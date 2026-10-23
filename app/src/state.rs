@@ -18,6 +18,10 @@ pub struct AppState {
     pub sessions: Sessions,
     /// A capture is being taken; a second shortcut press meanwhile is ignored.
     busy: AtomicBool,
+    /// A share is being sent; a second press of a sharing button meanwhile is refused.
+    sharing: AtomicBool,
+    /// The CargoFrame window was closed during a share: stop retrying and say how it ended.
+    share_cancelled: AtomicBool,
     /// Shortcuts that could not be registered, by trigger id, with the reason.
     shortcut_errors: Mutex<BTreeMap<String, String>>,
 }
@@ -31,6 +35,8 @@ impl AppState {
             tray_available,
             sessions: Sessions::new(),
             busy: AtomicBool::new(false),
+            sharing: AtomicBool::new(false),
+            share_cancelled: AtomicBool::new(false),
             shortcut_errors: Mutex::new(BTreeMap::new()),
         }
     }
@@ -50,6 +56,27 @@ impl AppState {
 
     pub fn end_capture(&self) {
         self.busy.store(false, Ordering::Release);
+    }
+
+    /// Claim the right to send. False if a share is already running.
+    pub fn try_begin_share(&self) -> bool {
+        if self.sharing.swap(true, Ordering::AcqRel) {
+            return false;
+        }
+        self.share_cancelled.store(false, Ordering::Release);
+        true
+    }
+
+    pub fn end_share(&self) {
+        self.sharing.store(false, Ordering::Release);
+    }
+
+    pub fn cancel_share(&self) {
+        self.share_cancelled.store(true, Ordering::Release);
+    }
+
+    pub fn share_cancelled(&self) -> bool {
+        self.share_cancelled.load(Ordering::Acquire)
     }
 
     pub fn set_shortcut_errors(&self, errors: BTreeMap<String, String>) {

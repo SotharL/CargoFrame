@@ -12,6 +12,11 @@
     "allow-edit-layout",
     "allow-app-info",
     "allow-get-general",
+    "allow-fetch-options",
+    "allow-set-edited-image",
+    "allow-share",
+    "allow-copy-text",
+    "allow-open-link",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

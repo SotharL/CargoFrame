@@ -3,6 +3,7 @@
 //! The always-running part is small on purpose: a tray icon, a shortcut listener and the
 //! state. Windows (and their web views) exist only while open.
 
+mod chats;
 mod cli;
 mod commands;
 mod connections;
@@ -88,12 +89,30 @@ pub fn run() {
             commands::set_safe,
             commands::test_safe_folder,
             commands::pick_folder,
+            commands::list_connections,
+            commands::set_connection_secret,
+            commands::connect_connection,
+            commands::cancel_sign_in,
+            commands::disconnect_connection,
+            commands::test_connection,
+            commands::describe_connection,
+            commands::preview_options,
+            commands::list_chats,
+            commands::pin_chat,
+            commands::set_chat_pinned,
+            commands::remove_chat,
+            commands::fetch_options,
+            commands::set_edited_image,
+            commands::share,
+            commands::copy_text,
+            commands::open_link,
         ])
         .on_window_event(|window, event| {
             // Closing the CargoFrame window frees its capture (the screenshot is large).
             if window.label() == windowing::CAPTURE {
                 if let tauri::WindowEvent::Destroyed = event {
                     if let Some(state) = window.app_handle().try_state::<AppState>() {
+                        state.cancel_share();
                         state.sessions.clear();
                     }
                 }

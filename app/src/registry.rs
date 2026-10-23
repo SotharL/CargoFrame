@@ -6,9 +6,11 @@ use cargoframe_layout::{ConnectionInfo, Registry};
 use cargoframe_window::vars;
 use std::collections::BTreeSet;
 
+type ConnectionLookup<'a> = Box<dyn Fn(&str) -> Option<ConnectionInfo> + 'a>;
+
 pub struct AppRegistry<'a> {
     pub rules: BTreeSet<String>,
-    connection: Box<dyn Fn(&str) -> Option<ConnectionInfo> + 'a>,
+    connection: ConnectionLookup<'a>,
 }
 
 impl<'a> AppRegistry<'a> {

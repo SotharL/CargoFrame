@@ -86,6 +86,20 @@ impl Sessions {
     }
 }
 
+/// The largest edited picture the window may hand over.
+pub const MAX_EDITED_PNG: usize = 64 * 1024 * 1024;
+
+/// Accept only what is plainly a PNG of a sane size.
+pub fn check_png(bytes: &[u8]) -> Result<(), String> {
+    if bytes.len() > MAX_EDITED_PNG {
+        return Err("The edited picture is too large".into());
+    }
+    if bytes.len() < 8 || bytes[..8] != [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
+        return Err("The edited picture is not a PNG".into());
+    }
+    Ok(())
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum PrepareError {
     #[error("trigger \"{0}\" does not exist")]
@@ -104,7 +118,7 @@ fn mode_of(mode: CaptureMode) -> cap::Mode {
     }
 }
 
-fn now() -> Moment {
+pub fn now() -> Moment {
     let t = Local::now();
     Moment {
         year: t.year(),
@@ -560,6 +574,41 @@ pub(crate) mod tests {
             .as_deref()
             .unwrap()
             .contains("no longer exists"));
+    }
+
+    #[test]
+    fn only_png_pictures_of_a_sane_size_are_accepted() {
+        assert!(check_png(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A, 0]).is_ok());
+        assert!(check_png(b"GIF89a....").is_err());
+        assert!(check_png(&[0x89, b'P']).is_err());
+        assert!(check_png(&[]).is_err());
+        let mut big = vec![0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A];
+        big.resize(MAX_EDITED_PNG + 1, 0);
+        assert!(check_png(&big).is_err());
+    }
+
+    #[test]
+    fn the_edited_picture_replaces_the_capture_only_while_set() {
+        let s = Session::new(vec![1, 2], {
+            let dir = tempfile::tempdir().unwrap();
+            let store = Store::new(cargoframe_config::Dirs::under(dir.path()));
+            prepare_with(
+                &store,
+                &no_connections(),
+                "t",
+                &Trigger::default(),
+                fake_capture(None),
+                NOW,
+                1,
+            )
+            .unwrap()
+            .view
+        });
+        assert_eq!(s.image_to_send(), vec![1, 2]);
+        s.set_edited(Some(vec![9]));
+        assert_eq!(s.image_to_send(), vec![9]);
+        s.set_edited(None);
+        assert_eq!(s.image_to_send(), vec![1, 2]);
     }
 
     #[test]

@@ -1,20 +1,28 @@
 //! Commands the web view can call. Keep this list in step with `build.rs` and
 //! `capabilities/`.
 
+use crate::chats::{self, ChatView};
+use crate::connections::{unix_now, ConnectionsView};
+use crate::desktop::{openable, TauriBrowser, TauriClipboard};
 use crate::items::{self, ItemKind, ItemList};
 use crate::registry::AppRegistry;
+use crate::session::{self, check_png};
+use crate::share::{self, ShareResult};
 use crate::state::AppState;
 use crate::tools::{self, RuleTest, VariableInfo};
 use crate::windowing;
 use cargoframe_config::{General, Safe};
-use cargoframe_layout::{validate, Layout};
+use cargoframe_connectors::{Describe, OptionItem};
+use cargoframe_layout::{validate, BlockKind, DropdownSource, Layout};
 use cargoframe_rules::Rule;
+use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
 use serde::Serialize;
-use tauri::ipc::Response;
+use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_dialog::DialogExt as _;
+use tauri_plugin_clipboard_manager::ClipboardExt as _;
+use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt as _;
 
 #[derive(Serialize)]
@@ -157,8 +165,11 @@ pub fn save_item(
     item: serde_json::Value,
 ) -> Result<(), String> {
     items::save(&state.store, kind, &id, item)?;
-    if kind == ItemKind::Trigger {
-        crate::triggers::reload(&app);
+    match kind {
+        ItemKind::Trigger => crate::triggers::reload(&app),
+        // Settings (an address, a project) may have changed: forget what was cached.
+        ItemKind::Connection => state.connections.invalidate(&id),
+        _ => {}
     }
     Ok(())
 }
@@ -170,6 +181,12 @@ pub fn delete_item(
     kind: ItemKind,
     id: String,
 ) -> Result<(), String> {
+    if kind == ItemKind::Connection {
+        // Take its passwords and tokens out of the credential store along with it.
+        if let Ok(c) = state.connections.load(&state.store, &id) {
+            state.connections.forget_secrets(&id, c.settings.kind());
+        }
+    }
     items::delete(&state.store, kind, &id)?;
     if kind == ItemKind::Trigger {
         crate::triggers::reload(&app);
@@ -258,4 +275,312 @@ pub async fn pick_folder(app: AppHandle, title: Option<String>) -> Option<String
         .blocking_pick_folder()
         .and_then(|p| p.into_path().ok())
         .map(|p| p.display().to_string())
+}
+
+// ----- connections (Settings) -----
+
+/// Run something that may wait on the credential store or the network off the UI thread.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
+    tauri::async_runtime::spawn_blocking(f)
+        .await
+        .map_err(|e| format!("The task stopped unexpectedly: {e}"))
+}
+
+/// Every connection with its state, what it can fill, and whether its secrets are stored.
+#[tauri::command]
+pub async fn list_connections(app: AppHandle) -> Result<ConnectionsView, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        state.connections.view(&state.store)
+    })
+    .await
+}
+
+/// Store (or, with an empty value, remove) a password or key the person typed. The value is
+/// never read back to the window.
+#[tauri::command]
+pub async fn set_connection_secret(
+    app: AppHandle,
+    id: String,
+    name: String,
+    value: String,
+) -> Result<(), String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        state
+            .connections
+            .set_secret(&state.store, &id, &name, &value)
+    })
+    .await?
+}
+
+/// Sign in. Opens the browser for services that use it and waits until the person is done.
+#[tauri::command]
+pub async fn connect_connection(app: AppHandle, id: String) -> Result<String, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        state.connections.connect(
+            &state.store,
+            &id,
+            &TauriBrowser(app.clone()),
+            &TauriClipboard(app.clone()),
+        )
+    })
+    .await?
+}
+
+#[tauri::command]
+pub fn cancel_sign_in(state: State<'_, AppState>) {
+    state.connections.cancel_sign_in();
+}
+
+#[tauri::command]
+pub async fn disconnect_connection(app: AppHandle, id: String) -> Result<(), String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        state.connections.disconnect(&state.store, &id)
+    })
+    .await?
+}
+
+/// Ask the service who we are.
+#[tauri::command]
+pub async fn test_connection(app: AppHandle, id: String) -> Result<String, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        state.connections.test(&state.store, &id)
+    })
+    .await?
+}
+
+#[tauri::command]
+pub fn describe_connection(state: State<'_, AppState>, id: String) -> Result<Describe, String> {
+    state.connections.describe(&state.store, &id)
+}
+
+#[derive(Serialize)]
+pub struct OptionsError {
+    message: String,
+    /// The sign-in is no longer accepted.
+    reconnect: bool,
+}
+
+/// A list from a service, for the Settings pages (the info type editor).
+#[tauri::command]
+pub async fn preview_options(
+    app: AppHandle,
+    id: String,
+    list: String,
+) -> Result<Vec<OptionItem>, OptionsError> {
+    fetch(app, id, list).await
+}
+
+async fn fetch(app: AppHandle, id: String, list: String) -> Result<Vec<OptionItem>, OptionsError> {
+    let result = blocking(move || {
+        let state = app.state::<AppState>();
+        state.connections.options(&state.store, &id, &list)
+    })
+    .await
+    .map_err(|message| OptionsError {
+        message,
+        reconnect: false,
+    })?;
+    result.map_err(|e| OptionsError {
+        reconnect: e.kind.needs_reconnect(),
+        message: e.message,
+    })
+}
+
+// ----- Claude chats (Settings) -----
+
+#[tauri::command]
+pub fn list_chats(state: State<'_, AppState>) -> Result<Vec<ChatView>, String> {
+    chats::list(&state.store)
+}
+
+#[tauri::command]
+pub fn pin_chat(state: State<'_, AppState>, link: String, title: String) -> Result<(), String> {
+    chats::pin_link(&state.store, &link, &title, unix_now())
+}
+
+#[tauri::command]
+pub fn set_chat_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> Result<(), String> {
+    chats::set_pinned(&state.store, &id, pinned)
+}
+
+#[tauri::command]
+pub fn remove_chat(state: State<'_, AppState>, id: String) -> Result<(), String> {
+    chats::remove(&state.store, &id)
+}
+
+// ----- sharing (the CargoFrame window) -----
+
+/// A dropdown list for a block of the open capture. Only the lists the layout itself asks for
+/// can be fetched from here.
+#[tauri::command]
+pub async fn fetch_options(
+    app: AppHandle,
+    session_id: u64,
+    block_id: String,
+) -> Result<Vec<OptionItem>, OptionsError> {
+    let asked = {
+        let state = app.state::<AppState>();
+        state
+            .sessions
+            .current()
+            .filter(|s| s.view.session_id == session_id)
+            .and_then(|s| {
+                let layout = s.view.layout.as_ref()?;
+                match &layout.block(&block_id)?.kind {
+                    BlockKind::Dropdown(d) => match &d.source {
+                        DropdownSource::WebApi {
+                            connection_id,
+                            options_id,
+                        } => Some((connection_id.clone(), options_id.clone())),
+                        DropdownSource::ClaudeChats => None,
+                    },
+                    _ => None,
+                }
+            })
+    };
+    let Some((connection_id, options_id)) = asked else {
+        return Err(OptionsError {
+            message: "That dropdown has no list to load".into(),
+            reconnect: false,
+        });
+    };
+    fetch(app, connection_id, options_id).await
+}
+
+/// The picture as edited (crop, drawings), sent just before a share. An empty body clears it.
+/// The capture is named in the `x-session-id` header so a late call cannot reach a newer one.
+#[tauri::command]
+pub fn set_edited_image(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected a picture".into());
+    };
+    let id: u64 = request
+        .headers()
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .ok_or("The capture is not named")?;
+    let session = state
+        .sessions
+        .current()
+        .filter(|s| s.view.session_id == id)
+        .ok_or("This capture is no longer open")?;
+    if bytes.is_empty() {
+        session.set_edited(None);
+        return Ok(());
+    }
+    check_png(bytes)?;
+    session.set_edited(Some(bytes.clone()));
+    Ok(())
+}
+
+/// Ask where to keep a copy when a share could not be delivered.
+fn pick_fallback_folder(app: &AppHandle, attempt: u32) -> Option<PickedFolder> {
+    let title = if attempt <= 1 {
+        "CargoFrame could not send. Choose a folder to keep a copy in"
+    } else {
+        "That folder did not work. Choose another folder for the copy"
+    };
+    let dir = app
+        .dialog()
+        .file()
+        .set_title(title)
+        .blocking_pick_folder()?
+        .into_path()
+        .ok()?
+        .display()
+        .to_string();
+    let remember = app
+        .dialog()
+        .message("Use this folder for future copies too?")
+        .title("CargoFrame")
+        .kind(MessageDialogKind::Info)
+        .buttons(MessageDialogButtons::YesNo)
+        .blocking_show();
+    Some(PickedFolder { dir, remember })
+}
+
+/// Press a sharing button.
+#[tauri::command]
+pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResult, String> {
+    {
+        let state = app.state::<AppState>();
+        if !state.try_begin_share() {
+            return Ok(ShareResult::Blocked {
+                reasons: vec!["A share is already being sent".into()],
+            });
+        }
+    }
+    let worker = app.clone();
+    let result = blocking(move || {
+        let app = worker;
+        let state = app.state::<AppState>();
+        let Some(session) = state.sessions.current() else {
+            return ShareResult::Blocked {
+                reasons: vec!["This capture is no longer open".into()],
+            };
+        };
+        let cancelled = || state.share_cancelled();
+        let browser = TauriBrowser(app.clone());
+        let clipboard = TauriClipboard(app.clone());
+        let svc = share::Services {
+            store: &state.store,
+            connections: &state.connections,
+            browser: &browser,
+            clipboard: &clipboard,
+            cancelled: &cancelled,
+            now: session::now(),
+        };
+        let mut picker = |attempt: u32| pick_fallback_folder(&app, attempt);
+        let mut sleep = share::interruptible_sleep(&cancelled);
+        share::run(&svc, &mut picker, &mut sleep, &session, &request)
+    })
+    .await;
+    let state = app.state::<AppState>();
+    state.end_share();
+    let result = result?;
+    // The window was closed while sending: nobody is watching, so say how it ended.
+    if state.share_cancelled() {
+        match &result {
+            ShareResult::Sent { summary, .. } => crate::notify::problem(&app, "Shared", summary),
+            ShareResult::Failed { label, saved, .. } => {
+                let kept = saved
+                    .as_ref()
+                    .map(|s| format!(" A copy is in {}", s.path))
+                    .unwrap_or_default();
+                crate::notify::problem(
+                    &app,
+                    "CargoFrame could not share",
+                    &format!("{label}.{kept}"),
+                );
+            }
+            ShareResult::Blocked { .. } => {}
+        }
+    }
+    Ok(result)
+}
+
+/// Copy text to the clipboard ("Copy prompt" after a hand-off).
+#[tauri::command]
+pub fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
+    if text.len() > 1_000_000 {
+        return Err("That text is too long to copy".into());
+    }
+    app.clipboard().write_text(text).map_err(|e| e.to_string())
+}
+
+/// Open a link from a result (the created issue, the post) in the browser.
+#[tauri::command]
+pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
+    if !openable(&url) {
+        return Err("Only web links can be opened".into());
+    }
+    app.opener()
+        .open_url(url, None::<&str>)
+        .map_err(|e| e.to_string())
 }

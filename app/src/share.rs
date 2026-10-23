@@ -646,6 +646,10 @@ pub fn run(
                 attempts,
                 "share sent"
             );
+            // A share to an existing Claude chat makes it the most recent one.
+            if let Some(chat) = prepared.payload.value("chat").filter(|c| *c != "new") {
+                crate::chats::touch(svc.store, chat, crate::connections::unix_now());
+            }
             let mut notes = prepared.notes.clone();
             notes.extend(outcome.notes);
             ShareResult::Sent {

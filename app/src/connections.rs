@@ -124,10 +124,6 @@ impl Connections {
         }
     }
 
-    pub fn secrets(&self) -> &dyn SecretStore {
-        self.secrets.as_ref()
-    }
-
     fn cache(&self) -> std::sync::MutexGuard<'_, Cache> {
         self.cache.lock().unwrap_or_else(|e| e.into_inner())
     }
