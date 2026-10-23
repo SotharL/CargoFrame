@@ -1,0 +1,57 @@
+[package]
+name = "cargoframe"
+description = "CargoFrame: capture, review and share your screen with its context"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+default-run = "cargoframe"
+
+[lib]
+name = "cargoframe_app"
+
+[lints]
+workspace = true
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "image-png"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
+serde.workspace = true
+thiserror.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+cargoframe-config = { path = "../core/config" }
+cargoframe-capture = { path = "../core/capture" }
+cargoframe-context = { path = "../core/context" }
+cargoframe-handoff = { path = "../core/handoff" }
+cargoframe-layout = { path = "../core/layout" }
+cargoframe-window = { path = "../core/window" }
+cargoframe-rules = { path = "../core/rules" }
+cargoframe-bundle = { path = "../core/bundle" }
+cargoframe-safe = { path = "../core/safe" }
+cargoframe-connectors = { path = "../core/connectors" }
+cargoframe-net = { path = "../core/net" }
+tauri-plugin-clipboard-manager = "2"
+tauri-plugin-global-shortcut = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+
+[target.'cfg(windows)'.dependencies]
+tauri-winrt-notification = "0.8"
+keyring = { version = "3", default-features = false, features = ["windows-native"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+notify-rust = "4"
+zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+keyring = { version = "3", default-features = false, features = ["async-secret-service", "async-io", "crypto-rust"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+cargoframe-net = { path = "../core/net", features = ["mock"] }
+zip = { version = "9", default-features = false, features = ["deflate"] }

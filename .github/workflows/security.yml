@@ -1,0 +1,42 @@
+name: Security
+
+# Known-vulnerability checks on the dependencies. They run when the lock files change and once
+# a week, because an advisory can appear for a dependency that did not change.
+on:
+  push:
+    branches: [main, 'dev/**']
+    paths: ['Cargo.lock', 'ui/package-lock.json', '.github/workflows/security.yml']
+  pull_request:
+    paths: ['Cargo.lock', 'ui/package-lock.json', '.github/workflows/security.yml']
+  schedule:
+    - cron: '17 5 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    name: Rust advisories
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      checks: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions-rust-lang/audit@v1
+        with:
+          # "Unmaintained" and "unsound" notices on the GTK bindings that Tauri uses on Linux are
+          # warnings, not failures. A real vulnerability fails the job.
+          denyWarnings: false
+
+  npm:
+    name: npm advisories
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm audit --audit-level=high
+        working-directory: ui

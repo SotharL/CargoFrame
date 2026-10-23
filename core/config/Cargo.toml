@@ -1,0 +1,23 @@
+[package]
+name = "cargoframe-config"
+description = "CargoFrame core: versioned configuration files"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+dirs.workspace = true
+cargoframe-layout = { path = "../layout" }
+cargoframe-handoff = { path = "../handoff" }
+cargoframe-rules = { path = "../rules" }
+cargoframe-connectors = { path = "../connectors" }
+
+[dev-dependencies]
+tempfile.workspace = true

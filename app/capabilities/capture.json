@@ -1,0 +1,25 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "What the CargoFrame (capture) window may ask the backend to do",
+  "windows": [
+    "capture"
+  ],
+  "permissions": [
+    "allow-get-session",
+    "allow-get-session-image",
+    "allow-close-capture",
+    "allow-edit-layout",
+    "allow-app-info",
+    "allow-get-general",
+    "allow-fetch-options",
+    "allow-set-edited-image",
+    "allow-share",
+    "allow-copy-text",
+    "allow-open-link",
+    "allow-open-settings",
+    "allow-report-painted",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
+  ]
+}
