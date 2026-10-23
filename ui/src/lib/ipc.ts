@@ -1,7 +1,7 @@
 import type {
   AppInfo, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
   General, IssueView, ItemEntry, ItemKind, ItemList, Layout, OptionsError, Rule, RuleTest, Safe,
-  SessionView, ShareRequest, ShareResult, VariableInfo,
+  SessionView, ShareRequest, ShareResult, TimingView, VariableInfo,
 } from './types';
 
 /** Whatever a failed list request rejected with, as an `OptionsError`. */
@@ -78,6 +78,9 @@ export interface Api {
   share(request: ShareRequest): Promise<ShareResult>;
   copyText(text: string): Promise<void>;
   openLink(url: string): Promise<void>;
+  /** Tell the app the window has painted its first usable content (for the timings). */
+  reportPainted(flow: 'capture' | 'settings'): Promise<void>;
+  getTimings(): Promise<TimingView[]>;
 
   // ----- safe settings -----
   getSafe(): Promise<Safe>;
@@ -155,6 +158,8 @@ async function tauriApi(): Promise<Api> {
     share: (request) => invoke<ShareResult>('share', { request }),
     copyText: (text) => invoke('copy_text', { text }),
     openLink: (url) => invoke('open_link', { url }),
+    reportPainted: (flow) => invoke('report_painted', { flow }),
+    getTimings: () => invoke('get_timings'),
     getSafe: () => invoke('get_safe'),
     setSafe: (safe) => invoke('set_safe', { safe }),
     testSafeFolder: (path) => invoke('test_safe_folder', { path }),
@@ -360,6 +365,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         : { status: 'sent', summary: 'Created DEMO-1', url: 'https://example.atlassian.net/browse/DEMO-1', notes: [], copy_next: null, close: true },
     copyText: async () => {},
     openLink: async () => {},
+    reportPainted: async () => {},
+    getTimings: async () => [
+      { id: 'ready', label: 'Shortcut to capture ready', ms: 64, budget_ms: 150, note: null },
+      { id: 'paint', label: 'Shortcut to usable window', ms: 410, budget_ms: 700, note: 'cold' },
+      { id: 'settings_paint', label: 'Settings window open', ms: 320, budget_ms: 500, note: 'cold' },
+    ],
     getSafe: async () => ({ ...safe }),
     setSafe: async (s) => {
       safe = { ...s };

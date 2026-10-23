@@ -79,6 +79,16 @@ jobs:
         run: ../scripts/ci/run.sh "Build AppImage" ../ui/node_modules/.bin/tauri build --bundles appimage
       - name: Install, run and quit the real AppImage
         run: scripts/ci/run.sh "AppImage smoke test" ./installers/linux/smoke-test.sh
+      - name: Build the test helpers (a tray stand-in and a fake program)
+        run: cargo build -p cargoframe-capture --examples
+      - name: Idle cost of the tray-only process (release binary)
+        env:
+          CARGOFRAME_PERF_SCALE: "2"
+        run: scripts/ci/run.sh "idle check" scripts/e2e/linux-idle.sh
+      - name: Window open times (release binary, virtual display)
+        env:
+          CARGOFRAME_PERF_SCALE: "2"
+        run: scripts/ci/run.sh "open times" scripts/e2e/linux-open-times.sh
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage

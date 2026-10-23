@@ -524,6 +524,25 @@ fn pick_fallback_folder(app: &AppHandle, attempt: u32) -> Option<PickedFolder> {
     Some(PickedFolder { dir, remember })
 }
 
+/// A window says it has painted its first usable content.
+#[tauri::command]
+pub fn report_painted(state: State<'_, AppState>, flow: String) {
+    let metric = match flow.as_str() {
+        "capture" => "paint",
+        "settings" => "settings_paint",
+        _ => return,
+    };
+    if let Some(ms) = state.timings.finish(&flow, metric) {
+        tracing::info!(ms, metric = %metric, "timing: usable");
+    }
+}
+
+/// The last timings, for Settings, General.
+#[tauri::command]
+pub fn get_timings(state: State<'_, AppState>) -> Vec<crate::timing::TimingView> {
+    state.timings.snapshot()
+}
+
 /// Press a sharing button.
 #[tauri::command]
 pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResult, String> {
@@ -536,6 +555,7 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
         }
     }
     let worker = app.clone();
+    let started = std::time::Instant::now();
     let result = blocking(move || {
         let app = worker;
         let state = app.state::<AppState>();
@@ -563,6 +583,14 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     let state = app.state::<AppState>();
     state.end_share();
     let result = result?;
+    if matches!(
+        result,
+        ShareResult::Sent { .. } | ShareResult::Failed { .. }
+    ) {
+        state
+            .timings
+            .record("share", started.elapsed().as_millis() as u64);
+    }
     // The window was closed while sending: nobody is watching, so say how it ended.
     if state.share_cancelled() {
         match &result {

@@ -1,0 +1,181 @@
+name: Release
+
+# Builds the installers for a version tag, checks them on real machines, and puts them in a DRAFT
+# release with checksums. Nothing is published until you open the draft and publish it.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+#
+# Or run it by hand (Actions > Release > Run workflow) for a tag that already exists.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to build, for example v0.1.0'
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  check:
+    name: The tag matches the version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - id: v
+        shell: bash
+        run: |
+          version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
+          [ -n "$version" ] || { echo "::error::no version in Cargo.toml"; exit 1; }
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error title=Tag and version differ::The tag is $TAG but Cargo.toml says $version. Bump the version, commit, and tag again."
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+  windows:
+    name: Windows installer
+    needs: check
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+        working-directory: ui
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the NSIS installer
+        working-directory: app
+        shell: bash
+        run: ../scripts/ci/run.sh "Build NSIS installer" ../ui/node_modules/.bin/tauri build --bundles nsis
+      - name: Name the installer and sign it (when a certificate is configured)
+        id: pack
+        shell: pwsh
+        env:
+          WINDOWS_CERT_PFX_BASE64: ${{ secrets.WINDOWS_CERT_PFX_BASE64 }}
+          WINDOWS_CERT_PASSWORD: ${{ secrets.WINDOWS_CERT_PASSWORD }}
+        run: |
+          $built = Get-ChildItem -Recurse -Path target\release\bundle\nsis -Filter *-setup.exe | Select-Object -First 1
+          if (-not $built) { throw 'no installer built' }
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $name = "CargoFrame-${{ needs.check.outputs.version }}-windows-x64-setup.exe"
+          Copy-Item $built.FullName (Join-Path dist $name)
+          ./scripts/windows/sign.ps1 -Files (Join-Path (Resolve-Path dist) $name)
+          "path=$((Resolve-Path (Join-Path dist $name)).Path)" >> $env:GITHUB_OUTPUT
+      - name: Silent install, upgrade, uninstall
+        shell: bash
+        run: scripts/ci/run.sh "Windows installer smoke test" pwsh -NoProfile -File installers/windows/smoke-test.ps1 -Installer '${{ steps.pack.outputs.path }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-windows
+          path: dist/*.exe
+          if-no-files-found: error
+
+  linux:
+    name: Linux package
+    needs: check
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+      - run: npm ci
+        working-directory: ui
+      - name: System packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libsoup-3.0-dev libxdo-dev xvfb xdotool dbus-x11 file
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build the AppImage
+        working-directory: app
+        env:
+          NO_STRIP: "true"
+        run: ../scripts/ci/run.sh "Build AppImage" ../ui/node_modules/.bin/tauri build --bundles appimage
+      - name: Install, run and quit the real AppImage
+        run: scripts/ci/run.sh "AppImage smoke test" ./installers/linux/smoke-test.sh
+      - name: Make the package
+        id: pack
+        run: |
+          pkg="CargoFrame-${{ needs.check.outputs.version }}-linux-x64"
+          mkdir -p "dist/$pkg"
+          cp target/release/bundle/appimage/*.AppImage "dist/$pkg/"
+          cp installers/linux/install.sh installers/linux/uninstall.sh app/icons/128x128.png "dist/$pkg/"
+          chmod +x "dist/$pkg/"*.sh "dist/$pkg/"*.AppImage
+          tar -C dist -czf "dist/$pkg.tar.gz" "$pkg"
+          rm -rf "dist/$pkg"
+          ls -l dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-linux
+          path: dist/*.tar.gz
+          if-no-files-found: error
+
+  draft:
+    name: Draft release
+    needs: [check, windows, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        working-directory: dist
+        run: |
+          sha256sum * > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+      - name: Create or refresh the draft
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            # A rebuild replaces the files of a release that is still a draft; a published
+            # release is never touched.
+            [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ] \
+              || { echo "::error::$TAG is already published; make a new tag instead."; exit 1; }
+            gh release upload "$TAG" dist/* --clobber
+          else
+            gh release create "$TAG" dist/* --draft --verify-tag \
+              --title "CargoFrame ${{ needs.check.outputs.version }}" --generate-notes
+          fi
+          {
+            echo "### Draft release $TAG"
+            echo
+            echo "Files:"
+            (cd dist && ls -1 | sed 's/^/- /')
+            echo
+            echo "Open the draft under Releases, read the notes, then publish."
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -1,14 +1,18 @@
 <script lang="ts">
   import Editor from '../editor/Editor.svelte';
+  import { afterPaint } from '../../lib/paint';
 
   let {
     original,
     size,
     edited = $bindable(false),
+    onpainted,
   }: {
     original: Blob;
     size: { width: number; height: number };
     edited?: boolean;
+    /** Called once the picture is on screen. */
+    onpainted?: () => void;
   } = $props();
 
   let bitmap = $state<ImageBitmap | null>(null);
@@ -24,6 +28,10 @@
       (e) => { if (!cancelled) failed = String(e); },
     );
     return () => { cancelled = true; };
+  });
+
+  $effect(() => {
+    if (bitmap) afterPaint(() => onpainted?.());
   });
 
   /** The picture to send, with the person's edits. */

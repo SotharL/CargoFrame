@@ -8,6 +8,16 @@ export interface General {
   check_updates: boolean;
 }
 
+/** One line of the last timings (Settings, General). */
+export interface TimingView {
+  id: string;
+  label: string;
+  ms: number;
+  budget_ms: number | null;
+  /** 'cold' or 'warm' for windows. */
+  note: string | null;
+}
+
 export interface AppInfo {
   version: string;
   os: 'windows' | 'linux' | 'macos' | 'other';

@@ -93,6 +93,7 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         tracing::debug!("a capture is already running");
         return;
     }
+    state.timings.begin("capture");
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let worker = app.clone();
@@ -107,6 +108,9 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         match result {
             Ok(Ok(s)) => {
                 state.sessions.set(s);
+                if let Some(ms) = state.timings.mark("capture", "ready") {
+                    tracing::info!(ready_ms = ms, "timing: capture ready");
+                }
                 windowing::open_capture(&app);
             }
             Ok(Err(e)) => {

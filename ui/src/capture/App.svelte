@@ -12,6 +12,7 @@
   import { initialValues, type FormValues } from './values';
   import { loadDropdowns } from './options';
   import ResultPanel from './ResultPanel.svelte';
+  import { afterPaint } from '../lib/paint';
 
   let api = $state<Api>();
   let view = $state<SessionView | null>(null);
@@ -25,6 +26,10 @@
   let result = $state<ShareResult | null>(null);
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
 
+  function reportPainted() {
+    void api?.reportPainted('capture').catch(() => {});
+  }
+
   async function load() {
     if (!api) return;
     try {
@@ -37,6 +42,8 @@
       notice = null;
       result = null;
       const sessionId = v.session_id;
+      // Without a screenshot block the window is usable as soon as it has drawn.
+      if (!v.layout?.blocks.some((b) => b.type === 'screenshot')) afterPaint(reportPainted);
       // Lists that come from a service arrive after the window is already usable.
       void loadDropdowns(api, v, () => view?.session_id === sessionId, (blockId, next) => {
         if (!view) return;
@@ -155,7 +162,7 @@
         {#each blocks as b (b.id)}
           <section style={place(b)} class="cell">
             {#if b.type === 'screenshot' && image}
-              <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} />
+              <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
             {:else if b.type === 'text'}
               <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
             {:else if b.type === 'dropdown' && view.dropdowns[b.id]}

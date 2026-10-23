@@ -30,6 +30,9 @@ jobs:
       - run: npm run check
       - run: npm test
       - run: npm run build
+      - name: Size gate (per-window JavaScript budget)
+        working-directory: .
+        run: node scripts/ci/check-budgets.mjs ui/dist
       - name: Report bundle size
         run: |
           echo "### UI bundle size (gzip)" >> "$GITHUB_STEP_SUMMARY"
@@ -84,6 +87,11 @@ jobs:
         if: runner.os == 'Windows'
         shell: bash
         run: scripts/ci/run.sh "cargo test" cargo test --workspace
+      - name: Timing gates (release build; shared runners are slower, so budgets are doubled)
+        shell: bash
+        env:
+          CARGOFRAME_PERF_SCALE: "2"
+        run: scripts/ci/run.sh "timing gates" cargo test --release -p cargoframe-capture --test perf -- --ignored --nocapture
       - name: End-to-end (Linux, X11 - shortcut, capture, CargoFrame window)
         if: runner.os == 'Linux'
         shell: bash

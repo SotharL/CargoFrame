@@ -38,6 +38,8 @@
     "allow-set-chat-pinned",
     "allow-remove-chat",
     "allow-open-link",
+    "allow-report-painted",
+    "allow-get-timings",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

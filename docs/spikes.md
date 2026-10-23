@@ -83,10 +83,13 @@ image together with text?
 5. Find the longest `q` value that still works.
 6. Linux: is there a `claude://` handler? Test `https://claude.ai/new?q=hello%20world` in the browser.
 
-**Settings this decides** (in `core/handoff`):
-- `composer_takes_image_and_text` (the `plan` argument): false means a second "Copy prompt" step.
-- `MAX_QUERY_BYTES` (default 6000).
-- `Scheme::App` or `Scheme::Web` per platform.
+**Settings this decides:**
+- In the Claude connection (Settings, Connections): **Put the prompt on the clipboard with the
+  picture** (off by default; this is `composer_takes_image_and_text` in `core/handoff`). Off means
+  the result panel offers a second "Copy prompt" step after the picture is pasted.
+- **Open Claude with** (desktop app or browser; automatic means the app on Windows and the browser
+  on Linux), which is `Scheme::App` or `Scheme::Web` in `core/handoff`.
+- `MAX_QUERY_BYTES` in `core/handoff/src/link.rs` (default 6000).
 
 **Fallback.** If no link works at all, the share counts as failed and the zip goes to the safe
 settings.

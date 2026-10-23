@@ -179,3 +179,78 @@ fn a_request_can_refuse_to_follow_redirects() {
         "the redirect must not have been followed"
     );
 }
+
+#[test]
+fn a_307_keeps_the_method_and_body_but_a_302_turns_a_post_into_a_get() {
+    let landing = MockServer::start(|_| MockResponse::text(200, "landed"));
+    let target = landing.url("/landing");
+    let t = target.clone();
+    let temp = MockServer::start(move |_| MockResponse::new(307).header("Location", &t));
+    let t = target.clone();
+    let found = MockServer::start(move |_| MockResponse::new(302).header("Location", &t));
+
+    client()
+        .send(&Request::post(temp.url("/")).body(Body::text("text/plain", "payload")))
+        .unwrap();
+    let kept = &landing.requests()[0];
+    assert_eq!(
+        (kept.method.as_str(), kept.text()),
+        ("POST", "payload".into())
+    );
+
+    client()
+        .send(&Request::post(found.url("/")).body(Body::text("text/plain", "payload")))
+        .unwrap();
+    let turned = &landing.requests()[1];
+    assert_eq!(turned.method, "GET");
+    assert!(turned.body.is_empty());
+}
+
+#[test]
+fn the_sign_in_header_stays_on_a_redirect_within_the_same_site() {
+    let server = MockServer::start(|req| {
+        if req.path() == "/start" {
+            MockResponse::new(302).header("Location", "/final")
+        } else {
+            MockResponse::text(200, "landed")
+        }
+    });
+    let resp = client()
+        .send(&Request::get(server.url("/start")).header("Authorization", "Bearer secret"))
+        .unwrap();
+    assert_eq!(resp.text(), "landed");
+    assert_eq!(
+        server.requests_to("/final")[0].header("authorization"),
+        Some("Bearer secret")
+    );
+}
+
+#[test]
+fn a_redirect_to_another_kind_of_address_is_refused() {
+    for location in [
+        "ftp://example.com/f",
+        "http://example.com/plain",
+        "javascript:1",
+    ] {
+        let server =
+            MockServer::start(move |_| MockResponse::new(302).header("Location", location));
+        let err = client().send(&Request::get(server.url("/"))).unwrap_err();
+        assert!(matches!(err, NetError::BadUrl(_)), "{location}: {err:?}");
+    }
+}
+
+#[test]
+fn a_redirect_loop_ends_with_the_last_redirect_answer() {
+    let server = MockServer::start(|req| {
+        let n: u32 = req
+            .query_param("n")
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(0);
+        MockResponse::new(302).header("Location", &format!("/loop?n={}", n + 1))
+    });
+    let resp = client()
+        .send(&Request::get(server.url("/loop?n=0")))
+        .unwrap();
+    assert_eq!(resp.status, 302);
+    assert_eq!(server.requests().len(), 6, "the first call plus five hops");
+}

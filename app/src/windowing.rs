@@ -30,8 +30,26 @@ fn shown(app: &AppHandle, label: &str) {
     }
 }
 
+/// Start timing a window opening, noting whether the window is already there.
+fn timing_begin(app: &AppHandle, flow: &str, label: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.timings.begin(flow);
+        let warm = app.get_webview_window(label).is_some();
+        state.timings.note(flow, if warm { "warm" } else { "cold" });
+    }
+}
+
+fn timing_mark(app: &AppHandle, flow: &str, metric: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        if let Some(ms) = state.timings.mark(flow, metric) {
+            tracing::info!(ms, metric, "timing: window shown");
+        }
+    }
+}
+
 fn open_settings_now(app: &AppHandle) -> tauri::Result<()> {
     shown(app, SETTINGS);
+    timing_begin(app, "settings", SETTINGS);
     if let Some(win) = app.get_webview_window(SETTINGS) {
         let _ = win.unminimize();
         win.show()?;
@@ -60,11 +78,19 @@ pub fn open_capture(app: &AppHandle) {
 
 fn open_capture_now(app: &AppHandle) -> tauri::Result<()> {
     shown(app, CAPTURE);
+    // The capture flow began at the shortcut; only say whether the window was ready.
+    if let Some(state) = app.try_state::<AppState>() {
+        let warm = app.get_webview_window(CAPTURE).is_some();
+        state
+            .timings
+            .note("capture", if warm { "warm" } else { "cold" });
+    }
     if let Some(win) = app.get_webview_window(CAPTURE) {
         win.emit("session-changed", ())?;
         let _ = win.unminimize();
         win.show()?;
         win.set_focus()?;
+        timing_mark(app, "capture", "window");
         return Ok(());
     }
     WebviewWindowBuilder::new(app, CAPTURE, WebviewUrl::App("capture.html".into()))
@@ -74,6 +100,7 @@ fn open_capture_now(app: &AppHandle) -> tauri::Result<()> {
         .center()
         .focused(true)
         .build()?;
+    timing_mark(app, "capture", "window");
     Ok(())
 }
 
@@ -83,6 +110,7 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
     let page = page.to_string();
     tauri::async_runtime::spawn(async move {
         shown(&app, SETTINGS);
+        timing_begin(&app, "settings", SETTINGS);
         if let Some(win) = app.get_webview_window(SETTINGS) {
             let _ = win.emit("navigate", page);
             let _ = win.unminimize();

@@ -1,5 +1,5 @@
-use crate::request::{Body, Http, NetError, Request, Response};
-use crate::url::check_url;
+use crate::request::{Body, Http, Method, NetError, Request, Response};
+use crate::url::{check_url, redirect_target, same_origin};
 use std::io::ErrorKind;
 use std::time::Duration;
 
@@ -71,18 +71,34 @@ fn map_error(e: ureq::Error) -> NetError {
     }
 }
 
-impl Http for UreqHttp {
-    fn send(&self, request: &Request) -> Result<Response, NetError> {
-        check_url(&request.url).map_err(|e| NetError::BadUrl(e.to_string()))?;
+/// Redirects a request may follow before the last answer is returned as it is.
+const MAX_REDIRECTS: usize = 5;
+
+/// Headers that carry a sign-in; they follow a redirect only to the same site.
+const SIGN_IN_HEADERS: [&str; 3] = ["authorization", "proxy-authorization", "cookie"];
+
+fn is_redirect(status: u16) -> bool {
+    matches!(status, 301 | 302 | 303 | 307 | 308)
+}
+
+impl UreqHttp {
+    /// One request, one answer: redirects are followed by `send`, which checks every hop.
+    fn once(
+        &self,
+        method: Method,
+        url: &str,
+        headers: &[(String, String)],
+        body: &Body,
+        timeout: Duration,
+    ) -> Result<Response, NetError> {
         let mut builder = ureq::http::Request::builder()
-            .method(request.method.as_str())
-            .uri(&request.url);
-        for (k, v) in &request.headers {
+            .method(method.as_str())
+            .uri(url);
+        for (k, v) in headers {
             builder = builder.header(k.as_str(), v.as_str());
         }
-        let timeout = Some(request.timeout);
-        let max_redirects = if request.follow_redirects { 5 } else { 0 };
-        let response = match &request.body {
+        let timeout = Some(timeout);
+        let response = match body {
             Body::None => {
                 let req = builder
                     .body(())
@@ -90,7 +106,7 @@ impl Http for UreqHttp {
                 self.agent
                     .configure_request(req)
                     .timeout_global(timeout)
-                    .max_redirects(max_redirects)
+                    .max_redirects(0)
                     .max_redirects_will_error(false)
                     .build()
                     .pipe(|r| self.agent.run(r))
@@ -103,7 +119,7 @@ impl Http for UreqHttp {
                 self.agent
                     .configure_request(req)
                     .timeout_global(timeout)
-                    .max_redirects(max_redirects)
+                    .max_redirects(0)
                     .max_redirects_will_error(false)
                     .build()
                     .pipe(|r| self.agent.run(r))
@@ -129,6 +145,44 @@ impl Http for UreqHttp {
             headers,
             body,
         })
+    }
+}
+
+impl Http for UreqHttp {
+    /// Sends the request and follows redirects by hand, so every hop is checked: it must be
+    /// https (plain http only between this computer's own servers), it may not carry a
+    /// user name, and a sign-in header never follows the request to another site. A POST that is
+    /// redirected with 301, 302 or 303 becomes a GET without a body, as in a browser.
+    fn send(&self, request: &Request) -> Result<Response, NetError> {
+        check_url(&request.url).map_err(|e| NetError::BadUrl(e.to_string()))?;
+        let mut url = request.url.clone();
+        let mut method = request.method;
+        let mut headers = request.headers.clone();
+        let mut body = request.body.clone();
+        let mut hops = 0;
+        loop {
+            let response = self.once(method, &url, &headers, &body, request.timeout)?;
+            if !request.follow_redirects || !is_redirect(response.status) || hops >= MAX_REDIRECTS {
+                return Ok(response);
+            }
+            let Some(location) = response.header("location") else {
+                return Ok(response);
+            };
+            let next = redirect_target(&url, location)
+                .map_err(|e| NetError::BadUrl(format!("refused a redirect: {e}")))?;
+            if !same_origin(&url, &next) {
+                headers
+                    .retain(|(k, _)| !SIGN_IN_HEADERS.contains(&k.to_ascii_lowercase().as_str()));
+            }
+            let to_get = response.status == 303
+                || (matches!(response.status, 301 | 302) && method == Method::Post);
+            if to_get && method != Method::Get {
+                method = Method::Get;
+                body = Body::None;
+            }
+            url = next;
+            hops += 1;
+        }
     }
 }
 

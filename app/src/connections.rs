@@ -470,6 +470,56 @@ pub mod tests {
         })
     }
 
+    /// Every file under `dir`, with its text (lossy), so a secret can be searched for.
+    fn all_files_text(dir: &std::path::Path) -> Vec<(std::path::PathBuf, String)> {
+        let mut out = Vec::new();
+        let mut stack = vec![dir.to_path_buf()];
+        while let Some(d) = stack.pop() {
+            for entry in std::fs::read_dir(&d).unwrap().flatten() {
+                let path = entry.path();
+                if path.is_dir() {
+                    stack.push(path);
+                } else {
+                    let text = String::from_utf8_lossy(&std::fs::read(&path).unwrap()).into_owned();
+                    out.push((path, text));
+                }
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn a_stored_secret_is_in_the_secret_store_and_in_no_file() {
+        let f = fixture();
+        save(
+            &f.store,
+            "jira",
+            json!({"name": "Work", "kind": "jira", "site_url": "https://acme.atlassian.net",
+                   "auth": "api_token", "email": "a@b.c"}),
+        );
+        f.connections
+            .set_secret(&f.store, "jira", "token", "TOP-SECRET-TOKEN-123")
+            .unwrap();
+        assert_eq!(
+            f.secrets.get("jira/token").unwrap().as_deref(),
+            Some("TOP-SECRET-TOKEN-123")
+        );
+        // Settings, connection files, caches, logs: nothing on disk may hold it.
+        let files = all_files_text(f._dir.path());
+        assert!(!files.is_empty());
+        for (path, text) in files {
+            assert!(
+                !text.contains("TOP-SECRET-TOKEN-123"),
+                "{} contains the secret",
+                path.display()
+            );
+        }
+        // And the window-facing view only says whether one is stored.
+        let view = serde_json::to_string(&f.connections.view(&f.store)).unwrap();
+        assert!(!view.contains("TOP-SECRET-TOKEN-123"));
+        assert!(view.contains("\"stored\":true"));
+    }
+
     #[test]
     fn status_follows_secrets_and_is_cached_until_invalidated() {
         let f = fixture();

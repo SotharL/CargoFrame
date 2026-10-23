@@ -58,6 +58,28 @@ Start-Sleep -Seconds 6
 Check (-not $proc.HasExited) 'app stays running in the background after --autostart'
 Check ((Running-Count) -ge 1) 'process found under the install folder'
 
+# 2b. What the always-on process costs while it sits in the tray (performance plan: under 40 MB,
+# effectively 0% CPU). The numbers are reported; only a busy loop fails here, because the memory
+# budget still has to be confirmed on a reference machine (docs/performance.md).
+$proc.Refresh()
+$cpu0 = $proc.TotalProcessorTime.TotalSeconds
+$wall = 10
+Start-Sleep -Seconds $wall
+$proc.Refresh()
+$cpuPct = [math]::Round((($proc.TotalProcessorTime.TotalSeconds - $cpu0) / $wall / [Environment]::ProcessorCount) * 100, 2)
+$privMb = [math]::Round($proc.PrivateMemorySize64 / 1MB, 1)
+$wsMb = [math]::Round($proc.WorkingSet64 / 1MB, 1)
+Write-Host "tray-only idle: $privMb MB private, $wsMb MB working set, $cpuPct% CPU over ${wall}s, $($proc.Threads.Count) threads"
+if ($env:GITHUB_STEP_SUMMARY) {
+  Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @(
+    '### Tray-only idle (Windows)',
+    "- Private memory: $privMb MB (budget 40 MB; report only for now)",
+    "- Working set: $wsMb MB",
+    "- CPU: $cpuPct% over ${wall}s (gate 2%)"
+  )
+}
+Check ($cpuPct -le 2) "idle CPU is effectively zero ($cpuPct%)"
+
 # 3. Upgrade in place while it runs (same version counts as an upgrade here)
 $code = Run-Installer @('/S')
 Check ($code -eq 0) "upgrade over a running copy exits 0 (got $code)"

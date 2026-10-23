@@ -14,6 +14,8 @@ fn main() {
             "close_capture",
             "edit_layout",
             "open_settings",
+            "report_painted",
+            "get_timings",
             "get_shortcut_errors",
             "reload_triggers",
             "list_items",

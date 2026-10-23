@@ -16,6 +16,7 @@ mod secrets;
 mod session;
 mod share;
 mod state;
+mod timing;
 mod tools;
 mod tray;
 mod tray_host;
@@ -108,6 +109,8 @@ pub fn run() {
             commands::share,
             commands::copy_text,
             commands::open_link,
+            commands::report_painted,
+            commands::get_timings,
         ])
         .on_window_event(|window, event| match event {
             // Settings, General, Memory decides whether a closed window is destroyed or kept.
@@ -151,4 +154,113 @@ pub fn run() {
             }
         }
     });
+}
+
+/// Guards on the shipped security configuration: what the web views may load and which backend
+/// commands each window may call. A loosened setting fails here, in review, not in a release.
+#[cfg(test)]
+mod shipped_config_tests {
+    use serde_json::Value;
+
+    fn json(text: &str) -> Value {
+        serde_json::from_str(text).expect("valid json")
+    }
+
+    fn tauri_conf() -> Value {
+        json(include_str!("../tauri.conf.json"))
+    }
+
+    fn capabilities() -> Vec<(&'static str, Value)> {
+        vec![
+            (
+                "capture",
+                json(include_str!("../capabilities/capture.json")),
+            ),
+            (
+                "settings",
+                json(include_str!("../capabilities/settings.json")),
+            ),
+        ]
+    }
+
+    fn directive<'a>(csp: &'a str, name: &str) -> Option<&'a str> {
+        csp.split(';')
+            .map(str::trim)
+            .find_map(|d| d.strip_prefix(name).map(str::trim))
+    }
+
+    #[test]
+    fn the_content_security_policy_stays_strict() {
+        let conf = tauri_conf();
+        let csp = conf["app"]["security"]["csp"].as_str().expect("a CSP");
+        assert_eq!(directive(csp, "default-src"), Some("'self'"));
+        for forbidden in ["'unsafe-eval'", "http:", "https:", "*"] {
+            assert!(
+                !csp.split_whitespace().any(|t| t == forbidden),
+                "the CSP must not allow {forbidden}: {csp}"
+            );
+        }
+        // Scripts come only from the app itself.
+        assert!(directive(csp, "script-src")
+            .map(|s| !s.contains("'unsafe-inline'"))
+            .unwrap_or(true));
+        // The page talks to the backend and nothing else.
+        assert_eq!(
+            directive(csp, "connect-src"),
+            Some("ipc: http://ipc.localhost")
+        );
+        for locked in ["object-src", "base-uri", "frame-src", "form-action"] {
+            assert_eq!(directive(csp, locked), Some("'none'"), "{locked}");
+        }
+        assert_eq!(conf["app"]["withGlobalTauri"], false);
+    }
+
+    #[test]
+    fn windows_only_get_our_own_commands_and_event_listening() {
+        for (name, cap) in capabilities() {
+            let windows = cap["windows"].as_array().expect("windows");
+            assert_eq!(windows.len(), 1, "{name} capability is for one window only");
+            assert_eq!(windows[0], name);
+            assert!(
+                cap.get("remote").is_none(),
+                "{name}: a capability must never be given to remote pages"
+            );
+            for p in cap["permissions"].as_array().expect("permissions") {
+                let p = p.as_str().expect("a permission name");
+                let ours = p.starts_with("allow-");
+                let events = p == "core:event:allow-listen" || p == "core:event:allow-unlisten";
+                assert!(
+                    ours || events,
+                    "{name} window is granted {p}: web pages get only the app's own commands"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn the_capture_window_cannot_change_settings_or_manage_connections() {
+        let caps = capabilities();
+        let (_, capture) = &caps[0];
+        let granted: Vec<&str> = capture["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        for forbidden in [
+            "allow-save-item",
+            "allow-delete-item",
+            "allow-set-connection-secret",
+            "allow-connect-connection",
+            "allow-disconnect-connection",
+            "allow-set-general",
+            "allow-set-safe",
+            "allow-pick-folder",
+        ] {
+            assert!(
+                !granted.contains(&forbidden),
+                "the CargoFrame window must not hold {forbidden}"
+            );
+        }
+    }
 }

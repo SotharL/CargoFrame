@@ -18,6 +18,7 @@
     "allow-copy-text",
     "allow-open-link",
     "allow-open-settings",
+    "allow-report-painted",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

@@ -6,12 +6,13 @@
   import Chip from '../../lib/components/Chip.svelte';
   import { getApi } from '../../lib/ipc';
   import { applyTheme } from '../../lib/theme';
-  import type { AppInfo, General, MemoryMode, ThemeChoice } from '../../lib/types';
+  import type { AppInfo, General, MemoryMode, ThemeChoice, TimingView } from '../../lib/types';
 
   let loaded = $state(false);
   let general = $state<General>({ theme: 'system', memory_mode: 'balanced', check_updates: false });
   let autostart = $state(false);
   let info = $state<AppInfo | null>(null);
+  let timings = $state<TimingView[]>([]);
   let status = $state<'' | 'saved' | 'error'>('');
   let errorText = $state('');
 
@@ -34,8 +35,13 @@
       api.getAutostart(),
       api.appInfo(),
     ]);
+    timings = await api.getTimings().catch(() => []);
     loaded = true;
   });
+
+  async function refreshTimings() {
+    timings = await (await getApi()).getTimings().catch(() => []);
+  }
 
   async function save(action: () => Promise<void>) {
     try {
@@ -82,6 +88,25 @@
       <p class="quiet">{memoryHints[general.memory_mode]}</p>
     </Section>
 
+    <Section title="Performance" hint="How long the last runs took, against the targets CargoFrame aims for.">
+      {#if timings.length === 0}
+        <p class="quiet">Nothing measured yet. Use a trigger or share something, then look again.</p>
+      {:else}
+        <ul class="timings">
+          {#each timings as t (t.id)}
+            <li>
+              <span>{t.label}{t.note ? ` (${t.note})` : ''}</span>
+              <Chip
+                kind={t.budget_ms !== null && t.ms > t.budget_ms ? 'warn' : 'dbg'}
+                label={t.budget_ms !== null ? `${t.ms} ms of ${t.budget_ms}` : `${t.ms} ms`}
+              />
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      <div><button type="button" onclick={refreshTimings}>Refresh</button></div>
+    </Section>
+
     <Section title="Updates">
       <p>
         Version <span class="mono selectable">{info?.version}</span>
@@ -113,4 +138,6 @@
   .page { display: grid; gap: 14px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .status { min-height: 26px; display: flex; align-items: center; gap: 8px; }
+  .timings { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .timings li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 </style>
