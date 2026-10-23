@@ -9,11 +9,14 @@ use tracing_subscriber::EnvFilter;
 const MAX_BYTES: u64 = 1024 * 1024;
 
 pub fn init(dirs: &Dirs) {
-    let filter = EnvFilter::try_from_env("CARGOFRAME_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
+    let filter =
+        EnvFilter::try_from_env("CARGOFRAME_LOG").unwrap_or_else(|_| EnvFilter::new("info"));
     let to_stderr = cfg!(debug_assertions) || std::env::var_os("CARGOFRAME_LOG_STDERR").is_some();
 
     let file = open_log(&dirs.logs().join("cargoframe.log"));
-    let builder = tracing_subscriber::fmt().with_env_filter(filter).with_ansi(false);
+    let builder = tracing_subscriber::fmt()
+        .with_env_filter(filter)
+        .with_ansi(false);
     match (file, to_stderr) {
         (Some(f), false) => builder.with_writer(Mutex::new(f)).init(),
         _ => builder.with_writer(std::io::stderr).init(),
@@ -26,7 +29,10 @@ pub fn init(dirs: &Dirs) {
 
 fn open_log(path: &Path) -> Option<fs::File> {
     fs::create_dir_all(path.parent()?).ok()?;
-    if fs::metadata(path).map(|m| m.len() > MAX_BYTES).unwrap_or(false) {
+    if fs::metadata(path)
+        .map(|m| m.len() > MAX_BYTES)
+        .unwrap_or(false)
+    {
         let _ = fs::rename(path, path.with_extension("log.old"));
     }
     OpenOptions::new().create(true).append(true).open(path).ok()

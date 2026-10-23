@@ -10,9 +10,15 @@ pub fn available() -> bool {
     use zbus::names::BusName;
 
     // If the check itself cannot run, assume a tray exists rather than nag.
-    let Ok(conn) = Connection::session() else { return true };
-    let Ok(bus) = DBusProxy::new(&conn) else { return true };
-    let Ok(name) = BusName::try_from("org.kde.StatusNotifierWatcher") else { return true };
+    let Ok(conn) = Connection::session() else {
+        return true;
+    };
+    let Ok(bus) = DBusProxy::new(&conn) else {
+        return true;
+    };
+    let Ok(name) = BusName::try_from("org.kde.StatusNotifierWatcher") else {
+        return true;
+    };
     bus.name_has_owner(name).unwrap_or(true)
 }
 

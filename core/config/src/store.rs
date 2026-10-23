@@ -332,7 +332,14 @@ mod tests {
         let path = d.path().join("config/general.json");
         fs::write(&path, r#"{"schema_version":99,"theme":"dark"}"#).unwrap();
         let err = s.load_or_default::<General>().unwrap_err();
-        assert!(matches!(err, ConfigError::Newer { found: 99, supported: 1, .. }));
+        assert!(matches!(
+            err,
+            ConfigError::Newer {
+                found: 99,
+                supported: 1,
+                ..
+            }
+        ));
         assert_eq!(
             fs::read_to_string(&path).unwrap(),
             r#"{"schema_version":99,"theme":"dark"}"#
@@ -382,15 +389,28 @@ mod tests {
     fn items_save_list_and_delete() {
         let (_d, s) = store();
         for id in ["b-two", "a_one", "3rd"] {
-            s.save_item(Kind::Rules, id, &Widget { schema_version: 2, name: id.into() })
-                .unwrap();
+            s.save_item(
+                Kind::Rules,
+                id,
+                &Widget {
+                    schema_version: 2,
+                    name: id.into(),
+                },
+            )
+            .unwrap();
         }
-        assert_eq!(s.list_ids(Kind::Rules).unwrap(), vec!["3rd", "a_one", "b-two"]);
+        assert_eq!(
+            s.list_ids(Kind::Rules).unwrap(),
+            vec!["3rd", "a_one", "b-two"]
+        );
         assert_eq!(s.list_ids(Kind::Layouts).unwrap(), Vec::<String>::new());
 
         let w: Widget = s.load_item(Kind::Rules, "a_one").unwrap().unwrap();
         assert_eq!(w.name, "a_one");
-        assert!(s.load_item::<Widget>(Kind::Rules, "nope").unwrap().is_none());
+        assert!(s
+            .load_item::<Widget>(Kind::Rules, "nope")
+            .unwrap()
+            .is_none());
 
         assert!(s.delete_item(Kind::Rules, "a_one").unwrap());
         assert!(!s.delete_item(Kind::Rules, "a_one").unwrap());
@@ -402,7 +422,13 @@ mod tests {
         let (d, s) = store();
         let dir = d.path().join("config/triggers");
         fs::create_dir_all(dir.join("subfolder.json")).unwrap();
-        for name in ["ok.json", "Upper.json", "notes.txt", "x.json.tmp1", ".hidden.json"] {
+        for name in [
+            "ok.json",
+            "Upper.json",
+            "notes.txt",
+            "x.json.tmp1",
+            ".hidden.json",
+        ] {
             fs::write(dir.join(name), "{}").unwrap();
         }
         assert_eq!(s.list_ids(Kind::Triggers).unwrap(), vec!["ok"]);
@@ -411,10 +437,26 @@ mod tests {
     #[test]
     fn ids_cannot_escape_the_folder() {
         let (_d, s) = store();
-        let w = Widget { schema_version: 2, name: "x".into() };
-        for bad in ["", "../evil", "a/b", "a\\b", "A", "-lead", ".dot", "con:", &"x".repeat(65)] {
+        let w = Widget {
+            schema_version: 2,
+            name: "x".into(),
+        };
+        for bad in [
+            "",
+            "../evil",
+            "a/b",
+            "a\\b",
+            "A",
+            "-lead",
+            ".dot",
+            "con:",
+            &"x".repeat(65),
+        ] {
             assert!(
-                matches!(s.save_item(Kind::Rules, bad, &w), Err(ConfigError::InvalidId(_))),
+                matches!(
+                    s.save_item(Kind::Rules, bad, &w),
+                    Err(ConfigError::InvalidId(_))
+                ),
                 "accepted {bad:?}"
             );
             assert!(s.load_item::<Widget>(Kind::Rules, bad).is_err());

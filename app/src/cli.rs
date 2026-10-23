@@ -77,19 +77,28 @@ mod tests {
 
     #[test]
     fn sign_in_start_stays_in_the_tray() {
-        let cli = Cli { autostart: true, quit: false };
+        let cli = Cli {
+            autostart: true,
+            quit: false,
+        };
         assert_eq!(startup(&cli, true), Startup::TrayOnly);
     }
 
     #[test]
     fn sign_in_start_without_a_tray_opens_settings() {
-        let cli = Cli { autostart: true, quit: false };
+        let cli = Cli {
+            autostart: true,
+            quit: false,
+        };
         assert_eq!(startup(&cli, false), Startup::OpenSettings);
     }
 
     #[test]
     fn quit_wins() {
-        let cli = Cli { autostart: true, quit: true };
+        let cli = Cli {
+            autostart: true,
+            quit: true,
+        };
         assert_eq!(startup(&cli, true), Startup::Exit);
     }
 }

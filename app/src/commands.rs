@@ -42,7 +42,10 @@ pub fn app_info(state: State<'_, AppState>) -> AppInfo {
 
 #[tauri::command]
 pub fn get_general(state: State<'_, AppState>) -> Result<General, String> {
-    state.store.load_or_default::<General>().map_err(|e| e.to_string())
+    state
+        .store
+        .load_or_default::<General>()
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
