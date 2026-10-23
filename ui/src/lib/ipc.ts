@@ -1,4 +1,4 @@
-import type { AppInfo, General } from './types';
+import type { AppInfo, General, SessionView } from './types';
 
 /**
  * Everything the interface asks the backend for. In the app these calls go to Rust through
@@ -12,6 +12,15 @@ export interface Api {
   getAutostart(): Promise<boolean>;
   setAutostart(enabled: boolean): Promise<void>;
   openConfigFolder(): Promise<void>;
+
+  // ----- the CargoFrame window -----
+  getSession(): Promise<SessionView>;
+  /** The screenshot as a PNG file. */
+  getSessionImage(): Promise<Blob>;
+  closeCapture(): Promise<void>;
+  editLayout(layoutId: string | null): Promise<void>;
+  /** Called when a new capture replaces the one shown. Returns a function that stops listening. */
+  onSessionChanged(callback: () => void): Promise<() => void>;
 }
 
 export const inTauri = (): boolean =>
@@ -26,6 +35,17 @@ async function tauriApi(): Promise<Api> {
     getAutostart: () => invoke<boolean>('get_autostart'),
     setAutostart: (enabled) => invoke('set_autostart', { enabled }),
     openConfigFolder: () => invoke('open_config_folder'),
+    getSession: () => invoke<SessionView>('get_session'),
+    getSessionImage: async () => {
+      const bytes = await invoke<ArrayBuffer>('get_session_image');
+      return new Blob([bytes], { type: 'image/png' });
+    },
+    closeCapture: () => invoke('close_capture'),
+    editLayout: (layoutId) => invoke('edit_layout', { layoutId }),
+    onSessionChanged: async (callback) => {
+      const { listen } = await import('@tauri-apps/api/event');
+      return listen('session-changed', callback);
+    },
   };
 }
 
@@ -54,6 +74,11 @@ export function memoryApi(initial?: Partial<General>): Api {
       autostart = enabled;
     },
     openConfigFolder: async () => {},
+    getSession: async () => (await import('../capture/demo')).demoSession(),
+    getSessionImage: async () => (await import('../capture/demo')).demoImage(),
+    closeCapture: async () => {},
+    editLayout: async () => {},
+    onSessionChanged: async () => () => {},
   };
 }
 

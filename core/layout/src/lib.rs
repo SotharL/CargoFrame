@@ -10,8 +10,8 @@ pub mod validate;
 
 pub use model::*;
 pub use validate::{
-    validate, Code, ConnectionInfo, ConnectionKind, ConnectionState, Issue, Registry, Severity,
-    SharingState,
+    sharing_state, validate, worst, Code, ConnectionInfo, ConnectionKind, ConnectionState, Issue,
+    Registry, Severity, SharingState,
 };
 
 /// Version written into every layout file so later releases can migrate old ones.

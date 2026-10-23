@@ -12,7 +12,7 @@ export default defineConfig({
     target: 'es2022',
     cssCodeSplit: true,
     rollupOptions: {
-      input: { settings: 'settings.html' },
+      input: { settings: 'settings.html', capture: 'capture.html' },
     },
   },
   test: {

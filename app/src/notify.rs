@@ -59,3 +59,43 @@ pub fn launched(app: &AppHandle) {
 
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn launched(_app: &AppHandle) {}
+
+/// A short notice that something went wrong (a capture failed). No click action.
+#[cfg(windows)]
+pub fn problem(app: &AppHandle, title: &str, body: &str) {
+    use tauri_winrt_notification::{Duration, Toast};
+    let app_id = if cfg!(debug_assertions) {
+        Toast::POWERSHELL_APP_ID.to_string()
+    } else {
+        app.config().identifier.clone()
+    };
+    if let Err(e) = Toast::new(&app_id)
+        .title(title)
+        .text1(body)
+        .duration(Duration::Short)
+        .show()
+    {
+        tracing::warn!("notification failed: {e}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn problem(_app: &AppHandle, title: &str, body: &str) {
+    use notify_rust::{Notification, Timeout};
+    let (title, body) = (title.to_string(), body.to_string());
+    std::thread::spawn(move || {
+        if let Err(e) = Notification::new()
+            .appname("CargoFrame")
+            .summary(&title)
+            .body(&body)
+            .icon("cargoframe")
+            .timeout(Timeout::Milliseconds(8_000))
+            .show()
+        {
+            tracing::warn!("notification failed: {e}");
+        }
+    });
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn problem(_app: &AppHandle, _title: &str, _body: &str) {}

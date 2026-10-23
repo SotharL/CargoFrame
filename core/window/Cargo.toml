@@ -1,0 +1,20 @@
+[package]
+name = "cargoframe-window"
+description = "CargoFrame core: what the CargoFrame window shows for one capture"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+serde.workspace = true
+cargoframe-context = { path = "../context" }
+cargoframe-layout = { path = "../layout" }
+cargoframe-handoff = { path = "../handoff" }
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile.workspace = true

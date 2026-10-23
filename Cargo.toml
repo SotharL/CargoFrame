@@ -7,6 +7,7 @@ members = [
     "core/handoff",
     "core/config",
     "core/capture",
+    "core/window",
     "app",
 ]
 # Added in later phases: core/rules, core/bundle, core/connectors

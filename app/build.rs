@@ -9,6 +9,12 @@ fn main() {
             "get_autostart",
             "set_autostart",
             "open_config_folder",
+            "get_session",
+            "get_session_image",
+            "close_capture",
+            "edit_layout",
+            "get_shortcut_errors",
+            "reload_triggers",
         ]),
     ))
     .expect("failed to run tauri-build");

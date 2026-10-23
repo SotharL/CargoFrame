@@ -9,6 +9,8 @@
     "allow-set-general",
     "allow-get-autostart",
     "allow-set-autostart",
-    "allow-open-config-folder"
+    "allow-open-config-folder",
+    "allow-get-shortcut-errors",
+    "allow-reload-triggers"
   ]
 }

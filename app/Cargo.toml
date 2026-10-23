@@ -22,10 +22,18 @@ tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-opener = "2"
 serde.workspace = true
+thiserror.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 cargoframe-config = { path = "../core/config" }
+cargoframe-capture = { path = "../core/capture" }
+cargoframe-context = { path = "../core/context" }
+cargoframe-handoff = { path = "../core/handoff" }
+cargoframe-layout = { path = "../core/layout" }
+cargoframe-window = { path = "../core/window" }
+tauri-plugin-global-shortcut = "2"
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.8"
@@ -33,3 +41,6 @@ tauri-winrt-notification = "0.8"
 [target.'cfg(target_os = "linux")'.dependencies]
 notify-rust = "4"
 zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+
+[dev-dependencies]
+tempfile.workspace = true

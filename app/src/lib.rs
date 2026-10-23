@@ -7,9 +7,12 @@ mod cli;
 mod commands;
 mod logging;
 mod notify;
+mod registry;
+mod session;
 mod state;
 mod tray;
 mod tray_host;
+mod triggers;
 mod windowing;
 
 use cargoframe_config::{Dirs, Store};
@@ -43,6 +46,7 @@ pub fn run() {
             Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState::new(Store::new(dirs), tray_available))
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
@@ -51,13 +55,30 @@ pub fn run() {
             commands::get_autostart,
             commands::set_autostart,
             commands::open_config_folder,
+            commands::get_session,
+            commands::get_session_image,
+            commands::close_capture,
+            commands::edit_layout,
+            commands::get_shortcut_errors,
+            commands::reload_triggers,
         ])
+        .on_window_event(|window, event| {
+            // Closing the CargoFrame window frees its capture (the screenshot is large).
+            if window.label() == windowing::CAPTURE {
+                if let tauri::WindowEvent::Destroyed = event {
+                    if let Some(state) = window.app_handle().try_state::<AppState>() {
+                        state.sessions.clear();
+                    }
+                }
+            }
+        })
         .setup(move |app| {
             if startup == Startup::Exit {
                 app.handle().exit(0);
                 return Ok(());
             }
             tray::build(app.handle())?;
+            triggers::reload(app.handle());
             notify::launched(app.handle());
             if startup == Startup::OpenSettings {
                 windowing::open_settings(app.handle());
