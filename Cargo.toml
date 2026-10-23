@@ -10,9 +10,10 @@ members = [
     "core/window",
     "core/rules",
     "core/bundle",
+    "core/net",
+    "core/connectors",
     "app",
 ]
-# Added in later phases: core/connectors
 
 [workspace.package]
 version = "0.1.0"

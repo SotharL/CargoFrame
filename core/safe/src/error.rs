@@ -19,6 +19,8 @@ pub enum FailureKind {
     Server(u16),
     /// The connection is disabled or not set up.
     ConnectorUnavailable,
+    /// The server's certificate is not trusted. Retrying cannot fix it.
+    Certificate,
 }
 
 impl FailureKind {
@@ -57,6 +59,7 @@ impl FailureKind {
             Self::Throttled(_) => "Too many requests",
             Self::Server(_) => "Service error",
             Self::ConnectorUnavailable => "Connection not set up",
+            Self::Certificate => "Certificate not trusted",
         }
     }
 }
@@ -139,6 +142,13 @@ mod tests {
         assert!(!FailureKind::AuthExpired.is_retryable());
         assert!(!FailureKind::Rejected(400).is_retryable());
         assert!(!FailureKind::ConnectorUnavailable.is_retryable());
+    }
+
+    #[test]
+    fn an_untrusted_certificate_is_not_retried() {
+        assert!(!FailureKind::Certificate.is_retryable());
+        assert!(!FailureKind::Certificate.needs_reconnect());
+        assert_eq!(FailureKind::Certificate.label(), "Certificate not trusted");
     }
 
     #[test]

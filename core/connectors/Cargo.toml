@@ -1,0 +1,25 @@
+[package]
+name = "cargoframe-connectors"
+description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, custom APIs)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cargoframe-net = { path = "../net" }
+cargoframe-safe = { path = "../safe" }
+cargoframe-context = { path = "../context" }
+cargoframe-handoff = { path = "../handoff" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+sha2 = "0.10"
+base64 = "0.22"
+getrandom = "0.3"
+
+[dev-dependencies]
+cargoframe-net = { path = "../net", features = ["mock"] }
