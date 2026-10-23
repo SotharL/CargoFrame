@@ -451,9 +451,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargoframe-capture"
+version = "0.1.0"
+dependencies = [
+ "png",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tracing",
+ "win-screenshot",
+ "windows",
+ "x11rb",
+ "zbus",
+]
+
+[[package]]
 name = "cargoframe-config"
 version = "0.1.0"
 dependencies = [
+ "cargoframe-handoff",
+ "cargoframe-layout",
  "dirs 7.0.0",
  "serde",
  "serde_json",
@@ -468,12 +484,18 @@ version = "0.1.0"
 [[package]]
 name = "cargoframe-handoff"
 version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+]
 
 [[package]]
 name = "cargoframe-layout"
 version = "0.1.0"
 dependencies = [
  "cargoframe-context",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]
@@ -1300,6 +1322,16 @@ checksum = "85649ca51fd72272d7821adaf274ad91c288277713d9c18820d8499a7ff69e9a"
 dependencies = [
  "typenum",
  "version_check",
+]
+
+[[package]]
+name = "gethostname"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1bd49230192a3797a9a4d6abe9b3eed6f7fa4c8a8a4947977c6f80025f92cbd8"
+dependencies = [
+ "rustix",
+ "windows-link",
 ]
 
 [[package]]
@@ -4579,6 +4611,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "win-screenshot"
+version = "4.0.14"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e46fb2d7cb00430b7c433b05cc37a0f2f03a5305a975b1886a6ce5e1d8977d4b"
+dependencies = [
+ "windows",
+]
+
+[[package]]
 name = "winapi"
 version = "0.3.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4933,6 +4974,23 @@ dependencies = [
  "once_cell",
  "pkg-config",
 ]
+
+[[package]]
+name = "x11rb"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9993aa5be5a26815fe2c3eacfc1fde061fc1a1f094bf1ad2a18bf9c495dd7414"
+dependencies = [
+ "gethostname",
+ "rustix",
+ "x11rb-protocol",
+]
+
+[[package]]
+name = "x11rb-protocol"
+version = "0.13.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ea6fc2961e4ef194dcbfe56bb845534d0dc8098940c7e5c012a258bfec6701bd"
 
 [[package]]
 name = "yoke"

@@ -5,11 +5,12 @@
 //! pasting a chat link once; CargoFrame keeps the list because Claude offers no way to read it.
 
 use crate::link::ChatId;
+use serde::{Deserialize, Serialize};
 
 /// How many recent (unpinned) chats are kept.
 pub const MAX_RECENT: usize = 20;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ChatEntry {
     pub id: ChatId,
     pub title: String,
@@ -18,7 +19,8 @@ pub struct ChatEntry {
     pub last_used: u64,
 }
 
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
 pub struct ChatList {
     entries: Vec<ChatEntry>, // pinned entries keep insertion order
 }
@@ -26,6 +28,14 @@ pub struct ChatList {
 impl ChatList {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Re-establish the invariants after loading a file that may have been edited by hand.
+    pub fn normalized(mut self) -> Self {
+        let mut seen = std::collections::HashSet::new();
+        self.entries.retain(|e| seen.insert(e.id.clone()));
+        self.trim_recent();
+        self
     }
 
     /// Add a chat (or update the title of a known one) and optionally pin it.
@@ -192,5 +202,45 @@ mod tests {
         assert!(l.remove(&id(1)));
         assert!(!l.remove(&id(1)));
         assert!(l.is_empty());
+    }
+}
+
+#[cfg(test)]
+mod serde_tests {
+    use super::*;
+
+    #[test]
+    fn list_round_trips_and_bad_ids_fail_to_load() {
+        let mut l = ChatList::new();
+        l.add(
+            ChatId::parse("01a168ea-ad83-718c-a341-75a44c6984ec").unwrap(),
+            "Release notes",
+            true,
+            5,
+        );
+        let text = serde_json::to_string(&l).unwrap();
+        let back: ChatList = serde_json::from_str(&text).unwrap();
+        assert_eq!(back, l);
+
+        let bad = r#"{"entries":[{"id":"nope","title":"x","pinned":false,"last_used":1}]}"#;
+        assert!(serde_json::from_str::<ChatList>(bad).is_err());
+    }
+
+    #[test]
+    fn normalizing_drops_duplicates_and_caps_the_recent_list() {
+        let id = |n: u32| ChatId::parse(&format!("00000000-0000-0000-0000-{n:012x}")).unwrap();
+        let mut entries = Vec::new();
+        for n in 0..(MAX_RECENT as u32 + 4) {
+            entries.push(format!(
+                r#"{{"id":"{}","title":"c{n}","pinned":false,"last_used":{}}}"#,
+                id(n).as_str(),
+                n + 1
+            ));
+        }
+        entries.push(entries[0].clone()); // a duplicate
+        let json = format!(r#"{{"entries":[{}]}}"#, entries.join(","));
+        let l: ChatList = serde_json::from_str(&json).unwrap();
+        let l = l.normalized();
+        assert_eq!(l.len(), MAX_RECENT);
     }
 }

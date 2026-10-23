@@ -21,21 +21,12 @@ prog="$HOME/.local/share/CargoFrame/CargoFrame.AppImage"
 "$work/install.sh"
 [ -x "$prog" ] || { echo "FAIL: not installed" >&2; exit 1; }
 grep -q -- "--autostart" "$HOME/.config/autostart/CargoFrame.desktop" || { echo "FAIL: autostart entry" >&2; exit 1; }
+file "$appimage" | head -c 300; echo
 echo "ok: installed with run on sign-in"
 
-# Run the whole sequence inside one session bus + virtual display.
-dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" bash -c '
-  set -euo pipefail
-  "'"$prog"'" --autostart >"'"$work"'/app.log" 2>&1 &
-  pid=$!
-  sleep 8
-  if ! kill -0 "$pid" 2>/dev/null; then echo "FAIL: app exited by itself"; cat "'"$work"'/app.log"; exit 1; fi
-  echo "ok: app stays running after --autostart"
-  "'"$prog"'" --quit >/dev/null 2>&1 || true
-  for _ in $(seq 1 20); do kill -0 "$pid" 2>/dev/null || break; sleep 0.5; done
-  if kill -0 "$pid" 2>/dev/null; then echo "FAIL: app did not quit on --quit"; cat "'"$work"'/app.log"; kill "$pid"; exit 1; fi
-  echo "ok: --quit stops the running copy"
-'
+# One session bus and one virtual display for the whole sequence.
+dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" \
+  "$root/installers/linux/session-check.sh" "$prog" "$work"
 
 "$HOME/.local/share/CargoFrame/uninstall.sh"
 [ ! -e "$prog" ] || { echo "FAIL: program left behind" >&2; exit 1; }

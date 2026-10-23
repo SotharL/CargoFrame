@@ -4,9 +4,23 @@
 /// instead. The real limit is a spike result; 6000 is a conservative starting point.
 pub const MAX_QUERY_BYTES: usize = 6000;
 
-/// A validated claude.ai chat id (lowercase UUID).
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+/// A validated claude.ai chat id (lowercase UUID). A file with a bad id fails to load.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
+#[serde(try_from = "String", into = "String")]
 pub struct ChatId(String);
+
+impl TryFrom<String> for ChatId {
+    type Error = String;
+    fn try_from(s: String) -> Result<Self, String> {
+        Self::parse(&s).ok_or_else(|| format!("not a chat id: {s}"))
+    }
+}
+
+impl From<ChatId> for String {
+    fn from(id: ChatId) -> String {
+        id.0
+    }
+}
 
 impl ChatId {
     pub fn parse(s: &str) -> Option<Self> {

@@ -14,6 +14,8 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 dirs.workspace = true
+cargoframe-layout = { path = "../layout" }
+cargoframe-handoff = { path = "../handoff" }
 
 [dev-dependencies]
 tempfile.workspace = true

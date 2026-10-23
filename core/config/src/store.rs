@@ -65,6 +65,23 @@ pub fn valid_id(id: &str) -> bool {
         && chars.all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-' || c == '_')
 }
 
+/// Everything of one kind that could be read, plus the files that could not. One damaged file
+/// never hides the others.
+#[derive(Debug)]
+pub struct Loaded<T> {
+    pub items: Vec<(String, T)>,
+    pub errors: Vec<ConfigError>,
+}
+
+impl<T> Default for Loaded<T> {
+    fn default() -> Self {
+        Self {
+            items: Vec::new(),
+            errors: Vec::new(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct Store {
     dirs: Dirs,
@@ -112,6 +129,19 @@ impl Store {
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
             Err(e) => Err(ConfigError::io(path, e)),
         }
+    }
+
+    /// Every readable item of a kind, sorted by id.
+    pub fn load_all<T: Document>(&self, kind: Kind) -> Result<Loaded<T>, ConfigError> {
+        let mut out = Loaded::default();
+        for id in self.list_ids(kind)? {
+            match self.load_item::<T>(kind, &id) {
+                Ok(Some(doc)) => out.items.push((id, doc)),
+                Ok(None) => {}
+                Err(e) => out.errors.push(e),
+            }
+        }
+        Ok(out)
     }
 
     /// Ids of the items of a kind, sorted. Files that are not `<valid id>.json` are ignored.
@@ -474,5 +504,50 @@ mod tests {
         assert_eq!(d.data(), Path::new("/r/data"));
         assert_eq!(d.kept_zips(), Path::new("/r/data/kept"));
         assert_eq!(d.logs(), Path::new("/r/data/logs"));
+    }
+}
+
+#[cfg(test)]
+mod load_all_tests {
+    use super::*;
+    use crate::models::Trigger;
+
+    #[test]
+    fn one_damaged_file_does_not_hide_the_others() {
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::new(Dirs::under(dir.path()));
+        s.save_item(
+            Kind::Triggers,
+            "good",
+            &Trigger {
+                name: "Good".into(),
+                ..Trigger::default()
+            },
+        )
+        .unwrap();
+        let bad = s.dirs().config().join("triggers").join("bad.json");
+        std::fs::write(&bad, "{ not json").unwrap();
+        let loaded = s.load_all::<Trigger>(Kind::Triggers).unwrap();
+        assert_eq!(loaded.items.len(), 1);
+        assert_eq!(loaded.items[0].0, "good");
+        assert_eq!(loaded.errors.len(), 1);
+    }
+
+    #[test]
+    fn layouts_and_chats_use_the_same_machinery() {
+        use cargoframe_layout::Layout;
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::new(Dirs::under(dir.path()));
+        s.save_item(Kind::Layouts, "bug", &Layout::empty("bug", "Bug report"))
+            .unwrap();
+        let l = s
+            .load_item::<Layout>(Kind::Layouts, "bug")
+            .unwrap()
+            .unwrap();
+        assert_eq!(l.name, "Bug report");
+        let text = std::fs::read_to_string(s.dirs().config().join("layouts/bug.json")).unwrap();
+        assert!(text.contains("\"schema_version\": 1"));
+        let chats = s.load_or_default::<cargoframe_handoff::ChatList>().unwrap();
+        assert!(chats.is_empty());
     }
 }

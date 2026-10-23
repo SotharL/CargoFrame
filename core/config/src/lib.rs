@@ -18,9 +18,11 @@
 pub mod error;
 pub mod models;
 pub mod paths;
+pub mod shortcut;
 pub mod store;
+pub mod triggers;
 
 pub use error::ConfigError;
-pub use models::{General, MemoryMode, Safe, Theme};
+pub use models::{CaptureMode, General, MemoryMode, Safe, Theme, Trigger};
 pub use paths::Dirs;
-pub use store::{valid_id, Document, Kind, Store};
+pub use store::{valid_id, Document, Kind, Loaded, Store};

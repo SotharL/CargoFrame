@@ -1,4 +1,6 @@
 use crate::store::Document;
+use cargoframe_handoff::ChatList;
+use cargoframe_layout::Layout;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -79,4 +81,61 @@ impl Default for Safe {
 impl Document for Safe {
     const SCHEMA: u32 = 1;
     const NAME: &'static str = "safe";
+}
+
+/// What a trigger captures.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CaptureMode {
+    /// The window in focus; the display it is on when there is none (or it cannot be read).
+    #[default]
+    ActiveWindow,
+    /// The display under the mouse pointer.
+    Display,
+    /// Every display as one picture.
+    AllDisplays,
+}
+
+/// `triggers/<id>.json`: a shortcut that captures and opens one layout.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Trigger {
+    pub schema_version: u32,
+    pub name: String,
+    pub enabled: bool,
+    /// Canonical form, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only".
+    pub shortcut: String,
+    pub capture: CaptureMode,
+    /// `layouts/<id>.json`. Each trigger has its own layout in V1.
+    pub layout_id: Option<String>,
+}
+
+impl Default for Trigger {
+    fn default() -> Self {
+        Self {
+            schema_version: Self::SCHEMA,
+            name: String::new(),
+            enabled: true,
+            shortcut: String::new(),
+            capture: CaptureMode::default(),
+            layout_id: None,
+        }
+    }
+}
+
+impl Document for Trigger {
+    const SCHEMA: u32 = 1;
+    const NAME: &'static str = "trigger";
+}
+
+/// `layouts/<id>.json` is the layout model itself.
+impl Document for Layout {
+    const SCHEMA: u32 = cargoframe_layout::SCHEMA_VERSION;
+    const NAME: &'static str = "layout";
+}
+
+/// `chats.json`: pinned and recent Claude chats. Stored beside `general.json`.
+impl Document for ChatList {
+    const SCHEMA: u32 = 1;
+    const NAME: &'static str = "chats";
 }

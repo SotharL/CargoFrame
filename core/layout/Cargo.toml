@@ -10,4 +10,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+serde.workspace = true
 cargoframe-context = { path = "../context" }
+
+[dev-dependencies]
+serde_json.workspace = true

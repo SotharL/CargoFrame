@@ -32,7 +32,7 @@ jobs:
       - name: Build the NSIS installer
         working-directory: app
         shell: bash
-        run: ../ui/node_modules/.bin/tauri build --bundles nsis
+        run: ../scripts/ci/run.sh "Build NSIS installer" ../ui/node_modules/.bin/tauri build --bundles nsis
       - name: Find the installer
         id: find
         shell: pwsh
@@ -42,8 +42,8 @@ jobs:
           "path=$($f.FullName)" >> $env:GITHUB_OUTPUT
           "### Installer: $($f.Name) ($([math]::Round($f.Length / 1MB, 1)) MB)" >> $env:GITHUB_STEP_SUMMARY
       - name: Silent install, upgrade, uninstall
-        shell: pwsh
-        run: ./installers/windows/smoke-test.ps1 -Installer '${{ steps.find.outputs.path }}'
+        shell: bash
+        run: scripts/ci/run.sh "Windows installer smoke test" pwsh -NoProfile -File installers/windows/smoke-test.ps1 -Installer '${{ steps.find.outputs.path }}'
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
@@ -71,14 +71,14 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Install script tests (fake AppImage)
-        run: ./installers/linux/test-install.sh
+        run: scripts/ci/run.sh "Linux install script tests" ./installers/linux/test-install.sh
       - name: Build the AppImage
         working-directory: app
         env:
           NO_STRIP: "true"
-        run: ../ui/node_modules/.bin/tauri build --bundles appimage
+        run: ../scripts/ci/run.sh "Build AppImage" ../ui/node_modules/.bin/tauri build --bundles appimage
       - name: Install, run and quit the real AppImage
-        run: ./installers/linux/smoke-test.sh
+        run: scripts/ci/run.sh "AppImage smoke test" ./installers/linux/smoke-test.sh
       - uses: actions/upload-artifact@v4
         with:
           name: linux-appimage
