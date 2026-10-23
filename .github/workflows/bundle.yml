@@ -20,7 +20,7 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -44,7 +44,7 @@ jobs:
       - name: Silent install, upgrade, uninstall
         shell: bash
         run: scripts/ci/run.sh "Windows installer smoke test" pwsh -NoProfile -File installers/windows/smoke-test.ps1 -Installer '${{ steps.find.outputs.path }}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-installer
           path: ${{ steps.find.outputs.path }}
@@ -55,7 +55,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
@@ -89,7 +89,7 @@ jobs:
         env:
           CARGOFRAME_PERF_SCALE: "2"
         run: scripts/ci/run.sh "open times" scripts/e2e/linux-open-times.sh
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: linux-appimage
           path: |

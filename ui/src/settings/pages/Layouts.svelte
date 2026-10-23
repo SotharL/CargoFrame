@@ -3,10 +3,11 @@
   import Chip from '../../lib/components/Chip.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { ConnectionView, InfoType, IssueView, Layout, Rule, Trigger, VariableInfo } from '../../lib/types';
+  import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Rule, Trigger, VariableInfo } from '../../lib/types';
   import Canvas from '../layout/Canvas.svelte';
   import Properties from '../layout/Properties.svelte';
   import { canPlace, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
+  import { offersFor, type TemplateOffer } from '../layout/templates';
   import { go, route } from '../route.svelte';
 
   const layouts = createItems<Layout>('layout');
@@ -24,15 +25,21 @@
   let message = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
   let confirmingDelete = $state(false);
   let busy = $state(false);
+  let templates = $state<LayoutTemplate[]>([]);
+  let picking = $state(false);
+  /** Set while the builder shows a template that has not been saved: saving makes a copy. */
+  let fromTemplate = $state<{ name: string } | null>(null);
 
   const dirty = $derived(draft !== null && JSON.stringify(tidy($state.snapshot(draft))) !== saved);
   const usedBy = $derived(currentId ? triggers.items.filter((t) => t.item.layout_id === currentId) : []);
   const block = $derived(draft?.blocks.find((b) => b.id === selected) ?? null);
+  const groups = $derived(offersFor(templates, connections));
 
   onMount(async () => {
     await Promise.all([layouts.reload(), triggers.reload(), rules.reload(), infos.reload()]);
     variables = await (await getApi()).listVariables();
     connections = (await (await getApi()).listConnections().catch(() => null))?.items ?? [];
+    templates = await (await getApi()).listLayoutTemplates().catch(() => []);
     if (route.arg && layouts.find(route.arg)) open(route.arg);
     else if (layouts.items.length === 1) open(layouts.items[0]!.id);
   });
@@ -49,6 +56,7 @@
     const l = layouts.find(id);
     if (!l) return;
     currentId = id;
+    fromTemplate = null;
     draft = structuredClone($state.snapshot(l));
     draft.id = id;
     saved = JSON.stringify(tidy(draft));
@@ -71,8 +79,50 @@
     }
   }
 
+  /** Show a template in the builder. Nothing is written until the person saves a copy. */
+  async function useTemplate(offer: TemplateOffer) {
+    message = null;
+    try {
+      const layout = await (await getApi()).layoutFromTemplate(offer.key, offer.connectionId);
+      currentId = null;
+      draft = structuredClone(layout);
+      fromTemplate = { name: layout.name };
+      saved = '';
+      selected = null;
+      confirmingDelete = false;
+      picking = false;
+    } catch (e) {
+      message = { kind: 'err', text: String(e) };
+    }
+  }
+
+  /** Write the layout in the builder as a new file, leaving any existing one as it was saved. */
+  async function saveAsNew(name: string) {
+    if (!draft) return;
+    busy = true;
+    message = null;
+    try {
+      const api = await getApi();
+      const out = tidy($state.snapshot(draft));
+      out.name = name;
+      const id = await api.newItemId('layout', name);
+      out.id = id;
+      await api.saveItem('layout', id, out);
+      await layouts.reload();
+      go('layouts', id);
+      open(id);
+      message = { kind: 'ok', text: fromTemplate ? 'Saved as your own layout' : 'Saved as a copy' };
+    } catch (e) {
+      message = { kind: 'err', text: String(e) };
+    }
+    busy = false;
+  }
+
   async function save() {
-    if (!draft || !currentId) return;
+    if (!draft) return;
+    // A template is never changed: saving it makes a layout of the person's own.
+    if (fromTemplate) return saveAsNew(draft.name.trim() || fromTemplate.name);
+    if (!currentId) return;
     busy = true;
     message = null;
     try {
@@ -87,8 +137,17 @@
     busy = false;
   }
 
+  const saveAsCopy = () => saveAsNew(`${draft?.name.trim() || 'Layout'} (copy)`);
+
   function revert() {
     if (currentId) open(currentId);
+  }
+
+  function discardTemplate() {
+    fromTemplate = null;
+    draft = null;
+    saved = '';
+    issues = [];
   }
 
   async function remove() {
@@ -165,13 +224,51 @@
       </select>
     </label>
     <button onclick={create}>New layout</button>
+    <button onclick={() => (picking = !picking)} aria-expanded={picking}>
+      {picking ? 'Hide templates' : 'Start from a template'}
+    </button>
   </div>
 
-  {#if layouts.loaded && layouts.items.length === 0}
+  {#if picking}
+    <section class="templates" aria-label="Templates">
+      <p class="quiet">
+        Ready-made windows for the connections you have. A template opens here as an unsaved layout:
+        change anything, then save, and your own copy is made. The template itself never changes.
+      </p>
+      {#each groups as g (g.id)}
+        <div class="group">
+          <h3>
+            {g.title}
+            <Chip kind={g.state === 'ready' || g.state === 'local' ? 'ok' : 'warn'} label={g.detail} />
+          </h3>
+          {#each g.offers as o (o.key)}
+            <div class="offer">
+              <div>
+                <strong>{o.name}</strong>
+                <p class="quiet small">{o.description}</p>
+              </div>
+              <button onclick={() => useTemplate(o)} aria-label={`Use ${o.name}${o.connectionId ? ` for ${g.title}` : ''}`}>Use</button>
+            </div>
+          {/each}
+        </div>
+      {/each}
+      {#if !connections.length}
+        <p class="quiet small">
+          Add a connection to see layouts for Jira, Google, Reddit, Claude or your own API.
+          <button class="link" onclick={() => go('connections')}>Go to Connections</button>
+        </p>
+      {/if}
+    </section>
+  {/if}
+
+  {#if layouts.loaded && layouts.items.length === 0 && !draft}
     <div class="empty">
       <h2>No layouts yet</h2>
-      <p class="quiet">A layout is the window a trigger opens. It starts empty: add the screenshot, text boxes, files, dropdowns and a sharing button you want.</p>
-      <button class="primary" onclick={create}>Create your first layout</button>
+      <p class="quiet">A layout is the window a trigger opens. Start from a template made for your connections, or from an empty one and add the screenshot, text boxes, files, dropdowns and a sharing button you want.</p>
+      <div class="buttons">
+        <button class="primary" onclick={() => (picking = true)}>Start from a template</button>
+        <button onclick={create}>Create an empty layout</button>
+      </div>
     </div>
   {/if}
 
@@ -183,21 +280,32 @@
         {#if counts.warning}<Chip kind="warn" label={`${counts.warning} to check`} />{/if}
         {#if counts.debug}<Chip kind="dbg" label={`${counts.debug} unknown`} />{/if}
         {#if !issues.length}<Chip kind="ok" label="No problems" />{/if}
-        {#if usedBy.length}
+        {#if fromTemplate}
+          <span class="quiet used">
+            Template “{fromTemplate.name}”: saving makes your own copy, the template stays as it is
+          </span>
+        {:else if usedBy.length}
           <span class="quiet used">Used by {usedBy.map((t) => t.item.name).join(', ')}</span>
         {:else}
           <span class="quiet used">Not used by any trigger yet</span>
         {/if}
       </div>
       <div class="actions">
-        {#if dirty}<Chip kind="warn" label="Unsaved changes" />{/if}
-        <button class="primary" onclick={save} disabled={busy || !dirty}>Save</button>
-        <button onclick={revert} disabled={!dirty}>Revert</button>
-        {#if confirmingDelete}
-          <button class="danger" onclick={remove}>Delete for good</button>
-          <button onclick={() => (confirmingDelete = false)}>Keep</button>
+        {#if fromTemplate}
+          <Chip kind="dbg" label="Not saved yet" />
+          <button class="primary" onclick={save} disabled={busy}>Save as my layout</button>
+          <button onclick={discardTemplate}>Discard</button>
         {:else}
-          <button onclick={() => (confirmingDelete = true)}>Delete</button>
+          {#if dirty}<Chip kind="warn" label="Unsaved changes" />{/if}
+          <button class="primary" onclick={save} disabled={busy || !dirty}>Save</button>
+          <button onclick={saveAsCopy} disabled={busy}>Save as copy</button>
+          <button onclick={revert} disabled={!dirty}>Revert</button>
+          {#if confirmingDelete}
+            <button class="danger" onclick={remove}>Delete for good</button>
+            <button onclick={() => (confirmingDelete = false)}>Keep</button>
+          {:else}
+            <button onclick={() => (confirmingDelete = true)}>Delete</button>
+          {/if}
         {/if}
       </div>
     </div>
@@ -243,6 +351,14 @@
   .pick { display: grid; gap: 2px; }
   .pick select { min-width: 220px; }
   .empty { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px; display: grid; gap: 8px; justify-items: start; }
+  .templates { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; display: grid; gap: 12px; }
+  .group { display: grid; gap: 6px; }
+  .group h3 { font-size: 13.5px; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .offer { display: flex; gap: 12px; justify-content: space-between; align-items: center; padding: 8px 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .offer p { margin: 2px 0 0; }
+  .small { font-size: 12.5px; }
+  .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+  .link { border: 0; background: transparent; padding: 0; color: var(--accent); text-decoration: underline; }
   .titlebar { display: grid; gap: 8px; }
   .name { font-size: 16px; font-weight: 600; max-width: 420px; }
   .chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }

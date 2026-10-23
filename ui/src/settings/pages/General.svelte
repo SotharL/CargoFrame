@@ -4,6 +4,8 @@
   import Segmented from '../../lib/components/Segmented.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import SafetySection from './SafetySection.svelte';
+  import TransferSection from './TransferSection.svelte';
   import { getApi } from '../../lib/ipc';
   import { applyTheme } from '../../lib/theme';
   import type { AppInfo, General, MemoryMode, ThemeChoice, TimingView } from '../../lib/types';
@@ -76,35 +78,44 @@
       <Toggle label="Run CargoFrame when I sign in" bind:checked={autostart} onchange={onAutostart} />
     </Section>
 
-    <Section title="Memory">
-      <label class="row">
-        <span>Keep windows ready</span>
-        <select bind:value={general.memory_mode} onchange={onMemory}>
-          <option value="balanced">Balanced</option>
-          <option value="low_memory">Low memory</option>
-          <option value="always_warm">Always warm</option>
-        </select>
-      </label>
-      <p class="quiet">{memoryHints[general.memory_mode]}</p>
-    </Section>
+    <SafetySection onstatus={(kind, text) => { status = kind === 'ok' ? 'saved' : 'error'; errorText = kind === 'ok' ? '' : text; }} />
 
-    <Section title="Performance" hint="How long the last runs took, against the targets CargoFrame aims for.">
-      {#if timings.length === 0}
-        <p class="quiet">Nothing measured yet. Use a trigger or share something, then look again.</p>
-      {:else}
-        <ul class="timings">
-          {#each timings as t (t.id)}
-            <li>
-              <span>{t.label}{t.note ? ` (${t.note})` : ''}</span>
-              <Chip
-                kind={t.budget_ms !== null && t.ms > t.budget_ms ? 'warn' : 'dbg'}
-                label={t.budget_ms !== null ? `${t.ms} ms of ${t.budget_ms}` : `${t.ms} ms`}
-              />
-            </li>
-          {/each}
-        </ul>
-      {/if}
-      <div><button type="button" onclick={refreshTimings}>Refresh</button></div>
+    <Section
+      title="Performance"
+      hint="How much memory CargoFrame keeps ready, and how long the last runs took against the targets it aims for."
+    >
+      <div class="sub">
+        <h3>Memory</h3>
+        <label class="row">
+          <span>Keep windows ready</span>
+          <select bind:value={general.memory_mode} onchange={onMemory}>
+            <option value="balanced">Balanced</option>
+            <option value="low_memory">Low memory</option>
+            <option value="always_warm">Always warm</option>
+          </select>
+        </label>
+        <p class="quiet">{memoryHints[general.memory_mode]}</p>
+      </div>
+
+      <div class="sub">
+        <h3>Last measured</h3>
+        {#if timings.length === 0}
+          <p class="quiet">Nothing measured yet. Use a trigger or share something, then look again.</p>
+        {:else}
+          <ul class="timings">
+            {#each timings as t (t.id)}
+              <li>
+                <span>{t.label}{t.note ? ` (${t.note})` : ''}</span>
+                <Chip
+                  kind={t.budget_ms !== null && t.ms > t.budget_ms ? 'warn' : 'dbg'}
+                  label={t.budget_ms !== null ? `${t.ms} ms of ${t.budget_ms}` : `${t.ms} ms`}
+                />
+              </li>
+            {/each}
+          </ul>
+        {/if}
+        <div><button type="button" onclick={refreshTimings}>Refresh</button></div>
+      </div>
     </Section>
 
     <Section title="Updates">
@@ -127,6 +138,8 @@
       </div>
     </Section>
 
+    <TransferSection />
+
     <div class="status" role="status" aria-live="polite">
       {#if status === 'saved'}<Chip kind="ok" label="Saved" />{/if}
       {#if status === 'error'}<Chip kind="err" label="Could not save" /> <span class="quiet">{errorText}</span>{/if}
@@ -136,6 +149,8 @@
 
 <style>
   .page { display: grid; gap: 14px; }
+  .sub { display: grid; gap: 8px; }
+  .sub h3 { font-size: 13.5px; }
   .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
   .status { min-height: 26px; display: flex; align-items: center; gap: 8px; }
   .timings { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }

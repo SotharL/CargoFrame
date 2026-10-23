@@ -5,6 +5,8 @@ import type { SessionView, ShareResult } from '../lib/types';
  * is not part of the real window's code.
  */
 export async function demoSession(): Promise<SessionView> {
+  // `?mode=local` shows the window as it is when the button has no active connection.
+  const local = new URLSearchParams(location.search).get('mode') === 'local';
   return {
     session_id: 1,
     trigger_id: 'bug',
@@ -70,7 +72,9 @@ export async function demoSession(): Promise<SessionView> {
       proj: { status: 'loading', selected: null, options: [], message: null },
     },
     issues: [],
-    sharing: { send: { enabled: true, reasons: [] } },
+    sharing: local
+      ? { send: { enabled: true, reasons: [], mode: 'save_locally', note: 'No connection: saves a zip in your “Folder for saved zips”' } }
+      : { send: { enabled: true, reasons: [], mode: 'send', note: null } },
   };
 }
 
@@ -125,6 +129,11 @@ export function demoShare(kind: string | null): ShareResult {
       return {
         status: 'failed', label: 'Sign-in expired', message: 'Jira refused the token', reconnect: true, attempts: 1,
         saved: { place: 'kept_locally', path: '/home/me/.local/share/CargoFrame/kept/CargoFrame_x.zip', note: 'safe folder: folder not writable' },
+      };
+    case 'saved':
+      return {
+        status: 'saved_locally', path: '/home/me/Documents/CargoFrame zips/CargoFrame_2026-10-23_153045_local.zip',
+        notes: [], close: false,
       };
     case 'blocked':
       return { status: 'blocked', reasons: ['\u201cSummary\u201d needs a value', 'Write the prompt before sharing'] };

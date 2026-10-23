@@ -18,6 +18,7 @@ mod share;
 mod state;
 mod timing;
 mod tools;
+mod transfer;
 mod tray;
 mod tray_host;
 mod triggers;
@@ -86,6 +87,12 @@ pub fn run() {
             commands::delete_item,
             commands::new_item_id,
             commands::validate_layout,
+            commands::list_layout_templates,
+            commands::layout_from_template,
+            commands::export_settings,
+            commands::open_import,
+            commands::apply_import,
+            commands::discard_import,
             commands::list_variables,
             commands::test_rule,
             commands::get_safe,
@@ -256,6 +263,12 @@ mod shipped_config_tests {
             "allow-set-general",
             "allow-set-safe",
             "allow-pick-folder",
+            "allow-list-layout-templates",
+            "allow-layout-from-template",
+            "allow-export-settings",
+            "allow-open-import",
+            "allow-apply-import",
+            "allow-discard-import",
         ] {
             assert!(
                 !granted.contains(&forbidden),

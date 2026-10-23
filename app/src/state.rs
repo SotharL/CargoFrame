@@ -1,6 +1,7 @@
 use crate::connections::Connections;
 use crate::session::Sessions;
 use crate::timing::Timings;
+use crate::transfer::Entry;
 use crate::warm::Warm;
 use cargoframe_config::Store;
 use std::collections::BTreeMap;
@@ -30,6 +31,9 @@ pub struct AppState {
     share_cancelled: AtomicBool,
     /// Shortcuts that could not be registered, by trigger id, with the reason.
     shortcut_errors: Mutex<BTreeMap<String, String>>,
+    /// The settings file the person opened to import, read and checked, waiting for their
+    /// choice of what to bring in. The window never names a file: it only ever sees this.
+    pending_import: Mutex<Option<Vec<Entry>>>,
 }
 
 impl AppState {
@@ -46,6 +50,7 @@ impl AppState {
             sharing: AtomicBool::new(false),
             share_cancelled: AtomicBool::new(false),
             shortcut_errors: Mutex::new(BTreeMap::new()),
+            pending_import: Mutex::new(None),
         }
     }
 
@@ -85,6 +90,21 @@ impl AppState {
 
     pub fn share_cancelled(&self) -> bool {
         self.share_cancelled.load(Ordering::Acquire)
+    }
+
+    pub fn set_pending_import(&self, entries: Option<Vec<Entry>>) {
+        *self
+            .pending_import
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()) = entries;
+    }
+
+    /// The opened settings file, once: choosing what to import uses it up.
+    pub fn take_pending_import(&self) -> Option<Vec<Entry>> {
+        self.pending_import
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
     }
 
     pub fn set_shortcut_errors(&self, errors: BTreeMap<String, String>) {
