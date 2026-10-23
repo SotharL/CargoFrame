@@ -20,6 +20,7 @@ mod tools;
 mod tray;
 mod tray_host;
 mod triggers;
+mod warm;
 mod windowing;
 
 use cargoframe_config::{Dirs, Store};
@@ -108,16 +109,19 @@ pub fn run() {
             commands::copy_text,
             commands::open_link,
         ])
-        .on_window_event(|window, event| {
+        .on_window_event(|window, event| match event {
+            // Settings, General, Memory decides whether a closed window is destroyed or kept.
+            tauri::WindowEvent::CloseRequested { api, .. } => {
+                windowing::close_requested(window, api)
+            }
             // Closing the CargoFrame window frees its capture (the screenshot is large).
-            if window.label() == windowing::CAPTURE {
-                if let tauri::WindowEvent::Destroyed = event {
-                    if let Some(state) = window.app_handle().try_state::<AppState>() {
-                        state.cancel_share();
-                        state.sessions.clear();
-                    }
+            tauri::WindowEvent::Destroyed if window.label() == windowing::CAPTURE => {
+                if let Some(state) = window.app_handle().try_state::<AppState>() {
+                    state.cancel_share();
+                    state.sessions.clear();
                 }
             }
+            _ => {}
         })
         .setup(move |app| {
             if startup == Startup::Exit {

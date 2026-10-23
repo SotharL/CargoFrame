@@ -1,5 +1,6 @@
 use crate::connections::Connections;
 use crate::session::Sessions;
+use crate::warm::Warm;
 use cargoframe_config::Store;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -16,6 +17,8 @@ pub struct AppState {
     pub tray_available: bool,
     /// The capture the CargoFrame window is showing.
     pub sessions: Sessions,
+    /// Which hidden windows are being kept warm (Memory mode).
+    pub warm: Warm,
     /// A capture is being taken; a second shortcut press meanwhile is ignored.
     busy: AtomicBool,
     /// A share is being sent; a second press of a sharing button meanwhile is refused.
@@ -34,6 +37,7 @@ impl AppState {
             paused: AtomicBool::new(false),
             tray_available,
             sessions: Sessions::new(),
+            warm: Warm::new(),
             busy: AtomicBool::new(false),
             sharing: AtomicBool::new(false),
             share_cancelled: AtomicBool::new(false),

@@ -1,6 +1,10 @@
-//! Creating and focusing windows. Windows are created on demand and destroyed when closed,
-//! so a tray-only CargoFrame holds no web view and uses little memory.
+//! Creating and focusing windows. Windows are created on demand, so a tray-only CargoFrame
+//! holds no web view and uses little memory. What a closed window does next (destroyed at once,
+//! kept hidden for five minutes, or kept for good) follows Settings, General, Memory.
 
+use crate::state::AppState;
+use crate::warm::{self, OnClose};
+use cargoframe_config::General;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const SETTINGS: &str = "settings";
@@ -20,7 +24,14 @@ pub fn open_settings(app: &AppHandle) {
     });
 }
 
+fn shown(app: &AppHandle, label: &str) {
+    if let Some(state) = app.try_state::<AppState>() {
+        state.warm.shown(label);
+    }
+}
+
 fn open_settings_now(app: &AppHandle) -> tauri::Result<()> {
+    shown(app, SETTINGS);
     if let Some(win) = app.get_webview_window(SETTINGS) {
         let _ = win.unminimize();
         win.show()?;
@@ -48,6 +59,7 @@ pub fn open_capture(app: &AppHandle) {
 }
 
 fn open_capture_now(app: &AppHandle) -> tauri::Result<()> {
+    shown(app, CAPTURE);
     if let Some(win) = app.get_webview_window(CAPTURE) {
         win.emit("session-changed", ())?;
         let _ = win.unminimize();
@@ -70,6 +82,7 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
     let app = app.clone();
     let page = page.to_string();
     tauri::async_runtime::spawn(async move {
+        shown(&app, SETTINGS);
         if let Some(win) = app.get_webview_window(SETTINGS) {
             let _ = win.emit("navigate", page);
             let _ = win.unminimize();
@@ -88,4 +101,56 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
             tracing::error!("could not open settings: {e}");
         }
     });
+}
+
+/// A Settings or CargoFrame window is being closed. In Low memory it closes (and is destroyed);
+/// otherwise it is hidden, and in Balanced a timer destroys it if nobody opens it again.
+pub fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestApi) {
+    let label = window.label().to_string();
+    if label != SETTINGS && label != CAPTURE {
+        return;
+    }
+    let app = window.app_handle().clone();
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    let mode = state
+        .store
+        .load_or_default::<General>()
+        .map(|g| g.memory_mode)
+        .unwrap_or_default();
+    tracing::debug!(window = %label, ?mode, "window closing");
+    let OnClose::Hide { release_after } = warm::on_close(mode) else {
+        return;
+    };
+    api.prevent_close();
+    if label == CAPTURE {
+        // The screenshot is large and belongs to the capture that just ended.
+        state.cancel_share();
+        state.sessions.clear();
+    }
+    let _ = window.hide();
+    let ticket = state.warm.hidden(&label);
+    if let Some(after) = release_after {
+        let spawned = std::thread::Builder::new()
+            .name(format!("release-{label}"))
+            .spawn(move || {
+                std::thread::sleep(after);
+                let Some(state) = app.try_state::<AppState>() else {
+                    return;
+                };
+                if !state.warm.still_hidden(&label, ticket) {
+                    return;
+                }
+                if let Some(win) = app.get_webview_window(&label) {
+                    if !win.is_visible().unwrap_or(true) {
+                        tracing::debug!(window = %label, "releasing a window that stayed hidden");
+                        let _ = win.destroy();
+                    }
+                }
+            });
+        if let Err(e) = spawned {
+            tracing::warn!("could not schedule releasing a hidden window: {e}");
+        }
+    }
 }

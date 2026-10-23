@@ -111,21 +111,75 @@ if [ -n "${CARGOFRAME_E2E_DEBUG:-}" ]; then
     echo "window $w: $(xdotool getwindowname "$w" 2>/dev/null) $(xdotool getwindowgeometry "$w" 2>/dev/null | tr '\n' ' ')"
   done
 fi
-import -window root "$out/capture-window.png"
+# A cold web view paints late on a slow machine: look again for up to 20 seconds.
+check_shot() {
 python3 - "$out/capture-window.png" <<'PY'
 import sys
 from PIL import Image
 im = Image.open(sys.argv[1]).convert("RGB")
 w, h = im.size
 colors = im.getcolors(maxcolors=w * h) or []
-print(f"screen {w}x{h}, {len(colors)} distinct colours")
 def has(rgb, tol=6, minimum=200):
     return sum(n for n, c in colors if all(abs(a - b) <= tol for a, b in zip(c, rgb))) >= minimum
 # The captured program's red strip and blue bar must be visible inside the window.
-assert has((0xE0, 0x4F, 0x4F)), "the program's red strip is not on screen (capture not shown?)"
-assert has((0x4F, 0x8E, 0xE0)), "the program's blue bar is not on screen"
-print("ok: the capture of the focused program is shown")
+if not has((0xE0, 0x4F, 0x4F)):
+    sys.exit("the program's red strip is not on screen (capture not shown?)")
+if not has((0x4F, 0x8E, 0xE0)):
+    sys.exit("the program's blue bar is not on screen")
 PY
+}
+shown=""
+for _ in $(seq 40); do
+  import -window root "$out/capture-window.png"
+  if check_shot 2>/dev/null; then shown=1; break; fi
+  sleep 0.5
+done
+[ -n "$shown" ] || { check_shot || true; fail "the capture of the focused program is not shown"; }
+echo "ok: the capture of the focused program is shown"
+
+# Press Escape in the CargoFrame window until <condition> holds (a freshly shown page may not
+# be listening for keys yet, so one press can be lost).
+press_escape_until() {
+  local target w i
+  for _ in $(seq 8); do
+    target="$(find_window CargoFrame || true)"
+    [ -n "$target" ] && { xdotool windowfocus "$target" 2>/dev/null || true; sleep 0.3; xdotool key --clearmodifiers Escape; }
+    for i in $(seq 15); do
+      if "$@"; then return 0; fi
+      sleep 0.1
+    done
+  done
+  return 1
+}
+not_visible() { [ -z "$(is_visible)" ]; }
+no_window() { [ -z "$(find_window CargoFrame || true)" ]; }
+
+# Memory mode defaults to Balanced: closing the window (Escape) hides it, keeps the program
+# running, and the next shortcut press brings the same window back at once.
+is_visible() { xdotool search --onlyvisible --name 'cargoframe' 2>/dev/null | while read -r w; do
+  [ "$(xdotool getwindowname "$w" 2>/dev/null)" = "CargoFrame" ] && echo "$w"; done | head -n1; }
+press_escape_until not_visible || fail "the CargoFrame window stayed visible after Escape"
+kill -0 "$app_pid" 2>/dev/null || fail "CargoFrame exited when its window closed"
+echo "ok: closing the window hid it and the program kept running"
+xdotool windowraise "$fake_win" || true
+xdotool windowfocus "$fake_win" || true
+sleep 0.5
+xdotool key --clearmodifiers ctrl+shift+F9
+for _ in $(seq 50); do [ -n "$(is_visible)" ] && break; sleep 0.1; done
+[ -n "$(is_visible)" ] || fail "the kept window did not come back on the next shortcut press"
+echo "ok: the kept window came back"
+
+# Low memory frees the web view at once: after Escape no CargoFrame window exists at all.
+printf '{ "schema_version": 1, "theme": "system", "memory_mode": "low_memory", "check_updates": false }\n' > "$cfg/general.json"
+press_escape_until no_window || fail "Low memory kept the window instead of destroying it"
+echo "ok: Low memory destroyed the window"
+xdotool windowraise "$fake_win" || true
+xdotool windowfocus "$fake_win" || true
+sleep 0.5
+xdotool key --clearmodifiers ctrl+shift+F9
+for _ in $(seq 100); do [ -n "$(find_window CargoFrame || true)" ] && break; sleep 0.1; done
+[ -n "$(find_window CargoFrame || true)" ] || fail "no window after the shortcut in Low memory"
+echo "ok: a new window opened in Low memory"
 
 grep -q "panicked" "$work/cargoframe.log" && fail "the app panicked"
 "$bin" --quit >/dev/null 2>&1 || true
