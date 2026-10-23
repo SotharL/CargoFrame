@@ -1,0 +1,24 @@
+# Build output
+/target/
+**/node_modules/
+**/dist/
+**/.svelte-kit/
+**/gen/
+
+# Secrets and signing material: these must never be committed
+*.pfx
+*.p12
+*.key
+*.pem
+*.cer
+.env
+.env.*
+secrets/
+.tauri/
+
+# Editors and OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
+*.log
