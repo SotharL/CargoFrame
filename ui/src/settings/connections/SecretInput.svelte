@@ -44,13 +44,8 @@
       <button type="button" disabled={busy} onclick={() => run(onclear)}>Remove</button>
     </div>
   {:else}
-    <form
-      class="row"
-      onsubmit={(e) => {
-        e.preventDefault();
-        void run(() => onsave(value));
-      }}
-    >
+    <!-- Not a <form>: this sits inside the connection's own form, and forms must not nest. -->
+    <div class="row">
       <input
         type="password"
         bind:value
@@ -58,10 +53,16 @@
         spellcheck="false"
         aria-label={label}
         placeholder="Paste it here"
+        onkeydown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            if (value && !busy) void run(() => onsave(value));
+          }
+        }}
       />
-      <button class="primary" type="submit" disabled={busy || !value}>Save</button>
+      <button class="primary" type="button" disabled={busy || !value} aria-label={`Save ${label}`} onclick={() => run(() => onsave(value))}>Save</button>
       {#if replacing}<button type="button" onclick={() => (replacing = false)}>Cancel</button>{/if}
-    </form>
+    </div>
   {/if}
   {#if error}<p class="error" role="alert">{error}</p>{:else if hint}<p class="quiet hint">{hint}</p>{/if}
 </div>

@@ -268,14 +268,14 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     listItems: async <T,>(kind: ItemKind) => ({
       items: [...store[kind].entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([id, item]) => ({ id, item: structuredClone(item) as T }) as ItemEntry<T>),
+        .map(([id, item]) => ({ id, item: plain(item) as T }) as ItemEntry<T>),
       problems: [],
     }),
     saveItem: async (kind, id, item) => {
       if (!/^[a-z0-9][a-z0-9_-]{0,63}$/.test(id)) throw `"${id}" cannot be used as a file name`;
       const name = (item as { name?: string }).name;
       if (!name || !name.trim()) throw 'Give it a name';
-      store[kind].set(id, structuredClone(item));
+      store[kind].set(id, plain(item));
     },
     deleteItem: async (kind, id) => {
       store[kind].delete(id);
@@ -372,6 +372,9 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
 }
 
 let cached: Promise<Api> | undefined;
+
+/** A copy that is safe to keep: the real backend gets JSON too, and a Svelte proxy cannot be structured-cloned. */
+const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
 /** Outside the app: the in-memory backend, with the demo's answers to a share. */
 async function demoApi(): Promise<Api> {

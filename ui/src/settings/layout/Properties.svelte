@@ -267,8 +267,11 @@
   .insert { display: grid; gap: 4px; font-size: 13px; }
   .maps { display: grid; gap: 8px; }
   .maps h3 { font-size: 13px; }
-  .map { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; padding: 8px; background: var(--surface-2); border-radius: var(--radius-sm); }
-  .map button { grid-column: 1 / -1; justify-self: end; padding: 2px 8px; }
+  .map { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 8px; background: var(--surface-2); border-radius: var(--radius-sm); }
+  .map > * { min-width: 0; width: 100%; box-sizing: border-box; }
+  .map .hintline { grid-column: 1 / -1; margin: 0; }
+  .map > :nth-child(3) { grid-column: 1 / -1; }
+  .map button { grid-column: 1 / -1; justify-self: end; width: auto; padding: 2px 8px; }
   .small { font-size: 12.5px; }
   .hintline { grid-column: 1 / -1; }
   .rect { border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 10px 10px; }

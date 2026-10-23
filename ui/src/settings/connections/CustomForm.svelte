@@ -121,7 +121,7 @@
 <style>
   fieldset { border: 1px solid var(--border); border-radius: var(--radius); padding: 12px; display: grid; gap: 12px; margin: 0; }
   legend { font-weight: 600; font-size: 13px; padding: 0 6px; }
-  .line { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; }
+  .line { display: grid; grid-template-columns: 1fr 2fr; gap: 10px; align-items: start; }
   .list { display: grid; grid-template-columns: repeat(3, 1fr) auto; gap: 6px; }
   .list input:nth-child(n + 4):nth-child(-n + 6) { grid-row: 2; }
 </style>

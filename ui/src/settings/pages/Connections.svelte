@@ -247,21 +247,23 @@
               stored={s.stored}
               onsave={async (value) => {
                 await (await getApi()).setConnectionSecret(draft!.id!, s.name, value);
+                note = '';
                 await refresh();
               }}
               onclear={async () => {
                 await (await getApi()).setConnectionSecret(draft!.id!, s.name, '');
+                note = '';
                 await refresh();
               }}
             />
           {/if}
         {/each}
       {/if}
-      {#if note}<p class="ok-note" role="status">{note}</p>{/if}
+      {#if note}<div role="status"><Chip kind="ok" label={note} /></div>{/if}
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
         <button class="primary" type="submit" disabled={busy}>Save</button>
-        <button type="button" onclick={() => (draft = null)}>{note ? 'Done' : 'Cancel'}</button>
+        <button type="button" onclick={() => (draft = null)}>{draft.id ? 'Done' : 'Cancel'}</button>
       </div>
     </form>
   {/if}
@@ -284,7 +286,6 @@
   .editor { display: grid; gap: 14px; }
   .buttons { display: flex; gap: 8px; }
   .error { color: var(--err); font-size: 13px; }
-  .ok-note { color: var(--ok); font-size: 13px; }
   .danger { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
   .problem {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap; padding: 10px 12px;
