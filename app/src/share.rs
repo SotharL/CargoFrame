@@ -22,15 +22,15 @@ use cargoframe_connectors::{
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
-    sharing_state, validate, BlockKind, DropdownSource, Layout, OnSuccess, SharingButton,
-    SharingState, ValueSource,
+    sharing_mode, sharing_state, validate, BlockKind, DropdownSource, Layout, OnSuccess,
+    SharingButton, SharingMode, SharingState, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
 use cargoframe_safe::retry::{run_with_retry, RetryPolicy, RetryResult};
 use cargoframe_safe::SendError;
 use cargoframe_window::vars::Moment;
-use cargoframe_window::view::SessionView;
+use cargoframe_window::view::{SessionView, NEEDS_SAVE_FOLDER};
 use serde::{Deserialize, Serialize};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -72,6 +72,13 @@ pub enum ShareResult {
         notes: Vec<String>,
         /// Text the window offers to copy next (a second paste).
         copy_next: Option<String>,
+        /// The layout asks to close the window after a successful share.
+        close: bool,
+    },
+    /// There was no active connection: a zip was saved in the folder for saved zips.
+    SavedLocally {
+        path: String,
+        notes: Vec<String>,
         /// The layout asks to close the window after a successful share.
         close: bool,
     },
@@ -130,10 +137,16 @@ pub fn interruptible_sleep<'a>(cancelled: &'a dyn Fn() -> bool) -> impl FnMut(Du
     }
 }
 
+/// The connection a share is sent through.
+struct Destination {
+    id: String,
+    connection: Connection,
+}
+
 /// Everything worked out before anything is sent.
 struct Prepared {
-    connection_id: String,
-    connection: Connection,
+    /// Where the share goes. `None`: there is no active connection, so it is saved locally.
+    destination: Option<Destination>,
     service: String,
     trigger_name: String,
     payload: Payload,
@@ -235,17 +248,23 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     if !reasons.is_empty() {
         return Err(reasons);
     }
-    let Some(connection_id) = button.connection_id.clone() else {
-        return Err(vec!["Choose where this button shares to".to_string()]);
+    // With no active connection the button saves a zip in the folder for saved zips.
+    let local = sharing_mode(layout, &req.button_id, &registry) == SharingMode::SaveLocally;
+    let destination = if local {
+        None
+    } else {
+        let Some(id) = button.connection_id.clone() else {
+            return Err(vec!["Choose where this button shares to".to_string()]);
+        };
+        let connection = svc.connections.load(svc.store, &id).map_err(|e| vec![e])?;
+        Some(Destination { id, connection })
     };
-    let connection = svc
-        .connections
-        .load(svc.store, &connection_id)
-        .map_err(|e| vec![e])?;
-    let is_ai = svc
-        .connections
-        .info(svc.store, &connection_id)
-        .is_some_and(|i| i.kind.is_ai_destination());
+    let connection_id: Option<&str> = destination.as_ref().map(|d| d.id.as_str());
+    let is_ai = connection_id.is_some_and(|id| {
+        svc.connections
+            .info(svc.store, id)
+            .is_some_and(|i| i.kind.is_ai_destination())
+    });
 
     let mut reasons: Vec<String> = Vec::new();
 
@@ -269,7 +288,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let info_for = |field: &str| {
         infos
             .iter()
-            .find(|t| t.connection_id == connection_id && t.field == field)
+            .find(|t| Some(t.connection_id.as_str()) == connection_id && t.field == field)
     };
     let mut fields: Vec<Field> = Vec::new();
     for mapping in &button.mappings {
@@ -303,7 +322,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     // A required field that no mapping fills can never be satisfied: say so.
     for t in infos
         .iter()
-        .filter(|t| t.connection_id == connection_id && t.required)
+        .filter(|t| Some(t.connection_id.as_str()) == connection_id && t.required)
     {
         if !button.mappings.iter().any(|m| m.field == t.field) {
             reasons.push(format!(
@@ -368,14 +387,14 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         fields,
         vars: view.variables.clone(),
     };
+    let service = match &destination {
+        None => "local".to_string(),
+        Some(d) if d.connection.name.trim().is_empty() => d.id.clone(),
+        Some(d) => d.connection.name.trim().to_string(),
+    };
     Ok(Prepared {
-        service: if connection.name.trim().is_empty() {
-            connection_id.clone()
-        } else {
-            connection.name.trim().to_string()
-        },
-        connection_id,
-        connection,
+        service,
+        destination,
         trigger_name: view.trigger_name.clone(),
         payload,
         selected,
@@ -446,17 +465,24 @@ impl FallbackIo for ZipIo<'_> {
     }
 }
 
-/// Build the fallback zip and put it somewhere safe. `None` only if the zip itself could not be
-/// built (then the failure message is all there is).
-fn keep_a_copy(
+/// Why a zip could not be written, in words.
+fn describe_write(f: &WriteFailure) -> String {
+    match f {
+        WriteFailure::NotWritable => "the folder is missing or cannot be written to".to_string(),
+        WriteFailure::DiskFull => "the disk is full".to_string(),
+        WriteFailure::Other(e) => e.clone(),
+    }
+}
+
+/// Everything the share held, as a zip in CargoFrame's temporary folder: the picture, what was
+/// typed and picked, the ticked files, and why it was kept (`failure`, when a send failed).
+/// Returns where the zip is. `None` only if the zip itself could not be built.
+fn build_keep_zip(
     svc: &Services,
-    picker: &mut dyn FnMut(u32) -> Option<PickedFolder>,
     p: &Prepared,
     view: &SessionView,
-    safe: &Safe,
-    failure: &SendError,
-    attempts: u32,
-) -> Option<SavedCopy> {
+    failure: Option<(&SendError, u32)>,
+) -> Option<PathBuf> {
     let tmp_dir = svc.store.dirs().data().join("tmp");
     fs::create_dir_all(&tmp_dir).ok()?;
     let nonce = std::time::SystemTime::now()
@@ -475,12 +501,6 @@ fn keep_a_copy(
             .collect::<Vec<_>>(),
         "variables": view.variables,
     });
-    let error_json = serde_json::json!({
-        "failure": failure.kind.label(),
-        "message": failure.message,
-        "attempts": attempts,
-        "when": created(&svc.now).iso(),
-    });
     let mut items = vec![
         Item {
             name: "screenshot.png".into(),
@@ -498,12 +518,20 @@ fn keep_a_copy(
             source: Source::Bytes(serde_json::to_vec_pretty(&share_json).unwrap_or_default()),
             kind: "text",
         },
-        Item {
+    ];
+    if let Some((failure, attempts)) = failure {
+        let error_json = serde_json::json!({
+            "failure": failure.kind.label(),
+            "message": failure.message,
+            "attempts": attempts,
+            "when": created(&svc.now).iso(),
+        });
+        items.push(Item {
             name: "error.json".into(),
             source: Source::Bytes(serde_json::to_vec_pretty(&error_json).unwrap_or_default()),
             kind: "text",
-        },
-    ];
+        });
+    }
     if let Some(root) = &p.project_folder {
         for rel in &p.selected {
             items.push(Item {
@@ -529,17 +557,36 @@ fn keep_a_copy(
             .map_err(|e| e.to_string())
         });
     if let Err(e) = built {
-        tracing::error!("could not build the fallback zip: {e}");
+        tracing::error!("could not build the zip to keep: {e}");
         let _ = fs::remove_file(&source);
         return None;
     }
+    Some(source)
+}
 
+/// The zip's file name for the moment the share happened.
+fn zip_name(svc: &Services, service: &str) -> String {
     let m = &svc.now;
-    let file_name = file_name_for(
+    file_name_for(
         (m.year.clamp(0, 9999) as u16, m.month, m.day),
         (m.hour, m.minute, m.second),
-        &p.service,
-    );
+        service,
+    )
+}
+
+/// Build the fallback zip and put it somewhere safe. `None` only if the zip itself could not be
+/// built (then the failure message is all there is).
+fn keep_a_copy(
+    svc: &Services,
+    picker: &mut dyn FnMut(u32) -> Option<PickedFolder>,
+    p: &Prepared,
+    view: &SessionView,
+    safe: &Safe,
+    failure: &SendError,
+    attempts: u32,
+) -> Option<SavedCopy> {
+    let source = build_keep_zip(svc, p, view, Some((failure, attempts)))?;
+    let file_name = zip_name(svc, &p.service);
     let cfg = LadderConfig {
         safe_folder: safe.folder.clone(),
         ..LadderConfig::default()
@@ -588,6 +635,47 @@ fn keep_a_copy(
     Some(saved)
 }
 
+/// No active connection: put a zip of the share in the folder for saved zips. That folder must
+/// be set. There is no asking, no fallback to another folder: the person chose "Save locally"
+/// by having no connection, and the setting says where. If it cannot be written the share is
+/// refused with the reason, and everything is still in the window.
+fn save_locally(svc: &Services, p: &Prepared, view: &SessionView) -> ShareResult {
+    let folder = svc
+        .store
+        .load_or_default::<Safe>()
+        .ok()
+        .and_then(|s| s.folder)
+        .map(|f| f.trim().to_string())
+        .filter(|f| !f.is_empty());
+    let Some(folder) = folder else {
+        return blocked(NEEDS_SAVE_FOLDER);
+    };
+    if !Path::new(&folder).is_dir() {
+        return blocked(format!(
+            "The folder for saved zips cannot be used: {folder} is missing. Choose it again in Settings"
+        ));
+    }
+    let Some(source) = build_keep_zip(svc, p, view, None) else {
+        return blocked("The zip could not be built");
+    };
+    let saved = copy_atomic(&source, Path::new(&folder), &zip_name(svc, &p.service));
+    let _ = fs::remove_file(&source);
+    match saved {
+        Ok(path) => {
+            tracing::info!("share saved locally");
+            ShareResult::SavedLocally {
+                path: path.display().to_string(),
+                notes: p.notes.clone(),
+                close: p.close,
+            }
+        }
+        Err(e) => blocked(format!(
+            "Could not save in {folder}: {}",
+            describe_write(&e)
+        )),
+    }
+}
+
 /// Do the share. Always returns a result the window can show; nothing is lost on failure.
 pub fn run(
     svc: &Services,
@@ -599,6 +687,15 @@ pub fn run(
     let mut prepared = match prepare(svc, session, req) {
         Ok(p) => p,
         Err(reasons) => return ShareResult::Blocked { reasons },
+    };
+    // The ticked files go into the saved zip one by one; nothing is sent, so nothing is zipped
+    // twice.
+    let Some(Destination {
+        id: connection_id,
+        connection,
+    }) = prepared.destination.take()
+    else {
+        return save_locally(svc, &prepared, &session.view);
     };
 
     if !prepared.selected.is_empty() {
@@ -626,8 +723,8 @@ pub fn run(
     let RetryResult { result, attempts } = {
         let mut op = |_attempt: u32| {
             svc.connections.with_ctx(
-                &prepared.connection_id,
-                &prepared.connection,
+                &connection_id,
+                &connection,
                 svc.browser,
                 svc.clipboard,
                 &progress,
@@ -642,7 +739,7 @@ pub fn run(
     match result {
         Ok(outcome) => {
             tracing::info!(
-                connection = %prepared.connection_id,
+                connection = %connection_id,
                 attempts,
                 "share sent"
             );
@@ -662,14 +759,14 @@ pub fn run(
         }
         Err(err) => {
             tracing::warn!(
-                connection = %prepared.connection_id,
+                connection = %connection_id,
                 attempts,
                 failure = err.kind.label(),
                 "share failed"
             );
             let reconnect = err.kind.needs_reconnect();
             if reconnect {
-                svc.connections.mark_expired(&prepared.connection_id);
+                svc.connections.mark_expired(&connection_id);
             }
             let saved = keep_a_copy(svc, picker, &prepared, &session.view, &safe, &err, attempts);
             ShareResult::Failed {
@@ -1169,18 +1266,149 @@ mod tests {
         assert!(Path::new(&saved.path).is_file());
     }
 
-    #[test]
-    fn a_disconnected_connection_blocks_instead_of_failing() {
-        let w = world(|_| MockResponse::json(200, json!({})));
-        set_safe(&w, None, 0);
+    fn disconnect(w: &World) {
         w.f.connections
             .set_secret(&w.f.store, "api", "secret", "")
             .unwrap();
-        let (r, _) = go(&w, &request(), vec![]);
+    }
+
+    /// Every entry of the zip as text (the picture too, lossily): for "this appears nowhere".
+    fn all_zip_text(path: &str) -> String {
+        let mut z = zip::ZipArchive::new(fs::File::open(path).unwrap()).unwrap();
+        let mut out = String::new();
+        for i in 0..z.len() {
+            let mut bytes = Vec::new();
+            z.by_index(i).unwrap().read_to_end(&mut bytes).unwrap();
+            out.push_str(&String::from_utf8_lossy(&bytes));
+            out.push('\n');
+        }
+        out
+    }
+
+    #[test]
+    fn a_connection_that_is_not_signed_in_saves_a_zip_and_sends_nothing() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let (r, asked) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, close, .. } = r else {
+            panic!("{r:?}");
+        };
         assert!(
-            matches!(&r, ShareResult::Blocked { reasons } if reasons[0].contains("not signed in")),
-            "{r:?}"
+            close,
+            "the layout's close-after-sharing setting still applies"
         );
+        assert_eq!(
+            asked, 0,
+            "the person is never asked where: the setting says"
+        );
+        assert!(Path::new(&path).starts_with(&dir), "{path}");
+        assert!(path.ends_with("_local.zip"), "{path}");
+        let mut names = zip_names(&path);
+        names.sort();
+        assert!(names.contains(&"screenshot.png".to_string()), "{names:?}");
+        assert!(names.contains(&"share.json".to_string()));
+        assert!(names.contains(&"files/run.log".to_string()));
+        assert!(
+            !names.contains(&"files/other.log".to_string()),
+            "only ticked files"
+        );
+        assert!(!names.iter().any(|n| n == "error.json"), "nothing failed");
+        let share: serde_json::Value =
+            serde_json::from_str(&zip_text(&path, "share.json")).unwrap();
+        assert_eq!(share["destination"], "local");
+        assert_eq!(share["prompt"], "why?");
+        assert_eq!(share["fields"][0]["value"], "it \"broke\"");
+        assert!(
+            w.server.requests().is_empty(),
+            "nothing leaves the computer"
+        );
+        assert!(!all_zip_text(&path).contains(SECRET));
+        // No leftovers next to the zip.
+        let files: Vec<_> = fs::read_dir(&dir).unwrap().flatten().collect();
+        assert_eq!(files.len(), 1);
+    }
+
+    #[test]
+    fn a_button_with_no_connection_chosen_saves_a_zip_too() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        if let Some(Some(BlockKind::SharingButton(b))) = w.session.view.layout.as_mut().map(|l| {
+            l.blocks
+                .iter_mut()
+                .map(|b| &mut b.kind)
+                .find(|k| matches!(k, BlockKind::SharingButton(_)))
+        }) {
+            b.connection_id = None;
+        }
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::SavedLocally { .. }), "{r:?}");
         assert!(w.server.requests().is_empty());
+    }
+
+    #[test]
+    fn saving_locally_needs_the_folder_for_saved_zips() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        disconnect(&w);
+        for folder in [None, Some("   ")] {
+            set_safe(&w, folder, 0);
+            let (r, asked) = go(
+                &w,
+                &request(),
+                vec![Some(PickedFolder {
+                    dir: w.out.path().display().to_string(),
+                    remember: true,
+                })],
+            );
+            assert_eq!(
+                r,
+                ShareResult::Blocked {
+                    reasons: vec![NEEDS_SAVE_FOLDER.to_string()]
+                }
+            );
+            assert_eq!(asked, 0, "no folder picker for a local save");
+        }
+        assert!(!w.f.store.dirs().data().join("kept").exists());
+        assert!(w.server.requests().is_empty());
+    }
+
+    #[test]
+    fn a_folder_that_is_gone_is_reported_not_created_or_replaced() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let missing = w.out.path().join("not-there");
+        set_safe(&w, Some(&missing.display().to_string()), 0);
+        disconnect(&w);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(
+            reasons[0].contains("not-there") && reasons[0].contains("missing"),
+            "{reasons:?}"
+        );
+        assert!(!missing.exists());
+        assert!(!w.f.store.dirs().data().join("kept").exists());
+    }
+
+    #[test]
+    fn two_local_saves_in_the_same_second_keep_both() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let (a, _) = go(&w, &request(), vec![]);
+        let (b, _) = go(&w, &request(), vec![]);
+        let (ShareResult::SavedLocally { path: a, .. }, ShareResult::SavedLocally { path: b, .. }) =
+            (a, b)
+        else {
+            panic!("both saved");
+        };
+        assert_ne!(a, b);
+        assert_eq!(fs::read_dir(&dir).unwrap().count(), 2);
     }
 }

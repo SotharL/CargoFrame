@@ -13,7 +13,7 @@ cargoframe-safe = { path = "../safe" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
-sha2 = "0.10"
+sha2 = "0.11"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [dev-dependencies]

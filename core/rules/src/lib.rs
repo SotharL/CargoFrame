@@ -3,7 +3,7 @@
 //! types use as `{{rule.<id>}}`.
 //!
 //! * [`model`]: the rule as stored in `rules/<id>.json`.
-//! * [`extract`]: apply a rule to the text of a file (JSON, YAML, TOML, INI, CSV, XML, regex).
+//! * [`extract`]: apply a rule to the text of a file (JSON, YAML, TOML, INI, CSV, XML, regex, and plain text or log files).
 //! * [`run`]: find the file safely inside the project folder, read it with a size limit, and run
 //!   every rule, never failing as a whole because one rule did.
 //!
@@ -13,7 +13,8 @@ pub mod extract;
 pub mod model;
 pub mod path;
 pub mod run;
+pub mod text;
 
 pub use extract::{check, extract, RuleError};
-pub use model::{Format, Multiple, Rule, DEFAULT_MAX_BYTES, HARD_MAX_BYTES};
+pub use model::{Format, Multiple, ReadMode, Rule, DEFAULT_MAX_BYTES, HARD_MAX_BYTES};
 pub use run::{run_all, FsFiles, Outcome, ProjectFiles};

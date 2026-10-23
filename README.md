@@ -6,7 +6,7 @@ A tray app for Windows 11 and Linux. A shortcut captures the program in focus, f
 folder, reads the data you asked for, and opens a window where you review it and share it to Jira,
 Google, Reddit, Claude or any API you describe. Nothing leaves your computer until you click.
 
-> **Status: V1 feature-complete on the `dev/v1` branch, in private beta.** Every feature in the
+> **Status: V1 feature-complete and merged to `main`, in private beta.** Every feature in the
 > plan is built and tested. What has **not** been done is running it on real desktops, with real
 > accounts, and with a trusted signing certificate. See [`docs/status.md`](docs/status.md) for
 > exactly what is and is not verified.
@@ -20,7 +20,17 @@ Google, Reddit, Claude or any API you describe. Nothing leaves your computer unt
    destination, the screenshot with crop, draw, shapes, text and colour tools, the files found
    with the ones you preselected, and a sharing button.
 4. You review and press the button. If the share fails it is retried, then a zip is kept in your
-   safe folder (or you are asked where to put it). Secrets never go in the zip.
+   safe folder (or you are asked where to put it). Secrets never go in the zip. A button with no
+   active connection says **Save locally** and saves that zip straight into the folder you set in
+   Settings, General, Safety.
+5. Layouts can start from a **ready-made template** for each connection (Jira bug, Jira comment,
+   Drive upload, Sheet row, Reddit post, Claude prompt, Custom API, or a local save). A template is
+   never changed; saving one makes your own copy. Layouts, data rules and info types can be
+   **exported and imported** as one file (Settings, General, Export and import).
+
+Data rules read JSON, YAML, TOML, INI, CSV, XML, a regular expression, or **plain text and log
+files** (`.txt`, `.log`): a line, a range, the first or last lines, lines that contain a word, or
+what follows a label.
 
 Destinations in V1: **Jira** (the reference), **Google** (Drive, Sheets), **Reddit**,
 **Claude** (hands the capture and your prompt to a chat; there is no chat inside CargoFrame) and

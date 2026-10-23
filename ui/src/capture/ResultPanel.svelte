@@ -42,6 +42,11 @@
       <span class="quiet">Paste the picture in Claude, then the prompt.</span>
     {/if}
     {#if !result.close}<button onclick={onclose}>Close</button>{/if}
+  {:else if result.status === 'saved_locally'}
+    <Chip kind="ok" label="Saved locally" />
+    <span class="selectable path">{result.path}</span>
+    {#each result.notes as n (n)}<Chip kind="warn" label={n} />{/each}
+    {#if !result.close}<button onclick={onclose}>Close</button>{/if}
   {:else if result.status === 'blocked'}
     {#each result.reasons as r (r)}<Chip kind="warn" label={r} />{/each}
   {:else}
@@ -62,4 +67,5 @@
 <style>
   .panel { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
   .note { font-size: 12.5px; }
+  .path { font-size: 12.5px; overflow-wrap: anywhere; }
 </style>

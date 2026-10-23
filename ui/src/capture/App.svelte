@@ -98,6 +98,9 @@
         // Nothing left to use from the result: let the confirmation be read, then go.
         setTimeout(() => void api?.closeCapture(), 1500);
       }
+      if (result.status === 'saved_locally' && result.close) {
+        setTimeout(() => void api?.closeCapture(), 2500);
+      }
     } catch (e) {
       result = { status: 'blocked', reasons: [String(e)] };
     } finally {
@@ -175,6 +178,8 @@
                 enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
                 sending={sending === b.id}
                 reasons={view.sharing[b.id]?.reasons ?? []}
+                mode={view.sharing[b.id]?.mode ?? 'send'}
+                note={view.sharing[b.id]?.note ?? null}
                 onshare={() => share(b)}
               />
             {/if}

@@ -1,7 +1,8 @@
 import type {
   AppInfo, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
-  General, IssueView, ItemEntry, ItemKind, ItemList, Layout, OptionsError, Rule, RuleTest, Safe,
-  SessionView, ShareRequest, ShareResult, TimingView, VariableInfo,
+  ExportSelection, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
+  ItemKind, ItemList, Layout, LayoutTemplate, OptionsError, Rule, RuleTest, Safe, SessionView,
+  ShareRequest, ShareResult, TimingView, VariableInfo,
 } from './types';
 
 /** Whatever a failed list request rejected with, as an `OptionsError`. */
@@ -47,8 +48,21 @@ export interface Api {
   deleteItem(kind: ItemKind, id: string): Promise<void>;
   newItemId(kind: ItemKind, name: string): Promise<string>;
   validateLayout(layout: Layout): Promise<IssueView[]>;
+  /** The ready-made layouts to start from. */
+  listLayoutTemplates(): Promise<LayoutTemplate[]>;
+  /** A template as an unsaved layout for a connection. Nothing is written. */
+  layoutFromTemplate(key: string, connectionId: string | null): Promise<Layout>;
   listVariables(): Promise<VariableInfo[]>;
   testRule(rule: Rule, folder: string | null): Promise<RuleTest>;
+
+  // ----- export and import of settings -----
+  /** Ask where to save, then write the chosen items. The path, or null when cancelled. */
+  exportSettings(selection: ExportSelection[]): Promise<string | null>;
+  /** Ask for a settings file and describe what is in it; nothing changes yet. Null when cancelled. */
+  openImport(): Promise<ImportPreview | null>;
+  /** Bring in the picks from the file opened last. */
+  applyImport(picks: ImportPick[]): Promise<ImportReport>;
+  discardImport(): Promise<void>;
 
   // ----- triggers -----
   getShortcutErrors(): Promise<Record<string, string>>;
@@ -123,6 +137,12 @@ async function tauriApi(): Promise<Api> {
     deleteItem: (kind, id) => invoke('delete_item', { kind, id }),
     newItemId: (kind, name) => invoke('new_item_id', { kind, name }),
     validateLayout: (layout) => invoke('validate_layout', { layout }),
+    listLayoutTemplates: () => invoke('list_layout_templates'),
+    layoutFromTemplate: (key, connectionId) => invoke('layout_from_template', { key, connectionId }),
+    exportSettings: (selection) => invoke('export_settings', { selection }),
+    openImport: () => invoke('open_import'),
+    applyImport: (picks) => invoke('apply_import', { picks }),
+    discardImport: () => invoke('discard_import'),
     listVariables: () => invoke('list_variables'),
     testRule: (rule, folder) => invoke('test_rule', { rule, folder }),
     getShortcutErrors: () => invoke('get_shortcut_errors'),
@@ -174,6 +194,36 @@ export interface MemoryOptions {
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
   /** Called by `fetchOptions` and `previewOptions`. */
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
+  /** What `openImport` finds in the "file" the person picks; the default is a cancelled dialog. */
+  importFile?: ImportPreview;
+}
+
+const TEMPLATE_CATALOG: LayoutTemplate[] = [
+  { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip. No account needed.', service: null },
+  { key: 'jira-bug', name: 'Jira bug report', description: 'Project, issue type, summary and description, with the screenshot and files attached.', service: 'jira' },
+  { key: 'jira-comment', name: 'Jira comment on an issue', description: 'Pick a recent issue and add a comment with the screenshot.', service: 'jira' },
+  { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and ticked files to a Drive folder.', service: 'google' },
+  { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet.', service: 'google' },
+  { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit, with a title and text.', service: 'reddit' },
+  { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt and hand the screenshot and prompt to Claude.', service: 'claude' },
+  { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
+];
+
+/** A small stand-in for the backend's template: a screenshot, a note and a button. */
+function templateLayout(t: LayoutTemplate, connectionId: string | null): Layout {
+  return {
+    id: '',
+    name: t.name,
+    blocks: [
+      { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 7, h: 7 } },
+      { id: 'note', type: 'text', rect: { x: 7, y: 0, w: 5, h: 3 }, title: 'Note', placement: 'above', role: 'plain', default_text: '{{app.title}}' },
+      {
+        id: 'send', type: 'sharing_button', rect: { x: 7, y: 6, w: 5, h: 1 },
+        label: t.service ? 'Send' : 'Save locally', connection_id: connectionId,
+        prompt_block_id: null, mappings: [], on_success: 'close_window',
+      },
+    ],
+  };
 }
 
 export function memoryApi(opts: MemoryOptions = {}): Api {
@@ -292,6 +342,26 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       return id;
     },
     validateLayout: async () => [],
+    listLayoutTemplates: async () => TEMPLATE_CATALOG.map((t) => ({ ...t })),
+    layoutFromTemplate: async (key, connectionId) => {
+      const t = TEMPLATE_CATALOG.find((x) => x.key === key);
+      if (!t) throw 'That template does not exist';
+      if (t.service && !connectionId) throw `“${t.name}” needs a connection to be built for`;
+      return templateLayout(t, t.service ? connectionId : null);
+    },
+    exportSettings: async (selection) => {
+      if (selection.every((s) => s.ids.length === 0)) throw 'Choose something to export';
+      return '/home/me/Documents/cargoframe-settings.json';
+    },
+    openImport: async () => opts.importFile ?? null,
+    applyImport: async (picks) => ({
+      imported: picks
+        .filter((p) => p.action !== 'skip')
+        .map((p) => ({ group: p.group, id: p.id, name: p.id, copy: p.action === 'copy' })),
+      skipped: picks.filter((p) => p.action === 'skip').length,
+      failed: [],
+    }),
+    discardImport: async () => {},
     listVariables: async () => [
       ...BUILTINS,
       ...[...store.rule.entries()].map(([id, r]) => ({

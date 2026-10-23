@@ -38,7 +38,7 @@ milliseconds. They contain no window titles, paths or content, and nothing is se
 
 ## Memory modes
 
-Settings, General, Memory decides what a closed window costs.
+Settings, General, Performance, Memory decides what a closed window costs.
 
 | Mode | A closed window | Reopening |
 |------|-----------------|-----------|
@@ -64,8 +64,8 @@ build). These are the numbers the gates were set against.
 | Tray-only process, anonymous memory | 19.6 MB |
 | Tray-only process, resident set / proportional set | 100 MB / 79 MB |
 | Tray-only process, CPU over the idle window | 0.13% |
-| JavaScript up front, CargoFrame window | 30 KB gzip |
-| JavaScript up front, Settings window | 48 KB gzip |
+| JavaScript up front, CargoFrame window | 31 KB gzip |
+| JavaScript up front, Settings window | 52 KB gzip |
 
 ## What these numbers do not prove
 

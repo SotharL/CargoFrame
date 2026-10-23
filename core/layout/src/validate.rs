@@ -5,7 +5,8 @@
 //! next to the colour.
 //!
 //! Rules from the brief:
-//! * a sharing button with no connection is a warning and is disabled;
+//! * a sharing button with no active connection (none chosen, one that was deleted, or one that
+//!   is not signed in) is a warning, and the button reads "Save locally" and saves a zip;
 //! * a sharing button to an AI destination needs a bound text block with the Prompt role,
 //!   otherwise it is a warning and disabled;
 //! * a dropdown whose connection is disconnected is an error;
@@ -89,6 +90,15 @@ pub trait Registry {
     fn is_known_variable(&self, name: &str) -> bool;
 }
 
+/// What a sharing button does when pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SharingMode {
+    /// Send to the connection the button names.
+    Send,
+    /// There is no active connection: save a zip in the folder for saved zips instead.
+    SaveLocally,
+}
+
 /// Whether a sharing button works right now.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SharingState {
@@ -153,7 +163,25 @@ pub fn worst(issues: &[Issue]) -> Option<Severity> {
     issues.iter().map(|i| i.severity).max()
 }
 
-/// Can the sharing button `block_id` send right now?
+/// Does the sharing button `block_id` send, or save locally? A connection is active when it
+/// exists and is signed in; an expired sign-in still counts, because a failed send keeps a zip
+/// and offers to reconnect.
+pub fn sharing_mode(layout: &Layout, block_id: &str, reg: &dyn Registry) -> SharingMode {
+    let Some(BlockKind::SharingButton(button)) = layout.block(block_id).map(|b| &b.kind) else {
+        return SharingMode::Send;
+    };
+    match button
+        .connection_id
+        .as_deref()
+        .and_then(|id| reg.connection(id))
+    {
+        Some(c) if c.state != ConnectionState::Disconnected => SharingMode::Send,
+        _ => SharingMode::SaveLocally,
+    }
+}
+
+/// Can the sharing button `block_id` do its job right now? Saving locally needs the folder for
+/// saved zips, which the layout cannot know: the caller checks it.
 pub fn sharing_state(layout: &Layout, block_id: &str, reg: &dyn Registry) -> SharingState {
     let Some(block) = layout.block(block_id) else {
         return SharingState::Disabled(vec![Code::MissingConnection]);
@@ -161,6 +189,9 @@ pub fn sharing_state(layout: &Layout, block_id: &str, reg: &dyn Registry) -> Sha
     let BlockKind::SharingButton(button) = &block.kind else {
         return SharingState::Disabled(vec![Code::MissingConnection]);
     };
+    if sharing_mode(layout, block_id, reg) == SharingMode::SaveLocally {
+        return SharingState::Ready;
+    }
     let blocking: Vec<Code> = sharing_issues(layout, block, button, reg)
         .into_iter()
         .filter(|i| is_blocking(i.code))
@@ -195,7 +226,7 @@ fn sharing_issues(
             block,
             Severity::Warning,
             Code::NoConnection,
-            "Choose where this button shares to",
+            "No connection chosen: this button reads \u{201c}Save locally\u{201d} and saves a zip",
         ));
         return out;
     };
@@ -203,21 +234,26 @@ fn sharing_issues(
     let Some(connection) = reg.connection(connection_id) else {
         out.push(issue(
             block,
-            Severity::Error,
+            Severity::Warning,
             Code::MissingConnection,
-            format!("Connection \"{connection_id}\" no longer exists"),
+            format!(
+                "Connection \"{connection_id}\" no longer exists: this button reads \u{201c}Save locally\u{201d}"
+            ),
         ));
         return out;
     };
 
     match connection.state {
         ConnectionState::Connected => {}
-        ConnectionState::Disconnected => out.push(issue(
-            block,
-            Severity::Error,
-            Code::ConnectionDisconnected,
-            "This connection is not signed in",
-        )),
+        ConnectionState::Disconnected => {
+            out.push(issue(
+                block,
+                Severity::Warning,
+                Code::ConnectionDisconnected,
+                "This connection is not signed in: this button reads \u{201c}Save locally\u{201d}",
+            ));
+            return out;
+        }
         ConnectionState::Expired => out.push(issue(
             block,
             Severity::Warning,
@@ -410,15 +446,18 @@ mod tests {
     }
 
     #[test]
-    fn button_without_connection_warns_and_is_disabled() {
+    fn button_without_connection_warns_and_saves_locally() {
         let l = layout(vec![at("s", 0, button(None, None))]);
         let issues = validate(&l, &Reg::default());
         assert_eq!(codes(&issues), vec![Code::NoConnection]);
         assert_eq!(issues[0].severity, Severity::Warning);
+        assert!(issues[0].message.contains("Save locally"));
         assert_eq!(
-            sharing_state(&l, "s", &Reg::default()),
-            SharingState::Disabled(vec![Code::NoConnection])
+            sharing_mode(&l, "s", &Reg::default()),
+            SharingMode::SaveLocally
         );
+        // The layout itself has nothing to block; the folder for saved zips is the caller's check.
+        assert_eq!(sharing_state(&l, "s", &Reg::default()), SharingState::Ready);
     }
 
     #[test]
@@ -482,21 +521,55 @@ mod tests {
     }
 
     #[test]
-    fn disconnected_connection_is_an_error_and_disables() {
+    fn a_connection_that_is_not_signed_in_is_not_active() {
         let reg = Reg::default().with("jira", ConnectionKind::Jira, ConnectionState::Disconnected);
         let l = layout(vec![at("s", 0, button(Some("jira"), None))]);
-        assert_eq!(validate(&l, &reg)[0].severity, Severity::Error);
-        assert!(matches!(
-            sharing_state(&l, "s", &reg),
-            SharingState::Disabled(_)
-        ));
+        let issues = validate(&l, &reg);
+        assert_eq!(codes(&issues), vec![Code::ConnectionDisconnected]);
+        assert_eq!(issues[0].severity, Severity::Warning);
+        assert_eq!(sharing_mode(&l, "s", &reg), SharingMode::SaveLocally);
+        assert_eq!(sharing_state(&l, "s", &reg), SharingState::Ready);
     }
 
     #[test]
-    fn deleted_connection_is_an_error() {
+    fn an_ai_button_without_a_prompt_still_saves_locally_when_not_signed_in() {
+        // The prompt is for the AI tool; a local zip does not need one.
+        let reg = Reg::default().with(
+            "claude",
+            ConnectionKind::Claude,
+            ConnectionState::Disconnected,
+        );
+        let l = layout(vec![at("s", 0, button(Some("claude"), None))]);
+        assert_eq!(
+            codes(&validate(&l, &reg)),
+            vec![Code::ConnectionDisconnected]
+        );
+        assert_eq!(sharing_state(&l, "s", &reg), SharingState::Ready);
+    }
+
+    #[test]
+    fn a_deleted_connection_warns_and_saves_locally() {
         let l = layout(vec![at("s", 0, button(Some("old"), None))]);
         let issues = validate(&l, &Reg::default());
         assert_eq!(codes(&issues), vec![Code::MissingConnection]);
+        assert_eq!(issues[0].severity, Severity::Warning);
+        assert_eq!(
+            sharing_mode(&l, "s", &Reg::default()),
+            SharingMode::SaveLocally
+        );
+    }
+
+    #[test]
+    fn signed_in_and_expired_connections_send() {
+        let reg = Reg::default()
+            .with("a", ConnectionKind::Jira, ConnectionState::Connected)
+            .with("b", ConnectionKind::Jira, ConnectionState::Expired);
+        let l = layout(vec![
+            at("s", 0, button(Some("a"), None)),
+            at("t", 1, button(Some("b"), None)),
+        ]);
+        assert_eq!(sharing_mode(&l, "s", &reg), SharingMode::Send);
+        assert_eq!(sharing_mode(&l, "t", &reg), SharingMode::Send);
     }
 
     #[test]
@@ -604,7 +677,7 @@ mod tests {
         let l = layout(vec![
             at("t", 0, text(TextRole::Plain, "{{x}}")),
             at("s", 1, button(None, None)),
-            at("e", 2, button(Some("old"), None)),
+            at("e", 1, BlockKind::Screenshot), // overlaps the button: an error
         ]);
         let issues = validate(&l, &reg);
         let sev: Vec<Severity> = issues.iter().map(|i| i.severity).collect();

@@ -1,19 +1,26 @@
 //! Find a rule's file safely and run every rule.
 
 use crate::extract::{extract, RuleError};
-use crate::model::Rule;
+use crate::model::{ReadMode, Rule};
 use cargoframe_context::glob;
 use std::collections::BTreeMap;
 use std::fs;
-use std::io::Read;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 /// Reading the project's files, behind a trait so tests (and the app, if it ever needs a
 /// different source) can stand in.
 pub trait ProjectFiles {
     /// The text of the first file under `root` that matches `pattern`, reading at most
-    /// `limit` bytes.
-    fn read(&self, root: &Path, pattern: &str, limit: u64) -> Result<String, RuleError>;
+    /// `limit` bytes. A file over the limit is refused for `Whole`; for `Head` and `Tail` its
+    /// first or last whole lines that fit in the limit are read instead.
+    fn read(
+        &self,
+        root: &Path,
+        pattern: &str,
+        limit: u64,
+        mode: ReadMode,
+    ) -> Result<String, RuleError>;
 }
 
 /// The real file system.
@@ -77,7 +84,13 @@ fn walk(
 }
 
 impl ProjectFiles for FsFiles {
-    fn read(&self, root: &Path, pattern: &str, limit: u64) -> Result<String, RuleError> {
+    fn read(
+        &self,
+        root: &Path,
+        pattern: &str,
+        limit: u64,
+        mode: ReadMode,
+    ) -> Result<String, RuleError> {
         let pattern = pattern.trim();
         if !pattern_ok(pattern) {
             return Err(RuleError::BadQuery(
@@ -97,12 +110,12 @@ impl ProjectFiles for FsFiles {
         let Some(rel) = rel else {
             return Err(RuleError::FileNotFound(pattern.to_string()));
         };
-        read_inside(root, &root.join(&rel), limit)
+        read_inside(root, &root.join(&rel), limit, mode)
     }
 }
 
 /// Read `file` only if, once links are followed, it is a regular file inside `root`.
-fn read_inside(root: &Path, file: &Path, limit: u64) -> Result<String, RuleError> {
+fn read_inside(root: &Path, file: &Path, limit: u64, mode: ReadMode) -> Result<String, RuleError> {
     let unreadable = |e: std::io::Error| RuleError::Unreadable(e.to_string());
     let root: PathBuf = root.canonicalize().map_err(unreadable)?;
     let real = file.canonicalize().map_err(unreadable)?;
@@ -115,17 +128,39 @@ fn read_inside(root: &Path, file: &Path, limit: u64) -> Result<String, RuleError
     if !meta.is_file() {
         return Err(RuleError::Unreadable("not a regular file".into()));
     }
-    if meta.len() > limit {
+    let too_big = meta.len() > limit;
+    if too_big && mode == ReadMode::Whole {
         return Err(RuleError::TooLarge(limit));
     }
+    let mut handle = fs::File::open(&real).map_err(unreadable)?;
     let mut bytes = Vec::new();
-    fs::File::open(&real)
-        .map_err(unreadable)?
-        .take(limit + 1)
-        .read_to_end(&mut bytes)
-        .map_err(unreadable)?;
-    if bytes.len() as u64 > limit {
-        return Err(RuleError::TooLarge(limit));
+    if too_big && mode == ReadMode::Tail {
+        // The last `limit` bytes, from the first whole line in them.
+        handle
+            .seek(SeekFrom::Start(meta.len() - limit))
+            .map_err(unreadable)?;
+        handle
+            .take(limit)
+            .read_to_end(&mut bytes)
+            .map_err(unreadable)?;
+        if let Some(newline) = bytes.iter().position(|b| *b == b'\n') {
+            bytes.drain(..=newline);
+        }
+    } else {
+        handle
+            .take(limit + 1)
+            .read_to_end(&mut bytes)
+            .map_err(unreadable)?;
+        if bytes.len() as u64 > limit {
+            if mode == ReadMode::Whole {
+                return Err(RuleError::TooLarge(limit));
+            }
+            // The first `limit` bytes, to the end of the last whole line in them.
+            bytes.truncate(usize::try_from(limit).unwrap_or(usize::MAX));
+            if let Some(newline) = bytes.iter().rposition(|b| *b == b'\n') {
+                bytes.truncate(newline + 1);
+            }
+        }
     }
     if bytes.contains(&0) {
         return Err(RuleError::Unreadable("it looks like a binary file".into()));
@@ -151,16 +186,19 @@ pub fn run_all<'a>(
     project: Option<&Path>,
     files: &dyn ProjectFiles,
 ) -> BTreeMap<String, Outcome> {
-    let mut cache: BTreeMap<(String, u64), Result<String, RuleError>> = BTreeMap::new();
+    // Rules share a read only when they need the same part of the same file.
+    type Key = (String, u64, u8);
+    let mut cache: BTreeMap<Key, Result<String, RuleError>> = BTreeMap::new();
     let mut out = BTreeMap::new();
     for (id, rule) in rules {
         let result = match project {
             None => Err(RuleError::NoProject),
             Some(root) => {
-                let key = (rule.file.trim().to_string(), rule.byte_limit());
+                let mode = rule.read_mode();
+                let key = (rule.file.trim().to_string(), rule.byte_limit(), mode as u8);
                 let text = cache
                     .entry(key)
-                    .or_insert_with(|| files.read(root, &rule.file, rule.byte_limit()));
+                    .or_insert_with(|| files.read(root, &rule.file, rule.byte_limit(), mode));
                 match text {
                     Ok(t) => extract(rule, t),
                     Err(e) => Err(e.clone()),
@@ -342,9 +380,96 @@ mod tests {
         assert_eq!(ok["s"].value.as_deref(), Some("aaa"));
     }
 
+    fn big_log(dir: &Path) {
+        // 3000 numbered lines, far over the 1000-byte limit used below.
+        let text: String = (1..=3000).map(|i| format!("line {i} INFO ok\n")).collect();
+        fs::write(dir.join("app.log"), text).unwrap();
+    }
+
+    #[test]
+    fn a_big_log_is_read_from_its_end_for_tail_and_level_queries() {
+        let d = project();
+        big_log(d.path());
+        let mut r = rule("app.log", Format::Text, "tail: 2");
+        r.max_bytes = 1000;
+        r.multiple = Multiple::Join;
+        r.separator = " | ".into();
+        let out = run_all([("t", &r)], Some(d.path()), &FsFiles);
+        assert_eq!(
+            out["t"].value.as_deref(),
+            Some("line 2999 INFO ok | line 3000 INFO ok")
+        );
+        let mut last = rule("app.log", Format::Text, "contains: info");
+        last.max_bytes = 1000;
+        last.multiple = Multiple::Last;
+        let out = run_all([("t", &last)], Some(d.path()), &FsFiles);
+        assert_eq!(out["t"].value.as_deref(), Some("line 3000 INFO ok"));
+    }
+
+    #[test]
+    fn the_part_read_starts_on_a_whole_line() {
+        let d = project();
+        big_log(d.path());
+        let mut first = rule("app.log", Format::Text, "contains: line");
+        first.max_bytes = 1000;
+        let out = run_all([("t", &first)], Some(d.path()), &FsFiles);
+        let value = out["t"].value.clone().unwrap_or_default();
+        assert!(
+            value.starts_with("line ") && value.ends_with("INFO ok"),
+            "the first line read is whole, not cut in the middle: {value:?}"
+        );
+    }
+
+    #[test]
+    fn a_big_log_is_read_from_its_start_for_head_and_line_numbers() {
+        let d = project();
+        big_log(d.path());
+        let mut r = rule("app.log", Format::Text, "line: 2");
+        r.max_bytes = 1000;
+        let out = run_all([("h", &r)], Some(d.path()), &FsFiles);
+        assert_eq!(out["h"].value.as_deref(), Some("line 2 INFO ok"));
+        let mut head = rule("app.log", Format::Text, "head: 3");
+        head.max_bytes = 1000;
+        head.multiple = Multiple::Last;
+        let out = run_all([("h", &head)], Some(d.path()), &FsFiles);
+        assert_eq!(out["h"].value.as_deref(), Some("line 3 INFO ok"));
+    }
+
+    #[test]
+    fn data_formats_still_refuse_a_file_over_the_limit() {
+        let d = project();
+        big_log(d.path());
+        let mut r = rule("app.log", Format::Regex, "line 1 ");
+        r.max_bytes = 1000;
+        let out = run_all([("r", &r)], Some(d.path()), &FsFiles);
+        assert!(out["r"].problem.as_deref().unwrap().contains("larger than"));
+    }
+
+    #[test]
+    fn txt_and_log_rules_read_a_small_file_whole() {
+        let d = project();
+        fs::write(d.path().join("notes.txt"), "Version: 2.5\nOwner: Ann\n").unwrap();
+        let out = run_all(
+            [
+                ("v", &rule("notes.txt", Format::Text, "after: version:")),
+                ("o", &rule("*.txt", Format::Text, "after: Owner")),
+            ],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(out["v"].value.as_deref(), Some("2.5"));
+        assert_eq!(out["o"].value.as_deref(), Some("Ann"));
+    }
+
     struct Counting(Cell<usize>);
     impl ProjectFiles for Counting {
-        fn read(&self, _root: &Path, _pattern: &str, _limit: u64) -> Result<String, RuleError> {
+        fn read(
+            &self,
+            _root: &Path,
+            _pattern: &str,
+            _limit: u64,
+            _mode: ReadMode,
+        ) -> Result<String, RuleError> {
             self.0.set(self.0.get() + 1);
             Ok(r#"{"a":1,"b":2}"#.into())
         }

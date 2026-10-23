@@ -10,10 +10,11 @@ use crate::session::{self, check_png};
 use crate::share::{self, ShareResult};
 use crate::state::AppState;
 use crate::tools::{self, RuleTest, VariableInfo};
+use crate::transfer;
 use crate::windowing;
 use cargoframe_config::{General, Safe};
 use cargoframe_connectors::{Describe, OptionItem};
-use cargoframe_layout::{validate, BlockKind, DropdownSource, Layout};
+use cargoframe_layout::{templates, validate, BlockKind, ConnectionKind, DropdownSource, Layout};
 use cargoframe_rules::Rule;
 use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
@@ -136,14 +137,13 @@ pub fn edit_layout(app: AppHandle, layout_id: Option<String>) {
 /// Open Settings on one of its pages (for example `connections`, to reconnect).
 #[tauri::command]
 pub fn open_settings(app: AppHandle, page: String) {
-    const PAGES: [&str; 7] = [
-        "triggers",
+    const PAGES: [&str; 6] = [
+        "general",
         "connections",
+        "triggers",
         "rules",
         "infotypes",
         "layouts",
-        "safe",
-        "general",
     ];
     if PAGES.contains(&page.as_str()) {
         windowing::open_settings_at(&app, &page);
@@ -227,6 +227,176 @@ pub fn new_item_id(
 pub fn validate_layout(state: State<'_, AppState>, layout: Layout) -> Vec<IssueView> {
     let registry = AppRegistry::from_store(&state.store, &state.connections);
     issue_views(&validate(&layout, &registry))
+}
+
+// ----- layout templates -----
+
+/// A starting point for a layout, as the list shows it.
+#[derive(Serialize)]
+pub struct TemplateView {
+    key: &'static str,
+    name: &'static str,
+    description: &'static str,
+    /// `jira`, `google`, `reddit`, `claude` or `custom`; `None` for the one that saves locally.
+    service: Option<&'static str>,
+}
+
+fn service_name(kind: ConnectionKind) -> &'static str {
+    match kind {
+        ConnectionKind::Jira => "jira",
+        ConnectionKind::Google => "google",
+        ConnectionKind::Reddit => "reddit",
+        ConnectionKind::Claude => "claude",
+        ConnectionKind::CustomApi => "custom",
+    }
+}
+
+/// The ready-made layouts, one or two for each kind of destination.
+#[tauri::command]
+pub fn list_layout_templates() -> Vec<TemplateView> {
+    templates::TEMPLATES
+        .iter()
+        .map(|t| TemplateView {
+            key: t.key,
+            name: t.name,
+            description: t.description,
+            service: t.service.map(service_name),
+        })
+        .collect()
+}
+
+/// A template as an unsaved layout for one of the person's connections. Nothing is written:
+/// saving it from the builder makes a copy and the template stays as it is.
+#[tauri::command]
+pub fn layout_from_template(
+    state: State<'_, AppState>,
+    key: String,
+    connection_id: Option<String>,
+) -> Result<Layout, String> {
+    let info = templates::info(&key).ok_or("That template does not exist")?;
+    let connection_id = connection_id.filter(|c| !c.trim().is_empty());
+    if let Some(c) = &connection_id {
+        let known = cargoframe_config::valid_id(c)
+            && state
+                .store
+                .list_ids(cargoframe_config::Kind::Connections)
+                .map_err(|e| e.to_string())?
+                .contains(c);
+        if !known {
+            return Err("That connection does not exist".into());
+        }
+    }
+    if info.service.is_some() && connection_id.is_none() {
+        return Err(format!(
+            "\u{201c}{}\u{201d} needs a connection to be built for",
+            info.name
+        ));
+    }
+    templates::build(&key, connection_id.as_deref())
+        .ok_or_else(|| "That template could not be built".into())
+}
+
+// ----- export and import of settings -----
+
+/// Ask where to save, then write the chosen layouts, data rules and info types there. `None`
+/// when the person cancels the dialog. The file holds no connection, secret or shortcut.
+#[tauri::command]
+pub async fn export_settings(
+    app: AppHandle,
+    selection: Vec<transfer::Selection>,
+) -> Result<Option<String>, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let m = session::now();
+        let stamp = format!(
+            "{:04}-{:02}-{:02} {:02}:{:02}",
+            m.year, m.month, m.day, m.hour, m.minute
+        );
+        let text = transfer::export(&state.store, &selection, &stamp)?;
+        let Some(path) = app
+            .dialog()
+            .file()
+            .set_title("Export settings")
+            .set_file_name(format!(
+                "cargoframe-settings-{:04}-{:02}-{:02}.json",
+                m.year, m.month, m.day
+            ))
+            .add_filter("CargoFrame settings", &["json"])
+            .blocking_save_file()
+            .and_then(|p| p.into_path().ok())
+        else {
+            return Ok(None);
+        };
+        std::fs::write(&path, text).map_err(|e| format!("The file could not be written: {e}"))?;
+        Ok(Some(path.display().to_string()))
+    })
+    .await?
+}
+
+/// What the import window shows after a file is opened.
+#[derive(Serialize)]
+pub struct ImportPreview {
+    file_name: String,
+    items: Vec<transfer::PreviewItem>,
+}
+
+/// Ask for a settings file, read and check it, and say what is in it. Nothing is changed yet.
+/// `None` when the person cancels the dialog.
+#[tauri::command]
+pub async fn open_import(app: AppHandle) -> Result<Option<ImportPreview>, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let Some(path) = app
+            .dialog()
+            .file()
+            .set_title("Import settings")
+            .add_filter("CargoFrame settings", &["json"])
+            .blocking_pick_file()
+            .and_then(|p| p.into_path().ok())
+        else {
+            return Ok(None);
+        };
+        let size = std::fs::metadata(&path)
+            .map_err(|e| format!("The file could not be read: {e}"))?
+            .len();
+        if size > transfer::MAX_FILE_BYTES {
+            return Err("This file is too large to be a CargoFrame settings file".to_string());
+        }
+        let text = std::fs::read_to_string(&path)
+            .map_err(|_| "The file could not be read as text".to_string())?;
+        let entries = transfer::parse(&text)?;
+        let items = transfer::preview(&state.store, &entries);
+        state.set_pending_import(Some(entries));
+        let file_name = path
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Ok(Some(ImportPreview { file_name, items }))
+    })
+    .await?
+}
+
+/// Bring in what the person picked from the file opened last, each item skipped, replaced or
+/// kept as a copy.
+#[tauri::command]
+pub async fn apply_import(
+    app: AppHandle,
+    picks: Vec<transfer::Pick>,
+) -> Result<transfer::Report, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let entries = state
+            .take_pending_import()
+            .ok_or("Open a settings file first")?;
+        Ok(transfer::apply(&state.store, &entries, &picks))
+    })
+    .await?
+}
+
+/// Forget the opened file without importing anything.
+#[tauri::command]
+pub fn discard_import(state: State<'_, AppState>) {
+    state.set_pending_import(None);
 }
 
 /// Built-in variables and one per data rule, for the variable picker.
@@ -585,7 +755,7 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     let result = result?;
     if matches!(
         result,
-        ShareResult::Sent { .. } | ShareResult::Failed { .. }
+        ShareResult::Sent { .. } | ShareResult::SavedLocally { .. } | ShareResult::Failed { .. }
     ) {
         state
             .timings
@@ -595,6 +765,9 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     if state.share_cancelled() {
         match &result {
             ShareResult::Sent { summary, .. } => crate::notify::problem(&app, "Shared", summary),
+            ShareResult::SavedLocally { path, .. } => {
+                crate::notify::problem(&app, "Saved locally", &format!("A zip is in {path}"));
+            }
             ShareResult::Failed { label, saved, .. } => {
                 let kept = saved
                     .as_ref()
@@ -630,4 +803,67 @@ pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
     app.opener()
         .open_url(url, None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod template_tests {
+    use super::*;
+    use cargoframe_connectors::{build, Connection};
+    use serde_json::json;
+
+    /// A connection of each kind with nothing filled in, as the connectors describe themselves.
+    fn describe_kind(kind: ConnectionKind) -> Describe {
+        let connection: Connection = serde_json::from_value(match kind {
+            ConnectionKind::Jira => json!({"name": "j", "kind": "jira"}),
+            ConnectionKind::Google => json!({"name": "g", "kind": "google"}),
+            ConnectionKind::Reddit => json!({"name": "r", "kind": "reddit"}),
+            ConnectionKind::Claude => json!({"name": "c", "kind": "claude"}),
+            ConnectionKind::CustomApi => json!({"name": "x", "kind": "custom"}),
+        })
+        .unwrap();
+        build(&connection).expect("enabled").describe()
+    }
+
+    /// The templates only fill fields and ask for lists that the connector really has.
+    #[test]
+    fn every_template_uses_fields_and_lists_its_connector_has() {
+        for t in templates::TEMPLATES.iter().filter(|t| t.service.is_some()) {
+            let described = describe_kind(t.service.unwrap());
+            let layout = templates::build(t.key, Some("c")).unwrap();
+            for block in &layout.blocks {
+                match &block.kind {
+                    BlockKind::SharingButton(b) => {
+                        for m in &b.mappings {
+                            assert!(
+                                described.fields.iter().any(|f| f.key == m.field),
+                                "{}: the connector has no field \"{}\"",
+                                t.key,
+                                m.field
+                            );
+                        }
+                    }
+                    BlockKind::Dropdown(d) => {
+                        if let DropdownSource::WebApi { options_id, .. } = &d.source {
+                            let list = options_id.split(':').next().unwrap_or_default();
+                            assert!(
+                                described.lists.iter().any(|l| l.id == list),
+                                "{}: the connector has no list \"{list}\"",
+                                t.key
+                            );
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn the_local_template_fills_no_service_field() {
+        let layout = templates::build("local-capture", None).unwrap();
+        let BlockKind::SharingButton(b) = &layout.block("send").unwrap().kind else {
+            panic!("no button");
+        };
+        assert!(b.connection_id.is_none());
+    }
 }

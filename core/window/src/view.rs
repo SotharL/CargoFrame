@@ -4,8 +4,8 @@ use crate::files::{FileEntry, Scan};
 use cargoframe_context::template;
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::{
-    sharing_state, validate, Block, BlockKind, Code, DropdownSource, Layout, Registry, Severity,
-    SharingState,
+    sharing_mode, sharing_state, validate, Block, BlockKind, Code, DropdownSource, Layout,
+    Registry, Severity, SharingMode, SharingState,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -95,7 +95,16 @@ pub struct SharingView {
     pub enabled: bool,
     /// Why the button is disabled, in words.
     pub reasons: Vec<String>,
+    /// `send`, or `save_locally` when the button has no active connection (it then reads
+    /// "Save locally" whatever label the layout gives it).
+    pub mode: &'static str,
+    /// What pressing the button does, when it is not obvious.
+    pub note: Option<String>,
 }
+
+/// Why "Save locally" is disabled. The same words are used when the share is refused.
+pub const NEEDS_SAVE_FOLDER: &str =
+    "Set a \u{201c}Folder for saved zips\u{201d} in Settings, General, Safety to save locally";
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionView {
@@ -132,6 +141,8 @@ pub struct Inputs<'a> {
     pub variables: &'a BTreeMap<String, String>,
     pub chats: &'a ChatList,
     pub registry: &'a dyn Registry,
+    /// The "Folder for saved zips" setting. A button with no active connection saves there.
+    pub local_folder: Option<&'a str>,
     /// Lists the files of a Files block. Called once per block.
     pub scan: &'a dyn Fn(&cargoframe_layout::FilesBlock) -> Scan,
 }
@@ -295,22 +306,45 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                 }
             }
             BlockKind::SharingButton(_) => {
-                let state = sharing_state(layout, &block.id, inputs.registry);
-                let sv = match state {
-                    SharingState::Ready => SharingView {
-                        enabled: true,
-                        reasons: Vec::new(),
-                    },
-                    SharingState::Disabled(codes) => SharingView {
-                        enabled: false,
-                        reasons: issues
-                            .iter()
-                            .filter(|i| {
-                                i.block_id.as_deref() == Some(block.id.as_str())
-                                    && codes.contains(&i.code)
-                            })
-                            .map(|i| i.message.clone())
-                            .collect(),
+                let sv = match sharing_mode(layout, &block.id, inputs.registry) {
+                    SharingMode::SaveLocally => {
+                        match inputs.local_folder.map(str::trim).filter(|f| !f.is_empty()) {
+                            Some(folder) => SharingView {
+                                enabled: true,
+                                reasons: Vec::new(),
+                                mode: "save_locally",
+                                note: Some(format!(
+                                    "No active connection: a zip is saved in {folder}"
+                                )),
+                            },
+                            None => SharingView {
+                                enabled: false,
+                                reasons: vec![NEEDS_SAVE_FOLDER.to_string()],
+                                mode: "save_locally",
+                                note: None,
+                            },
+                        }
+                    }
+                    SharingMode::Send => match sharing_state(layout, &block.id, inputs.registry) {
+                        SharingState::Ready => SharingView {
+                            enabled: true,
+                            reasons: Vec::new(),
+                            mode: "send",
+                            note: None,
+                        },
+                        SharingState::Disabled(codes) => SharingView {
+                            enabled: false,
+                            reasons: issues
+                                .iter()
+                                .filter(|i| {
+                                    i.block_id.as_deref() == Some(block.id.as_str())
+                                        && codes.contains(&i.code)
+                                })
+                                .map(|i| i.message.clone())
+                                .collect(),
+                            mode: "send",
+                            note: None,
+                        },
                     },
                 };
                 view.sharing.insert(block.id.clone(), sv);
@@ -436,6 +470,7 @@ mod tests {
             variables: vars,
             chats,
             registry: reg,
+            local_folder: None,
             scan,
         }
     }
@@ -497,9 +532,10 @@ mod tests {
             .as_deref()
             .unwrap()
             .contains("jira"));
-        // sharing button without a connection is disabled with a reason
+        // a sharing button without a connection saves locally, and needs the folder for that
+        assert_eq!(v.sharing["send"].mode, "save_locally");
         assert!(!v.sharing["send"].enabled);
-        assert!(!v.sharing["send"].reasons.is_empty());
+        assert_eq!(v.sharing["send"].reasons, [NEEDS_SAVE_FOLDER]);
         // issues come most severe first with stable names
         assert!(v
             .issues
@@ -552,6 +588,84 @@ mod tests {
         assert_eq!(json["layout"]["blocks"][0]["type"], "screenshot");
         assert_eq!(json["dropdowns"]["jira"]["status"], "needs_connection");
         assert_eq!(json["image"]["width"], 800);
+    }
+
+    struct Signed(ConnectionState);
+    impl Registry for Signed {
+        fn connection(&self, id: &str) -> Option<ConnectionInfo> {
+            (id == "jira").then_some(ConnectionInfo {
+                kind: ConnectionKind::Jira,
+                state: self.0,
+            })
+        }
+        fn rule_exists(&self, _: &str) -> bool {
+            false
+        }
+        fn is_known_variable(&self, name: &str) -> bool {
+            crate::vars::NAMES.contains(&name)
+        }
+    }
+
+    fn one_button(connection: Option<&str>) -> Layout {
+        Layout {
+            id: "l".into(),
+            name: "L".into(),
+            blocks: vec![Block {
+                id: "send".into(),
+                rect: rect(0),
+                kind: BlockKind::SharingButton(SharingButton {
+                    label: "Create ticket".into(),
+                    connection_id: connection.map(String::from),
+                    prompt_block_id: None,
+                    mappings: vec![],
+                    on_success: OnSuccess::KeepOpen,
+                }),
+            }],
+        }
+    }
+
+    #[test]
+    fn with_no_active_connection_the_button_saves_locally_once_a_folder_is_set() {
+        let vars = BTreeMap::new();
+        let chats = ChatList::new();
+        let scan = |_: &FilesBlock| Scan::default();
+        let no_id = one_button(None);
+        let signed_out = one_button(Some("jira"));
+        for (layout, reg) in [
+            (&no_id, &Signed(ConnectionState::Connected)),
+            (&signed_out, &Signed(ConnectionState::Disconnected)),
+        ] {
+            let mut i = inputs(Ok(layout), &vars, &chats, reg, &scan);
+            let v = build(&i);
+            assert_eq!(v.sharing["send"].mode, "save_locally");
+            assert!(!v.sharing["send"].enabled, "no folder, no saving");
+            assert_eq!(v.sharing["send"].reasons, [NEEDS_SAVE_FOLDER]);
+            // A blank setting is no folder either.
+            i.local_folder = Some("  ");
+            assert!(!build(&i).sharing["send"].enabled);
+            i.local_folder = Some("/home/me/zips");
+            let v = build(&i);
+            assert!(v.sharing["send"].enabled && v.sharing["send"].reasons.is_empty());
+            assert!(v.sharing["send"]
+                .note
+                .as_deref()
+                .unwrap()
+                .contains("/home/me/zips"));
+        }
+    }
+
+    #[test]
+    fn a_signed_in_connection_sends_whatever_the_folder_setting_says() {
+        let vars = BTreeMap::new();
+        let chats = ChatList::new();
+        let scan = |_: &FilesBlock| Scan::default();
+        let l = one_button(Some("jira"));
+        for state in [ConnectionState::Connected, ConnectionState::Expired] {
+            let reg = Signed(state);
+            let v = build(&inputs(Ok(&l), &vars, &chats, &reg, &scan));
+            assert_eq!(v.sharing["send"].mode, "send");
+            assert!(v.sharing["send"].enabled && v.sharing["send"].note.is_none());
+        }
     }
 
     #[test]

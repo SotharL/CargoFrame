@@ -270,6 +270,10 @@ pub fn prepare_with(
         cap::Subject::Display => "display",
         cap::Subject::AllDisplays => "all_displays",
     };
+    let save_folder = store
+        .load_or_default::<cargoframe_config::Safe>()
+        .ok()
+        .and_then(|s| s.folder);
     let inputs = view::Inputs {
         session_id: id,
         trigger_id,
@@ -286,6 +290,7 @@ pub fn prepare_with(
         variables: &variables,
         chats: &chats,
         registry: &registry,
+        local_folder: save_folder.as_deref(),
         scan: &scan,
     };
     let view = view::build(&inputs);

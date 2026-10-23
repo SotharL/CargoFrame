@@ -24,6 +24,20 @@ pub enum Format {
     Xml,
     /// A regular expression. The result is capture group 1 if there is one, else the match.
     Regex,
+    /// A plain text or log file (`.txt`, `.log`). The query is `tail: 20`, `line: -1`,
+    /// `contains: text`, `after: Version:` or `level: error`; see `text`.
+    Text,
+}
+
+/// Which part of a file a rule needs when the file is bigger than its size limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReadMode {
+    /// All of it, or refuse: the file is data (JSON, CSV…) and half of it is not valid.
+    Whole,
+    /// The first lines. A log read from the top.
+    Head,
+    /// The last lines. A log read from the bottom, where the latest entries are.
+    Tail,
 }
 
 /// What to do when a query finds several values.
@@ -83,5 +97,16 @@ impl Rule {
     /// The size limit actually applied.
     pub fn byte_limit(&self) -> u64 {
         self.max_bytes.clamp(1, HARD_MAX_BYTES)
+    }
+
+    /// What to read of a file bigger than the limit. Only text and log queries can work from
+    /// one end of a file; every other format needs the whole of it.
+    pub fn read_mode(&self) -> ReadMode {
+        match self.format {
+            Format::Text => crate::text::parse(&self.query)
+                .map(|q| q.read_mode())
+                .unwrap_or(ReadMode::Whole),
+            _ => ReadMode::Whole,
+        }
     }
 }
