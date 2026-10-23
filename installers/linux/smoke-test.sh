@@ -9,6 +9,8 @@ appimage="$(ls "$root"/target/release/bundle/appimage/*.AppImage | head -n1)"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 export HOME="$work/home"
+# CI runners set XDG_CONFIG_HOME for the runner user; the test must live entirely in its own HOME.
+unset XDG_DATA_HOME XDG_CONFIG_HOME XDG_STATE_HOME XDG_CACHE_HOME XDG_CURRENT_DESKTOP
 mkdir -p "$HOME"
 cp "$root/app/icons/128x128.png" "$work/cargoframe.png"
 cp "$root/installers/linux/install.sh" "$root/installers/linux/uninstall.sh" "$work/"
