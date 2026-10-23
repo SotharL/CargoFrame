@@ -36,15 +36,21 @@ cargoframe-window = { path = "../core/window" }
 cargoframe-rules = { path = "../core/rules" }
 cargoframe-bundle = { path = "../core/bundle" }
 cargoframe-safe = { path = "../core/safe" }
+cargoframe-connectors = { path = "../core/connectors" }
+cargoframe-net = { path = "../core/net" }
+tauri-plugin-clipboard-manager = "2"
 tauri-plugin-global-shortcut = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.8"
+keyring = { version = "3", default-features = false, features = ["windows-native"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 notify-rust = "4"
 zbus = { version = "5", default-features = false, features = ["blocking-api", "async-io"] }
+keyring = { version = "3", default-features = false, features = ["async-secret-service", "async-io", "crypto-rust"] }
 
 [dev-dependencies]
 tempfile.workspace = true
+cargoframe-net = { path = "../core/net", features = ["mock"] }

@@ -5,10 +5,13 @@
 
 mod cli;
 mod commands;
+mod connections;
+mod desktop;
 mod items;
 mod logging;
 mod notify;
 mod registry;
+mod secrets;
 mod session;
 mod state;
 mod tools;
@@ -19,6 +22,7 @@ mod windowing;
 
 use cargoframe_config::{Dirs, Store};
 use cli::{Cli, Startup};
+use connections::Connections;
 use state::AppState;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
@@ -50,7 +54,15 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .manage(AppState::new(Store::new(dirs), tray_available))
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(AppState::new(
+            Store::new(dirs),
+            tray_available,
+            Connections::new(
+                std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
+                std::sync::Arc::new(secrets::KeyringStore),
+            ),
+        ))
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::get_general,

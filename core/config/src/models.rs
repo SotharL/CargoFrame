@@ -152,3 +152,9 @@ impl Document for ChatList {
     const SCHEMA: u32 = 1;
     const NAME: &'static str = "chats";
 }
+
+/// `connections/<id>.json`: how to reach one service. Secrets are not in it.
+impl Document for cargoframe_connectors::Connection {
+    const SCHEMA: u32 = 1;
+    const NAME: &'static str = "connection";
+}

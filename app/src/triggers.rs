@@ -100,7 +100,7 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         let result = tauri::async_runtime::spawn_blocking(move || {
             let state = worker.state::<AppState>();
             let session_id = state.sessions.next_id();
-            session::capture_and_prepare(&state.store, &id, session_id)
+            session::capture_and_prepare(&state.store, &state.connections, &id, session_id)
         })
         .await;
         let state = app.state::<AppState>();

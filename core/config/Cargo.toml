@@ -17,6 +17,7 @@ dirs.workspace = true
 cargoframe-layout = { path = "../layout" }
 cargoframe-handoff = { path = "../handoff" }
 cargoframe-rules = { path = "../rules" }
+cargoframe-connectors = { path = "../connectors" }
 
 [dev-dependencies]
 tempfile.workspace = true

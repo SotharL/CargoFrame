@@ -189,7 +189,7 @@ pub fn new_item_id(
 /// The builder's status chips for a layout that may not be saved yet.
 #[tauri::command]
 pub fn validate_layout(state: State<'_, AppState>, layout: Layout) -> Vec<IssueView> {
-    let registry = AppRegistry::from_store(&state.store);
+    let registry = AppRegistry::from_store(&state.store, &state.connections);
     issue_views(&validate(&layout, &registry))
 }
 

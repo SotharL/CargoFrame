@@ -1,3 +1,4 @@
+use crate::connections::Connections;
 use crate::session::Sessions;
 use cargoframe_config::Store;
 use std::collections::BTreeMap;
@@ -7,6 +8,8 @@ use std::sync::Mutex;
 /// Shared by the tray, the commands and the windows.
 pub struct AppState {
     pub store: Store,
+    /// The services CargoFrame can share to, and their sign-ins.
+    pub connections: Connections,
     /// "Pause triggers" in the tray menu.
     paused: AtomicBool,
     /// False when a Linux desktop has no tray host.
@@ -20,9 +23,10 @@ pub struct AppState {
 }
 
 impl AppState {
-    pub fn new(store: Store, tray_available: bool) -> Self {
+    pub fn new(store: Store, tray_available: bool, connections: Connections) -> Self {
         Self {
             store,
+            connections,
             paused: AtomicBool::new(false),
             tray_available,
             sessions: Sessions::new(),

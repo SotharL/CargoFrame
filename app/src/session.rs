@@ -1,5 +1,6 @@
 //! One capture: take the screenshot, work out the context, build what the window shows.
 
+use crate::connections::Connections;
 use crate::registry::AppRegistry;
 use cargoframe_capture as cap;
 use cargoframe_config::{CaptureMode, Kind, Store, Trigger};
@@ -18,6 +19,37 @@ pub struct Session {
     /// The screenshot, PNG-encoded for speed.
     pub png: Vec<u8>,
     pub view: SessionView,
+    /// The picture as the person edited it (crop, drawings), sent by the window just before a
+    /// share. Replaced each time; `None` while the picture is untouched.
+    edited: Mutex<Option<Vec<u8>>>,
+    /// The folder the project files are read from, as resolved at capture time. Kept here so a
+    /// share never trusts a folder name sent back by the window.
+    pub project_folder: Option<String>,
+}
+
+impl Session {
+    pub fn new(png: Vec<u8>, view: SessionView) -> Self {
+        let project_folder = view.project.as_ref().map(|p| p.folder.clone());
+        Self {
+            png,
+            view,
+            edited: Mutex::new(None),
+            project_folder,
+        }
+    }
+
+    pub fn set_edited(&self, png: Option<Vec<u8>>) {
+        *self.edited.lock().unwrap_or_else(|e| e.into_inner()) = png;
+    }
+
+    /// The picture to send: the edited one if there is one, else the capture.
+    pub fn image_to_send(&self) -> Vec<u8> {
+        self.edited
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
+            .unwrap_or_else(|| self.png.clone())
+    }
 }
 
 /// The capture the window is showing. One at a time: a new capture replaces it.
@@ -87,6 +119,7 @@ fn now() -> Moment {
 /// Capture for real and prepare the session.
 pub fn capture_and_prepare(
     store: &Store,
+    connections: &Connections,
     trigger_id: &str,
     id: u64,
 ) -> Result<Session, PrepareError> {
@@ -101,7 +134,7 @@ pub fn capture_and_prepare(
         elapsed_ms = started.elapsed().as_millis() as u64,
         "captured"
     );
-    let session = prepare_with(store, trigger_id, &trigger, captured, now(), id)?;
+    let session = prepare_with(store, connections, trigger_id, &trigger, captured, now(), id)?;
     tracing::debug!(
         elapsed_ms = started.elapsed().as_millis() as u64,
         "session ready"
@@ -112,6 +145,7 @@ pub fn capture_and_prepare(
 /// Everything after the capture; separate so it can be tested without a screen.
 pub fn prepare_with(
     store: &Store,
+    connections: &Connections,
     trigger_id: &str,
     trigger: &Trigger,
     captured: cap::Captured,
@@ -156,7 +190,7 @@ pub fn prepare_with(
         .load_or_default::<ChatList>()
         .map(ChatList::normalized)
         .unwrap_or_default();
-    let registry = AppRegistry::from_store(store);
+    let registry = AppRegistry::from_store(store, connections);
 
     // Data rules: read their values from the project folder, then offer them to the window as
     // `{{rule.<id>}}`. A rule that fails only matters if the layout uses it.
@@ -237,7 +271,7 @@ pub fn prepare_with(
         .frame
         .to_png()
         .map_err(|e| PrepareError::Capture(e.to_string()))?;
-    Ok(Session { png, view })
+    Ok(Session::new(png, view))
 }
 
 #[cfg(test)]
@@ -245,6 +279,13 @@ mod tests {
     use super::*;
     use cargoframe_config::Dirs;
     use cargoframe_layout::{Block, BlockKind, FilesBlock, Rect, TextBlock};
+
+    fn no_connections() -> Connections {
+        Connections::new(
+            std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
+            std::sync::Arc::new(cargoframe_connectors::MemorySecrets::new()),
+        )
+    }
 
     fn fake_capture(exe: Option<&str>) -> cap::Captured {
         cap::Captured {
@@ -324,6 +365,7 @@ mod tests {
 
         let s = prepare_with(
             &store,
+            &no_connections(),
             "bugtrig",
             &trigger,
             fake_capture(Some(&exe.display().to_string())),
@@ -396,6 +438,7 @@ mod tests {
         };
         let s = prepare_with(
             &store,
+            &no_connections(),
             "t",
             &trigger,
             fake_capture(Some(&exe.display().to_string())),
@@ -449,7 +492,7 @@ mod tests {
             layout_id: Some("l".into()),
             ..Trigger::default()
         };
-        let s = prepare_with(&store, "t", &trigger, fake_capture(None), NOW, 1).unwrap();
+        let s = prepare_with(&store, &no_connections(), "t", &trigger, fake_capture(None), NOW, 1).unwrap();
         assert!(s.view.project.is_none());
         assert!(s.view.files["logs"]
             .problem
@@ -463,7 +506,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(Dirs::under(dir.path()));
         let none = Trigger::default();
-        let s = prepare_with(&store, "t", &none, fake_capture(None), NOW, 1).unwrap();
+        let s = prepare_with(&store, &no_connections(), "t", &none, fake_capture(None), NOW, 1).unwrap();
         assert!(s.view.layout.is_none());
         assert!(s
             .view
@@ -475,7 +518,7 @@ mod tests {
             layout_id: Some("gone".into()),
             ..Trigger::default()
         };
-        let s = prepare_with(&store, "t", &gone, fake_capture(None), NOW, 1).unwrap();
+        let s = prepare_with(&store, &no_connections(), "t", &gone, fake_capture(None), NOW, 1).unwrap();
         assert!(s
             .view
             .layout_problem
@@ -492,6 +535,7 @@ mod tests {
         let store = Store::new(Dirs::under(dir.path()));
         let s = prepare_with(
             &store,
+            &no_connections(),
             "t",
             &Trigger::default(),
             fake_capture(None),
