@@ -1,5 +1,6 @@
 //! What the layout checks know about the rest of the configuration.
 
+use cargoframe_config::{Kind, Store};
 use cargoframe_layout::{ConnectionInfo, Registry};
 use cargoframe_window::vars;
 use std::collections::BTreeSet;
@@ -7,6 +8,19 @@ use std::collections::BTreeSet;
 #[derive(Default)]
 pub struct AppRegistry {
     pub rules: BTreeSet<String>,
+}
+
+impl AppRegistry {
+    /// The ids of the rules on disk.
+    pub fn from_store(store: &Store) -> Self {
+        Self {
+            rules: store
+                .list_ids(Kind::Rules)
+                .unwrap_or_default()
+                .into_iter()
+                .collect(),
+        }
+    }
 }
 
 impl Registry for AppRegistry {

@@ -1,14 +1,20 @@
 //! Commands the web view can call. Keep this list in step with `build.rs` and
 //! `capabilities/`.
 
+use crate::items::{self, ItemKind, ItemList};
+use crate::registry::AppRegistry;
 use crate::state::AppState;
+use crate::tools::{self, RuleTest, VariableInfo};
 use crate::windowing;
-use cargoframe_config::General;
-use cargoframe_window::view::SessionView;
+use cargoframe_config::{General, Safe};
+use cargoframe_layout::{validate, Layout};
+use cargoframe_rules::Rule;
+use cargoframe_window::view::{issue_views, IssueView, SessionView};
 use serde::Serialize;
 use tauri::ipc::Response;
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
+use tauri_plugin_dialog::DialogExt as _;
 use tauri_plugin_opener::OpenerExt as _;
 
 #[derive(Serialize)]
@@ -133,4 +139,123 @@ pub fn get_shortcut_errors(
 #[tauri::command]
 pub fn reload_triggers(app: AppHandle) {
     crate::triggers::reload(&app);
+}
+
+// ----- items: triggers, layouts, data rules, info types -----
+
+#[tauri::command]
+pub fn list_items(state: State<'_, AppState>, kind: ItemKind) -> Result<ItemList, String> {
+    items::list(&state.store, kind)
+}
+
+#[tauri::command]
+pub fn save_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    kind: ItemKind,
+    id: String,
+    item: serde_json::Value,
+) -> Result<(), String> {
+    items::save(&state.store, kind, &id, item)?;
+    if kind == ItemKind::Trigger {
+        crate::triggers::reload(&app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn delete_item(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    kind: ItemKind,
+    id: String,
+) -> Result<(), String> {
+    items::delete(&state.store, kind, &id)?;
+    if kind == ItemKind::Trigger {
+        crate::triggers::reload(&app);
+    }
+    Ok(())
+}
+
+#[tauri::command]
+pub fn new_item_id(
+    state: State<'_, AppState>,
+    kind: ItemKind,
+    name: String,
+) -> Result<String, String> {
+    items::new_id(&state.store, kind, &name)
+}
+
+/// The builder's status chips for a layout that may not be saved yet.
+#[tauri::command]
+pub fn validate_layout(state: State<'_, AppState>, layout: Layout) -> Vec<IssueView> {
+    let registry = AppRegistry::from_store(&state.store);
+    issue_views(&validate(&layout, &registry))
+}
+
+/// Built-in variables and one per data rule, for the variable picker.
+#[tauri::command]
+pub fn list_variables(state: State<'_, AppState>) -> Vec<VariableInfo> {
+    tools::variables(&state.store)
+}
+
+// ----- data rules -----
+
+/// Try a rule. Without a folder, the project folder of the last capture is used.
+#[tauri::command]
+pub async fn test_rule(
+    state: State<'_, AppState>,
+    rule: Rule,
+    folder: Option<String>,
+) -> Result<RuleTest, String> {
+    let folder = folder.filter(|f| !f.trim().is_empty()).or_else(|| {
+        state
+            .sessions
+            .current()
+            .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
+    });
+    Ok(tools::test_rule(&rule, folder.as_deref()))
+}
+
+// ----- safe settings -----
+
+#[tauri::command]
+pub fn get_safe(state: State<'_, AppState>) -> Result<Safe, String> {
+    state
+        .store
+        .load_or_default::<Safe>()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_safe(state: State<'_, AppState>, mut safe: Safe) -> Result<(), String> {
+    if !(5..=300).contains(&safe.timeout_secs) {
+        return Err("The timeout must be between 5 and 300 seconds".into());
+    }
+    if safe.max_retries > 10 {
+        return Err("At most 10 retries".into());
+    }
+    safe.folder = safe
+        .folder
+        .map(|f| f.trim().to_string())
+        .filter(|f| !f.is_empty());
+    state.store.save(&safe).map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn test_safe_folder(path: String) -> Result<(), String> {
+    tools::test_folder(&path)
+}
+
+/// The system folder picker. `None` when the person cancels.
+#[tauri::command]
+pub async fn pick_folder(app: AppHandle, title: Option<String>) -> Option<String> {
+    let mut dialog = app.dialog().file();
+    if let Some(t) = title {
+        dialog = dialog.set_title(t);
+    }
+    dialog
+        .blocking_pick_folder()
+        .and_then(|p| p.into_path().ok())
+        .map(|p| p.display().to_string())
 }

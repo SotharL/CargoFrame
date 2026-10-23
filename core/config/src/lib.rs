@@ -16,6 +16,7 @@
 //! * Secrets are never stored here; they live in the operating system's credential store.
 
 pub mod error;
+pub mod infotype;
 pub mod models;
 pub mod paths;
 pub mod shortcut;
@@ -23,6 +24,7 @@ pub mod store;
 pub mod triggers;
 
 pub use error::ConfigError;
+pub use infotype::{InfoKind, InfoOption, InfoOptions, InfoType};
 pub use models::{CaptureMode, General, MemoryMode, Safe, Theme, Trigger};
 pub use paths::Dirs;
 pub use store::{valid_id, Document, Kind, Loaded, Store};

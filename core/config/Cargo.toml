@@ -16,6 +16,7 @@ thiserror.workspace = true
 dirs.workspace = true
 cargoframe-layout = { path = "../layout" }
 cargoframe-handoff = { path = "../handoff" }
+cargoframe-rules = { path = "../rules" }
 
 [dev-dependencies]
 tempfile.workspace = true

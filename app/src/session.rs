@@ -5,6 +5,7 @@ use cargoframe_capture as cap;
 use cargoframe_config::{CaptureMode, Kind, Store, Trigger};
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::Layout;
+use cargoframe_rules::{run_all, FsFiles, Rule};
 use cargoframe_window::files::{self, Limits, Scan};
 use cargoframe_window::vars::{self, Moment};
 use cargoframe_window::view::{self, AppView, ImageView, LayoutProblem, ProjectView, SessionView};
@@ -155,13 +156,44 @@ pub fn prepare_with(
         .load_or_default::<ChatList>()
         .map(ChatList::normalized)
         .unwrap_or_default();
-    let registry = AppRegistry {
-        rules: store
-            .list_ids(Kind::Rules)
-            .unwrap_or_default()
-            .into_iter()
-            .collect(),
-    };
+    let registry = AppRegistry::from_store(store);
+
+    // Data rules: read their values from the project folder, then offer them to the window as
+    // `{{rule.<id>}}`. A rule that fails only matters if the layout uses it.
+    let mut variables = builtins.values.clone();
+    let mut notes = captured.notes.clone();
+    if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
+        let outcomes = run_all(
+            loaded.items.iter().map(|(id, r)| (id.as_str(), r)),
+            project.as_ref().map(|p| Path::new(&p.folder)),
+            &FsFiles,
+        );
+        let used = layout
+            .as_ref()
+            .map(vars::referenced_rules)
+            .unwrap_or_default();
+        for (id, rule) in &loaded.items {
+            let Some(outcome) = outcomes.get(id) else {
+                continue;
+            };
+            if let Some(v) = &outcome.value {
+                variables.insert(format!("rule.{id}"), v.clone());
+            }
+            if let (true, Some(problem)) = (used.contains(id), &outcome.problem) {
+                let name = if rule.name.trim().is_empty() {
+                    id.as_str()
+                } else {
+                    rule.name.trim()
+                };
+                let tail = if outcome.used_fallback {
+                    " (using its fallback value)"
+                } else {
+                    ""
+                };
+                notes.push(format!("Data rule \u{201c}{name}\u{201d}: {problem}{tail}"));
+            }
+        }
+    }
 
     let scan = |f: &cargoframe_layout::FilesBlock| -> Scan {
         match &project {
@@ -188,14 +220,14 @@ pub fn prepare_with(
         trigger_name: &trigger.name,
         layout: layout.as_ref().map_err(Clone::clone),
         subject,
-        notes: captured.notes.clone(),
+        notes,
         app,
         project: project.clone(),
         image: ImageView {
             width: captured.frame.width(),
             height: captured.frame.height(),
         },
-        variables: &builtins.values,
+        variables: &variables,
         chats: &chats,
         registry: &registry,
         scan: &scan,
@@ -307,6 +339,87 @@ mod tests {
         assert_eq!(s.view.layout.as_ref().unwrap().id, "bug");
         assert_eq!(s.view.image.width, 4);
         assert_eq!(&s.png[1..4], b"PNG");
+    }
+
+    #[test]
+    fn data_rule_values_reach_the_window_and_only_used_failures_are_reported() {
+        use cargoframe_rules::{Format, Rule};
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        let project = dir.path().join("Foo");
+        std::fs::create_dir_all(project.join("bin")).unwrap();
+        std::fs::write(project.join("version.json"), r#"{"build": 42}"#).unwrap();
+        let exe = project.join("bin").join("Foo");
+        let rule = |file: &str, query: &str, fallback: Option<&str>| Rule {
+            name: format!("{query} rule"),
+            file: file.into(),
+            format: Format::Json,
+            query: query.into(),
+            fallback: fallback.map(str::to_string),
+            ..Rule::default()
+        };
+        store
+            .save_item(Kind::Rules, "build", &rule("version.json", "build", None))
+            .unwrap();
+        store
+            .save_item(Kind::Rules, "gone", &rule("missing.json", "x", None))
+            .unwrap();
+        store
+            .save_item(Kind::Rules, "soft", &rule("missing.json", "y", Some("n/a")))
+            .unwrap();
+        store
+            .save_item(Kind::Rules, "unused", &rule("missing.json", "z", None))
+            .unwrap();
+        let layout = Layout {
+            id: String::new(),
+            name: "L".into(),
+            blocks: vec![Block {
+                id: "note".into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 2,
+                },
+                kind: BlockKind::Text(TextBlock {
+                    title: "Note".into(),
+                    placement: Default::default(),
+                    role: Default::default(),
+                    default_text: "b={{rule.build}} g={{rule.gone}} s={{rule.soft}}".into(),
+                }),
+            }],
+        };
+        store.save_item(Kind::Layouts, "l", &layout).unwrap();
+        let trigger = Trigger {
+            layout_id: Some("l".into()),
+            ..Trigger::default()
+        };
+        let s = prepare_with(
+            &store,
+            "t",
+            &trigger,
+            fake_capture(Some(&exe.display().to_string())),
+            NOW,
+            1,
+        )
+        .unwrap();
+        // The value is read, the fallback fills in, and the failed rule stays unresolved.
+        assert_eq!(s.view.variables["rule.build"], "42");
+        assert_eq!(s.view.texts["note"].value, "b=42 g={{rule.gone}} s=n/a");
+        assert_eq!(s.view.texts["note"].unresolved, ["rule.gone"]);
+        // Only rules the layout uses are reported; the fallback one says so.
+        assert_eq!(s.view.notes.len(), 2, "{:?}", s.view.notes);
+        assert!(s
+            .view
+            .notes
+            .iter()
+            .any(|n| n.contains("x rule") && n.contains("no file matches")));
+        assert!(s
+            .view
+            .notes
+            .iter()
+            .any(|n| n.contains("y rule") && n.contains("fallback")));
+        assert!(!s.view.notes.iter().any(|n| n.contains("z rule")));
     }
 
     #[test]

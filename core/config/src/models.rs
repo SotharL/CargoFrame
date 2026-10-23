@@ -1,6 +1,7 @@
 use crate::store::Document;
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::Layout;
+use cargoframe_rules::Rule;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -132,6 +133,18 @@ impl Document for Trigger {
 impl Document for Layout {
     const SCHEMA: u32 = cargoframe_layout::SCHEMA_VERSION;
     const NAME: &'static str = "layout";
+}
+
+/// `rules/<id>.json` is the data rule itself.
+impl Document for Rule {
+    const SCHEMA: u32 = 1;
+    const NAME: &'static str = "rule";
+}
+
+/// `infotypes/<id>.json`.
+impl Document for crate::infotype::InfoType {
+    const SCHEMA: u32 = 1;
+    const NAME: &'static str = "infotype";
 }
 
 /// `chats.json`: pinned and recent Claude chats. Stored beside `general.json`.

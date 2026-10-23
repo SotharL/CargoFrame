@@ -5,11 +5,13 @@
 
 mod cli;
 mod commands;
+mod items;
 mod logging;
 mod notify;
 mod registry;
 mod session;
 mod state;
+mod tools;
 mod tray;
 mod tray_host;
 mod triggers;
@@ -46,6 +48,7 @@ pub fn run() {
             Some(vec!["--autostart"]),
         ))
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(AppState::new(Store::new(dirs), tray_available))
         .invoke_handler(tauri::generate_handler![
@@ -61,6 +64,17 @@ pub fn run() {
             commands::edit_layout,
             commands::get_shortcut_errors,
             commands::reload_triggers,
+            commands::list_items,
+            commands::save_item,
+            commands::delete_item,
+            commands::new_item_id,
+            commands::validate_layout,
+            commands::list_variables,
+            commands::test_rule,
+            commands::get_safe,
+            commands::set_safe,
+            commands::test_safe_folder,
+            commands::pick_folder,
         ])
         .on_window_event(|window, event| {
             // Closing the CargoFrame window frees its capture (the screenshot is large).

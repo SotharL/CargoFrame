@@ -1,26 +1,32 @@
 <script lang="ts">
   import { onMount } from 'svelte';
-  import { PAGES, isPageId, type PageId } from './nav';
+  import { PAGES } from './nav';
+  import { go, parseTarget, restore, route } from './route.svelte';
   import General from './pages/General.svelte';
+  import Triggers from './pages/Triggers.svelte';
+  import Rules from './pages/Rules.svelte';
+  import InfoTypes from './pages/InfoTypes.svelte';
+  import Safe from './pages/Safe.svelte';
+  import Layouts from './pages/Layouts.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi } from '../lib/ipc';
 
-  const KEY = 'cargoframe.settings.page';
-  let page = $state<PageId>('triggers');
   let trayAvailable = $state(true);
+  const page = $derived(route.page);
 
-  function remember(id: PageId) {
-    page = id;
-    try { localStorage.setItem(KEY, id); } catch { /* storage can be unavailable */ }
-  }
-
-  onMount(async () => {
-    try {
-      const saved = localStorage.getItem(KEY);
-      if (isPageId(saved)) page = saved;
-    } catch { /* ignore */ }
-    trayAvailable = (await (await getApi()).appInfo()).tray_available;
+  onMount(() => {
+    restore(location.search);
+    let stop: (() => void) | undefined;
+    getApi().then(async (api) => {
+      trayAvailable = (await api.appInfo()).tray_available;
+      // "Edit layout" in the CargoFrame window asks an open Settings window to move.
+      stop = await api.onNavigate((target) => {
+        const t = parseTarget(target);
+        if (t) go(t.page, t.arg);
+      });
+    });
+    return () => stop?.();
   });
 
   const current = $derived(PAGES.find((p) => p.id === page)!);
@@ -30,7 +36,7 @@
     e.preventDefault();
     const i = PAGES.findIndex((p) => p.id === page);
     const next = PAGES[(i + (e.key === 'ArrowDown' ? 1 : PAGES.length - 1)) % PAGES.length]!;
-    remember(next.id);
+    go(next.id);
     queueMicrotask(() => document.getElementById(`nav-${next.id}`)?.focus());
   }
 </script>
@@ -46,12 +52,12 @@
         aria-current={page === p.id ? 'page' : undefined}
         tabindex={page === p.id ? 0 : -1}
         onkeydown={onNavKey}
-        onclick={() => remember(p.id)}>{p.title}</button
+        onclick={() => go(p.id)}>{p.title}</button
       >
     {/each}
   </nav>
 
-  <main>
+  <main class:wide={page === 'layouts'}>
     {#if !trayAvailable}
       <div class="banner" role="status">
         <Chip kind="warn" label="No tray icon" />
@@ -67,6 +73,16 @@
     </header>
     {#if page === 'general'}
       <General />
+    {:else if page === 'triggers'}
+      <Triggers />
+    {:else if page === 'rules'}
+      <Rules />
+    {:else if page === 'infotypes'}
+      <InfoTypes />
+    {:else if page === 'safe'}
+      <Safe />
+    {:else if page === 'layouts'}
+      <Layouts />
     {:else}
       <Placeholder title={current.title} />
     {/if}
@@ -91,6 +107,7 @@
   main { overflow: auto; padding: 24px 32px 40px; display: grid; align-content: start; gap: 20px; }
   header { display: grid; gap: 4px; }
   main > :global(*) { max-width: 720px; }
+  main.wide > :global(*) { max-width: none; }
   .banner {
     display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
     padding: 10px 12px; border: 1px solid var(--warn); border-radius: var(--radius);

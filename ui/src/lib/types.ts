@@ -117,3 +117,78 @@ export interface SessionView {
   issues: IssueView[];
   sharing: Record<string, { enabled: boolean; reasons: string[] }>;
 }
+
+// ----- configuration items edited in Settings (mirror core/config, core/rules) -----
+
+export type ItemKind = 'trigger' | 'layout' | 'rule' | 'infotype';
+
+export interface ItemEntry<T> {
+  id: string;
+  item: T;
+}
+
+export interface ItemList<T> {
+  items: ItemEntry<T>[];
+  /** Files that could not be read; left untouched on disk. */
+  problems: string[];
+}
+
+export type CaptureMode = 'active_window' | 'display' | 'all_displays';
+
+export interface Trigger {
+  name: string;
+  enabled: boolean;
+  /** Canonical, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only". */
+  shortcut: string;
+  capture: CaptureMode;
+  layout_id: string | null;
+}
+
+export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex';
+export type RuleMultiple = 'first' | 'last' | 'join';
+
+export interface Rule {
+  name: string;
+  file: string;
+  format: RuleFormat;
+  query: string;
+  multiple: RuleMultiple;
+  separator: string;
+  fallback: string | null;
+  max_bytes: number;
+}
+
+export interface RuleTest {
+  folder: string | null;
+  value: string | null;
+  problem: string | null;
+}
+
+export type InfoKind = 'text' | 'choice' | 'multi_choice' | 'number' | 'flag';
+
+export type InfoOptions =
+  | { type: 'none' }
+  | { type: 'fixed'; options: { value: string; label: string }[] }
+  | { type: 'api'; options_id: string };
+
+export interface InfoType {
+  name: string;
+  connection_id: string;
+  field: string;
+  kind: InfoKind;
+  options: InfoOptions;
+  required: boolean;
+  default_template: string;
+}
+
+export interface Safe {
+  /** Folder for the fallback zip; null means "ask me". */
+  folder: string | null;
+  timeout_secs: number;
+  max_retries: number;
+}
+
+export interface VariableInfo {
+  name: string;
+  description: string;
+}

@@ -21,6 +21,7 @@ tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-single-instance = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-opener = "2"
+tauri-plugin-dialog = "2"
 serde.workspace = true
 thiserror.workspace = true
 serde_json.workspace = true
@@ -32,6 +33,9 @@ cargoframe-context = { path = "../core/context" }
 cargoframe-handoff = { path = "../core/handoff" }
 cargoframe-layout = { path = "../core/layout" }
 cargoframe-window = { path = "../core/window" }
+cargoframe-rules = { path = "../core/rules" }
+cargoframe-bundle = { path = "../core/bundle" }
+cargoframe-safe = { path = "../core/safe" }
 tauri-plugin-global-shortcut = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 

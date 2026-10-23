@@ -8,9 +8,11 @@ members = [
     "core/config",
     "core/capture",
     "core/window",
+    "core/rules",
+    "core/bundle",
     "app",
 ]
-# Added in later phases: core/rules, core/bundle, core/connectors
+# Added in later phases: core/connectors
 
 [workspace.package]
 version = "0.1.0"

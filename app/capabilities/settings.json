@@ -2,7 +2,9 @@
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "settings",
   "description": "What the Settings window may ask the backend to do",
-  "windows": ["settings"],
+  "windows": [
+    "settings"
+  ],
   "permissions": [
     "allow-app-info",
     "allow-get-general",
@@ -11,6 +13,19 @@
     "allow-set-autostart",
     "allow-open-config-folder",
     "allow-get-shortcut-errors",
-    "allow-reload-triggers"
+    "allow-reload-triggers",
+    "allow-list-items",
+    "allow-save-item",
+    "allow-delete-item",
+    "allow-new-item-id",
+    "allow-validate-layout",
+    "allow-list-variables",
+    "allow-test-rule",
+    "allow-get-safe",
+    "allow-set-safe",
+    "allow-test-safe-folder",
+    "allow-pick-folder",
+    "core:event:allow-listen",
+    "core:event:allow-unlisten"
   ]
 }

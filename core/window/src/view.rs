@@ -220,6 +220,19 @@ fn dropdown_state(block: &Block, inputs: &Inputs<'_>) -> Option<DropdownState> {
     })
 }
 
+/// Layout check results in the shape the web view draws.
+pub fn issue_views(issues: &[cargoframe_layout::Issue]) -> Vec<IssueView> {
+    issues
+        .iter()
+        .map(|i| IssueView {
+            block_id: i.block_id.clone(),
+            severity: severity_name(i.severity),
+            code: code_name(i.code),
+            message: i.message.clone(),
+        })
+        .collect()
+}
+
 pub fn build(inputs: &Inputs<'_>) -> SessionView {
     let mut view = SessionView {
         session_id: inputs.session_id,
@@ -251,15 +264,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
 
     let lookup = |name: &str| inputs.variables.get(name).cloned();
     let issues = validate(layout, inputs.registry);
-    view.issues = issues
-        .iter()
-        .map(|i| IssueView {
-            block_id: i.block_id.clone(),
-            severity: severity_name(i.severity),
-            code: code_name(i.code),
-            message: i.message.clone(),
-        })
-        .collect();
+    view.issues = issue_views(&issues);
 
     for block in &layout.blocks {
         match &block.kind {

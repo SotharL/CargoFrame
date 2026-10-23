@@ -15,6 +15,17 @@ fn main() {
             "edit_layout",
             "get_shortcut_errors",
             "reload_triggers",
+            "list_items",
+            "save_item",
+            "delete_item",
+            "new_item_id",
+            "validate_layout",
+            "list_variables",
+            "test_rule",
+            "get_safe",
+            "set_safe",
+            "test_safe_folder",
+            "pick_folder",
         ]),
     ))
     .expect("failed to run tauri-build");
