@@ -84,7 +84,7 @@ jobs:
       - name: Silent install, upgrade, uninstall
         shell: bash
         run: scripts/ci/run.sh "Windows installer smoke test" pwsh -NoProfile -File installers/windows/smoke-test.ps1 -Installer '${{ steps.pack.outputs.path }}'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-windows
           path: dist/*.exe
@@ -131,7 +131,7 @@ jobs:
           tar -C dist -czf "dist/$pkg.tar.gz" "$pkg"
           rm -rf "dist/$pkg"
           ls -l dist
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: release-linux
           path: dist/*.tar.gz
