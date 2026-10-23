@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-23, branch `dev/v1`._
+_Last updated 2026-10-23. V1 was merged to `main` from `dev/v1` in pull request #1._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of

@@ -1,6 +1,6 @@
 # Security review (V1)
 
-_Reviewed 2026-10-23 on branch `dev/v1`. This is a code review plus tests, not an outside audit._
+_Reviewed 2026-10-23, on the code merged to `main` in pull request #1. This is a code review plus tests, not an outside audit._
 
 ## What CargoFrame must protect
 
