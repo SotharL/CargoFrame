@@ -25,6 +25,7 @@ _Reviewed 2026-10-23 on branch `dev/v1`. This is a code review plus tests, not a
 | 2 | The content security policy did not forbid plugins, `<base>` tags, frames or form posts. Nothing in the app used them, so this was hardening. | Low | **Fixed.** Added `object-src 'none'; base-uri 'none'; frame-src 'none'; form-action 'none'`. A test (`shipped_config_tests` in `app/src/lib.rs`) fails if the policy is loosened, if a window is given a non-app permission, or if the CargoFrame window is given a settings or secrets command. |
 | 3 | Nothing proved that a stored secret stays out of every file CargoFrame writes. | Low | **Fixed.** `a_stored_secret_is_in_the_secret_store_and_in_no_file` stores a token and searches every file under the settings and data folders. |
 | 4 | A secret input sat inside another form (nested forms are invalid HTML). | Low | **Fixed.** It is no longer a form; Enter in the box stores the token and never submits the connection form. |
+| 5 | The weekly dependency check (`cargo audit`) found three advisories in the `zip` crate, version 6 (RUSTSEC-2026-0367, -0368, -0369): extracting an archive could follow links outside the target folder or keep set-user-id bits. | Low for CargoFrame | **Fixed.** CargoFrame only *writes* zips and never extracts one, so it was not exposed, but `zip` is now version 9, which has the fixes. |
 
 ## Checked and found sound
 
@@ -36,7 +37,7 @@ _Reviewed 2026-10-23 on branch `dev/v1`. This is a code review plus tests, not a
 - **Logs:** record events (trigger id, connection id, attempt count, failure class, timings). They do not record window titles, file names, payloads, headers or tokens. The log file is size-capped.
 - **Errors from services:** HTML pages and very long messages are cut before they reach a window.
 - **Updates:** the in-app updater is off while the repository is private, so there is no update channel to attack yet.
-- **Dependencies:** `npm audit` reports no vulnerabilities. A weekly and on-change workflow (`.github/workflows/security.yml`) runs `cargo audit` and `npm audit`; it has not run on GitHub yet.
+- **Dependencies:** `npm audit` and `cargo audit` report no vulnerabilities. A weekly and on-change workflow (`.github/workflows/security.yml`) runs both; its first run is what found finding 5. `cargo audit` still lists nine *warnings*, all "unmaintained" or "unsound" notices on libraries pulled in by Tauri 2 (GTK 3 bindings, two build-time helpers) and by the credential-store crate (D-Bus bindings, `zbus` and `zvariant`). They are not vulnerabilities and the workflow does not fail on them, but they are the list to re-read at each release.
 
 ## Known limits (honest list)
 

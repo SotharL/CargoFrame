@@ -662,7 +662,11 @@ mod tests {
             };
         });
         let err = w.with("c", |ctx| c.send(ctx, &payload())).unwrap_err();
-        assert!(err.message.contains("redirected"), "{}", err.message);
+        assert!(
+            err.message.contains("redirected"),
+            "{err:?}; the server saw {} request(s)",
+            first.requests().len()
+        );
         assert!(other.requests().is_empty());
     }
 

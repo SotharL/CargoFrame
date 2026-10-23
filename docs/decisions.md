@@ -28,11 +28,39 @@ the plan.
 
 - One Rust core, Tauri 2, Svelte UI. The always-on process is tray-only with no webview; the
   Settings and CargoFrame windows are created on demand.
-- Pure logic lives in small crates under `core/` with no dependencies, so it is fast to test.
-  Side effects (files, dialogs, network) sit behind traits and are injected.
+- Logic lives in small crates under `core/` that know nothing about Tauri or windows, so it is
+  tested without a display. Side effects (files, the secret store, network, the clock) sit behind
+  traits and are injected; tests use a local mock server and an in-memory secret store.
 - Secrets live in the OS credential store, never in config files, logs or zips.
 - Install paths: program in `%LocalAppData%\CargoFrame`, settings in `%AppData%\CargoFrame`
   (Linux: `~/.local/share/CargoFrame`, `~/.config/CargoFrame`). Local data (logs, kept zips) sits in a `data` subfolder of the program folder, so "delete my data" never touches the program.
+
+## Memory, speed and security (Phase 5)
+
+- **Memory modes** (Settings, General, Memory). *Low memory* destroys a window when it is closed.
+  *Balanced* (default) hides it and destroys it after 5 minutes unless it was opened again.
+  *Always warm* only ever hides it. The tray-only process never holds a web view. Measured on a
+  virtual display: reopening a kept window 36 ms, a cold one 823 ms.
+- **Performance budgets are gates, not hopes.** Each budget in `docs/performance.md` has a check
+  in CI. A gate fails at budget +20%. Shared runners are slower, so their timing gates run at
+  twice the budget (`CARGOFRAME_PERF_SCALE=2`). A budget changes only by changing the plan first.
+- **Memory is judged on anonymous memory on Linux.** The resident set counts shared libraries
+  that the toolkit maps for every program; the 40 MB budget still has to be confirmed on a
+  reference machine (spike S6).
+- **One HTTP client, redirects checked by us.** Every hop must be https (plain http only between
+  this computer's own test servers), may not go from https to http, may not carry a user name,
+  and may not take `Authorization`, `Proxy-Authorization` or `Cookie` to another site. At most 5
+  hops. A Custom API connection follows none: a redirect is reported as an error, so its key
+  can never be sent to a place the person did not name.
+- **The CargoFrame window is the less trusted window.** It gets no settings, secrets or
+  connection commands, and a share uses what the backend holds for that capture, not what the
+  window sends. Tests fail if the content security policy or the permissions are loosened.
+- **Timings stay local.** The program times its own shortcut-to-window path and shows the last
+  numbers in Settings. They are plain milliseconds in memory and the log, never sent anywhere.
+- **Releases are drafts.** Pushing a tag `vX.Y.Z` (the same as the version in `Cargo.toml`)
+  builds both installers, runs their smoke tests, and creates a **draft** GitHub release with
+  checksums. Nothing is published until the owner opens the draft and publishes it. The
+  in-app updater stays off while the repository is private.
 
 ## Changes from the project brief
 

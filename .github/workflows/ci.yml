@@ -82,11 +82,11 @@ jobs:
       - name: Test (Linux, with a virtual display for the capture tests)
         if: runner.os == 'Linux'
         shell: bash
-        run: scripts/ci/run.sh "cargo test" xvfb-run -a -s "-screen 0 1280x800x24" cargo test --workspace
+        run: scripts/ci/run.sh "cargo test" xvfb-run -a -s "-screen 0 1280x800x24" cargo test --workspace --no-fail-fast
       - name: Test (Windows)
         if: runner.os == 'Windows'
         shell: bash
-        run: scripts/ci/run.sh "cargo test" cargo test --workspace
+        run: scripts/ci/run.sh "cargo test" cargo test --workspace --no-fail-fast
       - name: Timing gates (release build; shared runners are slower, so budgets are doubled)
         shell: bash
         env:

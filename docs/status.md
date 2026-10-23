@@ -1,54 +1,75 @@
 # Status
 
-_Last updated 2026-10-23._
+_Last updated 2026-10-23, branch `dev/v1`._
+
+**V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
+no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
+those is true for each piece.
 
 ## What is verified
 
-- `cargo test --workspace`: **91 tests pass** (context 31, handoff 14, layout 21, safe 25).
-- `cargo clippy --workspace --all-targets -- -D warnings` and `cargo fmt --check` are clean.
-- Run in a Linux workspace without network access to crates.io, so the crates have **no
-  dependencies**.
+- **Unit and integration tests:** 355 Rust tests and 51 UI tests pass. `cargo clippy -D warnings`,
+  `cargo fmt --check` and `svelte-check` are clean.
+- **Linux end to end** (virtual X11 display): the shortcut captures a fake program, the CargoFrame
+  window opens with the capture, closing and reopening behaves as each of the three memory modes
+  promises, and the real release binary stays at 19.6 MB of its own memory while idle
+  (`scripts/e2e/`).
+- **The windows in a browser** with demo data: the layout builder, Connections page, the share
+  flow, themes and keyboard use (checked by hand-driven scripts, not kept as tests).
+- **Connectors against local mock servers:** Jira (Cloud and Server), Google (Drive, Sheets),
+  Reddit, Claude hand-off, Custom API, OAuth with PKCE, retry and fallback zip. The mock servers
+  follow each service's documented API; they are not the services.
+- **Installers:** GitHub's Windows runner builds the NSIS installer and runs a silent install,
+  upgrade and uninstall; GitHub's Ubuntu runner builds the AppImage, installs it, runs it and
+  quits it. See `.github/workflows/bundle.yml`.
+- **Security review** with fixes and regression tests: `docs/security.md`.
+- **Performance budgets** as CI gates with measured numbers: `docs/performance.md`.
 
 ## What is not verified
 
-- The GitHub Actions workflow has not run on GitHub yet. Expect to fix small things on its first run.
-- `scripts/windows/new-signing-material.ps1` has not been run (no PowerShell in the workspace).
-- Nothing that needs a dependency has been written or compiled: Tauri shell, tray, installer,
-  capture, JSON config, connectors, Svelte UI.
+- **A real desktop.** Windows 11 capture and tray, GNOME and KDE trays, Wayland capture and
+  clipboard, notification clicks: spikes S1 to S5 in `docs/spikes.md` are all still "not run".
+- **Real accounts.** OAuth sign-in with Google and Reddit, Jira tokens, and a Claude chat opened
+  from a link have only been exercised against mock servers or by unit test. Spike S5 (how
+  Claude's composer treats a pasted image) is open.
+- **The Linux credential store** (Secret Service) is covered by an in-memory stand-in in tests,
+  not by GNOME Keyring or KWallet.
+- **Performance on a reference machine** (spike S6), including the 40 MB tray-only budget and the
+  cold-open times, which were slightly over budget on a virtual display.
+- **Signing and releases.** `release.yml` and `scripts/windows/sign.ps1` have never run with a
+  certificate; the program inside the installer is not signed. `new-signing-material.ps1` has
+  not been run.
+- **Wayland "active window" capture** may not be possible on some compositors; the fallback is
+  the display under the cursor.
 
 ## Phases
 
 | Phase | Scope | State |
 |-------|-------|-------|
-| 0 Foundations | Workspace, CI, signing docs and script, spike runbook | Scaffold, CI and docs done. **You** run: signing material, spikes S1 to S7, name check |
-| 1 Shell and installer | Tray, single instance, launch notice, Settings window, NSIS and Linux installers | Not started (needs Tauri dependencies) |
-| 2 Capture and window | Triggers, capture, CargoFrame window, themes | Folder climb, templates, allow-list and layout model done; capture and UI not started |
-| 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Safe-settings retry and ladder, layout validation and grid done; zip, parsers, builder UI not started |
-| 4 Connectors | Jira, Google, Reddit, Claude, Custom API | Claude link and chat-list logic done; connectors not started |
-| 5 Hardening and release | Performance gates, security review, release workflow | Not started |
+| 0 Foundations | Workspace, CI, signing docs, spike runbook | Done. Owner runs: signing material, spikes, name check |
+| 1 Shell and installer | Tray, single instance, launch notice, Settings window, installers | Done and built in CI |
+| 2 Capture and window | Triggers, capture, CargoFrame window, themes | Done; Windows, X11 and the Wayland portal are implemented, Wayland is untested |
+| 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
+| 4 Connectors | Jira, Google, Reddit, Claude, Custom API, Connections page, share flow | Done against mock servers |
+| 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
 
-## Blockers for the rest of V1
+## What the owner needs to do before calling V1 solid
 
-1. **This build session cannot reach the repository on GitHub.** It is private and the session's
-   GitHub credential has no access to it. Everything above was written into a local copy and
-   delivered to your clone as files; nothing was committed or pushed.
-2. **This build session cannot download packages.** The workspace's network policy refused
-   `index.crates.io` and `registry.npmjs.org` (403 from the proxy), and the Ubuntu package
-   servers were unreachable. Compiling the Tauri shell needs the crates, the webkit/GTK
-   development packages and, for the UI, npm.
-
-To unblock:
-
-- **Network:** in the Claude app, open the session, select the caret after the session title,
-  choose **Edit cloud environment**, and set **Network access** to **Trusted** (the default level,
-  which already allows crates.io, npm, the Ubuntu archive and GitHub). The 403s on
-  `index.crates.io` and `registry.npmjs.org` suggest the environment is set to **None** or to a
-  **Custom** list without the defaults. If the dialog is read-only, the environment is shared by
-  an organization and an Owner changes it under Cloud environments in admin settings.
-- **GitHub:** reconnect it under claude.ai Settings > Connectors and make sure the repository is
-  included.
+1. Run spikes S1 to S7 on real machines and write the answers into `docs/spikes.md`; change the
+   named setting in code where an answer differs from the assumption.
+2. Use it with real accounts: one Jira (Cloud or Server), one Reddit, one Google, one Claude chat.
+3. Run `scripts/windows/new-signing-material.ps1`, add the repository secrets it prints, and push
+   a tag (`git tag v0.1.0 && git push origin v0.1.0`) to try the release workflow. It makes a
+   **draft** release; nothing is published until you publish it.
+4. Check the product name for conflicts (S7).
+5. Reconcile `C:\Users\Admin\Documents\GitHub\CargoFrame` with the repository. Earlier files were
+   delivered there by hand and may duplicate files now in git.
+6. Confirm that "log action" in the brief means **data rule** (see `docs/decisions.md`).
+7. Before making the repository public: the list at the end of `docs/signing.md` and in
+   `docs/security.md`.
 
 ## Decided
 
-- **Twitter/X and BlueSky:** v1.1, both (2026-10-23).
+- **Twitter/X, BlueSky and Instagram:** v1.1 (2026-10-23).
+- **Repository:** private until V1 is solid; the in-app updater is off, updates are manual.
 - **Still to confirm:** "log action" is read as "data rule".

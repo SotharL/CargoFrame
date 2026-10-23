@@ -8,6 +8,18 @@ and never by an automated session.
 | Code-signing certificate (`.pfx`) | Signs the Windows installer and app | Repository secrets `WINDOWS_CERT_PFX_BASE64`, `WINDOWS_CERT_PASSWORD`, plus your offline backup | `.cer`, given to testers if they want to trust it |
 | Update-signing key pair (Tauri) | Signs update packages and the update manifest | Repository secrets `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus your offline backup | `.pub` file, copied into `tauri.conf.json` and committed |
 
+## What is signed
+
+- The **installer** is signed by the release workflow (`scripts/windows/sign.ps1`) when the
+  secrets `WINDOWS_CERT_PFX_BASE64` and `WINDOWS_CERT_PASSWORD` exist. Without them the workflow
+  still builds an unsigned installer and says so in the log.
+- The **program inside the installer** (`CargoFrame.exe`) is **not signed yet**. Windows shows the
+  publisher on the installer, but SmartScreen and security tools may still treat the installed
+  program as unknown. Signing it means signing before the installer is packed; that is the first
+  thing to add when a trusted certificate replaces the self-signed one.
+- The Linux package is not signed. Publish `SHA256SUMS.txt` (the release draft includes it).
+- None of this has run with a real certificate yet.
+
 ## Private beta (now)
 
 - The certificate is self-signed. Testers see an "unknown publisher" warning. That is expected.

@@ -275,6 +275,13 @@ impl MockServer {
                     let _ = stream.write_all(out.as_bytes());
                     let _ = stream.write_all(&resp.body);
                     let _ = stream.flush();
+                    // Close politely: say we are done sending, then let the client finish
+                    // reading. Closing at once can reset the connection on Windows, and the
+                    // client then reports an aborted connection instead of our answer.
+                    let _ = stream.shutdown(std::net::Shutdown::Write);
+                    let _ = stream.set_read_timeout(Some(Duration::from_millis(300)));
+                    let mut rest = [0u8; 512];
+                    while matches!(stream.read(&mut rest), Ok(n) if n > 0) {}
                 });
             }
         });
