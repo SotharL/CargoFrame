@@ -20,7 +20,17 @@ Google, Reddit, Claude or any API you describe. Nothing leaves your computer unt
    destination, the screenshot with crop, draw, shapes, text and colour tools, the files found
    with the ones you preselected, and a sharing button.
 4. You review and press the button. If the share fails it is retried, then a zip is kept in your
-   safe folder (or you are asked where to put it). Secrets never go in the zip.
+   safe folder (or you are asked where to put it). Secrets never go in the zip. A button with no
+   active connection says **Save locally** and saves that zip straight into the folder you set in
+   Settings, General, Safety.
+5. Layouts can start from a **ready-made template** for each connection (Jira bug, Jira comment,
+   Drive upload, Sheet row, Reddit post, Claude prompt, Custom API, or a local save). A template is
+   never changed; saving one makes your own copy. Layouts, data rules and info types can be
+   **exported and imported** as one file (Settings, General, Export and import).
+
+Data rules read JSON, YAML, TOML, INI, CSV, XML, a regular expression, or **plain text and log
+files** (`.txt`, `.log`): a line, a range, the first or last lines, lines that contain a word, or
+what follows a label.
 
 Destinations in V1: **Jira** (the reference), **Google** (Drive, Sheets), **Reddit**,
 **Claude** (hands the capture and your prompt to a chat; there is no chat inside CargoFrame) and

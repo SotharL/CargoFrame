@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-10-23. V1 was merged to `main` from `dev/v1` in pull request #1._
+_Last updated 2026-10-23. V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -8,14 +8,17 @@ those is true for each piece.
 
 ## What is verified
 
-- **Unit and integration tests:** 355 Rust tests and 51 UI tests pass. `cargo clippy -D warnings`,
+- **Unit and integration tests:** 399 Rust tests and 76 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
 - **Linux end to end** (virtual X11 display): the shortcut captures a fake program, the CargoFrame
   window opens with the capture, closing and reopening behaves as each of the three memory modes
   promises, and the real release binary stays at 19.6 MB of its own memory while idle
   (`scripts/e2e/`).
 - **The windows in a browser** with demo data: the layout builder, Connections page, the share
-  flow, themes and keyboard use (checked by hand-driven scripts, not kept as tests).
+  flow, themes and keyboard use (checked by hand-driven scripts, not kept as tests). For the
+  settings update: the new General page in light and dark, the Save locally button and result,
+  and the template panel. The real program (virtual display) was also driven to the Layouts page
+  to see the template list come from the backend, and the capture end-to-end check still passes.
 - **Connectors against local mock servers:** Jira (Cloud and Server), Google (Drive, Sheets),
   Reddit, Claude hand-off, Custom API, OAuth with PKCE, retry and fallback zip. The mock servers
   follow each service's documented API; they are not the services.
@@ -27,6 +30,9 @@ those is true for each piece.
 
 ## What is not verified
 
+- **The settings update on a real desktop.** Save locally into a real folder, export and import
+  through the system file dialogs, and the text and log rules on real log files have been tested
+  by unit tests and the in-memory stand-in; the file dialogs themselves were not opened.
 - **A real desktop.** Windows 11 capture and tray, GNOME and KDE trays, Wayland capture and
   clipboard, notification clicks: spikes S1 to S5 in `docs/spikes.md` are all still "not run".
 - **Real accounts.** OAuth sign-in with Google and Reddit, Jira tokens, and a Claude chat opened
