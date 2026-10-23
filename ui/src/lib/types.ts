@@ -125,12 +125,64 @@ export interface SessionView {
   files: Record<string, FilesState>;
   dropdowns: Record<string, DropdownState>;
   issues: IssueView[];
-  sharing: Record<string, { enabled: boolean; reasons: string[] }>;
+  sharing: Record<string, SharingView>;
 }
 
 // ----- configuration items edited in Settings (mirror core/config, core/rules) -----
 
 export type ItemKind = 'trigger' | 'layout' | 'rule' | 'infotype' | 'connection';
+
+/** A ready-made layout to start from. `service` is the kind of connection it is built for. */
+export interface LayoutTemplate {
+  key: string;
+  name: string;
+  description: string;
+  /** `null`: the one that saves locally and needs no connection. */
+  service: 'jira' | 'google' | 'reddit' | 'claude' | 'custom' | null;
+}
+
+// ----- export and import of settings -----
+
+/** The groups a settings file holds. Connections, shortcuts and secrets are never among them. */
+export type TransferGroup = 'layouts' | 'rules' | 'infotypes';
+
+export interface ExportSelection {
+  group: TransferGroup;
+  ids: string[];
+}
+
+export interface ImportPreviewItem {
+  group: TransferGroup;
+  id: string;
+  name: string;
+  /** An item with this id is already here. */
+  exists: boolean;
+  existing_name: string | null;
+  /** Why it cannot be imported, when it cannot. */
+  error: string | null;
+  notes: string[];
+  /** Whether it can be brought in next to the one that is here (not for data rules). */
+  can_copy: boolean;
+}
+
+export interface ImportPreview {
+  file_name: string;
+  items: ImportPreviewItem[];
+}
+
+export type ImportAction = 'skip' | 'replace' | 'copy';
+
+export interface ImportPick {
+  group: TransferGroup;
+  id: string;
+  action: ImportAction;
+}
+
+export interface ImportReport {
+  imported: { group: TransferGroup; id: string; name: string; copy: boolean }[];
+  skipped: number;
+  failed: string[];
+}
 
 export interface ItemEntry<T> {
   id: string;
@@ -154,7 +206,7 @@ export interface Trigger {
   layout_id: string | null;
 }
 
-export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex';
+export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text';
 export type RuleMultiple = 'first' | 'last' | 'join';
 
 export interface Rule {
@@ -308,6 +360,16 @@ export interface OptionsError {
   reconnect: boolean;
 }
 
+/** What a sharing button does and whether it can right now. */
+export interface SharingView {
+  enabled: boolean;
+  reasons: string[];
+  /** `save_locally` when the button has no active connection. */
+  mode: 'send' | 'save_locally';
+  /** What pressing it does, when that is not obvious. */
+  note: string | null;
+}
+
 export interface SavedCopy {
   place: 'safe_folder' | 'picked_folder' | 'kept_locally' | 'not_saved';
   path: string;
@@ -323,6 +385,7 @@ export type ShareResult =
       copy_next: string | null;
       close: boolean;
     }
+  | { status: 'saved_locally'; path: string; notes: string[]; close: boolean }
   | { status: 'blocked'; reasons: string[] }
   | {
       status: 'failed';

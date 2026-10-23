@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/svelte';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { cleanup, render, screen, fireEvent } from '@testing-library/svelte';
 import ResultPanel from './ResultPanel.svelte';
 import type { ShareResult } from '../lib/types';
 
@@ -15,6 +15,8 @@ function show(result: ShareResult) {
 }
 
 describe('ResultPanel', () => {
+  afterEach(cleanup);
+
   it('offers the link and the second paste after a hand-off', async () => {
     const h = show({
       status: 'sent', summary: 'Created PROJ-1', url: 'https://x.test/PROJ-1',
@@ -27,6 +29,16 @@ describe('ResultPanel', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
     expect(h.oncopy).toHaveBeenCalledWith('why?');
     expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
+    expect(h.onclose).toHaveBeenCalled();
+  });
+
+  it('says where a local save went', async () => {
+    const h = show({
+      status: 'saved_locally', path: '/home/me/zips/CargoFrame_2026_local.zip', notes: [], close: false,
+    });
+    expect(screen.getByText('Saved locally')).toBeTruthy();
+    expect(screen.getByText('/home/me/zips/CargoFrame_2026_local.zip')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(h.onclose).toHaveBeenCalled();
   });

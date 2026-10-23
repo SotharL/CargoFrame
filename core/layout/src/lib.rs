@@ -6,12 +6,13 @@
 
 pub mod grid;
 pub mod model;
+pub mod templates;
 pub mod validate;
 
 pub use model::*;
 pub use validate::{
-    sharing_state, validate, worst, Code, ConnectionInfo, ConnectionKind, ConnectionState, Issue,
-    Registry, Severity, SharingState,
+    sharing_mode, sharing_state, validate, worst, Code, ConnectionInfo, ConnectionKind,
+    ConnectionState, Issue, Registry, Severity, SharingMode, SharingState,
 };
 
 /// Version written into every layout file so later releases can migrate old ones.

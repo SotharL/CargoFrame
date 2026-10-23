@@ -22,6 +22,7 @@
     { value: 'ini', label: 'INI', query: 'build.number', help: 'section.key, or just key for lines before the first section' },
     { value: 'csv', label: 'CSV', query: 'name', help: 'A column name from the header row, or a column number (1 is the first)' },
     { value: 'xml', label: 'XML', query: 'project/version', help: 'Element names separated by /, ending in @attribute if you want one. //name finds it at any depth' },
+    { value: 'text', label: 'Text or log file (.txt, .log)', query: 'tail: 20', help: 'One instruction: line: 3, line: -1 (the last line), lines: 5-9, head: 20, tail: 20, contains: timeout, after: Version:, or level: error, warn' },
     { value: 'regex', label: 'Text pattern (regex)', query: 'version = "(.+?)"', help: 'A regular expression. The value is the first (group), or the whole match when there is none' },
   ];
   const format = (f: RuleFormat) => FORMATS.find((x) => x.value === f)!;
@@ -129,7 +130,7 @@
         <input type="text" bind:value={draft.value.name} placeholder="App version" />
       </Field>
       <Field label="File" hint="Relative to the project folder. Use * or ** to match several; the first match is read.">
-        <input type="text" bind:value={draft.value.file} placeholder="package.json" />
+        <input type="text" bind:value={draft.value.file} placeholder={draft.value.format === 'text' ? 'logs/*.log' : 'package.json'} />
       </Field>
       <Field label="Format">
         <select bind:value={draft.value.format}>
@@ -147,7 +148,16 @@
         </select>
       </Field>
       {#if draft.value.multiple === 'join'}
-        <Field label="Separator"><input type="text" bind:value={draft.value.separator} /></Field>
+        <Field label="Separator" hint="Write \n for a new line and \t for a tab.">
+          <input type="text" bind:value={draft.value.separator} />
+        </Field>
+      {/if}
+      {#if draft.value.format === 'text'}
+        <p class="quiet small">
+          Several lines at once: choose “Join them all” (for example tail: 20, joined with \n). A file
+          larger than the limit is read from its end for tail:, line: -1, contains:, after: and level:,
+          and from its start for head:, line: 3 and lines:.
+        </p>
       {/if}
       <label class="check">
         <input type="checkbox" bind:checked={draft.useFallback} />

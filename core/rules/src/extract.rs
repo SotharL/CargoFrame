@@ -48,6 +48,10 @@ pub fn all_values(rule: &Rule, text: &str) -> Result<Vec<String>, RuleError> {
         Format::Csv => csv_column(text, &rule.query)?,
         Format::Xml => xml(text, &rule.query)?,
         Format::Regex => regex_values(text, &rule.query)?,
+        Format::Text => {
+            let q = crate::text::parse(&rule.query).map_err(RuleError::BadQuery)?;
+            crate::text::values(text, &q)
+        }
     };
     Ok(found.into_iter().take(MAX_VALUES).collect())
 }
@@ -68,8 +72,32 @@ pub fn extract(rule: &Rule, text: &str) -> Result<String, RuleError> {
     Ok(match rule.multiple {
         Multiple::First => values.swap_remove(0),
         Multiple::Last => values.pop().unwrap_or_default(),
-        Multiple::Join => values.join(&rule.separator),
+        Multiple::Join => values.join(&unescape(&rule.separator)),
     })
+}
+
+/// `\n`, `\t` and `\\` typed in the separator box mean a new line, a tab and a backslash. This is
+/// how a separator can be a line break, which a one-line text box cannot hold.
+fn unescape(separator: &str) -> String {
+    let mut out = String::with_capacity(separator.len());
+    let mut chars = separator.chars();
+    while let Some(c) = chars.next() {
+        if c != '\\' {
+            out.push(c);
+            continue;
+        }
+        match chars.next() {
+            Some('n') => out.push('\n'),
+            Some('t') => out.push('\t'),
+            Some('\\') => out.push('\\'),
+            Some(other) => {
+                out.push('\\');
+                out.push(other);
+            }
+            None => out.push('\\'),
+        }
+    }
+    out
 }
 
 fn by_path(root: &Value, query: &str) -> Result<Vec<String>, RuleError> {
@@ -275,6 +303,7 @@ pub fn check(rule: &Rule) -> Result<(), String> {
                     .unwrap_or("invalid pattern")
                     .to_string()
             }),
+        Format::Text => crate::text::parse(&rule.query).map(|_| ()),
         Format::Ini | Format::Csv | Format::Xml => Ok(()),
     }
 }
@@ -461,6 +490,32 @@ mod tests {
     }
 
     #[test]
+    fn a_text_rule_reads_logs_and_joins_with_a_line_break() {
+        let text = "a ERROR one\nb INFO two\nc ERROR three\n";
+        let mut r = rule(Format::Text, "level: error");
+        r.multiple = Multiple::Join;
+        r.separator = "\\n".into();
+        assert_eq!(extract(&r, text).unwrap(), "a ERROR one\nc ERROR three");
+        r.separator = " \\t ".into();
+        assert_eq!(extract(&r, text).unwrap(), "a ERROR one \t c ERROR three");
+        // A backslash that starts nothing known is left alone.
+        r.separator = "\\x; ".into();
+        assert_eq!(extract(&r, text).unwrap(), "a ERROR one\\x; c ERROR three");
+        assert_eq!(
+            extract(&rule(Format::Text, "tail: 1"), text).unwrap(),
+            "c ERROR three"
+        );
+        assert_eq!(
+            extract(&rule(Format::Text, "contains: nothing"), text).unwrap_err(),
+            RuleError::NoValue
+        );
+        assert!(matches!(
+            extract(&rule(Format::Text, "tail 5"), text).unwrap_err(),
+            RuleError::BadQuery(_)
+        ));
+    }
+
+    #[test]
     fn empty_queries_are_rejected_with_advice() {
         for f in [Format::Ini, Format::Csv, Format::Xml, Format::Regex] {
             assert!(matches!(
@@ -510,5 +565,15 @@ mod check_tests {
             .unwrap_err()
             .contains("look for"));
         assert!(check(&rule("a.csv", Format::Csv, "")).is_err());
+    }
+
+    #[test]
+    fn text_rules_are_checked_when_saved() {
+        assert!(check(&rule("logs/*.log", Format::Text, "tail: 20")).is_ok());
+        assert!(check(&rule("notes.txt", Format::Text, "after: Version:")).is_ok());
+        assert!(check(&rule("notes.txt", Format::Text, "tail 20"))
+            .unwrap_err()
+            .contains("tail:"));
+        assert!(check(&rule("notes.txt", Format::Text, "")).is_err());
     }
 }

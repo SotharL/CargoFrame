@@ -6,11 +6,13 @@
   import { getApi } from '../../lib/ipc';
   import type { Safe } from '../../lib/types';
 
+  /** Reports the outcome of a save so the General page can show one status line. */
+  let { onstatus }: { onstatus: (kind: 'ok' | 'err', text: string) => void } = $props();
+
   let loaded = $state(false);
   let safe = $state<Safe>({ folder: null, timeout_secs: 30, max_retries: 3 });
   let folderText = $state('');
   let folderCheck = $state<{ ok: boolean; text: string } | null>(null);
-  let status = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
   onMount(async () => {
     safe = await (await getApi()).getSafe();
@@ -19,12 +21,11 @@
   });
 
   async function save() {
-    status = null;
     try {
       await (await getApi()).setSafe({ ...safe, folder: folderText.trim() || null });
-      status = { kind: 'ok', text: 'Saved' };
+      onstatus('ok', 'Saved');
     } catch (e) {
-      status = { kind: 'err', text: String(e) };
+      onstatus('err', String(e));
     }
   }
 
@@ -49,19 +50,27 @@
 </script>
 
 {#if loaded}
-  <div class="page">
-    <Section title="When sharing fails">
-      <ol class="steps">
+  <Section
+    title="Safety"
+    hint="What CargoFrame does when a share fails, and where it keeps zips when there is nowhere to send."
+  >
+    <details class="steps">
+      <summary>When sharing fails</summary>
+      <ol>
         <li>CargoFrame tries again a few times, waiting a little longer each time.</li>
         <li>If it still fails, it saves everything as a zip in the folder below.</li>
         <li>If that folder is not set or cannot be written, it asks you where to save.</li>
         <li>If you cancel, the zip is kept in CargoFrame's own folder and you are told where.</li>
       </ol>
       <p class="quiet">Nothing you captured is thrown away because a service was down.</p>
-    </Section>
+    </details>
 
-    <Section title="Folder for saved zips">
-      <Field label="Folder" hint="Leave it empty to be asked each time.">
+    <div class="sub">
+      <h3>Folder for saved zips</h3>
+      <Field
+        label="Folder"
+        hint="Also where “Save locally” puts its zip when a button has no active connection. Leave it empty to be asked after a failed share; “Save locally” needs it set."
+      >
         <div class="row">
           <input type="text" bind:value={folderText} onchange={save} placeholder="Ask me each time" />
           <button type="button" onclick={choose}>Choose…</button>
@@ -69,26 +78,29 @@
         </div>
       </Field>
       {#if folderCheck}<Chip kind={folderCheck.ok ? 'ok' : 'err'} label={folderCheck.text} />{/if}
-    </Section>
+    </div>
 
-    <Section title="Retries">
+    <div class="sub">
+      <h3>Retries</h3>
       <div class="two">
-        <Field label="Give up after (seconds)" hint="How long one attempt may take.">
-          <input type="number" min="5" max="300" bind:value={safe.timeout_secs} onchange={save} />
-        </Field>
         <Field label="Retries" hint="Extra attempts after the first one (0 to 10).">
           <input type="number" min="0" max="10" bind:value={safe.max_retries} onchange={save} />
         </Field>
+        <Field label="Give up after (seconds)" hint="How long one attempt may take.">
+          <input type="number" min="5" max="300" bind:value={safe.timeout_secs} onchange={save} />
+        </Field>
       </div>
-    </Section>
-
-    {#if status}<Chip kind={status.kind} label={status.text} />{/if}
-  </div>
+    </div>
+  </Section>
 {/if}
 
 <style>
-  .page { display: grid; gap: 16px; }
-  .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+  .steps { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+  .steps summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  .steps ol { margin: 8px 0 4px; padding-left: 20px; display: grid; gap: 4px; }
+  .steps p { margin: 4px 0 0; }
+  .sub { display: grid; gap: 8px; }
+  .sub h3 { font-size: 13.5px; }
   .row { display: flex; gap: 8px; }
   .row input { flex: 1; min-width: 0; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }

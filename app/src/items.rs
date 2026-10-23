@@ -95,14 +95,22 @@ fn parse<T: serde::de::DeserializeOwned>(item: Value) -> Result<T, String> {
     serde_json::from_value(item).map_err(|e| format!("This item is not valid: {e}"))
 }
 
-/// Validate `item` for `kind` and write it as `id`. Triggers get their shortcut rewritten to the
-/// canonical form so it looks the same everywhere.
-pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), String> {
+/// An item that passed its checks, ready to write.
+enum Checked {
+    Trigger(Trigger),
+    Layout(Layout),
+    Rule(Rule),
+    InfoType(InfoType),
+    Connection(Connection),
+}
+
+/// Parse and check `item` as a `kind` called `id`, without touching the disk. Triggers get
+/// their shortcut rewritten to the canonical form so it looks the same everywhere.
+fn check_item(kind: ItemKind, id: &str, item: Value) -> Result<Checked, String> {
     if !cargoframe_config::valid_id(id) {
         return Err(format!("\"{id}\" cannot be used as a file name"));
     }
-    let e = |e: cargoframe_config::ConfigError| e.to_string();
-    match kind {
+    Ok(match kind {
         ItemKind::Trigger => {
             let mut t: Trigger = parse(item)?;
             if t.name.trim().is_empty() {
@@ -116,7 +124,7 @@ pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), 
                     return Err("The layout id is not valid".into());
                 }
             }
-            store.save_item(Kind::Triggers, id, &t).map_err(e)
+            Checked::Trigger(t)
         }
         ItemKind::Layout => {
             let mut l: Layout = parse(item)?;
@@ -124,21 +132,41 @@ pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), 
             if l.name.trim().is_empty() {
                 return Err("Give the layout a name".into());
             }
-            store.save_item(Kind::Layouts, id, &l).map_err(e)
+            Checked::Layout(l)
         }
         ItemKind::Rule => {
             let r: Rule = parse(item)?;
             cargoframe_rules::check(&r)?;
-            store.save_item(Kind::Rules, id, &r).map_err(e)
+            Checked::Rule(r)
         }
         ItemKind::InfoType => {
             let t: InfoType = parse(item)?;
             infotype::check(&t)?;
-            store.save_item(Kind::InfoTypes, id, &t).map_err(e)
+            Checked::InfoType(t)
         }
         ItemKind::Connection => {
             let c: Connection = parse(item)?;
             cargoframe_connectors::model::check(&c)?;
+            Checked::Connection(c)
+        }
+    })
+}
+
+/// Would `item` be accepted as a `kind` called `id`? Says what to change if not. Nothing is
+/// written.
+pub fn validate(kind: ItemKind, id: &str, item: &Value) -> Result<(), String> {
+    check_item(kind, id, item.clone()).map(|_| ())
+}
+
+/// Validate `item` for `kind` and write it as `id`.
+pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), String> {
+    let e = |e: cargoframe_config::ConfigError| e.to_string();
+    match check_item(kind, id, item)? {
+        Checked::Trigger(t) => store.save_item(Kind::Triggers, id, &t).map_err(e),
+        Checked::Layout(l) => store.save_item(Kind::Layouts, id, &l).map_err(e),
+        Checked::Rule(r) => store.save_item(Kind::Rules, id, &r).map_err(e),
+        Checked::InfoType(t) => store.save_item(Kind::InfoTypes, id, &t).map_err(e),
+        Checked::Connection(c) => {
             // The stored secrets belong to one kind of service; switching kinds would leave the
             // wrong ones behind, so a different service is a new connection.
             if let Some(old) = store

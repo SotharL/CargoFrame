@@ -6,7 +6,6 @@
   import Triggers from './pages/Triggers.svelte';
   import Rules from './pages/Rules.svelte';
   import InfoTypes from './pages/InfoTypes.svelte';
-  import Safe from './pages/Safe.svelte';
   import Layouts from './pages/Layouts.svelte';
   import Connections from './pages/Connections.svelte';
   import Placeholder from './pages/Placeholder.svelte';
@@ -82,8 +81,6 @@
       <Rules />
     {:else if page === 'infotypes'}
       <InfoTypes />
-    {:else if page === 'safe'}
-      <Safe />
     {:else if page === 'layouts'}
       <Layouts />
     {:else}

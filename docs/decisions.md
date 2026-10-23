@@ -37,7 +37,7 @@ the plan.
 
 ## Memory, speed and security (Phase 5)
 
-- **Memory modes** (Settings, General, Memory). *Low memory* destroys a window when it is closed.
+- **Memory modes** (Settings, General, Performance, Memory). *Low memory* destroys a window when it is closed.
   *Balanced* (default) hides it and destroys it after 5 minutes unless it was opened again.
   *Always warm* only ever hides it. The tray-only process never holds a web view. Measured on a
   virtual display: reopening a kept window 36 ms, a cold one 823 ms.
@@ -98,3 +98,34 @@ version control.
 
 Available to `{{...}}` in text blocks, prompts and info types, next to `{{rule.<id>}}` values:
 `project.folder`, `project.name`, `app.exe`, `app.title`, `capture.date`, `capture.time`.
+
+## Settings update (after the first run of V1)
+
+Requested by the owner after trying the app; each point and how it was read:
+
+- **Settings order.** General first, then Connections, Triggers, Data rules, Info types, Layouts.
+  The old *Safe* page is gone: its options live in General, under **Safety** (what happens when a
+  share fails, *Folder for saved zips*, *Retries*), placed between Startup and Performance. A
+  link to the old page still lands on General. *Memory* and the last measured timings are one
+  **Performance** block; *Updates* and *Files* stay separate.
+- **"Active connection".** A button has one when the connection it names exists and is signed in.
+  An expired sign-in still counts, because the service may accept a retry and the failure screen
+  offers Reconnect. A button with no connection chosen, a deleted connection, or a connection
+  that is not signed in **saves locally**.
+- **Save locally.** The button says "Save locally" and needs *Folder for saved zips*; with the
+  folder empty or unwritable it stays disabled and says why. It writes the same zip a failed
+  share keeps (screenshot, description, ticked files, manifest; never secrets) and sends nothing.
+  Two saves in the same second never overwrite each other.
+- **Default layouts are templates.** Eight built-in, read-only templates (a local save, Jira bug,
+  Jira comment, Drive upload, Sheet row, Reddit post, Claude prompt, Custom API) are offered per
+  connection. Opening one makes an unsaved layout; saving it, or pressing *Save as copy* on any
+  layout, writes a **new file** and never touches the template or the original.
+- **Plain text and log files in data rules.** A new *Text or log file* format with short
+  instructions (`line`, `lines`, `head`, `tail`, `contains`, `after`, `level`) instead of regular
+  expressions; colour codes are removed, big logs are read from the start or the end only.
+- **Export and import.** One JSON file holds any mix of layouts, data rules and info types.
+  Connections, secrets, triggers and shortcuts are never exported. Import is two steps: a preview
+  (new / already here / cannot be imported, with notes such as a missing connection), then a
+  choice per item: leave mine, replace mine, or import as a copy. Data rules cannot be imported as
+  a copy because layouts refer to them by id. Every imported item passes the same checks as one
+  typed into Settings.
