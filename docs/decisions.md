@@ -32,7 +32,7 @@ the plan.
   Side effects (files, dialogs, network) sit behind traits and are injected.
 - Secrets live in the OS credential store, never in config files, logs or zips.
 - Install paths: program in `%LocalAppData%\CargoFrame`, settings in `%AppData%\CargoFrame`
-  (Linux: `~/.local/share/CargoFrame`, `~/.config/CargoFrame`).
+  (Linux: `~/.local/share/CargoFrame`, `~/.config/CargoFrame`). Local data (logs, kept zips) sits in a `data` subfolder of the program folder, so "delete my data" never touches the program.
 
 ## Changes from the project brief
 

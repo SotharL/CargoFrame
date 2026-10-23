@@ -18,7 +18,7 @@ impl Dirs {
         }
         Some(Self {
             config: dirs::config_dir()?.join(APP_DIR),
-            data: dirs::data_local_dir()?.join(APP_DIR),
+            data: dirs::data_local_dir()?.join(APP_DIR).join("data"),
         })
     }
 
@@ -34,7 +34,8 @@ impl Dirs {
         &self.config
     }
 
-    /// Local data: `%LocalAppData%\CargoFrame` or `~/.local/share/CargoFrame`.
+    /// Local data: `%LocalAppData%\CargoFrame\data` or `~/.local/share/CargoFrame/data`. The
+    /// program itself lives one level up, so removing the data folder never touches it.
     pub fn data(&self) -> &Path {
         &self.data
     }

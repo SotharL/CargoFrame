@@ -5,8 +5,8 @@
   "build": {
     "frontendDist": "../ui/dist",
     "devUrl": "http://127.0.0.1:1420",
-    "beforeDevCommand": "npm --prefix ../ui run dev",
-    "beforeBuildCommand": "npm --prefix ../ui run build"
+    "beforeDevCommand": "npm --prefix ui run dev",
+    "beforeBuildCommand": "npm --prefix ui run build"
   },
   "app": {
     "windows": [],
@@ -30,8 +30,13 @@
       "nsis": {
         "installMode": "currentUser",
         "displayLanguageSelector": false,
-        "languages": ["English"]
-      }
+        "languages": [
+          "English"
+        ],
+        "template": "../installers/windows/installer.nsi",
+        "installerHooks": "../installers/windows/hooks.nsh"
+      },
+      "allowDowngrades": false
     }
   }
 }
