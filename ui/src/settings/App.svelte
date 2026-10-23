@@ -8,6 +8,7 @@
   import InfoTypes from './pages/InfoTypes.svelte';
   import Safe from './pages/Safe.svelte';
   import Layouts from './pages/Layouts.svelte';
+  import Connections from './pages/Connections.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi } from '../lib/ipc';
@@ -75,6 +76,8 @@
       <General />
     {:else if page === 'triggers'}
       <Triggers />
+    {:else if page === 'connections'}
+      <Connections />
     {:else if page === 'rules'}
       <Rules />
     {:else if page === 'infotypes'}

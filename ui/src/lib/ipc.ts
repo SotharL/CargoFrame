@@ -1,7 +1,17 @@
 import type {
-  AppInfo, General, IssueView, ItemEntry, ItemKind, ItemList, Layout, Rule, RuleTest, Safe,
-  SessionView, VariableInfo,
+  AppInfo, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
+  General, IssueView, ItemEntry, ItemKind, ItemList, Layout, OptionsError, Rule, RuleTest, Safe,
+  SessionView, ShareRequest, ShareResult, VariableInfo,
 } from './types';
+
+/** Whatever a failed list request rejected with, as an `OptionsError`. */
+export function asOptionsError(e: unknown): OptionsError {
+  if (e && typeof e === 'object' && 'message' in e) {
+    const o = e as { message: unknown; reconnect?: unknown };
+    return { message: String(o.message), reconnect: o.reconnect === true };
+  }
+  return { message: String(e), reconnect: false };
+}
 
 /**
  * Everything the interface asks the backend for. In the app these calls go to Rust through
@@ -25,6 +35,8 @@ export interface Api {
   /** Called when a new capture replaces the one shown. Returns a function that stops listening. */
   onSessionChanged(callback: () => void): Promise<() => void>;
 
+  /** Open the Settings window on a page (`connections`, `layouts`, ...). */
+  openSettings(page: string): Promise<void>;
   /** The Settings window is asked to show a page, for example `layouts/bug`. */
   onNavigate(callback: (target: string) => void): Promise<() => void>;
 
@@ -40,6 +52,32 @@ export interface Api {
 
   // ----- triggers -----
   getShortcutErrors(): Promise<Record<string, string>>;
+
+  // ----- connections (Settings) -----
+  listConnections(): Promise<ConnectionsView>;
+  /** Store a password or key. An empty value removes it. It is never read back. */
+  setConnectionSecret(id: string, name: string, value: string): Promise<void>;
+  /** Sign in. Resolves with a line for the person when they are done. */
+  connectConnection(id: string): Promise<string>;
+  cancelSignIn(): Promise<void>;
+  disconnectConnection(id: string): Promise<void>;
+  testConnection(id: string): Promise<string>;
+  describeConnection(id: string): Promise<Describe>;
+  /** A list from a service, for the info type editor. Rejects with an `OptionsError`. */
+  previewOptions(id: string, list: string): Promise<DropdownOption[]>;
+  listChats(): Promise<ChatView[]>;
+  pinChat(link: string, title: string): Promise<void>;
+  setChatPinned(id: string, pinned: boolean): Promise<void>;
+  removeChat(id: string): Promise<void>;
+
+  // ----- sharing (the CargoFrame window) -----
+  /** The list behind a dropdown block. Rejects with an `OptionsError`. */
+  fetchOptions(sessionId: number, blockId: string): Promise<DropdownOption[]>;
+  /** The picture as edited, uploaded before a share. `null` goes back to the capture. */
+  setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
+  share(request: ShareRequest): Promise<ShareResult>;
+  copyText(text: string): Promise<void>;
+  openLink(url: string): Promise<void>;
 
   // ----- safe settings -----
   getSafe(): Promise<Safe>;
@@ -72,6 +110,7 @@ async function tauriApi(): Promise<Api> {
       const { listen } = await import('@tauri-apps/api/event');
       return listen('session-changed', callback);
     },
+    openSettings: (page) => invoke('open_settings', { page }),
     onNavigate: async (callback) => {
       const { listen } = await import('@tauri-apps/api/event');
       return listen<string>('navigate', (e) => callback(e.payload));
@@ -84,6 +123,38 @@ async function tauriApi(): Promise<Api> {
     listVariables: () => invoke('list_variables'),
     testRule: (rule, folder) => invoke('test_rule', { rule, folder }),
     getShortcutErrors: () => invoke('get_shortcut_errors'),
+    listConnections: () => invoke('list_connections'),
+    setConnectionSecret: (id, name, value) => invoke('set_connection_secret', { id, name, value }),
+    connectConnection: (id) => invoke('connect_connection', { id }),
+    cancelSignIn: () => invoke('cancel_sign_in'),
+    disconnectConnection: (id) => invoke('disconnect_connection', { id }),
+    testConnection: (id) => invoke('test_connection', { id }),
+    describeConnection: (id) => invoke('describe_connection', { id }),
+    previewOptions: async (id, list) => {
+      try {
+        return await invoke<DropdownOption[]>('preview_options', { id, list });
+      } catch (e) {
+        throw asOptionsError(e);
+      }
+    },
+    listChats: () => invoke('list_chats'),
+    pinChat: (link, title) => invoke('pin_chat', { link, title }),
+    setChatPinned: (id, pinned) => invoke('set_chat_pinned', { id, pinned }),
+    removeChat: (id) => invoke('remove_chat', { id }),
+    fetchOptions: async (sessionId, blockId) => {
+      try {
+        return await invoke<DropdownOption[]>('fetch_options', { sessionId, blockId });
+      } catch (e) {
+        throw asOptionsError(e);
+      }
+    },
+    setEditedImage: async (sessionId, png) => {
+      const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
+      await invoke('set_edited_image', bytes, { headers: { 'x-session-id': String(sessionId) } });
+    },
+    share: (request) => invoke<ShareResult>('share', { request }),
+    copyText: (text) => invoke('copy_text', { text }),
+    openLink: (url) => invoke('open_link', { url }),
     getSafe: () => invoke('get_safe'),
     setSafe: (safe) => invoke('set_safe', { safe }),
     testSafeFolder: (path) => invoke('test_safe_folder', { path }),
@@ -91,7 +162,17 @@ async function tauriApi(): Promise<Api> {
   };
 }
 
-export function memoryApi(initial?: Partial<General>): Api {
+/** Options for the in-memory stand-in: what a share and a list request should do. */
+export interface MemoryOptions {
+  general?: Partial<General>;
+  /** Called by `share`; the default answers with a made-up success. */
+  share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
+  /** Called by `fetchOptions` and `previewOptions`. */
+  options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
+}
+
+export function memoryApi(opts: MemoryOptions = {}): Api {
+  const initial = opts.general;
   let general: General = {
     theme: 'system',
     memory_mode: 'balanced',
@@ -105,6 +186,51 @@ export function memoryApi(initial?: Partial<General>): Api {
     layout: new Map(),
     rule: new Map(),
     infotype: new Map(),
+    connection: new Map(),
+  };
+  // Credentials the in-memory stand-in "stores": which secrets are set, and signed-in ids.
+  const secretsSet = new Set<string>();
+  const signedIn = new Set<string>();
+  let chats: ChatView[] = [];
+  const TYPED: Record<string, string[]> = {
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], custom: ['secret'],
+  };
+  const OAUTH = new Set(['google', 'reddit']);
+  const describeFor = (c: Connection): Describe => {
+    if (c.kind === 'jira') {
+      return {
+        summary: 'Creates an issue, or comments on one.',
+        fields: [
+          { key: 'project', label: 'Project', hint: 'Project key', list: 'projects' },
+          { key: 'issuetype', label: 'Issue type', hint: '', list: 'issue_types' },
+          { key: 'summary', label: 'Summary', hint: 'The issue title', list: null },
+          { key: 'description', label: 'Description', hint: '', list: null },
+          { key: 'priority', label: 'Priority', hint: '', list: 'priorities' },
+          { key: 'issue', label: 'Existing issue', hint: 'Comment instead of creating', list: 'recent_issues' },
+        ],
+        lists: [
+          { id: 'projects', label: 'Projects', param: null },
+          { id: 'issue_types', label: 'Issue types', param: null },
+          { id: 'priorities', label: 'Priorities', param: null },
+          { id: 'components', label: 'Components of a project', param: 'project key' },
+        ],
+      };
+    }
+    if (c.kind === 'claude') {
+      return {
+        summary: 'Copies the screenshot, then opens Claude. The prompt is required.',
+        fields: [{ key: 'chat', label: 'Chat', hint: 'A chat id, or "new"', list: null }],
+        lists: [],
+      };
+    }
+    return { summary: '', fields: [], lists: [] };
+  };
+  const stateOf = (id: string, c: Connection): ConnectionView['state'] => {
+    if (!c.enabled) return 'disabled';
+    if (c.kind === 'claude') return 'connected';
+    if (c.kind === 'custom' && c.auth.type === 'none') return 'connected';
+    if (OAUTH.has(c.kind)) return signedIn.has(id) ? 'connected' : 'disconnected';
+    return secretsSet.has(`${id}/${TYPED[c.kind]![0]}`) ? 'connected' : 'disconnected';
   };
   const BUILTINS: VariableInfo[] = [
     ['app.exe', 'File name of the program in focus'],
@@ -137,6 +263,7 @@ export function memoryApi(initial?: Partial<General>): Api {
     closeCapture: async () => {},
     editLayout: async () => {},
     onSessionChanged: async () => () => {},
+    openSettings: async () => {},
     onNavigate: async () => () => {},
     listItems: async <T,>(kind: ItemKind) => ({
       items: [...store[kind].entries()]
@@ -173,6 +300,66 @@ export function memoryApi(initial?: Partial<General>): Api {
       problem: null,
     }),
     getShortcutErrors: async () => ({}),
+    listConnections: async () => ({
+      items: [...store.connection.entries()].map(([id, raw]) => {
+        const c = raw as Connection;
+        return {
+          id,
+          name: c.name,
+          kind: c.kind,
+          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', custom: 'Custom API' }[c.kind],
+          enabled: c.enabled,
+          state: stateOf(id, c),
+          secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),
+          describe: describeFor(c),
+        } satisfies ConnectionView;
+      }),
+      problems: [],
+      store_problem: null,
+    }),
+    setConnectionSecret: async (id, name, value) => {
+      if (value) secretsSet.add(`${id}/${name}`);
+      else secretsSet.delete(`${id}/${name}`);
+    },
+    connectConnection: async (id) => {
+      signedIn.add(id);
+      return 'Signed in as demo@example.com';
+    },
+    cancelSignIn: async () => {},
+    disconnectConnection: async (id) => {
+      signedIn.delete(id);
+      for (const k of [...secretsSet]) if (k.startsWith(`${id}/`)) secretsSet.delete(k);
+    },
+    testConnection: async (id) => {
+      const c = store.connection.get(id) as Connection | undefined;
+      if (!c || stateOf(id, c) !== 'connected') throw 'Not signed in';
+      return 'Signed in as demo@example.com';
+    },
+    describeConnection: async (id) => describeFor(store.connection.get(id) as Connection),
+    previewOptions: async (id, list) =>
+      opts.options ? opts.options(id, list) : [{ value: '1', label: `${list} one`, group: null }],
+    listChats: async () => chats.map((c) => ({ ...c })),
+    pinChat: async (link, title) => {
+      const m = /([0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12})/i.exec(link);
+      if (!m) throw 'That does not look like a Claude chat link. Open the chat and copy its address (https://claude.ai/chat/...)';
+      const id = m[1]!.toLowerCase();
+      chats = [...chats.filter((c) => c.id !== id), { id, title: title.trim() || 'Untitled chat', pinned: true }];
+    },
+    setChatPinned: async (id, pinned) => {
+      chats = chats.map((c) => (c.id === id ? { ...c, pinned } : c));
+    },
+    removeChat: async (id) => {
+      chats = chats.filter((c) => c.id !== id);
+    },
+    fetchOptions: async (_sessionId, blockId) =>
+      opts.options ? opts.options('demo', blockId) : [{ value: 'P1', label: 'Demo project', group: null }],
+    setEditedImage: async () => {},
+    share: async (request) =>
+      opts.share
+        ? opts.share(request)
+        : { status: 'sent', summary: 'Created DEMO-1', url: 'https://example.atlassian.net/browse/DEMO-1', notes: [], copy_next: null, close: true },
+    copyText: async () => {},
+    openLink: async () => {},
     getSafe: async () => ({ ...safe }),
     setSafe: async (s) => {
       safe = { ...s };
@@ -186,9 +373,16 @@ export function memoryApi(initial?: Partial<General>): Api {
 
 let cached: Promise<Api> | undefined;
 
+/** Outside the app: the in-memory backend, with the demo's answers to a share. */
+async function demoApi(): Promise<Api> {
+  const { demoShare } = await import('../capture/demo');
+  const kind = new URLSearchParams(location.search).get('share');
+  return memoryApi({ share: () => demoShare(kind) });
+}
+
 /** The backend for this page: Tauri when running in the app, an in-memory one otherwise. */
 export function getApi(): Promise<Api> {
-  cached ??= inTauri() ? tauriApi() : Promise.resolve(memoryApi());
+  cached ??= inTauri() ? tauriApi() : demoApi();
   return cached;
 }
 

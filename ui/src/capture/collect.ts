@@ -1,21 +1,7 @@
-import type { Block, SessionView } from '../lib/types';
+import type { Block, SessionView, ShareRequest } from '../lib/types';
 import type { FormValues } from './values';
 
-/** Everything the sharing button sends, apart from the picture itself. */
-export interface ShareRequest {
-  session_id: number;
-  trigger_id: string;
-  button_id: string;
-  /** The sharing button's destination connection. */
-  connection_id: string | null;
-  /** The Prompt text block bound to the button, with what the person typed. */
-  prompt: string | null;
-  texts: Record<string, string>;
-  dropdowns: Record<string, string | null>;
-  files: Record<string, string[]>;
-  /** True when the person changed the picture (the sent PNG is then the flattened one). */
-  image_edited: boolean;
-}
+export type { ShareRequest };
 
 type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
 

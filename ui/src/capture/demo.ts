@@ -1,4 +1,4 @@
-import type { SessionView } from '../lib/types';
+import type { SessionView, ShareResult } from '../lib/types';
 
 /**
  * A sample capture for `npm run dev`, tests and screenshots. Loaded only outside the app, so it
@@ -37,7 +37,7 @@ export async function demoSession(): Promise<SessionView> {
         { id: 'logs', type: 'files', rect: { x: 0, y: 9, w: 8, h: 3 }, title: 'Logs', include: ['**/*.log'], preselect: ['*.log'] },
         {
           id: 'send', type: 'sharing_button', rect: { x: 8, y: 9, w: 4, h: 2 },
-          label: 'Share', connection_id: null, prompt_block_id: null, mappings: [], on_success: 'close_window',
+          label: 'Share', connection_id: 'jira', prompt_block_id: null, mappings: [], on_success: 'keep_open',
         },
       ],
     },
@@ -67,15 +67,10 @@ export async function demoSession(): Promise<SessionView> {
           { value: 'new', label: 'New chat', group: null },
         ],
       },
-      proj: {
-        status: 'needs_connection',
-        selected: null,
-        options: [],
-        message: 'Connect "jira" in Settings to load these options',
-      },
+      proj: { status: 'loading', selected: null, options: [], message: null },
     },
     issues: [],
-    sharing: { send: { enabled: false, reasons: ['Choose where this button shares to'] } },
+    sharing: { send: { enabled: true, reasons: [] } },
   };
 }
 
@@ -116,4 +111,34 @@ export async function demoImage(): Promise<Blob> {
   g.font = '15px ui-monospace, monospace';
   g.fillText('thread \'main\' panicked at src/main.rs:4: crashed', 215, 460);
   return new Promise((resolve) => c.toBlob((b) => resolve(b!), 'image/png'));
+}
+
+/** What a share answers in the browser demo, chosen with `?share=` in the address. */
+export function demoShare(kind: string | null): ShareResult {
+  switch (kind) {
+    case 'fail':
+      return {
+        status: 'failed', label: 'Service error', message: 'Jira answered 503', reconnect: false, attempts: 4,
+        saved: { place: 'safe_folder', path: '/home/me/Documents/CargoFrame zips/CargoFrame_2026-10-23_153045_jira.zip', note: null },
+      };
+    case 'expired':
+      return {
+        status: 'failed', label: 'Sign-in expired', message: 'Jira refused the token', reconnect: true, attempts: 1,
+        saved: { place: 'kept_locally', path: '/home/me/.local/share/CargoFrame/kept/CargoFrame_x.zip', note: 'safe folder: folder not writable' },
+      };
+    case 'blocked':
+      return { status: 'blocked', reasons: ['\u201cSummary\u201d needs a value', 'Write the prompt before sharing'] };
+    case 'handoff':
+      return {
+        status: 'sent', summary: 'Copied the screenshot and opened Claude', url: null,
+        notes: [], copy_next: 'What is wrong in Foo?', close: false,
+      };
+    case 'slow':
+      return new Promise((resolve) => setTimeout(() => resolve({ status: 'blocked', reasons: ['done'] }), 1500)) as never;
+    default:
+      return {
+        status: 'sent', summary: 'Created PROJ-123', url: 'https://example.atlassian.net/browse/PROJ-123',
+        notes: ['1 file was skipped: logs/old.log could not be read'], copy_next: null, close: false,
+      };
+  }
 }

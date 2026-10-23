@@ -3,7 +3,7 @@
   import Chip from '../../lib/components/Chip.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { InfoType, IssueView, Layout, Rule, Trigger, VariableInfo } from '../../lib/types';
+  import type { ConnectionView, InfoType, IssueView, Layout, Rule, Trigger, VariableInfo } from '../../lib/types';
   import Canvas from '../layout/Canvas.svelte';
   import Properties from '../layout/Properties.svelte';
   import { canPlace, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
@@ -17,6 +17,7 @@
   let variables = $state<VariableInfo[]>([]);
   let currentId = $state<string | null>(null);
   let draft = $state<Layout | null>(null);
+  let connections = $state<ConnectionView[]>([]);
   let saved = $state('');
   let selected = $state<string | null>(null);
   let issues = $state<IssueView[]>([]);
@@ -31,6 +32,7 @@
   onMount(async () => {
     await Promise.all([layouts.reload(), triggers.reload(), rules.reload(), infos.reload()]);
     variables = await (await getApi()).listVariables();
+    connections = (await (await getApi()).listConnections().catch(() => null))?.items ?? [];
     if (route.arg && layouts.find(route.arg)) open(route.arg);
     else if (layouts.items.length === 1) open(layouts.items[0]!.id);
   });
@@ -211,6 +213,7 @@
               blocks={draft.blocks}
               rules={rules.items}
               infoTypes={infos.items}
+              {connections}
               {variables}
               {issues}
               onrect={setRect}

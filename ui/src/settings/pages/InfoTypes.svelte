@@ -3,9 +3,11 @@
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
-  import type { InfoKind, InfoType } from '../../lib/types';
+  import { getApi } from '../../lib/ipc';
+  import type { ConnectionView, InfoKind, InfoType } from '../../lib/types';
 
   const infos = createItems<InfoType>('infotype');
+  let connections = $state<ConnectionView[]>([]);
   let draft = $state<{ id: string | null; value: InfoType; listKind: 'none' | 'fixed' | 'api' } | null>(null);
   let formError = $state('');
   let confirming = $state<string | null>(null);
@@ -21,7 +23,12 @@
   const kindLabel = (k: InfoKind) => KINDS.find((x) => x.value === k)?.label ?? k;
   const isList = (k: InfoKind) => k === 'choice' || k === 'multi_choice';
 
-  onMount(infos.reload);
+  onMount(async () => {
+    await infos.reload();
+    connections = (await (await getApi()).listConnections().catch(() => null))?.items ?? [];
+  });
+  const connectionOf = (id: string) => connections.find((c) => c.id === id);
+  const nameOf = (id: string) => connectionOf(id)?.name ?? id;
 
   const blank = (): InfoType => ({
     name: '', connection_id: '', field: '', kind: 'text', options: { type: 'none' }, required: false, default_template: '',
@@ -97,7 +104,7 @@
       <div class="main">
         <h2>{item.name}</h2>
         <p class="quiet">
-          <span class="mono">{item.connection_id}</span> → <span class="mono">{item.field}</span>
+          {nameOf(item.connection_id)} → <span class="mono">{item.field}</span>
           · {kindLabel(item.kind)}{item.required ? ' · required' : ''}
         </p>
       </div>
@@ -121,11 +128,22 @@
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? 'Edit info type' : 'New info type'}</h2>
       <Field label="Name"><input type="text" bind:value={draft.value.name} placeholder="Priority" /></Field>
-      <Field label="Connection" hint="The id of the connection this field belongs to (for example jira).">
-        <input type="text" bind:value={draft.value.connection_id} placeholder="jira" />
+      <Field label="Connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
+        <select bind:value={draft.value.connection_id}>
+          <option value="">Choose…</option>
+          {#if draft.value.connection_id && !connectionOf(draft.value.connection_id)}
+            <option value={draft.value.connection_id}>{draft.value.connection_id} (missing)</option>
+          {/if}
+          {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
+        </select>
       </Field>
-      <Field label="Field key" hint="The field's key in that service's API, such as priority or customfield_10042.">
-        <input type="text" bind:value={draft.value.field} placeholder="priority" />
+      <Field label="Field key" hint="The field's key in that service's API, such as priority or customfield_10042. Pick one the service offers, or type your own.">
+        <input type="text" bind:value={draft.value.field} placeholder="priority" list="known-fields" />
+        <datalist id="known-fields">
+          {#each connectionOf(draft.value.connection_id)?.describe.fields ?? [] as f (f.key)}
+            <option value={f.key}>{f.label}</option>
+          {/each}
+        </datalist>
       </Field>
       <Field label="Kind">
         <select bind:value={draft.value.kind} onchange={onKind}>
@@ -152,8 +170,13 @@
             <button type="button" onclick={() => draft!.value.options.type === 'fixed' && draft!.value.options.options.push({ value: '', label: '' })}>Add an option</button>
           </div>
         {:else if draft.value.options.type === 'api'}
-          <Field label="API list" hint="The name of the options call defined on the connection.">
-            <input type="text" bind:value={draft.value.options.options_id} placeholder="priorities" />
+          <Field label="API list" hint="The list the service supplies. For a list that needs a project key, write list:KEY, for example components:PROJ.">
+            <input type="text" bind:value={draft.value.options.options_id} placeholder="priorities" list="known-lists" />
+            <datalist id="known-lists">
+              {#each connectionOf(draft.value.connection_id)?.describe.lists ?? [] as l (l.id)}
+                <option value={l.id}>{l.label}</option>
+              {/each}
+            </datalist>
           </Field>
         {/if}
       {/if}

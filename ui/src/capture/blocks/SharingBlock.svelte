@@ -7,13 +7,22 @@
     block,
     enabled,
     reasons,
+    sending = false,
     onshare,
-  }: { block: SharingBlock; enabled: boolean; reasons: string[]; onshare: () => void } = $props();
+  }: {
+    block: SharingBlock;
+    enabled: boolean;
+    reasons: string[];
+    sending?: boolean;
+    onshare: () => void;
+  } = $props();
 </script>
 
 <div class="share">
-  <button class="primary" disabled={!enabled} onclick={onshare}>{block.label || 'Share'}</button>
-  {#if !enabled}
+  <button class="primary" disabled={!enabled} aria-busy={sending} onclick={onshare}>
+    {sending ? 'Sending…' : block.label || 'Share'}
+  </button>
+  {#if !enabled && !sending && reasons.length > 0}
     <div class="why">
       {#each reasons as r (r)}<Chip kind="warn" label={r} />{/each}
     </div>

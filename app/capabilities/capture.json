@@ -17,6 +17,7 @@
     "allow-share",
     "allow-copy-text",
     "allow-open-link",
+    "allow-open-settings",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

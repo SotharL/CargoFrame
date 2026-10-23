@@ -120,7 +120,7 @@ export interface SessionView {
 
 // ----- configuration items edited in Settings (mirror core/config, core/rules) -----
 
-export type ItemKind = 'trigger' | 'layout' | 'rule' | 'infotype';
+export type ItemKind = 'trigger' | 'layout' | 'rule' | 'infotype' | 'connection';
 
 export interface ItemEntry<T> {
   id: string;
@@ -191,4 +191,150 @@ export interface Safe {
 export interface VariableInfo {
   name: string;
   description: string;
+}
+
+// ----- connections and sharing (mirror core/connectors and app/src/share.rs) -----
+
+export type ServiceKind = 'jira' | 'google' | 'reddit' | 'claude' | 'custom';
+export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled';
+
+export interface Pair {
+  name: string;
+  value: string;
+}
+
+export type CustomAuth =
+  | { type: 'none' }
+  | { type: 'bearer' }
+  | { type: 'header'; name: string }
+  | { type: 'basic'; user: string }
+  | { type: 'query'; param: string };
+
+export type CustomBody =
+  | { type: 'none' }
+  | { type: 'json'; template: string }
+  | { type: 'form'; fields: Pair[] }
+  | { type: 'multipart'; fields: Pair[]; image_field: string; files_field: string };
+
+export interface CustomList {
+  id: string;
+  label: string;
+  path: string;
+  items_path: string;
+  value_path: string;
+  label_path: string;
+}
+
+interface ConnectionCommon {
+  name: string;
+  enabled: boolean;
+}
+
+export type Connection = ConnectionCommon &
+  (
+    | { kind: 'jira'; site_url: string; auth: 'api_token' | 'pat'; email: string }
+    | { kind: 'google'; client_id: string; sheets: boolean; full_drive: boolean }
+    | { kind: 'reddit'; client_id: string; redirect_port: number }
+    | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; image_and_text_together: boolean }
+    | {
+        kind: 'custom';
+        base_url: string;
+        auth: CustomAuth;
+        send: { method: 'POST' | 'PUT' | 'PATCH'; path: string; headers: Pair[]; body: CustomBody };
+        lists: CustomList[];
+        test_path: string;
+        result_url_path: string;
+      }
+  );
+
+export interface FieldSpec {
+  key: string;
+  label: string;
+  hint: string;
+  list: string | null;
+}
+
+export interface ListSpec {
+  id: string;
+  label: string;
+  /** The list needs a value after a colon, for example a project key. */
+  param: string | null;
+}
+
+export interface Describe {
+  fields: FieldSpec[];
+  lists: ListSpec[];
+  summary: string;
+}
+
+export interface ConnectionView {
+  id: string;
+  name: string;
+  kind: ServiceKind;
+  kind_label: string;
+  enabled: boolean;
+  state: ConnectionState;
+  /** Which of the secrets the person types are stored (never their values). */
+  secrets: { name: string; stored: boolean }[];
+  describe: Describe;
+}
+
+export interface ConnectionsView {
+  items: ConnectionView[];
+  problems: string[];
+  /** Set when the operating system's credential store cannot be used. */
+  store_problem: string | null;
+}
+
+export interface ChatView {
+  id: string;
+  title: string;
+  pinned: boolean;
+}
+
+/** What a failed list request carries. */
+export interface OptionsError {
+  message: string;
+  reconnect: boolean;
+}
+
+export interface SavedCopy {
+  place: 'safe_folder' | 'picked_folder' | 'kept_locally' | 'not_saved';
+  path: string;
+  note: string | null;
+}
+
+export type ShareResult =
+  | {
+      status: 'sent';
+      summary: string;
+      url: string | null;
+      notes: string[];
+      copy_next: string | null;
+      close: boolean;
+    }
+  | { status: 'blocked'; reasons: string[] }
+  | {
+      status: 'failed';
+      label: string;
+      message: string;
+      reconnect: boolean;
+      attempts: number;
+      saved: SavedCopy | null;
+    };
+
+/** Everything a sharing button sends, apart from the picture itself. */
+export interface ShareRequest {
+  session_id: number;
+  trigger_id: string;
+  button_id: string;
+  /** The button's destination as the layout names it (the backend reads it from the layout). */
+  connection_id: string | null;
+  /** The Prompt text block bound to the button, with what the person typed. */
+  prompt: string | null;
+  texts: Record<string, string>;
+  dropdowns: Record<string, string | null>;
+  files: Record<string, string[]>;
+  /** True when the person changed the picture (the edited PNG is uploaded first). */
+  image_edited: boolean;
 }

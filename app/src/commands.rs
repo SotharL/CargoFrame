@@ -133,6 +133,25 @@ pub fn edit_layout(app: AppHandle, layout_id: Option<String>) {
     windowing::open_settings_at(&app, &page);
 }
 
+/// Open Settings on one of its pages (for example `connections`, to reconnect).
+#[tauri::command]
+pub fn open_settings(app: AppHandle, page: String) {
+    const PAGES: [&str; 7] = [
+        "triggers",
+        "connections",
+        "rules",
+        "infotypes",
+        "layouts",
+        "safe",
+        "general",
+    ];
+    if PAGES.contains(&page.as_str()) {
+        windowing::open_settings_at(&app, &page);
+    } else {
+        windowing::open_settings(&app);
+    }
+}
+
 // ----- triggers -----
 
 /// Shortcuts that could not be registered, by trigger id, with the reason.

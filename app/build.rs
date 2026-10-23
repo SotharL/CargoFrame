@@ -13,6 +13,7 @@ fn main() {
             "get_session_image",
             "close_capture",
             "edit_layout",
+            "open_settings",
             "get_shortcut_errors",
             "reload_triggers",
             "list_items",

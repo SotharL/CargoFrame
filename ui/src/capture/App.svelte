@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi, type Api } from '../lib/ipc';
-  import type { Block, SessionView } from '../lib/types';
+  import type { Block, SessionView, ShareResult } from '../lib/types';
   import ScreenshotBlock from './blocks/ScreenshotBlock.svelte';
   import TextBlock from './blocks/TextBlock.svelte';
   import DropdownBlock from './blocks/DropdownBlock.svelte';
@@ -10,6 +10,8 @@
   import SharingBlock from './blocks/SharingBlock.svelte';
   import { collectShare, promptIsEmpty } from './collect';
   import { initialValues, type FormValues } from './values';
+  import { loadDropdowns } from './options';
+  import ResultPanel from './ResultPanel.svelte';
 
   let api = $state<Api>();
   let view = $state<SessionView | null>(null);
@@ -18,6 +20,9 @@
   let imageEdited = $state(false);
   let failure = $state<string | null>(null);
   let notice = $state<string | null>(null);
+  /** The sharing button being sent, if any; every button waits while one is sending. */
+  let sending = $state<string | null>(null);
+  let result = $state<ShareResult | null>(null);
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
 
   async function load() {
@@ -30,6 +35,15 @@
       imageEdited = false;
       failure = null;
       notice = null;
+      result = null;
+      const sessionId = v.session_id;
+      // Lists that come from a service arrive after the window is already usable.
+      void loadDropdowns(api, v, () => view?.session_id === sessionId, (blockId, next) => {
+        if (!view) return;
+        const state = next(view.dropdowns[blockId]!);
+        view.dropdowns[blockId] = state;
+        values.dropdowns[blockId] = state.selected;
+      });
     } catch (e) {
       failure = String(e);
     }
@@ -57,14 +71,31 @@
   }
 
   async function share(button: Extract<Block, { type: 'sharing_button' }>) {
-    if (!view) return;
+    if (!view || !api || sending) return;
     const request = collectShare(view, button, values, imageEdited);
+    result = null;
     if (promptIsEmpty(request)) {
       notice = 'Write the prompt first.';
       return;
     }
-    // Delivery is added with the connectors; until a connection exists the button stays disabled.
-    notice = `Ready to share to ${request.connection_id ?? 'nowhere'}.`;
+    notice = null;
+    sending = button.id;
+    try {
+      // The edits live in this window; the backend sends them as they are now.
+      await api.setEditedImage(
+        view.session_id,
+        imageEdited && screenshot ? await screenshot.exportImage() : null,
+      );
+      result = await api.share(request);
+      if (result.status === 'sent' && result.close && !result.url && !result.copy_next) {
+        // Nothing left to use from the result: let the confirmation be read, then go.
+        setTimeout(() => void api?.closeCapture(), 1500);
+      }
+    } catch (e) {
+      result = { status: 'blocked', reasons: [String(e)] };
+    } finally {
+      sending = null;
+    }
   }
 
   function onKey(e: KeyboardEvent) {
@@ -134,7 +165,8 @@
             {:else if b.type === 'sharing_button'}
               <SharingBlock
                 block={b}
-                enabled={view.sharing[b.id]?.enabled ?? false}
+                enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
+                sending={sending === b.id}
                 reasons={view.sharing[b.id]?.reasons ?? []}
                 onshare={() => share(b)}
               />
@@ -143,7 +175,20 @@
         {/each}
       </main>
     {/if}
-    {#if notice}<footer role="status"><Chip kind="warn" label={notice} /></footer>{/if}
+    {#if notice || result}
+      <footer>
+        {#if notice}<div role="status"><Chip kind="warn" label={notice} /></div>{/if}
+        {#if result}
+          <ResultPanel
+            {result}
+            onopenlink={(url) => void api?.openLink(url)}
+            oncopy={(text) => void api?.copyText(text)}
+            onreconnect={() => void api?.openSettings('connections')}
+            onclose={() => void api?.closeCapture()}
+          />
+        {/if}
+      </footer>
+    {/if}
   {/if}
 </div>
 
@@ -167,5 +212,5 @@
     display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center;
     padding: 24px;
   }
-  footer { padding: 8px 14px; border-top: 1px solid var(--border); }
+  footer { padding: 8px 14px; border-top: 1px solid var(--border); display: grid; gap: 6px; }
 </style>

@@ -76,6 +76,7 @@ pub fn run() {
             commands::get_session_image,
             commands::close_capture,
             commands::edit_layout,
+            commands::open_settings,
             commands::get_shortcut_errors,
             commands::reload_triggers,
             commands::list_items,
