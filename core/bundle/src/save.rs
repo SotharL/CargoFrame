@@ -31,8 +31,12 @@ pub fn copy_atomic(source: &Path, dir: &Path, file_name: &str) -> Result<PathBuf
     let part = dir.join(part_name(&final_name));
     let target = dir.join(&final_name);
     let result = fs::copy(source, &part).and_then(|_| {
-        // Flush to disk before the rename, so a power cut cannot leave a short file.
-        fs::File::open(&part).and_then(|f| f.sync_all())?;
+        // Flush to disk before the rename, so a power cut cannot leave a short file. Opened
+        // for writing: on Windows, flushing a read-only handle is refused ("access denied").
+        fs::OpenOptions::new()
+            .write(true)
+            .open(&part)
+            .and_then(|f| f.sync_all())?;
         fs::rename(&part, &target)
     });
     match result {

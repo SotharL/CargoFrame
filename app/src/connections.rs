@@ -21,12 +21,15 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 /// capture snappy without showing something stale for long.
 const OPTIONS_TTL: Duration = Duration::from_secs(120);
 
+/// A fetched list and when it was fetched.
+type CachedList = (Instant, Vec<OptionItem>);
+
 #[derive(Default)]
 struct Cache {
     status: BTreeMap<String, Status>,
     /// Connections whose sign-in the service rejected. Cleared by signing in again.
     expired: BTreeSet<String>,
-    options: BTreeMap<(String, String), (Instant, Vec<OptionItem>)>,
+    options: BTreeMap<(String, String), CachedList>,
 }
 
 pub struct Connections {
@@ -397,9 +400,7 @@ impl Connections {
                 return Ok(items.clone());
             }
         }
-        let connection = self
-            .load(store, id)
-            .map_err(conn::error::invalid)?;
+        let connection = self.load(store, id).map_err(conn::error::invalid)?;
         let result = self.quietly(id, &connection, |c, ctx| c.options(ctx, list));
         match &result {
             Ok(items) => {
@@ -512,7 +513,11 @@ pub mod tests {
     #[test]
     fn only_the_secrets_of_the_kind_can_be_set_and_empty_removes() {
         let f = fixture();
-        save(&f.store, "claude", json!({"name": "Claude", "kind": "claude"}));
+        save(
+            &f.store,
+            "claude",
+            json!({"name": "Claude", "kind": "claude"}),
+        );
         let err = f
             .connections
             .set_secret(&f.store, "claude", "token", "x")
@@ -530,9 +535,13 @@ pub mod tests {
             .set_secret(&f.store, "jira", "oauth", "x")
             .unwrap_err();
         assert!(err.contains("no \"oauth\""), "{err}");
-        f.connections.set_secret(&f.store, "jira", "token", "t").unwrap();
+        f.connections
+            .set_secret(&f.store, "jira", "token", "t")
+            .unwrap();
         assert_eq!(f.secrets.keys(), vec!["jira/token".to_string()]);
-        f.connections.set_secret(&f.store, "jira", "token", "").unwrap();
+        f.connections
+            .set_secret(&f.store, "jira", "token", "")
+            .unwrap();
         assert!(f.secrets.keys().is_empty());
     }
 
@@ -550,7 +559,9 @@ pub mod tests {
             v["enabled"] = json!(false);
             v
         });
-        f.connections.set_secret(&f.store, "jira", "token", "TOPSECRET").unwrap();
+        f.connections
+            .set_secret(&f.store, "jira", "token", "TOPSECRET")
+            .unwrap();
         let view = f.connections.view(&f.store);
         assert!(view.store_problem.is_none());
         let jira = view.items.iter().find(|c| c.id == "jira").unwrap();

@@ -13,6 +13,7 @@ mod notify;
 mod registry;
 mod secrets;
 mod session;
+mod share;
 mod state;
 mod tools;
 mod tray;

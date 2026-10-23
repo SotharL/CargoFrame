@@ -134,7 +134,15 @@ pub fn capture_and_prepare(
         elapsed_ms = started.elapsed().as_millis() as u64,
         "captured"
     );
-    let session = prepare_with(store, connections, trigger_id, &trigger, captured, now(), id)?;
+    let session = prepare_with(
+        store,
+        connections,
+        trigger_id,
+        &trigger,
+        captured,
+        now(),
+        id,
+    )?;
     tracing::debug!(
         elapsed_ms = started.elapsed().as_millis() as u64,
         "session ready"
@@ -275,19 +283,19 @@ pub fn prepare_with(
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use cargoframe_config::Dirs;
     use cargoframe_layout::{Block, BlockKind, FilesBlock, Rect, TextBlock};
 
-    fn no_connections() -> Connections {
+    pub fn no_connections() -> Connections {
         Connections::new(
             std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
             std::sync::Arc::new(cargoframe_connectors::MemorySecrets::new()),
         )
     }
 
-    fn fake_capture(exe: Option<&str>) -> cap::Captured {
+    pub fn fake_capture(exe: Option<&str>) -> cap::Captured {
         cap::Captured {
             frame: cap::Frame::new(4, 3, vec![255; 4 * 3 * 4]).unwrap(),
             app: exe.map(|p| cap::FocusedApp {
@@ -302,7 +310,7 @@ mod tests {
         }
     }
 
-    const NOW: Moment = Moment {
+    pub const NOW: Moment = Moment {
         year: 2026,
         month: 10,
         day: 23,
@@ -492,7 +500,16 @@ mod tests {
             layout_id: Some("l".into()),
             ..Trigger::default()
         };
-        let s = prepare_with(&store, &no_connections(), "t", &trigger, fake_capture(None), NOW, 1).unwrap();
+        let s = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &trigger,
+            fake_capture(None),
+            NOW,
+            1,
+        )
+        .unwrap();
         assert!(s.view.project.is_none());
         assert!(s.view.files["logs"]
             .problem
@@ -506,7 +523,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(Dirs::under(dir.path()));
         let none = Trigger::default();
-        let s = prepare_with(&store, &no_connections(), "t", &none, fake_capture(None), NOW, 1).unwrap();
+        let s = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &none,
+            fake_capture(None),
+            NOW,
+            1,
+        )
+        .unwrap();
         assert!(s.view.layout.is_none());
         assert!(s
             .view
@@ -518,7 +544,16 @@ mod tests {
             layout_id: Some("gone".into()),
             ..Trigger::default()
         };
-        let s = prepare_with(&store, &no_connections(), "t", &gone, fake_capture(None), NOW, 1).unwrap();
+        let s = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &gone,
+            fake_capture(None),
+            NOW,
+            1,
+        )
+        .unwrap();
         assert!(s
             .view
             .layout_problem

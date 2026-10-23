@@ -1,8 +1,9 @@
 //! Reading, checking and writing the configuration items the Settings window edits: triggers,
-//! layouts, data rules and info types. One generic pair of functions serves all four so the
+//! layouts, data rules, info types and connections. One generic pair of functions serves all four so the
 //! window needs only a handful of commands.
 
 use cargoframe_config::{infotype, shortcut, InfoType, Kind, Store, Trigger};
+use cargoframe_connectors::Connection;
 use cargoframe_layout::Layout;
 use cargoframe_rules::Rule;
 use serde::{Deserialize, Serialize};
@@ -15,6 +16,7 @@ pub enum ItemKind {
     Layout,
     Rule,
     InfoType,
+    Connection,
 }
 
 impl ItemKind {
@@ -24,6 +26,7 @@ impl ItemKind {
             ItemKind::Layout => Kind::Layouts,
             ItemKind::Rule => Kind::Rules,
             ItemKind::InfoType => Kind::InfoTypes,
+            ItemKind::Connection => Kind::Connections,
         }
     }
 }
@@ -70,6 +73,10 @@ pub fn list(store: &Store, kind: ItemKind) -> Result<ItemList, String> {
         ItemKind::Rule => to_entries(store.load_all::<Rule>(Kind::Rules).map_err(e)?, |_, _| {}),
         ItemKind::InfoType => to_entries(
             store.load_all::<InfoType>(Kind::InfoTypes).map_err(e)?,
+            |_, _| {},
+        ),
+        ItemKind::Connection => to_entries(
+            store.load_all::<Connection>(Kind::Connections).map_err(e)?,
             |_, _| {},
         ),
         // A layout's id is its file name, whatever the file says.
@@ -129,6 +136,23 @@ pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), 
             infotype::check(&t)?;
             store.save_item(Kind::InfoTypes, id, &t).map_err(e)
         }
+        ItemKind::Connection => {
+            let c: Connection = parse(item)?;
+            cargoframe_connectors::model::check(&c)?;
+            // The stored secrets belong to one kind of service; switching kinds would leave the
+            // wrong ones behind, so a different service is a new connection.
+            if let Some(old) = store
+                .load_item::<Connection>(Kind::Connections, id)
+                .map_err(e)?
+            {
+                if old.settings.kind() != c.settings.kind() {
+                    return Err(
+                        "A connection cannot change service. Add a new connection instead".into(),
+                    );
+                }
+            }
+            store.save_item(Kind::Connections, id, &c).map_err(e)
+        }
     }
 }
 
@@ -159,6 +183,7 @@ pub fn new_id(store: &Store, kind: ItemKind, name: &str) -> Result<String, Strin
             ItemKind::Layout => "layout",
             ItemKind::Rule => "rule",
             ItemKind::InfoType => "info",
+            ItemKind::Connection => "connection",
         }
         .to_string()
     } else {
@@ -296,6 +321,40 @@ mod tests {
         assert!(list(&s, ItemKind::Rule).unwrap().items.is_empty());
         // Deleting what is not there is not an error.
         delete(&s, ItemKind::Rule, "version").unwrap();
+    }
+
+    #[test]
+    fn connections_are_checked_and_cannot_change_service() {
+        let (_d, s) = store();
+        let jira = json!({"name": "Work", "kind": "jira", "site_url": "https://acme.atlassian.net",
+                          "auth": "api_token", "email": "me@acme.com", "project": "P"});
+        save(&s, ItemKind::Connection, "work", jira.clone()).unwrap();
+        let l = list(&s, ItemKind::Connection).unwrap();
+        assert_eq!(l.items[0].id, "work");
+        assert_eq!(l.items[0].item["kind"], "jira");
+
+        // A bad address is refused with a reason and the saved one stays.
+        let mut bad = jira.clone();
+        bad["site_url"] = json!("http://acme.atlassian.net");
+        let err = save(&s, ItemKind::Connection, "work", bad).unwrap_err();
+        assert!(err.contains("https"), "{err}");
+        let err = save(
+            &s,
+            ItemKind::Connection,
+            "work",
+            json!({"name": "Now Claude", "kind": "claude"}),
+        )
+        .unwrap_err();
+        assert!(err.contains("new connection"), "{err}");
+        assert_eq!(
+            list(&s, ItemKind::Connection).unwrap().items[0].item["name"],
+            "Work"
+        );
+        assert_eq!(new_id(&s, ItemKind::Connection, "Work").unwrap(), "work-2");
+        assert_eq!(
+            new_id(&s, ItemKind::Connection, "!!").unwrap(),
+            "connection"
+        );
     }
 
     #[test]

@@ -54,3 +54,4 @@ keyring = { version = "3", default-features = false, features = ["async-secret-s
 [dev-dependencies]
 tempfile.workspace = true
 cargoframe-net = { path = "../core/net", features = ["mock"] }
+zip = { version = "6", default-features = false, features = ["deflate"] }
