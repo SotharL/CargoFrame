@@ -6,7 +6,7 @@ A tray app for Windows 11 and Linux. A shortcut captures the program in focus, f
 folder, reads the data you asked for, and opens a window where you review it and share it to Jira,
 Google, Reddit, Claude or any API you describe. Nothing leaves your computer until you click.
 
-> **Status: V1 feature-complete on the `dev/v1` branch, in private beta.** Every feature in the
+> **Status: V1 feature-complete and merged to `main`, in private beta.** Every feature in the
 > plan is built and tested. What has **not** been done is running it on real desktops, with real
 > accounts, and with a trusted signing certificate. See [`docs/status.md`](docs/status.md) for
 > exactly what is and is not verified.
