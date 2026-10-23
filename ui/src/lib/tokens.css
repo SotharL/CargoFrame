@@ -1,0 +1,51 @@
+/* Design tokens. Neutrals follow the Claude app's warm light and dark themes; the five
+   signal colours are fixed by the brief. Status colours are always paired with an icon and a
+   label, and are used as borders, dots and tinted backgrounds, never as the only signal. */
+:root {
+  --accent: #4f8ee0;
+  --ok: #62e04f;
+  --warn: #e0934f;
+  --err: #e04f4f;
+  --dbg: #b04fe0;
+
+  --bg: #faf9f5;
+  --surface: #ffffff;
+  --surface-2: #f3f1ea;
+  --border: #e8e6dc;
+  --border-strong: #d6d3c6;
+  --text: #1f1e1d;
+  --quiet: #6b6a64;
+  --on-accent: #1f1e1d;
+
+  --radius: 8px;
+  --radius-sm: 6px;
+  --space: 4px;
+  --font: 'Segoe UI Variable Text', 'Segoe UI', system-ui, -apple-system, 'Ubuntu', 'Cantarell',
+    'Noto Sans', sans-serif;
+  --mono: ui-monospace, 'Cascadia Mono', 'Consolas', 'DejaVu Sans Mono', monospace;
+  color-scheme: light;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --bg: #262624;
+    --surface: #30302e;
+    --surface-2: #3a3a37;
+    --border: #3d3d3a;
+    --border-strong: #55554f;
+    --text: #f5f4ee;
+    --quiet: #a3a29b;
+    color-scheme: dark;
+  }
+}
+
+:root[data-theme='dark'] {
+  --bg: #262624;
+  --surface: #30302e;
+  --surface-2: #3a3a37;
+  --border: #3d3d3a;
+  --border-strong: #55554f;
+  --text: #f5f4ee;
+  --quiet: #a3a29b;
+  color-scheme: dark;
+}

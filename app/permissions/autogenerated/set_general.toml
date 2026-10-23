@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-general"
+description = "Enables the set_general command without any pre-configured scope."
+commands.allow = ["set_general"]
+
+[[permission]]
+identifier = "deny-set-general"
+description = "Denies the set_general command without any pre-configured scope."
+commands.deny = ["set_general"]

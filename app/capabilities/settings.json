@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "settings",
+  "description": "What the Settings window may ask the backend to do",
+  "windows": ["settings"],
+  "permissions": [
+    "allow-app-info",
+    "allow-get-general",
+    "allow-set-general",
+    "allow-get-autostart",
+    "allow-set-autostart",
+    "allow-open-config-folder"
+  ]
+}
