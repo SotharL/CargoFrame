@@ -68,6 +68,14 @@ cargo fmt --all -- --check
 cd ui && npx svelte-check && npx vitest run
 ```
 
+**Windows: build the program and the installer.** Run `scripts\windows\build.cmd` (or double-click
+it). It writes `target\release\cargoframe.exe` and
+`target\release\bundle\nsis\CargoFrame_<version>_x64-setup.exe`. `build.cmd program` skips the
+installer, `build.cmd install` builds and then opens the installer, and adding `fast` skips
+reinstalling the web packages. In VS Code, **Ctrl+Shift+B** runs the same build (the tasks are in
+`.vscode/tasks.json`, and Terminal, Run Task lists the others). It is a cmd script so that a
+PowerShell "running scripts is disabled" setting cannot stop it.
+
 Rust stable (see `rust-toolchain.toml`), Node 22. On Linux the app needs the WebKitGTK and GTK 3
 development packages (the list is in `.github/workflows/ci.yml`). Run the program with
 `cd app && ../ui/node_modules/.bin/tauri dev`. To try the windows alone in a browser with demo

@@ -16,8 +16,9 @@
 secrets/
 .tauri/
 
-# Editors and OS
-.vscode/
+# Editors and OS (the shared build tasks in .vscode/tasks.json are kept)
+.vscode/*
+!.vscode/tasks.json
 .idea/
 Thumbs.db
 .DS_Store

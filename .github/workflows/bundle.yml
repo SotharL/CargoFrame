@@ -25,14 +25,12 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: ui/package-lock.json
-      - run: npm ci
-        working-directory: ui
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      # The same script a person runs (it installs the web packages first), so it is tested on every push.
       - name: Build the NSIS installer
-        working-directory: app
         shell: bash
-        run: ../scripts/ci/run.sh "Build NSIS installer" ../ui/node_modules/.bin/tauri build --bundles nsis
+        run: scripts/ci/run.sh "Build NSIS installer" cmd.exe //c scripts\\windows\\build.cmd installer nopause
       - name: Find the installer
         id: find
         shell: pwsh
