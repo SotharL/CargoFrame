@@ -6,6 +6,8 @@ built, checked and drafted as a release by `.github/workflows/release.yml` for a
 
 ## Windows (`installers/windows/`)
 
+- Build it with `scripts\windows\build.cmd` (see the README), or in VS Code with Ctrl+Shift+B.
+  CI builds it with the same script. The first build downloads the NSIS tools once.
 - Tauri's NSIS bundler in **current-user mode**; `installer.nsi` and `hooks.nsh` hold our
   changes. Registry entries are under `HKCU`; the default folder is `%LocalAppData%\CargoFrame`.
 - Start Menu shortcut with the app's AppUserModelID (needed for notification clicks).
