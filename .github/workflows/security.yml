@@ -23,7 +23,7 @@ jobs:
       contents: read
       checks: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions-rust-lang/audit@v1
         with:
           # "Unmaintained" and "unsound" notices on the GTK bindings that Tauri uses on Linux are
@@ -34,7 +34,7 @@ jobs:
     name: npm advisories
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
         with:
           node-version: 22
