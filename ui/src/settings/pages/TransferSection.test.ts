@@ -31,8 +31,8 @@ describe('Export', () => {
     const spy = vi.spyOn(api, 'exportSettings');
     render(TransferSection);
     expect(await screen.findByText('Layouts')).toBeTruthy();
-    expect(screen.getByText('Data rules')).toBeTruthy();
-    expect(screen.getByText('Info types')).toBeTruthy();
+    expect(screen.getByText('Data from files')).toBeTruthy();
+    expect(screen.getByText('Destination fields')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Export 3 items…' }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     expect(spy.mock.calls[0]![0]).toEqual([
@@ -49,13 +49,13 @@ describe('Export', () => {
     const spy = vi.spyOn(api, 'exportSettings');
     render(TransferSection);
     await screen.findByText('Layouts');
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'All data rules' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'All data from files' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Export 2 items…' }));
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[0]![0].map((s) => s.group)).toEqual(['layouts', 'infotypes']);
 
     await fireEvent.click(screen.getByRole('checkbox', { name: 'All layouts' }));
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'All info types' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'All destination fields' }));
     const none = screen.getByRole('button', { name: 'Export 0 items…' }) as HTMLButtonElement;
     expect(none.disabled).toBe(true);
   });

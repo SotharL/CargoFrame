@@ -9,6 +9,7 @@
 //! be tested without a window.
 
 use cargoframe_config::MemoryMode;
+use serde::Serialize;
 use std::collections::HashMap;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -35,6 +36,42 @@ pub fn on_close(mode: MemoryMode) -> OnClose {
             release_after: None,
         },
     }
+}
+
+/// What a window's web view is doing right now.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum WindowState {
+    /// On screen.
+    Open,
+    /// Hidden but alive, so it opens at once (and holds memory).
+    Kept,
+    /// Not there: no web view, no memory held.
+    Closed,
+}
+
+pub fn window_state(exists: bool, visible: bool) -> WindowState {
+    match (exists, visible) {
+        (false, _) => WindowState::Closed,
+        (true, true) => WindowState::Open,
+        (true, false) => WindowState::Kept,
+    }
+}
+
+/// One window's line in Settings, General, Performance.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct WindowStatus {
+    pub label: &'static str,
+    pub name: &'static str,
+    pub state: WindowState,
+}
+
+/// What the Refresh button in Performance shows besides the timings: the memory setting in force
+/// and what it is doing to each window right now.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct MemoryStatus {
+    pub mode: MemoryMode,
+    pub windows: Vec<WindowStatus>,
 }
 
 /// Counts how often each window was hidden or shown, so a release timer started for one hide
@@ -96,6 +133,30 @@ mod tests {
                 release_after: None
             }
         );
+    }
+
+    #[test]
+    fn a_window_is_open_kept_or_closed() {
+        assert_eq!(window_state(true, true), WindowState::Open);
+        assert_eq!(window_state(true, false), WindowState::Kept);
+        assert_eq!(window_state(false, false), WindowState::Closed);
+        // A window that is gone cannot be visible, whatever the caller passes.
+        assert_eq!(window_state(false, true), WindowState::Closed);
+    }
+
+    #[test]
+    fn the_status_is_sent_to_the_page_in_snake_case() {
+        let status = MemoryStatus {
+            mode: MemoryMode::LowMemory,
+            windows: vec![WindowStatus {
+                label: "capture",
+                name: "Capture window",
+                state: WindowState::Kept,
+            }],
+        };
+        let json = serde_json::to_value(&status).unwrap();
+        assert_eq!(json["mode"], "low_memory");
+        assert_eq!(json["windows"][0]["state"], "kept");
     }
 
     #[test]

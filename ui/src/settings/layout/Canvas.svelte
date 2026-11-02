@@ -215,12 +215,14 @@
           onfocus={() => (selected = b.id)}
           onkeydown={(e) => onKey(e, b)}
         >
-          <div class="top">
-            <span class="kind">{typeLabel(b.type)}</span>
+          <!-- One line, so a block a single row high still shows its title: the title shrinks first,
+               the small (type) after it and the badges on the right stay visible. -->
+          <div class="line">
+            <span class="name" title={label(b)}>{label(b)}</span>
+            <span class="kind">({typeLabel(b.type).toLowerCase()})</span>
             {#if b.type === 'text' && b.role === 'prompt'}<span class="tag">Prompt</span>{/if}
             {#if count(b.id)}<span class="count {w}" title="{count(b.id)} to look at">{w === 'error' ? '✕' : w === 'warning' ? '!' : '?'} {count(b.id)}</span>{/if}
           </div>
-          <div class="name">{label(b)}</div>
           <button
             type="button"
             class="handle"
@@ -257,7 +259,7 @@
   }
   .grid.dragging { cursor: grabbing; }
   .block {
-    position: relative; display: grid; grid-template-rows: auto 1fr; gap: 2px; align-content: start;
+    position: relative; display: flex; align-items: flex-start; gap: 2px;
     background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
     padding: 6px 8px; overflow: hidden; cursor: grab; touch-action: none; min-width: 0;
   }
@@ -267,17 +269,17 @@
   .block.warn { border-color: var(--warn); }
   .block.dbg { border-color: var(--dbg); }
   .block.selected.err, .block.selected.warn, .block.selected.dbg { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
-  .top { display: flex; gap: 6px; align-items: center; min-width: 0; }
-  .kind { font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--quiet); }
+  .line { display: flex; gap: 6px; align-items: baseline; min-width: 0; width: 100%; padding-right: 10px; }
+  .kind { font-size: 10px; color: var(--quiet); flex: none; white-space: nowrap; }
   .tag {
-    font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--accent);
+    flex: none; font-size: 11px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--accent);
     background: color-mix(in srgb, var(--accent) 16%, transparent);
   }
-  .count { margin-left: auto; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 999px; border: 1px solid var(--quiet); }
+  .count { flex: none; margin-left: auto; font-size: 11px; font-weight: 700; padding: 0 6px; border-radius: 999px; border: 1px solid var(--quiet); }
   .count.error { border-color: var(--err); background: color-mix(in srgb, var(--err) 16%, transparent); }
   .count.warning { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
   .count.debug { border-color: var(--dbg); background: color-mix(in srgb, var(--dbg) 16%, transparent); }
-  .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .name { font-weight: 600; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .screenshot { background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px); }
   .handle {
     position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; padding: 0; border: 0;

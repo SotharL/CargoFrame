@@ -14,11 +14,11 @@ export interface PageMeta {
 
 /** Order matches the settings window's sidebar. */
 export const PAGES: PageMeta[] = [
-  { id: 'general', title: 'General', blurb: 'Appearance, startup, safety, performance and updates.' },
+  { id: 'general', title: 'General', blurb: 'Appearance, startup, safety, export and import, files, performance and updates.' },
   { id: 'connections', title: 'Connections', blurb: 'Services you share to: Jira, Google, Reddit, Claude, or your own API.' },
   { id: 'triggers', title: 'Triggers', blurb: 'Shortcuts that capture your screen and open a CargoFrame window.' },
-  { id: 'rules', title: 'Data rules', blurb: 'Values CargoFrame reads from files in the project folder.' },
-  { id: 'infotypes', title: 'Info types', blurb: 'The named fields a connection accepts, and where each value comes from.' },
+  { id: 'rules', title: 'Data from files', blurb: 'Pull a value out of a file in the project folder (a version, a log line) to use in your text and fields.' },
+  { id: 'infotypes', title: 'Destination fields', blurb: 'The boxes on the service you share to (Jira priority, labels…) and what fills each one.' },
   { id: 'layouts', title: 'Layouts', blurb: 'Build the window each trigger opens, block by block.' },
 ];
 

@@ -1,10 +1,12 @@
 name: Bundle
 
 # Builds the real installers and exercises them on real machines.
+# The two installer builds are the most expensive jobs (the Windows one counts double), so they run
+# on `main` and by hand, not on every pull-request update. A version tag is built by release.yml.
 on:
   push:
-    branches: [main, 'dev/**']
-  pull_request:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
 
 permissions:

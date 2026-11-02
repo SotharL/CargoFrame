@@ -713,6 +713,39 @@ pub fn get_timings(state: State<'_, AppState>) -> Vec<crate::timing::TimingView>
     state.timings.snapshot()
 }
 
+/// The memory setting in force and what it is doing to each window, for Settings, General,
+/// Performance (the Refresh button).
+#[tauri::command]
+pub fn get_memory_status(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::warm::MemoryStatus, String> {
+    let mode = state
+        .store
+        .load_or_default::<General>()
+        .map_err(|e| e.to_string())?
+        .memory_mode;
+    let windows = [
+        (windowing::SETTINGS, "Settings"),
+        (windowing::CAPTURE, "Capture window"),
+    ]
+    .into_iter()
+    .map(|(label, name)| {
+        let win = app.get_webview_window(label);
+        let visible = win
+            .as_ref()
+            .and_then(|w| w.is_visible().ok())
+            .unwrap_or(false);
+        crate::warm::WindowStatus {
+            label,
+            name,
+            state: crate::warm::window_state(win.is_some(), visible),
+        }
+    })
+    .collect();
+    Ok(crate::warm::MemoryStatus { mode, windows })
+}
+
 /// Press a sharing button.
 #[tauri::command]
 pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResult, String> {

@@ -16,6 +16,7 @@ fn main() {
             "open_settings",
             "report_painted",
             "get_timings",
+            "get_memory_status",
             "get_shortcut_errors",
             "reload_triggers",
             "list_items",

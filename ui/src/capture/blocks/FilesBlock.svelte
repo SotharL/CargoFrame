@@ -9,21 +9,33 @@
     info,
     selected = $bindable([]),
   }: { block: FilesBlock; info: FilesState; selected: string[] } = $props();
+
+  // A long list gets a filter; All and None act on what the filter leaves.
+  let filter = $state('');
+  const visible = $derived.by(() => {
+    const q = filter.trim().toLowerCase();
+    return q ? info.entries.filter((e) => e.path.toLowerCase().includes(q)) : info.entries;
+  });
+  const selectAll = () => (selected = [...new Set([...selected, ...visible.map((e) => e.path)])]);
+  const selectNone = () => (selected = selected.filter((p) => !visible.some((e) => e.path === p)));
 </script>
 
 <div class="files">
   <div class="head">
     <span class="title">{block.title}</span>
-    <span class="quiet count">{selected.length} of {info.entries.length} selected</span>
+    <span class="quiet count">{selected.length} of {info.entries.length} selected{filter.trim() ? ` · ${visible.length} shown` : ''}</span>
     <span class="spacer"></span>
-    <button class="small" onclick={() => (selected = info.entries.map((e) => e.path))} disabled={!info.entries.length}>All</button>
-    <button class="small" onclick={() => (selected = [])} disabled={!selected.length}>None</button>
+    <button class="small" onclick={selectAll} disabled={!visible.length}>All</button>
+    <button class="small" onclick={selectNone} disabled={!selected.length}>None</button>
   </div>
+  {#if info.entries.length > 6}
+    <input type="text" class="filter" bind:value={filter} placeholder="Filter files…" aria-label="Filter files" />
+  {/if}
   {#if info.problem}
     <Chip kind="dbg" label={info.problem} />
   {/if}
   <ul>
-    {#each info.entries as f (f.path)}
+    {#each visible as f (f.path)}
       <li>
         <label>
           <input
@@ -36,7 +48,7 @@
         </label>
       </li>
     {:else}
-      {#if !info.problem}<li class="quiet empty">No files match.</li>{/if}
+      {#if !info.problem}<li class="quiet empty">{filter.trim() ? 'No file matches the filter.' : 'No files match.'}</li>{/if}
     {/each}
   </ul>
   {#if info.truncated}
@@ -45,14 +57,19 @@
 </div>
 
 <style>
-  .files { display: grid; grid-template-rows: auto auto 1fr auto; gap: 6px; height: 100%; min-height: 0; }
-  .head { display: flex; gap: 8px; align-items: center; }
+  /* A column, not a grid with fixed rows: the list takes whatever height is left and scrolls inside
+     itself, whether or not the notices above and below it are showing. */
+  .files { display: flex; flex-direction: column; gap: 6px; height: 100%; min-height: 0; }
+  .filter { width: 100%; flex: none; }
+  .files > :global(.chip) { flex: none; align-self: flex-start; }
+  .head { display: flex; gap: 8px; align-items: center; flex: none; }
   .title { font-weight: 600; font-size: 13px; }
   .count { font-size: 12px; }
   .spacer { flex: 1; }
   .small { padding: 1px 8px; font-size: 12px; }
   ul {
-    list-style: none; margin: 0; padding: 4px; overflow: auto; min-height: 0;
+    list-style: none; margin: 0; padding: 4px; overflow-y: auto; overflow-x: hidden;
+    flex: 1 1 0; min-height: 84px;
     background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
   }
   li label { display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: center; padding: 3px 4px; border-radius: 4px; }

@@ -1,5 +1,6 @@
 <script lang="ts">
   import Field from '../../lib/components/Field.svelte';
+  import TextAutomation from './TextAutomation.svelte';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Rect, Rule, VariableInfo } from '../../lib/types';
   import { COLUMNS, typeLabel } from './model';
 
@@ -28,7 +29,6 @@
   } = $props();
 
   let rectError = $state('');
-  let textarea = $state<HTMLTextAreaElement>();
 
   function setRect(patch: Partial<Rect>) {
     const next = { ...block.rect, ...patch };
@@ -62,19 +62,6 @@
     const at = id.indexOf(':');
     return at < 0 ? [id, ''] : [id.slice(0, at), id.slice(at + 1)];
   };
-
-  function insertVariable(name: string) {
-    if (block.type !== 'text' || !name) return;
-    const token = `{{${name}}}`;
-    const el = textarea;
-    const at = el?.selectionStart ?? block.default_text.length;
-    const end = el?.selectionEnd ?? at;
-    block.default_text = block.default_text.slice(0, at) + token + block.default_text.slice(end);
-    queueMicrotask(() => {
-      el?.focus();
-      el?.setSelectionRange(at + token.length, at + token.length);
-    });
-  }
 </script>
 
 <div class="props">
@@ -101,16 +88,10 @@
         <option value="prompt">Prompt</option>
       </select>
     </Field>
-    <Field label="Starting text" hint="Filled in for you each time; edit it before sharing.">
-      <textarea rows="5" bind:value={block.default_text} bind:this={textarea}></textarea>
-    </Field>
-    <label class="insert">
-      <span class="quiet">Insert a variable</span>
-      <select onchange={(e) => { insertVariable(e.currentTarget.value); e.currentTarget.value = ''; }}>
-        <option value="">Choose…</option>
-        {#each variables as v (v.name)}<option value={v.name}>{v.name} – {v.description}</option>{/each}
-      </select>
-    </label>
+    <div class="auto-field">
+      <span class="auto-title">Text automation</span>
+      <TextAutomation bind:value={block.default_text} {variables} {rules} />
+    </div>
   {:else if block.type === 'dropdown'}
     <Field label="Title"><input type="text" bind:value={block.title} /></Field>
     <Field label="Choices come from">
@@ -257,14 +238,15 @@
 </div>
 
 <style>
-  .props { display: grid; gap: 12px; align-content: start; }
+  .props { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; }
   .head { display: flex; gap: 10px; align-items: baseline; }
   .id { font-size: 12px; }
   .issue { font-size: 12.5px; padding: 6px 8px; border-radius: var(--radius-sm); border: 1px solid var(--quiet); }
   .issue.error { border-color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
   .issue.warning { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
   .issue.debug { border-color: var(--dbg); background: color-mix(in srgb, var(--dbg) 12%, transparent); }
-  .insert { display: grid; gap: 4px; font-size: 13px; }
+  .auto-field { display: grid; gap: 4px; }
+  .auto-title { font-weight: 600; font-size: 13px; }
   .maps { display: grid; gap: 8px; }
   .maps h3 { font-size: 13px; }
   .map { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 8px; background: var(--surface-2); border-radius: var(--radius-sm); }

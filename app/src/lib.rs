@@ -118,6 +118,7 @@ pub fn run() {
             commands::open_link,
             commands::report_painted,
             commands::get_timings,
+            commands::get_memory_status,
         ])
         .on_window_event(|window, event| match event {
             // Settings, General, Memory decides whether a closed window is destroyed or kept.
