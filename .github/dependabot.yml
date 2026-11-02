@@ -3,9 +3,15 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
   - package-ecosystem: cargo
     directory: /
     schedule:
-      interval: weekly
+      interval: monthly
+    groups:
+      rust-dependencies:
+        patterns: ["*"]
   # Add an npm entry for /ui once the Svelte project exists.
