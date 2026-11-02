@@ -1,12 +1,15 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import Combobox from '../../lib/components/Combobox.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { ConnectionView, InfoKind, InfoType } from '../../lib/types';
+  import { layoutsUsingField, usedIn } from '../usage';
+  import type { ComboOption, ConnectionView, InfoKind, InfoType, Layout } from '../../lib/types';
 
   const infos = createItems<InfoType>('infotype');
+  const layouts = createItems<Layout>('layout');
   let connections = $state<ConnectionView[]>([]);
   let draft = $state<{ id: string | null; value: InfoType; listKind: 'none' | 'fixed' | 'api' } | null>(null);
   let formError = $state('');
@@ -24,11 +27,19 @@
   const isList = (k: InfoKind) => k === 'choice' || k === 'multi_choice';
 
   onMount(async () => {
-    await infos.reload();
+    await Promise.all([infos.reload(), layouts.reload()]);
     connections = (await (await getApi()).listConnections().catch(() => null))?.items ?? [];
   });
   const connectionOf = (id: string) => connections.find((c) => c.id === id);
   const nameOf = (id: string) => connectionOf(id)?.name ?? id;
+
+  /** What the chosen service offers, to search through: label first, the key as a note. */
+  const knownFields = $derived<ComboOption[]>(
+    (connectionOf(draft?.value.connection_id ?? '')?.describe.fields ?? []).map((f) => ({ value: f.key, label: f.label, note: f.key })),
+  );
+  const knownLists = $derived<ComboOption[]>(
+    (connectionOf(draft?.value.connection_id ?? '')?.describe.lists ?? []).map((l) => ({ value: l.id, label: l.label, note: l.id })),
+  );
 
   const blank = (): InfoType => ({
     name: '', connection_id: '', field: '', kind: 'text', options: { type: 'none' }, required: false, default_template: '',
@@ -86,16 +97,20 @@
 
 <div class="page">
   {#if infos.failure}<Chip kind="err" label={infos.failure} />{/if}
-  {#each infos.problems as p (p)}<Chip kind="warn" label={`Could not read an info type file: ${p}`} />{/each}
+  {#each infos.problems as p (p)}<Chip kind="warn" label={`Could not read a destination field file: ${p}`} />{/each}
 
   {#if infos.loaded && infos.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No info types yet</h2>
+      <h2>No destination fields yet</h2>
       <p class="quiet">
-        An info type describes one field a service accepts, such as Jira's Priority or a custom
-        field, so a sharing button can fill it from a text block, a data rule or a fixed value.
+        A destination field is one box on the service you share to, such as Jira's Priority, Labels
+        or a custom field. Describe it once here; a sharing button in a layout then fills it for you
+        from a text block, a value read from a file, or a fixed value.
       </p>
-      <button class="primary" onclick={add}>Add an info type</button>
+      <p class="example">
+        Example: <strong>Jira → priority</strong>, filled with the fixed value <strong>High</strong> each time.
+      </p>
+      <button class="primary" onclick={add}>Add a destination field</button>
     </div>
   {/if}
 
@@ -107,6 +122,7 @@
           {nameOf(item.connection_id)} → <span class="mono">{item.field}</span>
           · {kindLabel(item.kind)}{item.required ? ' · required' : ''}
         </p>
+        <p class="use">{usedIn(layoutsUsingField(layouts.items, id))}</p>
       </div>
       <div class="actions">
         <button onclick={() => edit(id, item)}>Edit</button>
@@ -121,12 +137,12 @@
   {/each}
 
   {#if infos.items.length > 0 && !draft}
-    <div><button class="primary" onclick={add}>Add an info type</button></div>
+    <div><button class="primary" onclick={add}>Add a destination field</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit info type' : 'New info type'}</h2>
+      <h2>{draft.id ? 'Edit destination field' : 'New destination field'}</h2>
       <Field label="Name"><input type="text" bind:value={draft.value.name} placeholder="Priority" /></Field>
       <Field label="Connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
         <select bind:value={draft.value.connection_id}>
@@ -137,13 +153,8 @@
           {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
         </select>
       </Field>
-      <Field label="Field key" hint="The field's key in that service's API, such as priority or customfield_10042. Pick one the service offers, or type your own.">
-        <input type="text" bind:value={draft.value.field} placeholder="priority" list="known-fields" />
-        <datalist id="known-fields">
-          {#each connectionOf(draft.value.connection_id)?.describe.fields ?? [] as f (f.key)}
-            <option value={f.key}>{f.label}</option>
-          {/each}
-        </datalist>
+      <Field label="Field key" hint="The field's key in that service's API, such as priority or customfield_10042. Search the ones the service offers, or type your own.">
+        <Combobox label="Field key" options={knownFields} free bind:value={draft.value.field} placeholder="Search or type a key, for example priority" />
       </Field>
       <Field label="Kind">
         <select bind:value={draft.value.kind} onchange={onKind}>
@@ -171,12 +182,7 @@
           </div>
         {:else if draft.value.options.type === 'api'}
           <Field label="API list" hint="The list the service supplies. For a list that needs a project key, write list:KEY, for example components:PROJ.">
-            <input type="text" bind:value={draft.value.options.options_id} placeholder="priorities" list="known-lists" />
-            <datalist id="known-lists">
-              {#each connectionOf(draft.value.connection_id)?.describe.lists ?? [] as l (l.id)}
-                <option value={l.id}>{l.label}</option>
-              {/each}
-            </datalist>
+            <Combobox label="API list" options={knownLists} free bind:value={draft.value.options.options_id} placeholder="Search or type a list, for example priorities" />
           </Field>
         {/if}
       {/if}
@@ -203,6 +209,8 @@
   .empty { display: grid; gap: 8px; justify-items: start; }
   .card { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
   .main { display: grid; gap: 4px; min-width: 0; }
+  .use { font-size: 13px; }
+  .example { font-size: 13px; }
   .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: start; }
   .editor { display: grid; gap: 14px; }
   .check { display: flex; gap: 8px; align-items: center; }

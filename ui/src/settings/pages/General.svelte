@@ -8,13 +8,16 @@
   import TransferSection from './TransferSection.svelte';
   import { getApi } from '../../lib/ipc';
   import { applyTheme } from '../../lib/theme';
-  import type { AppInfo, General, MemoryMode, ThemeChoice, TimingView } from '../../lib/types';
+  import type { AppInfo, General, MemoryMode, MemoryStatus, ThemeChoice, TimingView } from '../../lib/types';
 
   let loaded = $state(false);
   let general = $state<General>({ theme: 'system', memory_mode: 'balanced', check_updates: false });
   let autostart = $state(false);
   let info = $state<AppInfo | null>(null);
   let timings = $state<TimingView[]>([]);
+  let memory = $state<MemoryStatus | null>(null);
+  let refreshing = $state(false);
+  let refreshedAt = $state('');
   let status = $state<'' | 'saved' | 'error'>('');
   let errorText = $state('');
 
@@ -37,13 +40,36 @@
       api.getAutostart(),
       api.appInfo(),
     ]);
-    timings = await api.getTimings().catch(() => []);
+    await readPerformance();
     loaded = true;
   });
 
-  async function refreshTimings() {
-    timings = await (await getApi()).getTimings().catch(() => []);
+  async function readPerformance() {
+    const api = await getApi();
+    [timings, memory] = await Promise.all([
+      api.getTimings().catch(() => []),
+      api.getMemoryStatus().catch(() => null),
+    ]);
   }
+
+  /** The Refresh button. It stays on "Refreshing" for a moment even when the answer is instant, so
+   * the click is visibly answered, then says when the numbers were read. */
+  async function refreshPerformance() {
+    if (refreshing) return;
+    refreshing = true;
+    try {
+      await Promise.all([readPerformance(), new Promise((done) => setTimeout(done, 450))]);
+      refreshedAt = new Date().toLocaleTimeString();
+    } finally {
+      refreshing = false;
+    }
+  }
+
+  const windowText = {
+    open: 'Open now',
+    kept: 'Hidden, kept ready (holds memory)',
+    closed: 'Closed (no memory held)',
+  } as const;
 
   async function save(action: () => Promise<void>) {
     try {
@@ -80,15 +106,27 @@
 
     <SafetySection onstatus={(kind, text) => { status = kind === 'ok' ? 'saved' : 'error'; errorText = kind === 'ok' ? '' : text; }} />
 
+    <TransferSection />
+
+    <Section title="Files">
+      <p class="quiet">Settings: <span class="mono selectable">{info?.config_dir}</span></p>
+      <p class="quiet">Logs and kept zips: <span class="mono selectable">{info?.data_dir}</span></p>
+      <div>
+        <button type="button" onclick={async () => (await getApi()).openConfigFolder()}>
+          Open settings folder
+        </button>
+      </div>
+    </Section>
+
     <Section
       title="Performance"
-      hint="How much memory CargoFrame keeps ready, and how long the last runs took against the targets it aims for."
+      hint="How much memory CargoFrame keeps ready, what that is doing right now, and how long the last runs took against the targets it aims for."
     >
       <div class="sub">
         <h3>Memory</h3>
         <label class="row">
           <span>Keep windows ready</span>
-          <select bind:value={general.memory_mode} onchange={onMemory}>
+          <select bind:value={general.memory_mode} onchange={async () => { await onMemory(); await refreshPerformance(); }}>
             <option value="balanced">Balanced</option>
             <option value="low_memory">Low memory</option>
             <option value="always_warm">Always warm</option>
@@ -97,10 +135,24 @@
         <p class="quiet">{memoryHints[general.memory_mode]}</p>
       </div>
 
-      <div class="sub">
+      <div class="sub" aria-busy={refreshing}>
+        <h3>Right now</h3>
+        {#if memory}
+          <ul class="timings">
+            {#each memory.windows as w (w.label)}
+              <li>
+                <span>{w.name}</span>
+                <Chip kind={w.state === 'kept' ? 'warn' : w.state === 'open' ? 'ok' : 'dbg'} label={windowText[w.state]} />
+              </li>
+            {/each}
+          </ul>
+        {:else}
+          <p class="quiet">Could not read the window state.</p>
+        {/if}
+
         <h3>Last measured</h3>
         {#if timings.length === 0}
-          <p class="quiet">Nothing measured yet. Use a trigger or share something, then look again.</p>
+          <p class="quiet">Nothing measured yet. Use a trigger or share something, then press Refresh.</p>
         {:else}
           <ul class="timings">
             {#each timings as t (t.id)}
@@ -114,7 +166,15 @@
             {/each}
           </ul>
         {/if}
-        <div><button type="button" onclick={refreshTimings}>Refresh</button></div>
+        <div class="refresh">
+          <button type="button" onclick={refreshPerformance} disabled={refreshing}>
+            {refreshing ? 'Refreshing…' : 'Refresh'}
+          </button>
+          {#if refreshing}<span class="spinner" aria-hidden="true"></span>{/if}
+          <span class="quiet" role="status" aria-live="polite">
+            {#if refreshing}Reading the current state…{:else if refreshedAt}Refreshed at {refreshedAt}{/if}
+          </span>
+        </div>
       </div>
     </Section>
 
@@ -127,18 +187,6 @@
         installer; it upgrades CargoFrame in place and keeps your settings.
       </p>
     </Section>
-
-    <Section title="Files">
-      <p class="quiet">Settings: <span class="mono selectable">{info?.config_dir}</span></p>
-      <p class="quiet">Logs and kept zips: <span class="mono selectable">{info?.data_dir}</span></p>
-      <div>
-        <button type="button" onclick={async () => (await getApi()).openConfigFolder()}>
-          Open settings folder
-        </button>
-      </div>
-    </Section>
-
-    <TransferSection />
 
     <div class="status" role="status" aria-live="polite">
       {#if status === 'saved'}<Chip kind="ok" label="Saved" />{/if}
@@ -155,4 +203,12 @@
   .status { min-height: 26px; display: flex; align-items: center; gap: 8px; }
   .timings { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
   .timings li { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+  .refresh { display: flex; align-items: center; gap: 10px; }
+  .spinner {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 2px solid var(--border-strong); border-top-color: var(--accent);
+    animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @media (prefers-reduced-motion: reduce) { .spinner { animation-duration: 2.4s; } }
 </style>

@@ -4,9 +4,11 @@
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { Rule, RuleFormat, RuleTest } from '../../lib/types';
+  import { layoutsUsingRule, usedIn } from '../usage';
+  import type { Layout, Rule, RuleFormat, RuleTest } from '../../lib/types';
 
   const rules = createItems<Rule>('rule');
+  const layouts = createItems<Layout>('layout');
   let draft = $state<{ id: string | null; value: Rule; useFallback: boolean } | null>(null);
   let formError = $state('');
   let confirming = $state<string | null>(null);
@@ -27,7 +29,7 @@
   ];
   const format = (f: RuleFormat) => FORMATS.find((x) => x.value === f)!;
 
-  onMount(rules.reload);
+  onMount(() => Promise.all([rules.reload(), layouts.reload()]));
 
   const blank = (): Rule => ({
     name: '', file: '', format: 'json', query: '', multiple: 'first', separator: ', ', fallback: null, max_bytes: 1048576,
@@ -84,16 +86,21 @@
 
 <div class="page">
   {#if rules.failure}<Chip kind="err" label={rules.failure} />{/if}
-  {#each rules.problems as p (p)}<Chip kind="warn" label={`Could not read a rule file: ${p}`} />{/each}
+  {#each rules.problems as p (p)}<Chip kind="warn" label={`Could not read a file-value file: ${p}`} />{/each}
 
   {#if rules.loaded && rules.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No data rules yet</h2>
+      <h2>No values from files yet</h2>
       <p class="quiet">
-        A data rule reads one value from a file in the project folder, such as the version in
-        package.json, and gives it a name you can use in text blocks as <code>{'{{rule.version}}'}</code>.
+        CargoFrame can read one value out of a file in the project folder, such as the version in
+        package.json or the last line of a log, and give it a name. You then use that name in a text
+        block, or pick it as the source for a destination field.
       </p>
-      <button class="primary" onclick={add}>Add a rule</button>
+      <p class="example">
+        Example: read <code>version</code> from <code>package.json</code>, call it “version”, and write
+        <code>{'{{rule.version}}'}</code> in a text block to have it filled in on every capture.
+      </p>
+      <button class="primary" onclick={add}>Add a value from a file</button>
     </div>
   {/if}
 
@@ -105,7 +112,8 @@
           <span class="mono">{item.file}</span> · {format(item.format).label}
           · <span class="mono">{item.query || 'whole file'}</span>
         </p>
-        <p class="use">Use as <code class="selectable">{`{{rule.${id}}}`}</code></p>
+        <p class="use">Write <code class="selectable">{`{{rule.${id}}}`}</code> in a text block to use it.</p>
+        <p class="use quiet">{usedIn(layoutsUsingRule(layouts.items, id))}</p>
       </div>
       <div class="actions">
         <button onclick={() => edit(id, item)}>Edit</button>
@@ -120,13 +128,13 @@
   {/each}
 
   {#if rules.items.length > 0 && !draft}
-    <div><button class="primary" onclick={add}>Add a rule</button></div>
+    <div><button class="primary" onclick={add}>Add a value from a file</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit rule' : 'New rule'}</h2>
-      <Field label="Name" hint="Shown when the rule cannot find its value.">
+      <h2>{draft.id ? 'Edit value from a file' : 'New value from a file'}</h2>
+      <Field label="Name" hint="Also the name you write in a text block, and shown when the value cannot be found.">
         <input type="text" bind:value={draft.value.name} placeholder="App version" />
       </Field>
       <Field label="File" hint="Relative to the project folder. Use * or ** to match several; the first match is read.">
@@ -204,6 +212,7 @@
   .card { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
   .main { display: grid; gap: 4px; min-width: 0; }
   .use { font-size: 13px; }
+  .example { font-size: 13px; }
   code { font: 12.5px var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 5px; }
   .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: start; }
   .editor { display: grid; gap: 14px; }

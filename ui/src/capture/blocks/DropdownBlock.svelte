@@ -1,6 +1,10 @@
 <script lang="ts">
   import Chip from '../../lib/components/Chip.svelte';
-  import type { Block, DropdownState } from '../../lib/types';
+  import Combobox from '../../lib/components/Combobox.svelte';
+  import type { Block, ComboOption, DropdownState } from '../../lib/types';
+
+  /** From this many choices on, the list can be searched instead of scrolled. */
+  const SEARCH_FROM = 8;
 
   type DropdownBlock = Extract<Block, { type: 'dropdown' }>;
   let {
@@ -9,6 +13,8 @@
     value = $bindable(null),
   }: { block: DropdownBlock; info: DropdownState; value: string | null } = $props();
   const id = $derived(`dd-${block.id}`);
+  const searchable = $derived(info.status === 'ready' && info.options.length > SEARCH_FROM);
+  const choices = $derived<ComboOption[]>(info.options.map((o) => ({ value: o.value, label: o.label, note: o.group })));
   const groups = $derived.by(() => {
     const out: { name: string | null; options: DropdownState['options'] }[] = [];
     for (const o of info.options) {
@@ -22,6 +28,9 @@
 
 <div class="dd">
   <label for={id}>{block.title}</label>
+  {#if searchable}
+    <Combobox {id} options={choices} value={value ?? ''} onchange={(v) => (value = v)} placeholder="Search {info.options.length} choices…" />
+  {:else}
   <select {id} bind:value disabled={info.status !== 'ready'}>
     {#if info.status === 'loading'}
       <option value={null}>Loading…</option>
@@ -39,6 +48,7 @@
       {/each}
     {/if}
   </select>
+  {/if}
   {#if info.status === 'needs_connection'}
     <Chip kind="err" label={info.message ?? 'Not connected'} />
   {/if}

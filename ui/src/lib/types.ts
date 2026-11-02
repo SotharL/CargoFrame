@@ -18,6 +18,27 @@ export interface TimingView {
   note: string | null;
 }
 
+/** One entry of a searchable drop down (`Combobox`). */
+export interface ComboOption {
+  value: string;
+  label: string;
+  /** Shown small, after the label: a group name or the field key. */
+  note?: string | null;
+}
+
+/** What the memory setting is doing to one window right now (Settings, General, Performance). */
+export interface WindowStatus {
+  label: string;
+  name: string;
+  /** 'open' on screen, 'kept' hidden but alive, 'closed' not there. */
+  state: 'open' | 'kept' | 'closed';
+}
+
+export interface MemoryStatus {
+  mode: MemoryMode;
+  windows: WindowStatus[];
+}
+
 export interface AppInfo {
   version: string;
   os: 'windows' | 'linux' | 'macos' | 'other';
