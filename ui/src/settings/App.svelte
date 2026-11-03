@@ -8,6 +8,7 @@
   import InfoTypes from './pages/InfoTypes.svelte';
   import Layouts from './pages/Layouts.svelte';
   import Connections from './pages/Connections.svelte';
+  import VideoPage from './pages/Video.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi } from '../lib/ipc';
@@ -83,6 +84,8 @@
       <InfoTypes />
     {:else if page === 'layouts'}
       <Layouts />
+    {:else if page === 'video'}
+      <VideoPage />
     {:else}
       <Placeholder title={current.title} />
     {/if}

@@ -11,8 +11,9 @@ use crate::share::{self, ShareResult};
 use crate::state::AppState;
 use crate::tools::{self, FilesPreview, RuleTest, VariableInfo};
 use crate::transfer;
+use crate::video;
 use crate::windowing;
-use cargoframe_config::{General, Safe};
+use cargoframe_config::{General, Safe, Video};
 use cargoframe_connectors::{Describe, OptionItem};
 use cargoframe_layout::{
     templates, validate, BlockKind, ConnectionKind, DropdownSource, FilesBlock, Layout,
@@ -491,6 +492,69 @@ pub fn set_safe(state: State<'_, AppState>, mut safe: Safe) -> Result<(), String
 #[tauri::command]
 pub fn test_safe_folder(path: String) -> Result<(), String> {
     tools::test_folder(&path)
+}
+
+// ----- video settings -----
+
+#[tauri::command]
+pub fn get_video(state: State<'_, AppState>) -> Result<Video, String> {
+    state
+        .store
+        .load_or_default::<Video>()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_video(state: State<'_, AppState>, video: Video) -> Result<(), String> {
+    let video = video::normalized(video);
+    video::validate(&video)?;
+    state.store.save(&video).map_err(|e| e.to_string())
+}
+
+/// "Test ffmpeg": where it is, what it can do and what Auto would pick. Uses the settings as
+/// they are in the form, saved or not.
+#[tauri::command]
+pub async fn detect_video_tools(video: Video) -> Result<video::ToolsView, String> {
+    let video = video::normalized(video);
+    blocking(move || video::tools_view(&video, video::Os::current(), &video::Session::current()))
+        .await
+}
+
+/// Record the screen for a few seconds with the settings as they are in the form.
+#[tauri::command]
+pub async fn try_video_recording(
+    state: State<'_, AppState>,
+    video: Video,
+) -> Result<video::Trial, String> {
+    let video = video::normalized(video);
+    let work = state.store.dirs().data().join("video-test");
+    blocking(move || {
+        video::trial(
+            &video,
+            video::Os::current(),
+            &video::Session::current(),
+            &work,
+            video::TRIAL_SECONDS,
+        )
+    })
+    .await
+}
+
+/// Open the clip of the last test recording in the person's video player.
+#[tauri::command]
+pub fn open_video_test(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let clip = state
+        .store
+        .dirs()
+        .data()
+        .join("video-test")
+        .join(video::TRIAL_CLIP);
+    if !clip.is_file() {
+        return Err("There is no test clip yet: run a test recording first".into());
+    }
+    app.opener()
+        .open_path(clip.display().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// The system folder picker. `None` when the person cancels.

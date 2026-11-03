@@ -2,7 +2,8 @@ import type {
   AppInfo, Block, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
-  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo,
+  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
+  VideoTools, VideoTrial,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
@@ -105,6 +106,14 @@ export interface Api {
   getSafe(): Promise<Safe>;
   setSafe(safe: Safe): Promise<void>;
   testSafeFolder(path: string): Promise<void>;
+  getVideo(): Promise<Video>;
+  setVideo(video: Video): Promise<void>;
+  /** Where ffmpeg is and what it can do, for the settings as they are in the form. */
+  detectVideoTools(video: Video): Promise<VideoTools>;
+  /** Record the screen for a few seconds with the settings as they are in the form. */
+  tryVideoRecording(video: Video): Promise<VideoTrial>;
+  /** Open the clip of the last test recording. */
+  openVideoTest(): Promise<void>;
   /** The system folder picker; null when cancelled. */
   pickFolder(title?: string): Promise<string | null>;
 
@@ -201,6 +210,11 @@ async function tauriApi(): Promise<Api> {
     getSafe: () => invoke('get_safe'),
     setSafe: (safe) => invoke('set_safe', { safe }),
     testSafeFolder: (path) => invoke('test_safe_folder', { path }),
+    getVideo: () => invoke('get_video'),
+    setVideo: (video) => invoke('set_video', { video }),
+    detectVideoTools: (video) => invoke('detect_video_tools', { video }),
+    tryVideoRecording: (video) => invoke('try_video_recording', { video }),
+    openVideoTest: () => invoke('open_video_test'),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
     getUpdateView: () => invoke('get_update_view'),
     checkUpdate: () => invoke('check_update'),
@@ -216,6 +230,12 @@ async function tauriApi(): Promise<Api> {
 /** Options for the in-memory stand-in: what a share and a list request should do. */
 export interface MemoryOptions {
   general?: Partial<General>;
+  /** Starting video settings. */
+  video?: Partial<Video>;
+  /** The stand-in finds no ffmpeg. */
+  noFfmpeg?: boolean;
+  /** The stand-in's test recording fails. */
+  recordingFails?: boolean;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
   /** Called by `fetchOptions` and `previewOptions`. */
@@ -272,6 +292,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   };
   let autostart = true;
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
+  let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
+  let trialRan = false;
   const store: Record<ItemKind, Map<string, unknown>> = {
     trigger: new Map(),
     layout: new Map(),
@@ -574,6 +596,43 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     },
     testSafeFolder: async (path) => {
       if (!path.trim()) throw 'Choose a folder';
+    },
+    getVideo: async () => ({ ...video }),
+    setVideo: async (v) => {
+      video = { ...v };
+    },
+    detectVideoTools: async (v) => {
+      if (opts.noFfmpeg) {
+        return {
+          found: false, ffmpeg: null, version: null, encoders: [], captures: [], auto_capture: null,
+          auto_encoder: null, os: 'windows', problem: v.ffmpeg
+            ? `ffmpeg was not found in ${v.ffmpeg}.`
+            : 'ffmpeg was not found. Install it (on Windows: winget install Gyan.FFmpeg) or choose the folder it is in.',
+        };
+      }
+      return {
+        found: true, ffmpeg: 'C:\\Tools\\ffmpeg\\bin\\ffmpeg.exe', version: '7.1-full_build',
+        encoders: ['software', 'nvenc', 'media_foundation'], captures: ['gdigrab', 'ddagrab'],
+        auto_capture: 'gdigrab', auto_encoder: 'software', os: 'windows', problem: null,
+      };
+    },
+    tryVideoRecording: async (v) => {
+      if (opts.recordingFails) {
+        return {
+          ok: false, message: 'The recorder stopped by itself: Cannot load nvcuda.dll. Hardware encoders need the matching graphics card and driver: choose Software to carry on.',
+          capture: 'gdigrab', encoder: 'nvenc', width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      trialRan = true;
+      return {
+        ok: true, message: 'Recorded 5.0 s at 1920×1080 with GDI and software (x264). Open the clip to check that it shows your screen.',
+        capture: v.capture === 'auto' ? 'gdigrab' : v.capture, encoder: v.encoder === 'auto' ? 'software' : v.encoder,
+        width: 1920, height: 1080, clip_ms: 5000, clip_bytes: 2_400_000, took_ms: 6100,
+        clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
+      };
+    },
+    openVideoTest: async () => {
+      if (!trialRan) throw 'There is no test clip yet: run a test recording first';
     },
     pickFolder: async () => '/home/me/Documents/CargoFrame zips',
     getUpdateView: async () => updateView(),

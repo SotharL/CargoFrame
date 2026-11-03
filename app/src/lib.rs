@@ -23,6 +23,7 @@ mod tray;
 mod tray_host;
 mod triggers;
 mod updates;
+mod video;
 mod warm;
 mod windowing;
 
@@ -124,6 +125,11 @@ pub fn run() {
             commands::check_update,
             commands::install_update,
             commands::set_update_token,
+            commands::get_video,
+            commands::set_video,
+            commands::detect_video_tools,
+            commands::try_video_recording,
+            commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
             // Settings, General, Memory decides whether a closed window is destroyed or kept.
@@ -333,6 +339,9 @@ mod shipped_config_tests {
             "allow-disconnect-connection",
             "allow-set-general",
             "allow-set-safe",
+            "allow-set-video",
+            "allow-try-video-recording",
+            "allow-open-video-test",
             "allow-pick-folder",
             "allow-list-layout-templates",
             "allow-layout-from-template",

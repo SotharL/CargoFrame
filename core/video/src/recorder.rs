@@ -25,8 +25,12 @@ pub const DEFAULT_FPS: u32 = 30;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Capture {
-    /// X11 (`:0`, or the display of a virtual screen), the whole screen of `size`.
-    X11 { display: String, size: (u32, u32) },
+    /// X11 (`:0`, or the display of a virtual screen). `size` is the part of the screen taken;
+    /// `None` takes the whole screen, whatever its size.
+    X11 {
+        display: String,
+        size: Option<(u32, u32)>,
+    },
     /// Windows, the old way: the desktop through GDI.
     Gdigrab,
     /// Windows, Desktop Duplication: the picture stays on the graphics card until downloaded.
@@ -110,10 +114,9 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         Capture::X11 { display, size } => {
             a.extend(["-f".into(), "x11grab".into()]);
             a.extend(["-framerate".into(), fps.to_string().into()]);
-            a.extend([
-                "-video_size".into(),
-                format!("{}x{}", size.0, size.1).into(),
-            ]);
+            if let Some((w, h)) = size {
+                a.extend(["-video_size".into(), format!("{w}x{h}").into()]);
+            }
             a.extend(["-i".into(), display.clone().into()]);
         }
         Capture::Gdigrab => {
@@ -195,11 +198,13 @@ pub struct Recorder {
 impl Recorder {
     pub fn start(cfg: &Config) -> Result<Self, RecordError> {
         let ring = Ring::new(&cfg.dir, cfg.window, cfg.max_bytes);
-        let mut child = Command::new(&cfg.ffmpeg)
+        let mut command = Command::new(&cfg.ffmpeg);
+        command
             .args(args(cfg, &ring))
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
+            .stderr(Stdio::piped());
+        let mut child = export::quiet(&mut command)
             .spawn()
             .map_err(|e| ExportError::NoEncoder(format!("{}: {e}", cfg.ffmpeg.display())))?;
         let said = Arc::new(Mutex::new(String::new()));

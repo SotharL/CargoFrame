@@ -134,6 +134,11 @@ memory and keeps `unsafe_code = "forbid"` (no capture API calls in the app). The
 not depend on this answer are already built and tested: the rolling buffer, the edit model and
 the ffmpeg export (`core/video`).
 
+**Quickest check (Windows or Linux):** open Settings, Video, press "Test ffmpeg" and then "Try a
+5-second recording". It uses the same recorder the product will, reports whether it worked, and
+keeps the clip so you can watch it. Change Capture and Compression and try again to compare;
+the scripts below measure CPU and memory as well.
+
 **What to run.**
 - Windows: `powershell -ExecutionPolicy Bypass -File scripts\windows\s9-video.ps1` (needs ffmpeg:
   `winget install Gyan.FFmpeg`). It records 10 s with each of `gdigrab` and `ddagrab` and each

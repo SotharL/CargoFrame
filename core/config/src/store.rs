@@ -330,6 +330,33 @@ mod tests {
     }
 
     #[test]
+    fn video_settings_start_safe_and_keep_what_is_missing_at_its_default() {
+        use crate::models::{Video, VideoCapture, VideoEncoder};
+        let (d, s) = store();
+        let fresh = s.load_or_default::<Video>().unwrap();
+        assert_eq!(fresh, Video::default());
+        assert_eq!(
+            (fresh.capture, fresh.encoder),
+            (VideoCapture::Auto, VideoEncoder::Auto)
+        );
+        assert_eq!(
+            (fresh.fps, fresh.window_secs, fresh.max_height),
+            (30, 10, 1080)
+        );
+
+        fs::create_dir_all(d.path().join("config")).unwrap();
+        fs::write(
+            d.path().join("config/video.json"),
+            r#"{ "schema_version": 1, "fps": 15, "encoder": "media_foundation", "someday": true }"#,
+        )
+        .unwrap();
+        let v = s.load_or_default::<Video>().unwrap();
+        assert_eq!(v.fps, 15);
+        assert_eq!(v.encoder, VideoEncoder::MediaFoundation);
+        assert_eq!(v.window_secs, 10, "missing fields keep their default");
+    }
+
+    #[test]
     fn writes_leave_no_temporary_files() {
         let (d, s) = store();
         s.save(&Safe::default()).unwrap();

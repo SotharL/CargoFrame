@@ -2,7 +2,7 @@
 //!
 //! ```text
 //! %AppData%\CargoFrame\            (Linux: ~/.config/CargoFrame/)
-//!   general.json   safe.json
+//!   general.json   safe.json   video.json
 //!   triggers\<id>.json   connections\<id>.json   rules\<id>.json
 //!   infotypes\<id>.json  layouts\<id>.json
 //! ```
@@ -25,6 +25,8 @@ pub mod triggers;
 
 pub use error::ConfigError;
 pub use infotype::{InfoKind, InfoOption, InfoOptions, InfoType};
-pub use models::{CaptureMode, General, MemoryMode, Safe, Theme, Trigger};
+pub use models::{
+    CaptureMode, General, MemoryMode, Safe, Theme, Trigger, Video, VideoCapture, VideoEncoder,
+};
 pub use paths::Dirs;
 pub use store::{valid_id, Document, Kind, Loaded, Store};

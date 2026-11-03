@@ -4,7 +4,8 @@ export type PageId =
   | 'triggers'
   | 'rules'
   | 'infotypes'
-  | 'layouts';
+  | 'layouts'
+  | 'video';
 
 export interface PageMeta {
   id: PageId;
@@ -20,6 +21,7 @@ export const PAGES: PageMeta[] = [
   { id: 'rules', title: 'Data from files', blurb: 'Pull a value out of a file in the project folder (a version, a log line) to use in your text and fields.' },
   { id: 'infotypes', title: 'Destination fields', blurb: 'The boxes on the service you share to (Jira priority, labels…) and what fills each one.' },
   { id: 'layouts', title: 'Layouts', blurb: 'Build the window each trigger opens, block by block.' },
+  { id: 'video', title: 'Video', blurb: 'How the screen is recorded: where ffmpeg is, how it captures and compresses, and a test recording to try it on this PC.' },
 ];
 
 /** Pages that moved: the old address still lands somewhere sensible. */

@@ -84,6 +84,81 @@ impl Document for Safe {
     const NAME: &'static str = "safe";
 }
 
+/// How the screen is captured for a video.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoCapture {
+    /// CargoFrame picks what suits this system.
+    #[default]
+    Auto,
+    /// Windows, the old way (GDI): works almost everywhere, costs more CPU.
+    Gdigrab,
+    /// Windows, Desktop Duplication: the picture stays on the graphics card.
+    Ddagrab,
+    /// Linux with an X11 session.
+    X11,
+}
+
+/// How a video is compressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoEncoder {
+    /// CargoFrame picks what suits this system.
+    #[default]
+    Auto,
+    /// On the processor: works everywhere.
+    Software,
+    Nvenc,
+    Qsv,
+    Amf,
+    /// Windows' own encoder.
+    MediaFoundation,
+    Vaapi,
+}
+
+/// `video.json`: how videos are recorded. Nothing here records by itself; a recording starts
+/// from a trigger.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Video {
+    pub schema_version: u32,
+    /// Folder that holds ffmpeg and ffprobe, or the ffmpeg program itself. Empty means "look
+    /// next to CargoFrame, then on the search path".
+    pub ffmpeg: Option<String>,
+    pub capture: VideoCapture,
+    pub encoder: VideoEncoder,
+    pub fps: u32,
+    /// How many seconds before the stop shortcut the clip starts, at most.
+    pub window_secs: u32,
+    /// Larger pictures are scaled down to this height. 0 keeps the screen's own size.
+    pub max_height: u32,
+}
+
+impl Video {
+    pub const MIN_FPS: u32 = 5;
+    pub const MAX_FPS: u32 = 60;
+    pub const MAX_WINDOW_SECS: u32 = 30;
+}
+
+impl Default for Video {
+    fn default() -> Self {
+        Self {
+            schema_version: Self::SCHEMA,
+            ffmpeg: None,
+            capture: VideoCapture::Auto,
+            encoder: VideoEncoder::Auto,
+            fps: 30,
+            window_secs: 10,
+            max_height: 1080,
+        }
+    }
+}
+
+impl Document for Video {
+    const SCHEMA: u32 = 1;
+    const NAME: &'static str = "video";
+}
+
 /// What a trigger captures.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]

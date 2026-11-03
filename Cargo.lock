@@ -508,6 +508,7 @@ dependencies = [
  "cargoframe-rules",
  "cargoframe-safe",
  "cargoframe-update",
+ "cargoframe-video",
  "cargoframe-window",
  "chrono",
  "keyring",

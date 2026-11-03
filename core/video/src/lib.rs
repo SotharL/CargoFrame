@@ -16,5 +16,5 @@ pub mod segments;
 
 pub use buffer::{RollingBuffer, Window};
 pub use edit::{resolve, Clip, Crop, Edit, Overlay, Problem, Resolved};
-pub use export::{locate, parse_probe, plan, probe, run, ExportError, Plan};
+pub use export::{ask, locate, locate_in, parse_probe, plan, probe, quiet, run, ExportError, Plan};
 pub use segments::{join, JoinError, Ring, Segment};

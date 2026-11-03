@@ -24,7 +24,7 @@ fn an_x11_recording_is_captured_scaled_encoded_and_cut_into_segments() {
     let cfg = config(
         Capture::X11 {
             display: ":0.0".into(),
-            size: (2560, 1440),
+            size: Some((2560, 1440)),
         },
         dir.path(),
     );
@@ -67,12 +67,28 @@ fn a_windows_recording_downloads_the_picture_from_the_graphics_card_first() {
 }
 
 #[test]
+fn without_a_size_x11_takes_the_whole_screen() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = config(
+        Capture::X11 {
+            display: ":1".into(),
+            size: None,
+        },
+        dir.path(),
+    );
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    assert!(!a.iter().any(|x| x == "-video_size"));
+    assert_eq!(after(&a, "-i"), ":1");
+}
+
+#[test]
 fn vaapi_names_its_device_first_and_uploads_the_picture() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = config(
         Capture::X11 {
             display: ":0".into(),
-            size: (1280, 720),
+            size: Some((1280, 720)),
         },
         dir.path(),
     );
@@ -173,7 +189,7 @@ fn recording_the_screen_for_a_while_gives_a_clip_of_the_last_seconds() {
         ffmpeg.clone(),
         Capture::X11 {
             display: screen.display.clone(),
-            size: (640, 480),
+            size: Some((640, 480)),
         },
         ring_dir.clone(),
     );
@@ -238,7 +254,7 @@ fn a_recorder_that_cannot_start_reports_why_and_a_cancelled_one_leaves_nothing()
         ffmpeg.clone(),
         Capture::X11 {
             display: ":96".into(),
-            size: (640, 480),
+            size: Some((640, 480)),
         },
         dir.path().to_path_buf(),
     );
@@ -265,7 +281,7 @@ fn a_recorder_that_cannot_start_reports_why_and_a_cancelled_one_leaves_nothing()
         ffmpeg,
         Capture::X11 {
             display: screen.display.clone(),
-            size: (640, 480),
+            size: Some((640, 480)),
         },
         ring_dir.clone(),
     );

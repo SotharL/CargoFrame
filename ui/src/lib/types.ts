@@ -324,6 +324,49 @@ export interface Safe {
   max_retries: number;
 }
 
+// ----- video (mirror core/config Video and app/src/video.rs) -----
+
+export type VideoCapture = 'auto' | 'gdigrab' | 'ddagrab' | 'x11';
+export type VideoEncoder = 'auto' | 'software' | 'nvenc' | 'qsv' | 'amf' | 'media_foundation' | 'vaapi';
+
+export interface Video {
+  /** Folder that holds ffmpeg and ffprobe, or the ffmpeg program; null means "find it". */
+  ffmpeg: string | null;
+  capture: VideoCapture;
+  encoder: VideoEncoder;
+  fps: number;
+  /** Seconds before the stop shortcut the clip may start. */
+  window_secs: number;
+  /** Larger pictures are scaled down to this height; 0 keeps the screen's size. */
+  max_height: number;
+}
+
+export interface VideoTools {
+  found: boolean;
+  ffmpeg: string | null;
+  version: string | null;
+  /** Encoders this ffmpeg lists. Listed does not mean this PC can use it. */
+  encoders: VideoEncoder[];
+  captures: VideoCapture[];
+  auto_capture: VideoCapture | null;
+  auto_encoder: VideoEncoder | null;
+  os: 'windows' | 'linux' | 'other';
+  problem: string | null;
+}
+
+export interface VideoTrial {
+  ok: boolean;
+  message: string;
+  capture: VideoCapture | null;
+  encoder: VideoEncoder | null;
+  width: number;
+  height: number;
+  clip_ms: number;
+  clip_bytes: number;
+  took_ms: number;
+  clip: string | null;
+}
+
 export interface VariableInfo {
   name: string;
   description: string;

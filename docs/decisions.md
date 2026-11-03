@@ -438,8 +438,40 @@ everything after the recorded file exists, and a recorder that works on a virtua
   and `scripts/e2e/s9-video-linux.sh` to measure it.
 - **Not built yet:** the video block and the "video layout", the recorder window (start, stop,
   the editor with its timeline, crop and marks), per-connection sending of a video (size limits
-  differ: Discord 10 to 25 MB, Slack more, Teams needs OneDrive), the settings (encoder, frame
-  rate, window length), Windows and Wayland capture results from S9, and the shortcut that starts
-  a recording. Wayland needs the portal's PipeWire stream, which ffmpeg reads only from 7.1; S9
+  differ: Discord 10 to 25 MB, Slack more, Teams needs OneDrive), Windows and Wayland capture
+  results from S9, and the shortcut that starts a recording. Wayland needs the portal's PipeWire stream, which ffmpeg reads only from 7.1; S9
   says whether that route or GStreamer is needed.
 
+### Phase 12, part 2: the Video settings page, and a test recording you can run (3 Nov 2026)
+
+Spike S9 needs a person at a real Windows desktop, so the app now lets that person run the
+important part of it without a script: Settings, Video.
+
+- **ffmpeg is the person's to install, with a setting for where it is.** The page takes a folder
+  (or the ffmpeg program itself); when a place is given it is the only place looked in, so a wrong
+  folder says so instead of quietly using another ffmpeg. Empty means next to CargoFrame, then the
+  search path. The message when it is missing gives `winget install Gyan.FFmpeg`. Shipping
+  ffmpeg with the installer stays an S9 and licence question (recommended until measured: not).
+- **"Test ffmpeg" reads what this ffmpeg has** (`-encoders`, `-devices`, `-filters`: gdigrab,
+  ddagrab, x11grab; x264, NVENC, QSV, AMF, Media Foundation, VAAPI) and shows what *Automatic*
+  would use. A choice this ffmpeg lacks is greyed out. An encoder being listed does not mean this
+  PC can use it (no graphics card, no driver), so the page says that, and the test decides.
+- **Automatic is the safest choice, not the fastest.** Windows: GDI capture (works in remote
+  sessions and virtual machines, where Desktop Duplication may not) and software x264
+  `ultrafast`; a build without x264 falls back to the first hardware encoder it has. Linux: x11grab
+  on an X11 session, the whole screen. A Wayland session gets a plain "not supported yet"
+  rather than a black recording. S9's numbers decide whether Automatic should change.
+- **"Try a 5-second recording"** records with the settings in the form (saved or not), joins the
+  pieces, reads the clip back with ffprobe and reports size, length, time taken and the capture
+  and encoder used. A failure shows ffmpeg's last line plus a hint that fits what was tried
+  (hardware encoder: choose Software; Desktop Duplication: try GDI). The clip is kept in
+  `video-test/` (replaced by the next test) so the person can open it and see that it shows the
+  screen; the pieces are deleted. Only one test runs at a time.
+- **No console window flashes up.** CargoFrame has no console, so every ffmpeg it starts on
+  Windows is started with `CREATE_NO_WINDOW`.
+- **Settings:** `video.json` with capture, encoder, frames per second (5 to 60, default 30),
+  seconds kept (1 to 30, default 10), and the largest height (0 or 240 to 4320, default 1080).
+  Out-of-range values are refused with a sentence; the file tolerates missing and unknown fields.
+- **Not verified:** the Windows paths (GDI, Desktop Duplication, the hardware encoders, the
+  hidden console) have not run on a Windows machine. The Linux X11 path ran against a virtual
+  screen in the tests.

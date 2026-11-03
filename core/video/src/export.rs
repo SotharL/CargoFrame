@@ -139,11 +139,13 @@ fn run_command(
     cancelled: &dyn Fn() -> bool,
     timeout: Duration,
 ) -> Result<String, ExportError> {
-    let mut child = Command::new(program)
+    let mut command = Command::new(program);
+    command
         .args(args)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = quiet(&mut command)
         .spawn()
         .map_err(|e| ExportError::NoEncoder(format!("{}: {e}", program.display())))?;
     // Both pipes are drained as the program runs, so a chatty one cannot fill them and stop.
@@ -214,16 +216,39 @@ fn last_line(stderr: &str) -> String {
     }
 }
 
+/// Keep a console window from flashing up when CargoFrame (which has no console of its own)
+/// starts ffmpeg on Windows. Nothing on other systems.
+pub fn quiet(command: &mut Command) -> &mut Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+    }
+    command
+}
+
+/// Find a program in `dirs` only.
+pub fn locate_in(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
+    let candidates = [name.to_string(), format!("{name}.exe")];
+    dirs.iter()
+        .flat_map(|d| candidates.iter().map(move |c| d.join(c)))
+        .find(|p| p.is_file())
+}
+
 /// Find a program in `dirs` first (a copy shipped next to CargoFrame), then in the search path.
 pub fn locate(name: &str, dirs: &[PathBuf]) -> Option<PathBuf> {
     let path_dirs: Vec<PathBuf> = std::env::var_os("PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
-    let candidates = [name.to_string(), format!("{name}.exe")];
-    dirs.iter()
-        .chain(path_dirs.iter())
-        .flat_map(|d| candidates.iter().map(move |c| d.join(c)))
-        .find(|p| p.is_file())
+    let all: Vec<PathBuf> = dirs.iter().cloned().chain(path_dirs).collect();
+    locate_in(name, &all)
+}
+
+/// Run a tool for the text it prints (for example `ffmpeg -encoders`). Gives up after 20 s.
+pub fn ask(program: &Path, args: &[&str]) -> Result<String, ExportError> {
+    let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+    run_command(program, &args, &|| false, Duration::from_secs(20))
 }
 
 /// Read size and length out of ffprobe's JSON.
