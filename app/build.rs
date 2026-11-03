@@ -32,6 +32,7 @@ fn main() {
             "discard_import",
             "list_variables",
             "test_rule",
+            "preview_files",
             "get_safe",
             "set_safe",
             "test_safe_folder",

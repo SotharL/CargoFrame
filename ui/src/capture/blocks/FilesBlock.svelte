@@ -34,6 +34,11 @@
   {#if info.problem}
     <Chip kind="dbg" label={info.problem} />
   {/if}
+  {#if info.places.length > 1}
+    <p class="quiet from" title={info.places.map((p) => p.folder).join('\n')}>
+      Looked in: {info.places.map((p) => `${p.label} (${p.exists ? p.found : 'not found'})`).join(', ')}
+    </p>
+  {/if}
   <ul>
     {#each visible as f (f.path)}
       <li>
@@ -61,6 +66,7 @@
      itself, whether or not the notices above and below it are showing. */
   .files { display: flex; flex-direction: column; gap: 6px; height: 100%; min-height: 0; }
   .filter { width: 100%; flex: none; }
+  .from { margin: 0; font-size: 12px; flex: none; }
   .files > :global(.chip) { flex: none; align-self: flex-start; }
   .head { display: flex; gap: 8px; align-items: center; flex: none; }
   .title { font-weight: 600; font-size: 13px; }

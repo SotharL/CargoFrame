@@ -36,7 +36,7 @@ export async function demoSession(): Promise<SessionView> {
           id: 'proj', type: 'dropdown', rect: { x: 8, y: 7, w: 4, h: 2 }, title: 'Jira project',
           source: { type: 'web_api', connection_id: 'jira', options_id: 'projects' },
         },
-        { id: 'logs', type: 'files', rect: { x: 0, y: 9, w: 8, h: 3 }, title: 'Logs', include: ['**/*.log'], preselect: ['*.log'] },
+        { id: 'logs', type: 'files', rect: { x: 0, y: 9, w: 8, h: 3 }, title: 'Logs', include: ['**/*.log'], preselect: ['*.log'], look_in: { folders: ['project'], subfolder: '' } },
         {
           id: 'send', type: 'sharing_button', rect: { x: 8, y: 9, w: 4, h: 2 },
           label: 'Share', connection_id: 'jira', prompt_block_id: null, mappings: [], on_success: 'keep_open',
@@ -51,6 +51,7 @@ export async function demoSession(): Promise<SessionView> {
       logs: {
         truncated: false,
         problem: null,
+        places: [],
         entries: [
           { path: 'app.log', size: 18_204, selected: true },
           { path: 'logs/debug.log', size: 2_400_000, selected: false },

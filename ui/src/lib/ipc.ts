@@ -1,7 +1,7 @@
 import type {
-  AppInfo, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
-  ExportSelection, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
-  ItemKind, ItemList, Layout, LayoutTemplate, OptionsError, Rule, RuleTest, Safe, SessionView,
+  AppInfo, Block, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
+  ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
+  ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, ShareRequest, ShareResult, TimingView, VariableInfo,
 } from './types';
 
@@ -54,6 +54,8 @@ export interface Api {
   layoutFromTemplate(key: string, connectionId: string | null): Promise<Layout>;
   listVariables(): Promise<VariableInfo[]>;
   testRule(rule: Rule, folder: string | null): Promise<RuleTest>;
+  /** What a Files block would find. Without a program, the one of the last capture is used. */
+  previewFiles(block: Extract<Block, { type: 'files' }>, program: string | null): Promise<FilesPreview>;
 
   // ----- export and import of settings -----
   /** Ask where to save, then write the chosen items. The path, or null when cancelled. */
@@ -145,6 +147,7 @@ async function tauriApi(): Promise<Api> {
     discardImport: () => invoke('discard_import'),
     listVariables: () => invoke('list_variables'),
     testRule: (rule, folder) => invoke('test_rule', { rule, folder }),
+    previewFiles: (block, program) => invoke('preview_files', { block, program }),
     getShortcutErrors: () => invoke('get_shortcut_errors'),
     listConnections: () => invoke('list_connections'),
     setConnectionSecret: (id, name, value) => invoke('set_connection_secret', { id, name, value }),
@@ -374,6 +377,26 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       value: '1.2.3',
       problem: null,
     }),
+    previewFiles: async (block, program) => {
+      const folders = block.look_in.folders.length ? block.look_in.folders : (['project'] as LookFolder[]);
+      const names: Record<LookFolder, string> = {
+        project: 'Project folder',
+        program: 'Program folder',
+        above_1: 'One folder above the program',
+        above_2: 'Two folders above the program',
+        above_3: 'Three folders above the program',
+      };
+      const places = folders.map((f) => ({ label: names[f], folder: `/home/me/dev/Foo/${f}`, exists: true, found: 2 }));
+      return {
+        program: program ?? '/home/me/dev/Foo/bin/Foo',
+        places,
+        missing: [],
+        total: places.length * 2,
+        ticked: 0,
+        truncated: false,
+        problem: null,
+      };
+    },
     getShortcutErrors: async () => ({}),
     listConnections: async () => ({
       items: [...store.connection.entries()].map(([id, raw]) => {

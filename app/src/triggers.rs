@@ -141,6 +141,7 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         let state = app.state::<AppState>();
         match result {
             Ok(Ok(s)) => {
+                state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
                 state.sessions.set(s);
                 stage_files_in_background(&app);
                 if let Some(ms) = state.timings.mark("capture", "ready") {

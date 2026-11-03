@@ -14,7 +14,7 @@ export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: 
   { type: 'screenshot', label: 'Screenshot', hint: 'The capture, with crop, draw, shapes and text', size: [8, 8] },
   { type: 'text', label: 'Text', hint: 'A text box with a title, for notes or a prompt', size: [4, 3] },
   { type: 'dropdown', label: 'Dropdown', hint: 'Choices from a service or from your Claude chats', size: [4, 2] },
-  { type: 'files', label: 'Files', hint: 'Files from the project folder to tick and zip together', size: [6, 3] },
+  { type: 'files', label: 'Files', hint: 'Files from the project folder (or folders above the program) to tick and zip together', size: [6, 3] },
   { type: 'sharing_button', label: 'Sharing button', hint: 'Sends everything to a connection', size: [4, 2] },
 ];
 
@@ -77,7 +77,9 @@ function content(type: BlockType): BlockContent {
     case 'dropdown':
       return { type, title: 'Choose', source: { type: 'claude_chats' } };
     case 'files':
-      return { type, title: 'Files', include: ['**/*.log'], preselect: [] };
+      return {
+        type, title: 'Files', include: ['**/*.log'], preselect: [], look_in: { folders: ['project'], subfolder: '' },
+      };
     case 'sharing_button':
       return {
         type, label: 'Share', connection_id: null, prompt_block_id: null, mappings: [], on_success: 'close_window',

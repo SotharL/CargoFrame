@@ -9,12 +9,14 @@ use crate::registry::AppRegistry;
 use crate::session::{self, check_png};
 use crate::share::{self, ShareResult};
 use crate::state::AppState;
-use crate::tools::{self, RuleTest, VariableInfo};
+use crate::tools::{self, FilesPreview, RuleTest, VariableInfo};
 use crate::transfer;
 use crate::windowing;
 use cargoframe_config::{General, Safe};
 use cargoframe_connectors::{Describe, OptionItem};
-use cargoframe_layout::{templates, validate, BlockKind, ConnectionKind, DropdownSource, Layout};
+use cargoframe_layout::{
+    templates, validate, BlockKind, ConnectionKind, DropdownSource, FilesBlock, Layout,
+};
 use cargoframe_rules::Rule;
 use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
@@ -420,6 +422,20 @@ pub async fn test_rule(
             .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
     });
     Ok(tools::test_rule(&rule, folder.as_deref()))
+}
+
+/// What a Files block would find. Without a program, the one of the last capture is used.
+#[tauri::command]
+pub async fn preview_files(
+    state: State<'_, AppState>,
+    block: FilesBlock,
+    program: Option<String>,
+) -> Result<FilesPreview, String> {
+    let program = program
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| state.last_program());
+    // Folder listings can take a moment on a big tree.
+    blocking(move || tools::preview_files(&block, program.as_deref())).await
 }
 
 // ----- safe settings -----

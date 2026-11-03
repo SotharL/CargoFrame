@@ -84,7 +84,36 @@ export type BlockContent =
       on_success: 'close_window' | 'keep_open';
     }
   | { type: 'dropdown'; title: string; source: DropdownSource }
-  | { type: 'files'; title: string; include: string[]; preselect: string[] };
+  | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
+
+/** A folder a Files block can look in, found from the program that had focus. */
+export type LookFolder = 'project' | 'program' | 'above_1' | 'above_2' | 'above_3';
+
+export interface LookIn {
+  /** Empty means the project folder. */
+  folders: LookFolder[];
+  /** A folder inside each of the folders above, such as logs; empty for the folder itself. */
+  subfolder: string;
+}
+
+/** One folder a Files block looked in, and how many files it offered. */
+export interface PlaceFound {
+  label: string;
+  folder: string;
+  exists: boolean;
+  found: number;
+}
+
+/** What a Files block would find, for the builder's live count. */
+export interface FilesPreview {
+  program: string | null;
+  places: PlaceFound[];
+  missing: string[];
+  total: number;
+  ticked: number;
+  truncated: boolean;
+  problem: string | null;
+}
 
 export type Block = { id: string; rect: Rect } & BlockContent;
 
@@ -115,6 +144,8 @@ export interface FilesState {
   entries: FileEntry[];
   truncated: boolean;
   problem: string | null;
+  /** What each folder looked in held; the window says where files came from when there are several. */
+  places: PlaceFound[];
 }
 
 export interface DropdownOption {

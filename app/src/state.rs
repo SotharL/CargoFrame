@@ -27,6 +27,9 @@ pub struct AppState {
     pub warm: Warm,
     /// The last timings, for Settings, General.
     pub timings: Timings,
+    /// The program that had focus at the last capture, so the layout builder can show what a
+    /// Files block would find without asking again. Kept in memory only.
+    last_program: Mutex<Option<String>>,
     /// A capture is being taken; a second shortcut press meanwhile is ignored.
     busy: AtomicBool,
     /// A share is being sent; a second press of a sharing button meanwhile is refused.
@@ -48,6 +51,7 @@ impl AppState {
             store,
             connections,
             paused: AtomicBool::new(false),
+            last_program: Mutex::new(None),
             tray_available,
             sessions: Sessions::new(),
             warm: Warm::new(),
@@ -70,6 +74,20 @@ impl AppState {
             .into_iter()
             .collect();
         self.workspace.sweep(&keep, older_than)
+    }
+
+    /// Remember the program of the capture that was just taken.
+    pub fn set_last_program(&self, program: Option<String>) {
+        if program.is_some() {
+            *self.last_program.lock().unwrap_or_else(|e| e.into_inner()) = program;
+        }
+    }
+
+    pub fn last_program(&self) -> Option<String> {
+        self.last_program
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     pub fn paused(&self) -> bool {

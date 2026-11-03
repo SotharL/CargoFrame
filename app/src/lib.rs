@@ -94,6 +94,7 @@ pub fn run() {
             commands::discard_import,
             commands::list_variables,
             commands::test_rule,
+            commands::preview_files,
             commands::get_safe,
             commands::set_safe,
             commands::test_safe_folder,

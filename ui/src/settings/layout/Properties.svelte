@@ -1,5 +1,6 @@
 <script lang="ts">
   import Field from '../../lib/components/Field.svelte';
+  import LookInEditor from './LookInEditor.svelte';
   import TextAutomation from './TextAutomation.svelte';
   import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Rect, Rule, VariableInfo } from '../../lib/types';
@@ -145,12 +146,13 @@
     {/if}
   {:else if block.type === 'files'}
     <Field label="Title"><input type="text" bind:value={block.title} /></Field>
-    <Field label="Show these files" hint="One pattern per line, relative to the project folder: *.log, logs/**/*.txt">
+    <Field label="Show these files" hint="One pattern per line, relative to each folder looked in: *.log, logs/**/*.txt">
       <textarea rows="3" value={block.include.join('\n')} oninput={(e) => (block.include = lines(e.currentTarget.value))}></textarea>
     </Field>
     <Field label="Tick these by default" hint="One pattern per line. Only files listed above can be ticked.">
       <textarea rows="2" value={block.preselect.join('\n')} oninput={(e) => (block.preselect = lines(e.currentTarget.value))}></textarea>
     </Field>
+    <LookInEditor {block} />
   {:else if block.type === 'sharing_button'}
     <Field label="Button label"><input type="text" bind:value={block.label} placeholder="Share" /></Field>
     {@const target = connectionOf(block.connection_id)}
