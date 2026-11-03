@@ -23,6 +23,7 @@
     { kind: 'google', label: 'Google', blurb: 'Save the screenshot and files to Drive, and optionally log a row in a sheet.' },
     { kind: 'reddit', label: 'Reddit', blurb: 'Post the screenshot to a subreddit you choose.' },
     { kind: 'claude', label: 'Claude', blurb: 'Copy the screenshot and open a chat, so you can paste it into your message.' },
+    { kind: 'slack', label: 'Slack', blurb: 'Post a message with the screenshot and files into a channel or thread.' },
     { kind: 'custom', label: 'Custom API', blurb: 'Send to any web service that has an HTTP API.' },
   ];
 
@@ -36,6 +37,8 @@
         return { kind, name: 'Reddit', enabled: true, client_id: '', redirect_port: 53682 };
       case 'claude':
         return { kind, name: 'Claude', enabled: true, open_with: 'auto', send_automatically: true, extra_wait_seconds: 0 };
+      case 'slack':
+        return { kind, name: 'Slack', enabled: true };
       case 'custom':
         return {
           kind, name: 'My API', enabled: true, base_url: 'https://', auth: { type: 'none' },
@@ -70,6 +73,7 @@
   function secretLabel(c: Connection, name: string): string {
     if (name === 'client_secret') return 'Client secret';
     if (c.kind === 'jira') return c.auth === 'pat' ? 'Personal access token' : 'API token';
+    if (c.kind === 'slack') return 'Bot token (starts with xoxb-)';
     if (c.kind === 'custom') {
       return { bearer: 'Token', header: 'Key', basic: 'Password', query: 'Key', none: 'Key' }[c.auth.type];
     }

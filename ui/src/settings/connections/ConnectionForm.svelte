@@ -62,8 +62,34 @@
     <input type="text" inputmode="numeric" value={String(claude.extra_wait_seconds)}
       oninput={(e) => (claude.extra_wait_seconds = Math.min(30, Math.max(0, Math.floor(Number(e.currentTarget.value)) || 0)))} />
   </Field>
+{:else if value.kind === 'slack'}
+  <p class="quiet">
+    CargoFrame posts as a Slack app you create in your own workspace. Nothing here to fill in: the
+    token you paste below says which workspace.
+  </p>
+  <details class="steps">
+    <summary>How to get the token</summary>
+    <ol>
+      <li>Open <span class="mono">api.slack.com/apps</span> and choose Create New App, From scratch. Pick your workspace.</li>
+      <li>
+        Under OAuth &amp; Permissions, add these Bot Token Scopes:
+        <span class="mono">chat:write</span>, <span class="mono">files:write</span>,
+        <span class="mono">channels:read</span> and <span class="mono">groups:read</span>. Add
+        <span class="mono">chat:write.public</span> too if you want to post in public channels the app has not joined.
+      </li>
+      <li>Choose Install to Workspace. Copy the Bot User OAuth Token, which starts with <span class="mono">xoxb-</span>.</li>
+      <li>Save this connection, then paste the token below.</li>
+      <li>In each channel you post to, type <span class="mono">/invite @</span> and the app's name. Files and private channels need this.</li>
+    </ol>
+  </details>
 {:else if value.kind === 'custom'}
   <CustomForm bind:value />
 {/if}
 
 <Toggle label="Enabled" bind:checked={value.enabled} />
+
+<style>
+  .steps { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
+  .steps summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  .steps ol { margin: 8px 0 2px; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; }
+</style>

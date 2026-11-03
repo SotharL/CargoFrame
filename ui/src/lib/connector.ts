@@ -8,6 +8,7 @@ export const KIND_NAME: Record<KindKey, string> = {
   google: 'Google',
   reddit: 'Reddit',
   claude: 'Claude',
+  slack: 'Slack',
   custom: 'Custom API',
   local: 'This computer',
 };

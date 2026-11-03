@@ -42,6 +42,14 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         files: yes('Pasted into the chat as files (20 at most, 30 MB each), or as text'),
         link: yes('Addresses are typed into the message as written'),
       };
+    case 'slack':
+      return {
+        text: yes('Posted as the message (or the comment on the files)'),
+        dropdown: limited('Only the channel has a list to pick from'),
+        screenshot: yes('Uploaded to the channel as a picture'),
+        files: yes('Uploaded to the channel as one zip'),
+        link: yes('Addresses turn into links by themselves; <, > and & are shown as typed'),
+      };
     default:
       return {
         text: yes('Placed in the request where you write {{prompt}} or {{field}}'),

@@ -59,4 +59,30 @@ describe('Connections page', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(screen.getByText('Claude chats')).toBeTruthy());
   });
+
+  it('adds a Slack connection: setup steps, then a bot token, then it is ready', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Slack/ }));
+    // The steps for getting a token are on the form, with the scopes to give the app.
+    const steps = screen.getByText('How to get the token').closest('details')!;
+    for (const scope of ['chat:write', 'files:write', 'channels:read', 'groups:read']) {
+      expect(steps.textContent).toContain(scope);
+    }
+    expect(steps.textContent).toContain('/invite @');
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Saved. Now add the token below.')).toBeTruthy();
+    expect(screen.getByText('Needs its token')).toBeTruthy();
+    const box = await screen.findByLabelText('Bot token (starts with xoxb-)');
+    await fireEvent.input(box, { target: { value: 'xoxb-secret' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Bot token (starts with xoxb-)' }));
+    expect(await screen.findByText("Stored in your system's password store")).toBeTruthy();
+    expect(document.body.textContent).not.toContain('xoxb-secret');
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByText('Connected')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
+    const saved = await api.listItems('connection');
+    expect(saved.items[0]!.item).toMatchObject({ kind: 'slack', name: 'Slack', enabled: true });
+  });
 });

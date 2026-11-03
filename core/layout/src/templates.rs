@@ -24,7 +24,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 8] = [
+pub const TEMPLATES: [TemplateInfo; 9] = [
     TemplateInfo {
         key: "local-capture",
         name: "Save a capture locally",
@@ -66,6 +66,12 @@ pub const TEMPLATES: [TemplateInfo; 8] = [
         name: "Ask Claude about a capture",
         description: "Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude.",
         service: Some(ConnectionKind::Claude),
+    },
+    TemplateInfo {
+        key: "slack-message",
+        name: "Slack message",
+        description: "Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.",
+        service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
         key: "custom-post",
@@ -347,6 +353,39 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 vec![from_block("chat", "chat")],
             ),
         ],
+        ("slack-message", Some(c)) => vec![
+            shot(10),
+            block(
+                "channel",
+                rect(7, 0, 5, 1),
+                web_list("Channel", c, "channels"),
+            ),
+            block(
+                "message",
+                rect(7, 1, 5, 4),
+                text("Message", TextRole::Plain, SEEN_IN),
+            ),
+            block(
+                "thread",
+                rect(7, 5, 5, 1),
+                text(
+                    "Reply in a thread (message link, optional)",
+                    TextRole::Plain,
+                    "",
+                ),
+            ),
+            block("files", rect(7, 6, 5, 3), files("Attach files")),
+            button(
+                rect(7, 9, 5, 1),
+                "Post to Slack",
+                Some(c),
+                Some("message"),
+                vec![
+                    from_block("channel", "channel"),
+                    from_block("thread", "thread"),
+                ],
+            ),
+        ],
         ("custom-post", Some(c)) => vec![
             shot(8),
             block(
@@ -430,6 +469,7 @@ mod tests {
             ConnectionKind::Google,
             ConnectionKind::Reddit,
             ConnectionKind::Claude,
+            ConnectionKind::Slack,
             ConnectionKind::CustomApi,
         ] {
             assert!(

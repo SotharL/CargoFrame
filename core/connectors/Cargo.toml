@@ -1,6 +1,6 @@
 [package]
 name = "cargoframe-connectors"
-description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, custom APIs)"
+description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, Slack, custom APIs)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

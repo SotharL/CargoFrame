@@ -15,6 +15,7 @@ pub mod oauth;
 pub mod payload;
 pub mod reddit;
 pub mod secrets;
+pub mod slack;
 
 #[cfg(test)]
 mod testkit;
@@ -101,6 +102,7 @@ pub fn build(connection: &Connection) -> Option<Box<dyn Connector>> {
         Settings::Reddit(s) => Box::new(reddit::RedditConnector::new(s.clone())),
         Settings::Google(s) => Box::new(google::GoogleConnector::new(s.clone())),
         Settings::Claude(s) => Box::new(claude::ClaudeConnector::new(s.clone())),
+        Settings::Slack(s) => Box::new(slack::SlackConnector::new(s.clone())),
         Settings::Custom(s) => Box::new(custom::CustomConnector::new(s.clone())),
     })
 }

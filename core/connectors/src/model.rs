@@ -25,6 +25,7 @@ pub enum Settings {
     Google(Google),
     Reddit(Reddit),
     Claude(Claude),
+    Slack(Slack),
     Custom(Custom),
 }
 
@@ -35,6 +36,7 @@ pub enum Kind {
     Google,
     Reddit,
     Claude,
+    Slack,
     Custom,
 }
 
@@ -45,6 +47,7 @@ impl Settings {
             Settings::Google(_) => Kind::Google,
             Settings::Reddit(_) => Kind::Reddit,
             Settings::Claude(_) => Kind::Claude,
+            Settings::Slack(_) => Kind::Slack,
             Settings::Custom(_) => Kind::Custom,
         }
     }
@@ -57,6 +60,7 @@ impl Kind {
             Kind::Google => "Google",
             Kind::Reddit => "Reddit",
             Kind::Claude => "Claude",
+            Kind::Slack => "Slack",
             Kind::Custom => "Custom API",
         }
     }
@@ -68,6 +72,7 @@ impl Kind {
             Kind::Google => &["client_secret", "oauth"],
             Kind::Reddit => &["oauth"],
             Kind::Claude => &[],
+            Kind::Slack => &["token"],
             Kind::Custom => &["secret"],
         }
     }
@@ -77,6 +82,7 @@ impl Kind {
         match self {
             Kind::Jira => &["token"],
             Kind::Google => &["client_secret"],
+            Kind::Slack => &["token"],
             Kind::Reddit | Kind::Claude => &[],
             Kind::Custom => &["secret"],
         }
@@ -170,6 +176,14 @@ impl Default for Claude {
         }
     }
 }
+
+// ----- Slack -----
+
+/// Slack needs nothing but a bot token (kept in the credential store): the token belongs to one
+/// workspace, so there is no address or account to set.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Slack {}
 
 // ----- Custom API -----
 
@@ -289,7 +303,7 @@ pub fn check(c: &Connection) -> Result<(), String> {
                 return Err("Write the client id of your Google OAuth client".into());
             }
         }
-        Settings::Claude(_) => {}
+        Settings::Claude(_) | Settings::Slack(_) => {}
         Settings::Custom(cu) => check_custom(cu)?,
     }
     Ok(())

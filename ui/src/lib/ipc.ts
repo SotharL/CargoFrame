@@ -239,6 +239,7 @@ const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet.', service: 'google' },
   { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit, with a title and text.', service: 'reddit' },
   { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt and hand the screenshot and prompt to Claude.', service: 'claude' },
+  { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
   { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
 ];
 
@@ -294,7 +295,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     phase: updatePhase,
   });
   const TYPED: Record<string, string[]> = {
-    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], custom: ['secret'],
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], custom: ['secret'],
   };
   const OAUTH = new Set(['google', 'reddit']);
   const describeFor = (c: Connection): Describe => {
@@ -315,6 +316,18 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           { id: 'priorities', label: 'Priorities', param: null },
           { id: 'components', label: 'Components of a project', param: 'project key' },
         ],
+      };
+    }
+    if (c.kind === 'slack') {
+      return {
+        summary: 'Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached.',
+        fields: [
+          { key: 'channel', label: 'Channel', hint: 'The app must have been invited to it', list: 'channels' },
+          { key: 'thread', label: 'Reply in a thread', hint: 'A message link or its timestamp', list: null },
+          { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
+          { key: 'title', label: 'Bold first line', hint: '', list: null },
+        ],
+        lists: [{ id: 'channels', label: 'Channels the app can see', param: null }],
       };
     }
     if (c.kind === 'claude') {
@@ -460,7 +473,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           id,
           name: c.name,
           kind: c.kind,
-          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', custom: 'Custom API' }[c.kind],
+          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', custom: 'Custom API' }[c.kind],
           enabled: c.enabled,
           state: stateOf(id, c),
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),

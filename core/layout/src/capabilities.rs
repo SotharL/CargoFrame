@@ -115,6 +115,13 @@ impl Capabilities {
                 files: Capability::limited("Pasting files works on Windows only for now; text files can go inside the message"),
                 link: Capability::yes("Addresses are typed into the message as written"),
             },
+            ConnectionKind::Slack => Self {
+                text: Capability::yes("Posted as the message (or the comment on the files)"),
+                dropdown: Capability::limited("Only the channel has a list to pick from"),
+                screenshot: Capability::yes("Uploaded to the channel as a picture"),
+                files: Capability::yes("Uploaded to the channel as one zip"),
+                link: Capability::yes("Addresses turn into links by themselves; <, > and & are shown as typed"),
+            },
             ConnectionKind::CustomApi => Self::custom(CustomShape::default()),
         }
     }
@@ -162,11 +169,12 @@ impl Capabilities {
 mod tests {
     use super::*;
 
-    const KINDS: [ConnectionKind; 5] = [
+    const KINDS: [ConnectionKind; 6] = [
         ConnectionKind::Jira,
         ConnectionKind::Google,
         ConnectionKind::Reddit,
         ConnectionKind::Claude,
+        ConnectionKind::Slack,
         ConnectionKind::CustomApi,
     ];
 

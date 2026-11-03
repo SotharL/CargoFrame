@@ -300,3 +300,38 @@ release, downloads the installer, checks it, installs it and restarts.
   machine; the flags, the quit handshake and the plan are covered by tests, and the real run is
   the owner's check.
 
+## Phase 11: chat connectors, Slack first (3 Nov 2026)
+
+Item 18 of the owner's feedback: Slack, Discord and Teams. Slack is built first; Discord and Teams
+follow the same shape (a connector, a row in the capability table, a template, a form).
+
+- **A bot token you create, not a sign-in.** Following the plan's decision, Slack uses a Slack app
+  in the person's own workspace: they paste the Bot User OAuth Token (`xoxb-`) once, it is kept
+  in the credential store under `<connection>/token`, and the Connections form shows the five
+  steps to get it (create the app, add four scopes, install, paste, invite the app to the channel).
+  The scopes are `chat:write`, `files:write`, `channels:read` and `groups:read`; `chat:write.public`
+  is optional and lets the app post in public channels it has not joined. Nothing is registered
+  by CargoFrame, so there is no shared client secret to protect.
+- **What a button can fill.** `channel` (a list of the channels the app can see, grouped public
+  and private; a typed `#name` is looked up), `thread` (a message link from "Copy link", or the
+  timestamp), `message` (defaults to the prompt, then the window title) and `title` (an optional
+  bold first line). A thread link also names its channel, so a button may map only the thread; a
+  link into a different channel than the one chosen is refused before anything is sent.
+- **Files.** The screenshot and the zip of the ticked files go through Slack's current upload
+  steps (ask for an address, send the bytes, share them with the message as their comment); the
+  old `files.upload` is gone. With no files the message is a plain `chat.postMessage`. Each step
+  is recorded, so a retry after a failed share never uploads a file twice or posts twice.
+- **Text is escaped.** `&`, `<` and `>` become entities, so captured text cannot write a Slack
+  command such as `<!channel>`. The cost: a person cannot write `<https://…|word>` links by hand.
+  Addresses become links in Slack by themselves.
+- **Failures in words.** Slack answers with HTTP 200 and `ok: false`; each code that matters
+  (`invalid_auth`, `missing_scope` with the scope it needs, `channel_not_found`, `not_in_channel`,
+  `is_archived`, `msg_too_long`, rate limits, Slack's own errors) is turned into a sentence and a
+  failure class: a revoked token asks to reconnect, a rate limit waits, a server problem retries.
+- **Colour and template.** Berry (`--kind-slack`), apart from Jira blue, Google green, Reddit
+  orange, Claude brown and Custom violet. "Slack message" is a ready-made layout: screenshot,
+  channel, message, optional thread link, files, a Post to Slack button.
+- **Still to do for this phase.** Discord (bot token; channel, forum post or thread) and Teams
+  (a Microsoft sign-in through an app registration the owner creates), then "each posts to a test
+  workspace" on the owner's side. Slack has only run against a mock server so far.
+
