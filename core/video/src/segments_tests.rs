@@ -178,7 +178,11 @@ fn joining_needs_segments_and_quotes_every_name() {
     let (list, args) = join(&segs, Path::new("/w/list.txt"), Path::new("/w/out.mp4")).unwrap();
     assert_eq!(
         list,
-        format!("file '{}/it'\\''s.ts'\n", dir.path().display())
+        format!(
+            "file '{}{}it'\\''s.ts'\n",
+            dir.path().display(),
+            std::path::MAIN_SEPARATOR
+        )
     );
     let a: Vec<String> = args
         .iter()
