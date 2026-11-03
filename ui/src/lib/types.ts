@@ -177,6 +177,14 @@ export interface DropdownState {
   message: string | null;
 }
 
+/** What the window knows of the recording of a video capture. */
+export interface VideoClipInfo {
+  width: number;
+  height: number;
+  duration_ms: number;
+  bytes: number;
+}
+
 export interface SessionView {
   session_id: number;
   trigger_id: string;
@@ -188,6 +196,8 @@ export interface SessionView {
   app: { title: string; exe_path: string | null; exe_name: string | null } | null;
   project: { folder: string; name: string; how: string } | null;
   image: { width: number; height: number };
+  /** The recording, for a capture made by a video trigger; absent for a screenshot. */
+  video?: VideoClipInfo | null;
   variables: Record<string, string>;
   texts: Record<string, { value: string; unresolved: string[] }>;
   files: Record<string, FilesState>;

@@ -42,6 +42,15 @@ pub struct ImageView {
     pub height: u32,
 }
 
+/// The recording a video trigger made, as the window needs to know it.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct VideoView {
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub bytes: u64,
+}
+
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 pub struct TextState {
     pub value: String,
@@ -129,6 +138,8 @@ pub struct SessionView {
     pub app: Option<AppView>,
     pub project: Option<ProjectView>,
     pub image: ImageView,
+    /// The recording, for a capture made by a video trigger; `None` for a screenshot.
+    pub video: Option<VideoView>,
     pub variables: BTreeMap<String, String>,
     pub texts: BTreeMap<String, TextState>,
     pub files: BTreeMap<String, FilesState>,
@@ -265,6 +276,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
         app: inputs.app.clone(),
         project: inputs.project.clone(),
         image: inputs.image.clone(),
+        video: None,
         variables: inputs.variables.clone(),
         texts: BTreeMap::new(),
         files: BTreeMap::new(),

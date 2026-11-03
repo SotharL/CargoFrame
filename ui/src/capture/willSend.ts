@@ -36,6 +36,9 @@ export function willSend(
     if (b.type === 'screenshot' && r?.state === 'sent') {
       parts.push(imageEdited ? 'Screenshot (edited)' : 'Screenshot');
     }
+    if (b.type === 'video' && r?.state === 'sent' && view.video) {
+      parts.push(`Video (${(view.video.duration_ms / 1000).toFixed(1)} s, ${formatSize(view.video.bytes)})`);
+    }
   }
   for (const b of blocks) {
     const r = sent(b);

@@ -100,6 +100,11 @@ pub fn problem(_app: &AppHandle, title: &str, body: &str) {
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn problem(_app: &AppHandle, _title: &str, _body: &str) {}
 
+/// A short notice that is not a problem (a recording has started). Shown like `problem`.
+pub fn info(app: &AppHandle, title: &str, body: &str) {
+    problem(app, title, body);
+}
+
 /// "A newer version is available". Clicking it opens Settings, General, where Updates is.
 #[cfg(windows)]
 pub fn update_available(app: &AppHandle, version: &str) {

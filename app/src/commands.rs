@@ -119,6 +119,20 @@ pub fn get_session_image(state: State<'_, AppState>) -> Result<Response, String>
         .ok_or_else(|| "There is no capture to show".to_string())
 }
 
+/// The recording of a video capture, as MP4 bytes (sent raw), for the window to play.
+#[tauri::command]
+pub fn get_session_clip(state: State<'_, AppState>) -> Result<Response, String> {
+    let session = state
+        .sessions
+        .current()
+        .ok_or_else(|| "There is no capture to show".to_string())?;
+    let clip = session
+        .clip
+        .as_ref()
+        .ok_or_else(|| "This capture has no recording".to_string())?;
+    video::read_clip(&clip.path, video::PREVIEW_LIMIT).map(Response::new)
+}
+
 #[tauri::command]
 pub fn close_capture(app: AppHandle) {
     if let Some(win) = app.get_webview_window(windowing::CAPTURE) {

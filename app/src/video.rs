@@ -506,9 +506,45 @@ pub enum RecordingView {
     },
 }
 
+/// The folder (inside the app's data folder) a recording started by a trigger works in. Settings,
+/// Video has its own (`video-test`), so a test never touches a real recording.
+pub fn work_dir(store: &cargoframe_config::Store) -> PathBuf {
+    store.dirs().data().join("video-recording")
+}
+
+/// What a press of a video trigger does.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Step {
+    /// Nothing is recording: start.
+    Start,
+    /// A recording this trigger family started is running: stop it and open the window.
+    Stop,
+    /// Something else is going on; this is what to tell the person.
+    Refuse(&'static str),
+    /// The recording ended by itself: say why (and the next press starts a new one).
+    Report(String),
+}
+
+/// Decide what a press of a video trigger does, from where the recording stands.
+pub fn step(view: &RecordingView, started_by_trigger: bool) -> Step {
+    match view {
+        RecordingView::Idle => Step::Start,
+        RecordingView::Failed { message } if started_by_trigger => Step::Report(message.clone()),
+        RecordingView::Failed { .. } => Step::Start,
+        RecordingView::Recording { .. } if started_by_trigger => Step::Stop,
+        RecordingView::Recording { .. } => {
+            Step::Refuse("A test recording started from Settings is running. Stop it there first.")
+        }
+        RecordingView::Finishing => Step::Refuse("The last recording is still being finished."),
+    }
+}
+
 /// The one recording that can run at a time: started, watched and stopped by commands.
 pub struct Recording {
     slot: Mutex<Slot>,
+    /// The running recording was started by a trigger: it is not stopped after ten minutes (the
+    /// person stops it with the shortcut, and only the last seconds are kept anyway).
+    by_trigger: std::sync::atomic::AtomicBool,
 }
 
 impl Default for Recording {
@@ -521,7 +557,28 @@ impl Recording {
     pub fn new() -> Self {
         Self {
             slot: Mutex::new(Slot::Idle { failure: None }),
+            by_trigger: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Was the running recording started by a video trigger (and not from Settings)?
+    pub fn started_by_trigger(&self) -> bool {
+        self.by_trigger.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Like `start`, for a video trigger.
+    pub fn start_for_trigger(
+        &self,
+        video: &Video,
+        os: Os,
+        session: &Session,
+        work: &Path,
+        keep_secs: u32,
+    ) -> Result<(), String> {
+        self.start(video, os, session, work, keep_secs)?;
+        self.by_trigger
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(())
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Slot> {
@@ -539,6 +596,12 @@ impl Recording {
         keep_secs: u32,
     ) -> Result<(), String> {
         validate(video)?;
+        // a recording started by hand has the ten-minute limit (see `view`)
+        let idle = matches!(&*self.lock(), Slot::Idle { .. });
+        if idle {
+            self.by_trigger
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+        }
         // refuse early, before looking for ffmpeg, so the message is the right one
         match &*self.lock() {
             Slot::Idle { .. } => {}
@@ -600,7 +663,7 @@ impl Recording {
             Slot::Running(a) => (a.recorder.poll(), a.recorder.elapsed()),
         };
         let message = match progress {
-            Ok(p) if elapsed <= MANUAL_LIMIT => {
+            Ok(p) if elapsed <= MANUAL_LIMIT || self.started_by_trigger() => {
                 let Slot::Running(a) = &*slot else {
                     return RecordingView::Idle;
                 };

@@ -34,6 +34,18 @@ describe('willSend', () => {
     expect(willSend(view, button, values, false)).toEqual(['Screenshot', '1 file (18 KB)', 'Prompt', 'Note', 'Jira project']);
   });
 
+  it('lists the recording of a video capture, with its length and size, where the picture would be', async () => {
+    const { view, button } = await viewFor('slack', (b) => { b.prompt_block_id = 'prompt'; });
+    view.layout!.blocks = view.layout!.blocks.filter((b) => b.type !== 'screenshot');
+    view.layout!.blocks.unshift({ id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 8 } });
+    view.video = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 };
+    view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('slack'), 'slack');
+    expect(willSend(view, button, initialValues(view), false)[0]).toBe('Video (9.5 s, 3.0 MB)');
+    // where video cannot go, it is not listed
+    view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('teams'), 'teams');
+    expect(willSend(view, button, initialValues(view), false).join()).not.toContain('Video');
+  });
+
   it('says when the picture was edited and counts every ticked file', async () => {
     const { view, button } = await viewFor('jira', (b) => { b.prompt_block_id = 'prompt'; });
     const values = initialValues(view);

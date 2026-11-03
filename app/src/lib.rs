@@ -78,6 +78,7 @@ pub fn run() {
             commands::open_config_folder,
             commands::get_session,
             commands::get_session_image,
+            commands::get_session_clip,
             commands::close_capture,
             commands::edit_layout,
             commands::open_settings,

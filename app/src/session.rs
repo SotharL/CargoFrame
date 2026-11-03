@@ -11,16 +11,31 @@ use cargoframe_rules::{run_all, FsFiles, Rule};
 use cargoframe_window::files::{self, Limits, Scan};
 use cargoframe_window::places;
 use cargoframe_window::vars::{self, Moment};
-use cargoframe_window::view::{self, AppView, ImageView, LayoutProblem, ProjectView, SessionView};
+use cargoframe_window::view::{
+    self, AppView, ImageView, LayoutProblem, ProjectView, SessionView, VideoView,
+};
 use chrono::{Datelike, Local, Timelike};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+/// The recording of a capture made by a video trigger, kept in the capture's own folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clip {
+    pub path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub bytes: u64,
+}
+
 pub struct Session {
-    /// The screenshot, PNG-encoded for speed.
+    /// The screenshot, PNG-encoded for speed. For a video capture it is the picture taken when
+    /// the recording was stopped, used for the context (the program in focus) and as a poster.
     pub png: Vec<u8>,
     pub view: SessionView,
+    /// The recording, for a capture made by a video trigger.
+    pub clip: Option<Clip>,
     /// The picture as the person edited it (crop, drawings), sent by the window just before a
     /// share. Replaced each time; `None` while the picture is untouched.
     edited: Mutex<Option<Vec<u8>>>,
@@ -40,10 +55,23 @@ impl Session {
         Self {
             png,
             view,
+            clip: None,
             edited: Mutex::new(None),
             files_root,
             dir: Mutex::new(None),
         }
+    }
+
+    /// This capture is a recording: tell the window about it.
+    pub fn with_clip(mut self, clip: Clip) -> Self {
+        self.view.video = Some(VideoView {
+            width: clip.width,
+            height: clip.height,
+            duration_ms: clip.duration_ms,
+            bytes: clip.bytes,
+        });
+        self.clip = Some(clip);
+        self
     }
 
     /// Read the files from another folder than the project folder (see `files_root`).
@@ -210,6 +238,8 @@ pub enum PrepareError {
     Config(String),
     #[error("{0}")]
     Capture(String),
+    #[error("{0}")]
+    Clip(String),
 }
 
 fn mode_of(mode: CaptureMode) -> cap::Mode {
@@ -218,6 +248,71 @@ fn mode_of(mode: CaptureMode) -> cap::Mode {
         CaptureMode::Display => cap::Mode::Display,
         CaptureMode::AllDisplays => cap::Mode::AllDisplays,
     }
+}
+
+/// The name of the recording inside a capture's own folder.
+pub const CLIP_NAME: &str = "recording.mp4";
+
+/// What a finished recording is, as far as the window needs to know.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClipInfo {
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub bytes: u64,
+}
+
+/// A picture taken now, when a recording has just been stopped: what the program in focus is
+/// gives the capture its context, and the picture is the poster.
+pub fn capture_for_video(trigger: &Trigger) -> Result<cap::Captured, PrepareError> {
+    cap::capture(mode_of(trigger.capture)).map_err(|e| PrepareError::Capture(e.to_string()))
+}
+
+/// A capture made by a video trigger: everything `prepare_with` does, and the recording moved
+/// into the capture's own folder (so it goes when the capture is closed, and a recording started
+/// meanwhile cannot take it away).
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_video(
+    store: &Store,
+    connections: &Connections,
+    workspace: &Workspace,
+    trigger_id: &str,
+    trigger: &Trigger,
+    captured: cap::Captured,
+    now: Moment,
+    id: u64,
+    clip: &Path,
+    info: ClipInfo,
+) -> Result<Session, PrepareError> {
+    let session = prepare_with(store, connections, trigger_id, trigger, captured, now, id)?;
+    let moved = session
+        .with_dir(workspace, |dir| {
+            let target = dir.path().join(CLIP_NAME);
+            move_file(clip, &target).map(|()| target)
+        })
+        .map_err(|e| {
+            PrepareError::Clip(format!(
+                "CargoFrame could not make a folder for the recording: {e}"
+            ))
+        })?
+        .map_err(|e| PrepareError::Clip(format!("CargoFrame could not keep the recording: {e}")))?;
+    Ok(session.with_clip(Clip {
+        path: moved,
+        width: info.width,
+        height: info.height,
+        duration_ms: info.duration_ms,
+        bytes: info.bytes,
+    }))
+}
+
+/// Move a file: a rename where it can be, a copy and a delete across drives.
+fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to)?;
+    let _ = std::fs::remove_file(from);
+    Ok(())
 }
 
 pub fn now() -> Moment {
@@ -463,6 +558,97 @@ pub(crate) mod tests {
         minute: 0,
         second: 1,
     };
+
+    #[test]
+    fn a_video_session_keeps_the_recording_in_its_own_folder_and_tells_the_window_about_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        let layout = Layout {
+            id: String::new(),
+            name: "Clip".into(),
+            blocks: vec![Block {
+                id: "clip".into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 8,
+                    h: 8,
+                },
+                kind: BlockKind::Video,
+            }],
+        };
+        store.save_item(Kind::Layouts, "clip", &layout).unwrap();
+        let trigger = Trigger {
+            name: "Clip".into(),
+            media: cargoframe_config::Media::Video,
+            layout_id: Some("clip".into()),
+            ..Trigger::default()
+        };
+        let work = dir.path().join("work");
+        std::fs::create_dir_all(&work).unwrap();
+        let source = work.join("test-clip.mp4");
+        std::fs::write(&source, b"not really a video").unwrap();
+        let workspace = Workspace::new(dir.path().join("captures"));
+
+        let s = prepare_video(
+            &store,
+            &no_connections(),
+            &workspace,
+            "cliptrig",
+            &trigger,
+            fake_capture(None),
+            NOW,
+            3,
+            &source,
+            ClipInfo {
+                width: 1280,
+                height: 720,
+                duration_ms: 9_500,
+                bytes: 18,
+            },
+        )
+        .unwrap();
+
+        let clip = s.clip.clone().expect("the session has the recording");
+        assert_eq!(clip.path.file_name().unwrap(), CLIP_NAME);
+        assert_eq!(std::fs::read(&clip.path).unwrap(), b"not really a video");
+        assert!(!source.exists(), "the recording moved, it was not copied");
+        // inside the capture's own folder, so it goes when the capture is closed
+        assert_eq!(clip.path.parent().map(Path::to_path_buf), s.dir_path());
+        let video = s.view.video.clone().expect("the window is told");
+        assert_eq!(
+            (video.width, video.height, video.duration_ms),
+            (1280, 720, 9_500)
+        );
+        let json = serde_json::to_value(&s.view).unwrap();
+        assert_eq!(json["video"]["duration_ms"], 9_500);
+        assert_eq!(json["layout"]["blocks"][0]["type"], "video");
+
+        let folder = s.dir_path().unwrap();
+        drop(s);
+        assert!(
+            !folder.exists(),
+            "closing the capture removes the recording"
+        );
+    }
+
+    #[test]
+    fn a_screenshot_session_has_no_video() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        let s = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &Trigger::default(),
+            fake_capture(None),
+            NOW,
+            1,
+        )
+        .unwrap();
+        assert!(s.clip.is_none() && s.view.video.is_none());
+        assert!(serde_json::to_value(&s.view).unwrap()["video"].is_null());
+    }
 
     #[test]
     fn a_session_combines_capture_layout_variables_and_files() {

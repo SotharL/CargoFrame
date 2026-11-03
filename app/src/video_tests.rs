@@ -745,3 +745,137 @@ fn a_mark_the_page_drew_is_checked_kept_and_laid_over_the_copy() {
     assert!(!work.join(DRAWN_MARK).exists());
     store_mark(&work, None).unwrap();
 }
+
+// ----- a press of a video trigger -----
+
+#[test]
+fn a_press_starts_when_nothing_records_and_stops_what_a_trigger_started() {
+    let recording = RecordingView::Recording {
+        elapsed_ms: 4_000,
+        buffered_ms: 4_000,
+        squeezed: false,
+        keep_secs: 10,
+    };
+    assert_eq!(step(&RecordingView::Idle, false), Step::Start);
+    assert_eq!(step(&RecordingView::Idle, true), Step::Start);
+    assert_eq!(step(&recording, true), Step::Stop);
+    assert!(matches!(step(&recording, false), Step::Refuse(m) if m.contains("Settings")));
+    assert!(matches!(
+        step(&RecordingView::Finishing, true),
+        Step::Refuse(_)
+    ));
+}
+
+#[test]
+fn a_recording_that_ended_by_itself_is_reported_to_the_trigger_that_started_it() {
+    let failed = RecordingView::Failed {
+        message: "the screen could not be read".into(),
+    };
+    assert_eq!(
+        step(&failed, true),
+        Step::Report("the screen could not be read".into())
+    );
+    // a failure left by a test in Settings is no business of a trigger: it just starts
+    assert_eq!(step(&failed, false), Step::Start);
+}
+
+#[test]
+fn a_start_for_a_trigger_that_fails_leaves_nothing_marked_as_a_trigger_recording() {
+    let rec = Recording::new();
+    assert!(!rec.started_by_trigger());
+    let video = Video {
+        ffmpeg: Some("/no/such/ffmpeg".into()),
+        ..Video::default()
+    };
+    let session = Session {
+        wayland: false,
+        display: None,
+    };
+    let dir = tempfile::tempdir().unwrap();
+    // ffmpeg is not there, so neither start works, and neither leaves the flag set
+    assert!(rec
+        .start_for_trigger(&video, Os::Linux, &session, dir.path(), 5)
+        .is_err());
+    assert!(!rec.started_by_trigger());
+}
+
+#[test]
+fn a_recording_from_a_trigger_becomes_a_session_whose_clip_plays_back() {
+    use crate::session::tests::{fake_capture, no_connections, NOW};
+    use crate::session::{prepare_video, ClipInfo};
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    let Some(ffprobe) = locate("ffprobe", &[]) else {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    };
+    let Some(screen) = Screen::start(88) else {
+        eprintln!("skipped: no virtual X screen (Xvfb) to record");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("video-recording");
+    let f = Found {
+        ffmpeg,
+        ffprobe: ffprobe.clone(),
+        ..found(&[VideoEncoder::Software], &[VideoCapture::X11])
+    };
+    let session = Session {
+        wayland: false,
+        display: Some(screen.display.clone()),
+    };
+    let choice = Choice {
+        capture: VideoCapture::X11,
+        encoder: VideoEncoder::Software,
+    };
+    let video = Video {
+        fps: 10,
+        ..Video::default()
+    };
+    let rec = Recording::new();
+    rec.start_with(f, choice, &video, &session, &work, 2)
+        .unwrap();
+    rec.by_trigger
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(3_500));
+    // the next press stops it
+    assert_eq!(step(&rec.view(), rec.started_by_trigger()), Step::Stop);
+    let trial = rec.stop();
+    assert!(trial.ok, "{}", trial.message);
+
+    let store = cargoframe_config::Store::new(cargoframe_config::Dirs::under(dir.path()));
+    let workspace = cargoframe_bundle::Workspace::new(dir.path().join("captures"));
+    let trigger = cargoframe_config::Trigger {
+        media: cargoframe_config::Media::Video,
+        ..cargoframe_config::Trigger::default()
+    };
+    let made = prepare_video(
+        &store,
+        &no_connections(),
+        &workspace,
+        "t",
+        &trigger,
+        fake_capture(None),
+        NOW,
+        1,
+        std::path::Path::new(trial.clip.as_deref().expect("a clip")),
+        ClipInfo {
+            width: trial.width,
+            height: trial.height,
+            duration_ms: trial.clip_ms,
+            bytes: trial.clip_bytes,
+        },
+    )
+    .unwrap();
+    let clip = made.clip.clone().expect("the session has the clip");
+    // the recording work folder keeps nothing a new recording could wipe: the clip moved
+    assert!(!work.join(TRIAL_CLIP).exists());
+    let info = cargoframe_video::probe(&ffprobe, &clip.path).unwrap();
+    assert_eq!((info.width, info.height), (640, 480));
+    assert_eq!(info.duration_ms, clip.duration_ms);
+    // and what `get_session_clip` sends is the whole file
+    let bytes = read_clip(&clip.path, PREVIEW_LIMIT).unwrap();
+    assert_eq!(bytes.len() as u64, clip.bytes);
+}

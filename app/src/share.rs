@@ -384,12 +384,23 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         return Err(reasons);
     }
 
-    let png = if !button.send.screenshot {
-        None
-    } else if req.image_edited {
-        Some(session.image_to_send())
-    } else {
-        Some(session.png.clone())
+    // A video capture sends its recording where a screenshot capture sends the picture.
+    let image = match &session.clip {
+        Some(clip) if button.send.screenshot => match video_attachment(clip, kind) {
+            Ok(a) => Some(a),
+            Err(why) => return Err(vec![why]),
+        },
+        Some(_) => None,
+        None if !button.send.screenshot => None,
+        None => Some(Attachment {
+            name: "screenshot.png".into(),
+            mime: "image/png".into(),
+            data: if req.image_edited {
+                session.image_to_send()
+            } else {
+                session.png.clone()
+            },
+        }),
     };
     let title = view
         .app
@@ -399,11 +410,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .unwrap_or_else(|| "Screen".to_string());
     let payload = Payload {
         title,
-        image: png.map(|data| Attachment {
-            name: "screenshot.png".into(),
-            mime: "image/png".into(),
-            data,
-        }),
+        image,
         files_zip: None,
         local: None,
         inline_files: Vec::new(),
@@ -435,6 +442,43 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         send: button.send,
         close: button.on_success == OnSuccess::CloseWindow,
         notes: Vec::new(),
+    })
+}
+
+/// The largest recording CargoFrame reads into memory to send (the services have limits of
+/// their own, which they report when a file is too big).
+pub const MAX_VIDEO_BYTES: u64 = 100 * 1024 * 1024;
+
+/// The recording of a video capture as the attachment a connector sends, or why it cannot go to
+/// this destination.
+fn video_attachment(
+    clip: &crate::session::Clip,
+    kind: Option<cargoframe_layout::ConnectionKind>,
+) -> Result<Attachment, String> {
+    if let Some(kind) = kind {
+        let caps = cargoframe_layout::Capabilities::for_kind(kind, cfg!(windows));
+        if !caps.video.works() {
+            return Err(format!(
+                "This destination cannot take a video: {}",
+                caps.video.note
+            ));
+        }
+    }
+    let size = fs::metadata(&clip.path)
+        .map(|m| m.len())
+        .map_err(|_| "The recording is no longer there: record it again".to_string())?;
+    if size > MAX_VIDEO_BYTES {
+        return Err(format!(
+            "The recording is {} MB and CargoFrame sends up to {} MB: record a shorter one, or lower the picture size in Settings, Video",
+            size / (1024 * 1024),
+            MAX_VIDEO_BYTES / (1024 * 1024),
+        ));
+    }
+    let data = fs::read(&clip.path).map_err(|e| format!("The recording could not be read: {e}"))?;
+    Ok(Attachment {
+        name: crate::session::CLIP_NAME.into(),
+        mime: "video/mp4".into(),
+        data,
     })
 }
 
@@ -683,9 +727,13 @@ fn build_keep_zip(
     // The picture is left out when the button's rules leave it out.
     if let Some(image) = &p.payload.image {
         items.push(Item {
-            name: "screenshot.png".into(),
+            name: image.name.clone(),
             source: Source::Bytes(image.data.clone()),
-            kind: "screenshot",
+            kind: if image.mime.starts_with("video/") {
+                "video"
+            } else {
+                "screenshot"
+            },
         });
     }
     items.push(Item {
@@ -1936,6 +1984,118 @@ mod tests {
         // No leftovers next to the zip.
         let files: Vec<_> = fs::read_dir(&dir).unwrap().flatten().collect();
         assert_eq!(files.len(), 1);
+    }
+
+    /// Turn the capture of a test world into a video capture whose recording holds `bytes`.
+    fn make_video(w: &mut World, bytes: &[u8]) {
+        let path = w.out.path().join("recording.mp4");
+        fs::write(&path, bytes).unwrap();
+        let view = w.session.view.clone();
+        w.session = std::mem::replace(&mut w.session, Session::new(Vec::new(), view)).with_clip(
+            crate::session::Clip {
+                path,
+                width: 1280,
+                height: 720,
+                duration_ms: 9_000,
+                bytes: bytes.len() as u64,
+            },
+        );
+    }
+
+    #[test]
+    fn a_video_capture_saved_locally_keeps_the_recording_where_the_picture_would_be() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let names = zip_names(&path);
+        assert!(names.contains(&"recording.mp4".to_string()), "{names:?}");
+        assert!(!names.contains(&"screenshot.png".to_string()), "{names:?}");
+        assert!(zip_text(&path, "recording.mp4").starts_with("MP4 BYTES"));
+        assert!(zip_text(&path, "manifest.json").contains("\"video\""));
+    }
+
+    #[test]
+    fn a_video_capture_leaves_the_recording_out_when_the_button_leaves_the_picture_out() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        set_rules(
+            &mut w,
+            SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let names = zip_names(&path);
+        assert!(!names.contains(&"recording.mp4".to_string()), "{names:?}");
+        assert!(!names.contains(&"screenshot.png".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn a_video_is_not_sent_to_a_destination_that_cannot_take_one_and_the_reason_is_given() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        set_safe(&w, None, 0);
+        // the test world's own destination is a Custom API connection
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(
+            reasons.iter().any(|m| m.contains("cannot take a video")),
+            "{reasons:?}"
+        );
+        assert!(w.server.requests().is_empty(), "nothing was sent");
+
+        use_claude(&mut w, json!({}));
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(
+            reasons
+                .iter()
+                .any(|m| m.contains("Claude cannot watch a video")),
+            "{reasons:?}"
+        );
+        assert!(w.deliver.seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_recording_over_the_limit_is_refused_before_anything_is_read() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        // a sparse file: the size is what counts, nothing is written
+        let big = w.out.path().join("big.mp4");
+        let f = fs::File::create(&big).unwrap();
+        f.set_len(MAX_VIDEO_BYTES + 1).unwrap();
+        drop(f);
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = big;
+        w.session.clip = Some(clip);
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(reasons[0].contains("record a shorter one"), "{reasons:?}");
     }
 
     #[test]

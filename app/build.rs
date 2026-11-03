@@ -11,6 +11,7 @@ fn main() {
             "open_config_folder",
             "get_session",
             "get_session_image",
+            "get_session_clip",
             "close_capture",
             "edit_layout",
             "open_settings",

@@ -614,3 +614,29 @@ this part is what layouts, triggers and the sending table need to say first.
   Reddit, Teams, Claude and Custom API no, each with the reason. Saving a zip keeps it as `recording.mp4`.
   These are claims about what the connectors can carry; the sending itself is part of the next parts, and
   the real posts to Slack, Discord and Jira stay on the owner's list.
+
+### Phase 12, part 11: a trigger that records, and a capture window that plays the clip (3 Nov 2026)
+
+A video trigger now does what its name says. These are the choices; the recommended answer was taken wherever
+there was one.
+
+- **The first press starts recording, the next press stops it** and opens the CargoFrame window with the clip.
+  The shortcut is the same both times, so there is nothing to remember; the notice that appears on the first press
+  says how many seconds are kept ("only the last 30 seconds").
+- **A recording started by a trigger has no ten-minute limit,** because it is stopped by hand; the 30-second
+  rolling buffer in Settings still decides what is kept. A recording started from Settings keeps its ten minutes.
+- **The tray has "Stop recording and discard"** for when the person starts by mistake: nothing is opened, the clip is deleted.
+- **A second press while a capture is open or being prepared does nothing** (as for a screenshot trigger);
+  a recording that stopped by itself is reported once, and the next press starts again.
+- **The clip is moved into the capture's own temporary folder,** and goes with it when the window closes
+  (`recording.mp4`, deleted on drop like the screenshot). Nothing stays in the work folder.
+- **The window plays the clip in a Video block** with its length, size and weight. If the window's web view
+  cannot play it (H.264 on some Linux systems), the block says so and the clip is still sent.
+- **It is sent through the same attachment as the picture,** named `recording.mp4`; so Slack, Discord, Jira and
+  Google Drive carry it with the code they already have. The button's "send the capture" switch decides.
+- **A destination that cannot take a video is not sent one,** and the reason from the capability table is shown
+  in the window and in the result (Reddit, Teams, Claude, Custom API).
+- **A recording over 100 MB is refused before it is read,** with the size in the message. Discord's and Jira's own
+  limits are not guessed: the service answers and its answer is shown.
+- **Not in this part:** editing in the capture window (trim, crop, mark are in Settings only so far), a ready-made
+  layout for video, per-connection size hints. They are the next parts.

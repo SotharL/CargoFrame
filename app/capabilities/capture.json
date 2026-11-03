@@ -8,6 +8,7 @@
   "permissions": [
     "allow-get-session",
     "allow-get-session-image",
+    "allow-get-session-clip",
     "allow-close-capture",
     "allow-edit-layout",
     "allow-app-info",

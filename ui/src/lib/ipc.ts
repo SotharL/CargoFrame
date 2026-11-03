@@ -33,6 +33,8 @@ export interface Api {
   getSession(): Promise<SessionView>;
   /** The screenshot as a PNG file. */
   getSessionImage(): Promise<Blob>;
+  /** The recording of a video capture (MP4). */
+  getSessionClip(): Promise<Blob>;
   closeCapture(): Promise<void>;
   editLayout(layoutId: string | null): Promise<void>;
   /** Called when a new capture replaces the one shown. Returns a function that stops listening. */
@@ -156,6 +158,10 @@ async function tauriApi(): Promise<Api> {
     getSessionImage: async () => {
       const bytes = await invoke<ArrayBuffer>('get_session_image');
       return new Blob([bytes], { type: 'image/png' });
+    },
+    getSessionClip: async () => {
+      const bytes = await invoke<ArrayBuffer>('get_session_clip');
+      return new Blob([bytes], { type: 'video/mp4' });
     },
     closeCapture: () => invoke('close_capture'),
     editLayout: (layoutId) => invoke('edit_layout', { layoutId }),
@@ -452,6 +458,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     openConfigFolder: async () => {},
     getSession: async () => (await import('../capture/demo')).demoSession(),
     getSessionImage: async () => (await import('../capture/demo')).demoImage(),
+    getSessionClip: async () => new Blob([new Uint8Array(16)], { type: 'video/mp4' }),
     closeCapture: async () => {},
     editLayout: async () => {},
     onSessionChanged: async () => () => {},

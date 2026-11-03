@@ -4,6 +4,7 @@
   import { getApi, type Api } from '../lib/ipc';
   import type { Block, SessionView, ShareResult } from '../lib/types';
   import ScreenshotBlock from './blocks/ScreenshotBlock.svelte';
+  import VideoBlock from './blocks/VideoBlock.svelte';
   import TextBlock from './blocks/TextBlock.svelte';
   import DropdownBlock from './blocks/DropdownBlock.svelte';
   import FilesBlock from './blocks/FilesBlock.svelte';
@@ -181,7 +182,11 @@
             {#if b.type === 'screenshot' && image}
               <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
             {:else if b.type === 'video'}
-              <p class="quiet videonote">The recording of a video trigger appears here.</p>
+              {#if view.video}
+                {#key view.session_id}<VideoBlock info={view.video} />{/key}
+              {:else}
+                <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
+              {/if}
             {:else if b.type === 'text'}
               <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
             {:else if b.type === 'dropdown' && view.dropdowns[b.id]}

@@ -12,6 +12,7 @@ use tauri::{
 const ID_OPEN: &str = "open_settings";
 const ID_PAUSE: &str = "pause";
 const ID_QUIT: &str = "quit";
+const ID_STOP_RECORDING: &str = "stop_recording";
 const ID_CAPTURE_PREFIX: &str = "capture:";
 const TRAY_ID: &str = "main";
 
@@ -26,6 +27,22 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         CheckMenuItem::with_id(app, ID_PAUSE, "Pause triggers", true, paused, None::<&str>)?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit CargoFrame", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
+    // while a video trigger is recording, a way to throw the recording away
+    let recording_now = app.try_state::<AppState>().is_some_and(|s| {
+        s.recording.started_by_trigger()
+            && matches!(
+                s.recording.view(),
+                crate::video::RecordingView::Recording { .. }
+            )
+    });
+    let stop_recording = MenuItem::with_id(
+        app,
+        ID_STOP_RECORDING,
+        "Recording: stop and discard it",
+        true,
+        None::<&str>,
+    )?;
+    let sep_recording = PredefinedMenuItem::separator(app)?;
 
     let mut captures = Vec::new();
     if let Some(state) = app.try_state::<AppState>() {
@@ -52,6 +69,10 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         }
     }
     let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = Vec::new();
+    if recording_now {
+        items.push(&stop_recording);
+        items.push(&sep_recording);
+    }
     for c in &captures {
         items.push(c);
     }
@@ -98,6 +119,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
                 }
             }
             ID_QUIT => app.exit(0),
+            ID_STOP_RECORDING => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.recording.cancel();
+                    tracing::info!("recording discarded from the tray");
+                }
+                refresh_menu(app);
+            }
             other => {
                 if let Some(trigger_id) = other.strip_prefix(ID_CAPTURE_PREFIX) {
                     triggers::run(app, trigger_id.to_string());

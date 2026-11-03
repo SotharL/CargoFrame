@@ -57,7 +57,7 @@ those is true for each piece.
 | 2 Capture and window | Triggers, capture, CargoFrame window, themes | Done; Windows, X11 and the Wayland portal are implemented, Wayland is untested |
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
 | 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, Connections page, share flow | Done against mock servers |
-| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); the layout block, editor window, shortcut and sharing are not built |
+| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block, a trigger that makes a video (press to start, press to stop), the clip played and sent from the CargoFrame window. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); editing in the capture window, a ready-made video layout and per-connection size hints are not built |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
 
 ## What the owner needs to do before calling V1 solid
@@ -81,6 +81,11 @@ those is true for each piece.
    handles of the timeline under it, drag the crop box, and click on the picture to place the drawn
    mark and give it a text. Try Capture = Desktop Duplication and an NVIDIA/Intel/AMD encoder if you have one. Write
    what worked and what each cost into the S9 table in `docs/spikes.md`.
+   Video trigger: on the Triggers page make a trigger with Makes = Video (and a layout with a Video block and a
+   sharing button), press its shortcut, do something on the screen, press it again; the window should open
+   with the clip playing. Send it to Slack, Google Drive, Jira and Discord and write down which size limits
+   you hit; try Reddit/Teams/Claude to see the reason shown. Press the shortcut once and use the tray's "Stop
+   recording and discard".
 7. Before making the repository public: the list at the end of `docs/signing.md` and in
    `docs/security.md`.
 
