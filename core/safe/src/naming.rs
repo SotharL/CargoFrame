@@ -87,9 +87,7 @@ pub fn custom_zip_file_name(typed: &str) -> Option<String> {
         .to_string();
     if stem.chars().count() > MAX_CUSTOM_STEM {
         stem = stem.chars().take(MAX_CUSTOM_STEM).collect();
-        stem = stem
-            .trim_end_matches(|c: char| c == ' ' || c == '.')
-            .to_string();
+        stem = stem.trim_end_matches([' ', '.']).to_string();
     }
     if stem.is_empty() {
         return None;

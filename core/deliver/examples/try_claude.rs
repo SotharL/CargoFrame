@@ -16,7 +16,9 @@ use std::time::{Duration, Instant};
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let Some(chat) = args.first() else {
-        eprintln!("usage: try_claude <chat link | new> [--browser] [--no-enter] [--extra N] [--no-file]");
+        eprintln!(
+            "usage: try_claude <chat link | new> [--browser] [--no-enter] [--extra N] [--no-file]"
+        );
         std::process::exit(2);
     };
     let flag = |name: &str| args.iter().any(|a| a == name);
@@ -52,8 +54,11 @@ fn main() {
     let mut files = vec![shot];
     if !flag("--no-file") {
         let log = dir.join("test-log.txt");
-        std::fs::write(&log, "CargoFrame delivery test file.\nLine 2: this is only a test.\n")
-            .expect("test file");
+        std::fs::write(
+            &log,
+            "CargoFrame delivery test file.\nLine 2: this is only a test.\n",
+        )
+        .expect("test file");
         files.push(log);
     }
 
@@ -77,14 +82,20 @@ fn main() {
                 let now = match cargoframe_capture::focused_app() {
                     Ok(Some(a)) => format!(
                         "{:?} \"{}\"",
-                        a.exe_path.as_deref().and_then(|p| p.file_name()).unwrap_or_default(),
+                        a.exe_path
+                            .as_deref()
+                            .and_then(|p| p.file_name())
+                            .unwrap_or_default(),
                         a.title
                     ),
                     Ok(None) => "(nothing)".into(),
                     Err(e) => format!("(error: {e})"),
                 };
                 if now != last {
-                    println!("  {:>5.1}s  in front: {now}", started.elapsed().as_secs_f32());
+                    println!(
+                        "  {:>5.1}s  in front: {now}",
+                        started.elapsed().as_secs_f32()
+                    );
                     last = now;
                 }
                 std::thread::sleep(Duration::from_millis(150));
@@ -125,7 +136,11 @@ fn write_png(path: &std::path::Path) {
     for y in 0..h {
         for x in 0..w {
             let stripe = (x / 20 + y / 20) % 2 == 0;
-            data.extend_from_slice(if stripe { &[30, 110, 220] } else { &[250, 190, 40] });
+            data.extend_from_slice(if stripe {
+                &[30, 110, 220]
+            } else {
+                &[250, 190, 40]
+            });
         }
     }
     let file = std::fs::File::create(path).expect("png file");

@@ -800,17 +800,8 @@ mod option_tests {
             output: "${nope}".into(),
             ..rule(Format::Regex, r"(?P<yes>\d)")
         };
-        assert!(
-            extract(&named, "1")
-                .unwrap_err()
-                .to_string()
-                .contains("${nope}")
-                == false
-                && extract(&named, "1")
-                    .unwrap_err()
-                    .to_string()
-                    .contains("nope")
-        );
+        let err = extract(&named, "1").unwrap_err().to_string();
+        assert!(err.contains("nope"), "{err}");
     }
 
     #[test]

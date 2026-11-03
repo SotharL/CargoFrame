@@ -233,26 +233,30 @@ impl LookIn {
 
     /// The subfolder as a clean relative path with `/` separators: `None` when none is set,
     /// `Err` when it is not a plain relative folder (absolute, drive letter, `..`).
-    pub fn clean_subfolder(&self) -> Result<Option<String>, ()> {
+    pub fn clean_subfolder(&self) -> Result<Option<String>, NotASubfolder> {
         clean_subfolder(&self.subfolder)
     }
 }
 
+/// The text is not a plain relative folder: it could point outside the folder it is joined to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotASubfolder;
+
 /// `logs`, `\build\logs\` or `./logs` become `logs`, `build/logs`, `logs`. Anything that could
 /// point outside the folder it is joined to is refused.
-pub fn clean_subfolder(raw: &str) -> Result<Option<String>, ()> {
+pub fn clean_subfolder(raw: &str) -> Result<Option<String>, NotASubfolder> {
     let raw = raw.trim();
     if raw.is_empty() {
         return Ok(None);
     }
     if raw.contains('\0') || raw.contains(':') || raw.starts_with(['/', '\\']) {
-        return Err(());
+        return Err(NotASubfolder);
     }
     let mut parts = Vec::new();
     for part in raw.split(['/', '\\']) {
         match part.trim() {
             "" | "." => {}
-            ".." => return Err(()),
+            ".." => return Err(NotASubfolder),
             p => parts.push(p.to_string()),
         }
     }
@@ -402,7 +406,7 @@ mod serde_tests {
             "a:b",
             "x\0y",
         ] {
-            assert_eq!(ok(bad), Err(()), "{bad:?}");
+            assert_eq!(ok(bad), Err(NotASubfolder), "{bad:?}");
         }
     }
 
