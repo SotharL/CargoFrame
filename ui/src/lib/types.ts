@@ -354,6 +354,15 @@ export interface VideoTools {
   problem: string | null;
 }
 
+/** What "Export a copy" does with the test clip (mirrors app/src/video.rs `TestEdit`). */
+export interface VideoTestEdit {
+  start_ms: number;
+  end_ms: number | null;
+  crop: { x: number; y: number; w: number; h: number } | null;
+  /** Lay a red square over the whole clip, to check that marks are drawn. */
+  mark: boolean;
+}
+
 /** A recording started with "Record until I stop". */
 export type VideoRecording =
   | { state: 'idle' }

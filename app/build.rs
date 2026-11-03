@@ -49,6 +49,7 @@ fn main() {
             "get_video_recording",
             "stop_video_recording",
             "get_video_test_clip",
+            "export_video_test",
             "open_video_test",
             "pick_folder",
             "list_connections",

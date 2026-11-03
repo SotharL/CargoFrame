@@ -8,8 +8,8 @@
 
 use cargoframe_config::{Video, VideoCapture, VideoEncoder};
 use cargoframe_video::recorder::{self, Capture, Config, Encoder, Recorder, X264Preset};
-use cargoframe_video::{ask, locate_in, probe, Window};
-use serde::Serialize;
+use cargoframe_video::{ask, locate_in, plan, probe, run, Crop, Edit, Overlay, Window};
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
@@ -18,6 +18,8 @@ use std::time::{Duration, Instant};
 pub const TRIAL_SECONDS: u64 = 5;
 /// The name of the test clip, kept in `video-test/` until the next test replaces it.
 pub const TRIAL_CLIP: &str = "test-clip.mp4";
+/// The name of the copy made by "Export a copy".
+pub const EXPORTED_CLIP: &str = "exported.mp4";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Os {
@@ -756,6 +758,119 @@ fn finish(active: Active) -> Trial {
         clip_bytes: bytes,
         took_ms,
         clip: Some(clip.display().to_string()),
+    }
+}
+
+/// What "Export a copy" is asked to do with the test clip.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct TestEdit {
+    pub start_ms: u64,
+    /// `None` keeps the clip to its end.
+    pub end_ms: Option<u64>,
+    pub crop: Option<Crop>,
+    /// Lay a red square over the whole clip, to check that marks are drawn.
+    pub mark: bool,
+}
+
+impl Recording {
+    fn is_idle(&self) -> bool {
+        matches!(&*self.lock(), Slot::Idle { .. })
+    }
+}
+
+/// Cut, crop and mark the test clip into a copy, the way an edited video will be exported.
+pub fn export_test(video: &Video, edit: &TestEdit, recording: &Recording, work: &Path) -> Trial {
+    if !recording.is_idle() {
+        return Trial::failed("Stop the recording first.", None);
+    }
+    let input = work.join(TRIAL_CLIP);
+    if !input.is_file() {
+        return Trial::failed(
+            "There is no test clip yet: run a test recording first",
+            None,
+        );
+    }
+    let found = match find(video, program_beside_app().as_deref()) {
+        Ok(f) => f,
+        Err(e) => return Trial::failed(e, None),
+    };
+    let info = match probe(&found.ffprobe, &input) {
+        Ok(i) => i,
+        Err(e) => return Trial::failed(format!("The test clip could not be read: {e}"), None),
+    };
+    let mut overlays = Vec::new();
+    if edit.mark {
+        let image = work.join("mark.png");
+        let target = format!("file:{}", image.display());
+        // ffmpeg draws the test mark itself: a translucent red square
+        let made = ask(
+            &found.ffmpeg,
+            &[
+                "-hide_banner",
+                "-nostdin",
+                "-y",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red@0.6:s=120x120,format=rgba",
+                "-frames:v",
+                "1",
+                target.as_str(),
+            ],
+        );
+        if let Err(e) = made {
+            return Trial::failed(format!("The test mark could not be made: {e}"), None);
+        }
+        overlays.push(Overlay {
+            image,
+            x: 20,
+            y: 20,
+            from_ms: edit.start_ms,
+            to_ms: edit.end_ms.unwrap_or(info.duration_ms),
+        });
+    }
+    let output = work.join(EXPORTED_CLIP);
+    let began = Instant::now();
+    let edit = Edit {
+        start_ms: edit.start_ms,
+        end_ms: edit.end_ms,
+        crop: edit.crop,
+        overlays,
+    };
+    let planned = match plan(&input, &output, &edit, &info) {
+        Ok(p) => p,
+        Err(problems) => {
+            let said: Vec<String> = problems.iter().map(ToString::to_string).collect();
+            return Trial::failed(said.join(". "), None);
+        }
+    };
+    let _ = std::fs::remove_file(&output);
+    if let Err(e) = run(&found.ffmpeg, &planned, &|| false, Duration::from_secs(120)) {
+        return Trial::failed(format!("The copy could not be made: {e}"), None);
+    }
+    let out = match probe(&found.ffprobe, &output) {
+        Ok(i) => i,
+        Err(e) => return Trial::failed(format!("The copy could not be read back: {e}"), None),
+    };
+    let bytes = std::fs::metadata(&output).map(|m| m.len()).unwrap_or(0);
+    Trial {
+        ok: true,
+        message: format!(
+            "Made a copy of {:.1} s at {}×{}. Open it to check the cut, the crop and the mark.",
+            out.duration_ms as f64 / 1000.0,
+            out.width,
+            out.height
+        ),
+        capture: None,
+        encoder: None,
+        width: out.width,
+        height: out.height,
+        clip_ms: out.duration_ms,
+        clip_bytes: bytes,
+        took_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
+        clip: Some(output.display().to_string()),
     }
 }
 

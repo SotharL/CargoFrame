@@ -133,6 +133,7 @@ pub fn run() {
             commands::get_video_recording,
             commands::stop_video_recording,
             commands::get_video_test_clip,
+            commands::export_video_test,
             commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
@@ -363,6 +364,7 @@ mod shipped_config_tests {
             "allow-start-video-recording",
             "allow-stop-video-recording",
             "allow-get-video-test-clip",
+            "allow-export-video-test",
             "allow-pick-folder",
             "allow-list-layout-templates",
             "allow-layout-from-template",

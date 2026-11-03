@@ -508,3 +508,22 @@ after the owner has tried it.
   bytes (not JSON numbers), at most 100 MB, only by the Settings window's own permission; the CargoFrame
   window is not granted it (a test lists the video commands it must not hold).
 
+### Phase 12, part 5: export a trimmed, cropped, marked copy of the test clip (3 Nov 2026)
+
+Settings, Video, under a test clip: "Trim, crop and mark a copy" makes an edited copy
+(`video-test/exported.mp4`) the way an edited video will be saved, so the owner can check ffmpeg's
+export on Windows before the editor exists.
+
+- **It is the real export path.** The command builds an `Edit` (start, end, crop, one mark) and calls
+  the same `plan` and `run` the product will use. The start and end are seconds in the form and
+  milliseconds on the wire; a crop is rounded to even sides; a cut shorter than half a second, or a
+  crop outside the picture, is refused with the same sentence the product will show.
+- **The test mark is drawn by ffmpeg itself** (a translucent red square from a `color` source), so
+  the page needs no drawing code yet. It exercises the overlay filter graph with its time window.
+  The editor will send marks it draws on a canvas instead.
+- **Only the test clip, only the Settings window.** The command takes no path: it reads
+  `video-test/test-clip.mp4` and writes `exported.mp4` in the same folder, so the page cannot make
+  ffmpeg read or write anywhere else. It refuses while a recording is running.
+- **Not built yet:** the editor itself (timeline, drawing crop and marks over the picture), the
+  video block and layout, sending a video, and the shortcut that starts a recording.
+

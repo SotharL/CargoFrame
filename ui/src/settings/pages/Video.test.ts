@@ -169,4 +169,65 @@ describe('Video settings', () => {
       expect(revoked).toEqual(['blob:clip-0']);
     });
   });
+
+  describe('trimming, cropping and marking a copy', () => {
+    async function recordATest() {
+      open();
+      await screen.findByText('ffmpeg found');
+      await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+      await screen.findByText('It works');
+    }
+
+    it('starts from the whole clip and makes a copy of the cut', async () => {
+      await recordATest();
+      expect((screen.getByRole('spinbutton', { name: 'Start (seconds)' }) as HTMLInputElement).value).toBe('0');
+      expect((screen.getByRole('spinbutton', { name: 'End (seconds)' }) as HTMLInputElement).value).toBe('5');
+      await fireEvent.input(screen.getByRole('spinbutton', { name: 'Start (seconds)' }), { target: { value: '1' } });
+      await fireEvent.input(screen.getByRole('spinbutton', { name: 'End (seconds)' }), { target: { value: '3.5' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+      await screen.findByText('Copy made');
+      expect(screen.getByText(/Made a copy of 2\.5 s at 1920×1080/)).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Open the copy' })).toBeTruthy();
+    });
+
+    it('offers a crop box in the middle of the picture and crops to even sizes', async () => {
+      await recordATest();
+      expect(screen.queryByRole('spinbutton', { name: 'Width (px)' })).toBeNull();
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
+      expect((screen.getByRole('spinbutton', { name: 'Left (px)' }) as HTMLInputElement).value).toBe('480');
+      expect((screen.getByRole('spinbutton', { name: 'Width (px)' }) as HTMLInputElement).value).toBe('960');
+      await fireEvent.input(screen.getByRole('spinbutton', { name: 'Width (px)' }), { target: { value: '641' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+      await screen.findByText('Copy made');
+      expect(screen.getByText(/at 640×540/)).toBeTruthy();
+    });
+
+    it('says in words why a cut cannot be made', async () => {
+      await recordATest();
+      await fireEvent.input(screen.getByRole('spinbutton', { name: 'End (seconds)' }), { target: { value: '0.2' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+      await screen.findByText('No copy made');
+      expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toContain('must be at least 0.5 s');
+      expect(screen.queryByRole('button', { name: 'Open the copy' })).toBeNull();
+    });
+
+    it('plays the copy in the window', async () => {
+      URL.createObjectURL = () => 'blob:copy';
+      URL.revokeObjectURL = () => {};
+      await recordATest();
+      await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+      await screen.findByText('Copy made');
+      await fireEvent.click(screen.getByRole('button', { name: 'Watch the copy here' }));
+      await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+      expect(document.querySelector('video')!.getAttribute('aria-label')).toBe('Edited copy');
+    });
+
+    it('forgets the copy when a new test clip is recorded', async () => {
+      await recordATest();
+      await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+      await screen.findByText('Copy made');
+      await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+      await waitFor(() => expect(screen.queryByText('Copy made')).toBeNull());
+    });
+  });
 });

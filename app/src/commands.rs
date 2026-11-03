@@ -568,27 +568,49 @@ pub async fn stop_video_recording(app: AppHandle) -> Result<video::Trial, String
     blocking(move || app.state::<AppState>().recording.stop()).await
 }
 
-/// The last test clip's bytes, to play in the Video page (sent raw, not as JSON numbers).
+/// The last test clip's bytes (or its exported copy's), to play in the Video page (sent raw, not
+/// as JSON numbers).
 #[tauri::command]
-pub fn get_video_test_clip(state: State<'_, AppState>) -> Result<Response, String> {
-    let clip = state
-        .store
-        .dirs()
-        .data()
-        .join("video-test")
-        .join(video::TRIAL_CLIP);
+pub fn get_video_test_clip(
+    state: State<'_, AppState>,
+    exported: Option<bool>,
+) -> Result<Response, String> {
+    let clip = video_test_file(&state, exported);
     video::read_clip(&clip, video::PREVIEW_LIMIT).map(Response::new)
 }
 
-/// Open the clip of the last test recording in the person's video player.
+fn video_test_file(state: &AppState, exported: Option<bool>) -> std::path::PathBuf {
+    let name = if exported == Some(true) {
+        video::EXPORTED_CLIP
+    } else {
+        video::TRIAL_CLIP
+    };
+    state.store.dirs().data().join("video-test").join(name)
+}
+
+/// Cut, crop and mark the test clip into a copy.
 #[tauri::command]
-pub fn open_video_test(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
-    let clip = state
-        .store
-        .dirs()
-        .data()
-        .join("video-test")
-        .join(video::TRIAL_CLIP);
+pub async fn export_video_test(
+    app: AppHandle,
+    video: Video,
+    edit: video::TestEdit,
+) -> Result<video::Trial, String> {
+    let video = video::normalized(video);
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let work = state.store.dirs().data().join("video-test");
+        video::export_test(&video, &edit, &state.recording, &work)
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn open_video_test(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    exported: Option<bool>,
+) -> Result<(), String> {
+    let clip = video_test_file(&state, exported);
     if !clip.is_file() {
         return Err("There is no test clip yet: run a test recording first".into());
     }

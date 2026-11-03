@@ -1,5 +1,5 @@
 use super::*;
-use cargoframe_video::locate;
+use cargoframe_video::{locate, Crop};
 use std::fs;
 use std::process::{Child, Command, Stdio};
 
@@ -565,4 +565,105 @@ fn a_clip_is_sent_to_the_window_only_when_it_is_there_and_not_huge() {
         err.contains("too large") && err.contains("video player"),
         "{err}"
     );
+}
+
+fn make_test_clip(ffmpeg: &Path, work: &Path) {
+    fs::create_dir_all(work).unwrap();
+    let out = Command::new(ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+        ])
+        .arg("testsrc=s=320x240:r=10:d=3")
+        .args(["-c:v", "libx264", "-pix_fmt", "yuv420p"])
+        .arg(work.join(TRIAL_CLIP))
+        .output()
+        .unwrap();
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+#[test]
+fn the_test_clip_is_cut_cropped_and_marked_into_a_copy_and_bad_edits_are_explained() {
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    if locate("ffprobe", &[]).is_none() {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("video-test");
+    let idle = Recording::new();
+    let video = Video::default();
+
+    let edit = TestEdit {
+        start_ms: 500,
+        end_ms: Some(2_500),
+        crop: Some(Crop {
+            x: 0,
+            y: 0,
+            w: 160,
+            h: 120,
+        }),
+        mark: true,
+    };
+    // nothing recorded yet
+    let t = export_test(&video, &edit, &idle, &work);
+    assert!(
+        !t.ok && t.message.contains("no test clip yet"),
+        "{}",
+        t.message
+    );
+
+    make_test_clip(&ffmpeg, &work);
+    let t = export_test(&video, &edit, &idle, &work);
+    assert!(t.ok, "{}", t.message);
+    assert_eq!((t.width, t.height), (160, 120));
+    assert!(
+        (1_500..=2_500).contains(&t.clip_ms),
+        "a 2 s cut gave {} ms",
+        t.clip_ms
+    );
+    assert!(Path::new(t.clip.as_deref().unwrap()).is_file());
+    assert!(work.join("mark.png").is_file(), "the test mark was drawn");
+
+    // without a crop or a mark, the whole picture
+    let plain = TestEdit {
+        start_ms: 0,
+        end_ms: None,
+        crop: None,
+        mark: false,
+    };
+    let t = export_test(&video, &plain, &idle, &work);
+    assert!(t.ok, "{}", t.message);
+    assert_eq!((t.width, t.height), (320, 240));
+
+    // problems are said in words
+    let too_short = TestEdit {
+        end_ms: Some(100),
+        ..plain.clone()
+    };
+    let t = export_test(&video, &too_short, &idle, &work);
+    assert!(!t.ok && t.message.contains("at least"), "{}", t.message);
+    let outside = TestEdit {
+        crop: Some(Crop {
+            x: 300,
+            y: 0,
+            w: 100,
+            h: 100,
+        }),
+        ..plain
+    };
+    let t = export_test(&video, &outside, &idle, &work);
+    assert!(!t.ok && t.message.contains("outside"), "{}", t.message);
 }

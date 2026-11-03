@@ -4,7 +4,9 @@
   import Field from '../../lib/components/Field.svelte';
   import Section from '../../lib/components/Section.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { Video, VideoCapture, VideoEncoder, VideoRecording, VideoTools, VideoTrial } from '../../lib/types';
+  import type {
+    Video, VideoCapture, VideoEncoder, VideoRecording, VideoTestEdit, VideoTools, VideoTrial,
+  } from '../../lib/types';
 
   const CAPTURES: { id: VideoCapture; label: string }[] = [
     { id: 'auto', label: 'Automatic' },
@@ -34,6 +36,15 @@
   let recording = $state<VideoRecording>({ state: 'idle' });
   let stopping = $state(false);
   let timer: ReturnType<typeof setInterval> | undefined;
+  // trim, crop and mark a copy of the test clip
+  let trimStart = $state(0);
+  let trimEnd = $state(0);
+  let cropOn = $state(false);
+  let crop = $state({ x: 0, y: 0, w: 0, h: 0 });
+  let markOn = $state(false);
+  let exporting = $state(false);
+  let copy = $state<VideoTrial | null>(null);
+  let playing = $state<'test' | 'exported'>('test');
   let playerUrl = $state<string | null>(null);
   let playerError = $state('');
   let loadingPlayer = $state(false);
@@ -111,7 +122,7 @@
     closePlayer();
     playerError = '';
     try {
-      trial = await (await getApi()).tryVideoRecording(v);
+      setTrial(await (await getApi()).tryVideoRecording(v));
     } catch (e) {
       trial = {
         ok: false, message: String(e), capture: null, encoder: null, width: 0, height: 0,
@@ -128,12 +139,13 @@
   }
 
   /** Play the clip in this window. Whether the window can play H.264 is itself worth knowing. */
-  async function watch() {
+  async function watch(exported = false) {
     closePlayer();
     playerError = '';
     loadingPlayer = true;
     try {
-      playerUrl = URL.createObjectURL(await (await getApi()).getVideoTestClip());
+      playerUrl = URL.createObjectURL(await (await getApi()).getVideoTestClip(exported));
+      playing = exported ? 'exported' : 'test';
     } catch (e) {
       playerError = String(e);
     } finally {
@@ -146,6 +158,46 @@
     const why = err?.message ? ` (${err.message})` : err ? ` (error ${err.code})` : '';
     playerError = `This window cannot play the clip${why}. The clip itself is fine: open it in your video player instead.`;
     closePlayer();
+  }
+
+  /** A new test clip starts a new edit: the whole clip, no crop, and a crop box ready in the middle. */
+  function setTrial(t: VideoTrial) {
+    trial = t;
+    copy = null;
+    if (!t.ok) return;
+    trimStart = 0;
+    trimEnd = Math.round(t.clip_ms / 100) / 10;
+    const even = (n: number) => Math.floor(n / 2) * 2;
+    crop = { x: even(t.width / 4), y: even(t.height / 4), w: even(t.width / 2), h: even(t.height / 2) };
+    cropOn = false;
+    markOn = false;
+  }
+
+  async function exportCopy() {
+    const v = current();
+    if (!v) return;
+    const nums = [trimStart, trimEnd, crop.x, crop.y, crop.w, crop.h].map(Number);
+    if (nums.some((n) => !Number.isFinite(n))) {
+      copy = failure('The start, the end and the crop must be numbers');
+      return;
+    }
+    const edit: VideoTestEdit = {
+      start_ms: Math.max(0, Math.round(Number(trimStart) * 1000)),
+      end_ms: Math.round(Number(trimEnd) * 1000),
+      crop: cropOn ? { x: Math.round(crop.x), y: Math.round(crop.y), w: Math.round(crop.w), h: Math.round(crop.h) } : null,
+      mark: markOn,
+    };
+    exporting = true;
+    copy = null;
+    closePlayer();
+    playerError = '';
+    try {
+      copy = await (await getApi()).exportVideoTest(v, edit);
+    } catch (e) {
+      copy = failure(String(e));
+    } finally {
+      exporting = false;
+    }
   }
 
   function failure(message: string): VideoTrial {
@@ -196,7 +248,7 @@
     stopPolling();
     stopping = true;
     try {
-      trial = await (await getApi()).stopVideoRecording();
+      setTrial(await (await getApi()).stopVideoRecording());
     } catch (e) {
       trial = failure(String(e));
     } finally {
@@ -209,10 +261,10 @@
     return (ms / 1000).toFixed(0);
   }
 
-  async function openClip() {
+  async function openClip(exported = false) {
     openError = '';
     try {
-      await (await getApi()).openVideoTest();
+      await (await getApi()).openVideoTest(exported);
     } catch (e) {
       openError = String(e);
     }
@@ -377,16 +429,67 @@
             {#if trial.clip}<dt>File</dt><dd><code>{trial.clip}</code></dd>{/if}
           </dl>
           <div class="row">
-            <button type="button" onclick={openClip}>Open the clip</button>
-            <button type="button" onclick={watch} disabled={loadingPlayer}>
+            <button type="button" onclick={() => openClip(false)}>Open the clip</button>
+            <button type="button" onclick={() => watch(false)} disabled={loadingPlayer}>
               {loadingPlayer ? 'Loading…' : 'Watch it here'}
             </button>
           </div>
+          <details class="edit">
+            <summary>Trim, crop and mark a copy</summary>
+            <p class="quiet note">
+              Makes an edited copy of the test clip the way an edited video will be saved. The test clip itself is not changed.
+            </p>
+            <div class="two">
+              <Field label="Start (seconds)">
+                <input type="number" min="0" step="0.1" bind:value={trimStart} />
+              </Field>
+              <Field label="End (seconds)">
+                <input type="number" min="0" step="0.1" bind:value={trimEnd} />
+              </Field>
+            </div>
+            <label class="check"><input type="checkbox" bind:checked={cropOn} /> Crop to an area</label>
+            {#if cropOn}
+              <div class="four">
+                <Field label="Left (px)"><input type="number" min="0" bind:value={crop.x} /></Field>
+                <Field label="Top (px)"><input type="number" min="0" bind:value={crop.y} /></Field>
+                <Field label="Width (px)"><input type="number" min="2" bind:value={crop.w} /></Field>
+                <Field label="Height (px)"><input type="number" min="2" bind:value={crop.h} /></Field>
+              </div>
+            {/if}
+            <label class="check"><input type="checkbox" bind:checked={markOn} /> Lay a red square over the copy (checks that marks are drawn)</label>
+            <div class="row">
+              <button type="button" onclick={exportCopy} disabled={exporting}>
+                {exporting ? 'Making the copy…' : 'Export a copy'}
+              </button>
+            </div>
+            {#if copy}
+              <div class="facts" aria-label="Copy result">
+                <Chip kind={copy.ok ? 'ok' : 'err'} label={copy.ok ? 'Copy made' : 'No copy made'} />
+                <p class={copy.ok ? '' : 'problem'} role={copy.ok ? 'status' : 'alert'}>{copy.message}</p>
+                {#if copy.ok}
+                  <dl>
+                    <dt>Copy</dt><dd>{(copy.clip_ms / 1000).toFixed(1)} s, {copy.width}×{copy.height}, {mb(copy.clip_bytes)} MB</dd>
+                    {#if copy.clip}<dt>File</dt><dd><code>{copy.clip}</code></dd>{/if}
+                  </dl>
+                  <div class="row">
+                    <button type="button" onclick={() => openClip(true)}>Open the copy</button>
+                    <button type="button" onclick={() => watch(true)} disabled={loadingPlayer}>Watch the copy here</button>
+                  </div>
+                {/if}
+              </div>
+            {/if}
+          </details>
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
           {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
           {#if playerUrl}
             <!-- svelte-ignore a11y_media_has_caption -->
-            <video src={playerUrl} controls muted aria-label="Test clip" onerror={playerFailed}></video>
+            <video
+              src={playerUrl}
+              controls
+              muted
+              aria-label={playing === 'exported' ? 'Edited copy' : 'Test clip'}
+              onerror={playerFailed}
+            ></video>
           {/if}
         {/if}
       </div>
@@ -412,5 +515,9 @@
     border-radius: var(--radius-sm); padding: 6px 8px; width: 100%;
   }
   .primary { font-weight: 600; }
+  .four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+  .edit { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; display: grid; gap: 10px; width: 100%; box-sizing: border-box; }
+  .edit summary { cursor: pointer; font-weight: 600; font-size: 13px; }
   video { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #000; }
 </style>

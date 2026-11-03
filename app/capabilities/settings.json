@@ -45,6 +45,7 @@
     "allow-get-video-recording",
     "allow-stop-video-recording",
     "allow-get-video-test-clip",
+    "allow-export-video-test",
     "allow-open-video-test",
     "allow-pick-folder",
     "allow-list-connections",
