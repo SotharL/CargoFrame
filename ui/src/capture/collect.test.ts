@@ -25,7 +25,7 @@ describe('collectShare', () => {
 
   it('has no prompt when none is bound', async () => {
     const view = await demoSession();
-    const button = view.layout!.blocks.find((b) => b.id === 'send') as Sharing;
+    const button = { ...(view.layout!.blocks.find((b) => b.id === 'send') as Sharing), prompt_block_id: null };
     const req = collectShare(view, button, initialValues(view), false);
     expect(req.prompt).toBeNull();
     expect(promptIsEmpty(req)).toBe(false);

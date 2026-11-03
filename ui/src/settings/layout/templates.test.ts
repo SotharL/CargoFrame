@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { offersFor } from './templates';
 import type { ConnectionView, LayoutTemplate } from '../../lib/types';
+import { demoCapabilities } from '../../lib/demoReach';
 
 const templates: LayoutTemplate[] = [
   { key: 'local-capture', name: 'Save a capture locally', description: '', service: null },
@@ -11,7 +12,7 @@ const templates: LayoutTemplate[] = [
 
 const conn = (id: string, name: string, kind: ConnectionView['kind'], state: ConnectionView['state']): ConnectionView => ({
   id, name, kind, kind_label: kind === 'jira' ? 'Jira' : 'Reddit', enabled: state !== 'disabled', state,
-  secrets: [], describe: { summary: '', fields: [], lists: [] },
+  secrets: [], describe: { summary: '', fields: [], lists: [] }, capabilities: demoCapabilities(kind),
 });
 
 describe('offersFor', () => {

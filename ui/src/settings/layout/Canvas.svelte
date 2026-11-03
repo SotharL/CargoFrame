@@ -1,6 +1,8 @@
 <script lang="ts">
   import { roleTag } from '../../lib/roles';
-  import type { Block, IssueView, Rect } from '../../lib/types';
+  import { buttonKind, kindStyle } from '../../lib/connector';
+  import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
+  import { lineFor, type Line } from './reach';
   import {
     BLOCK_TYPES, COLUMNS, canPlace, makeBlock, moveTo, removeBlock, resizeTo, rowsNeeded, typeLabel,
     type BlockType,
@@ -10,7 +12,16 @@
     blocks = $bindable(),
     selected = $bindable(null),
     issues = [],
-  }: { blocks: Block[]; selected: string | null; issues?: IssueView[] } = $props();
+    reach = {},
+    connections = [],
+  }: {
+    blocks: Block[];
+    selected: string | null;
+    issues?: IssueView[];
+    /** What each sharing button sends, by button id. */
+    reach?: Record<string, Reach>;
+    connections?: ConnectionView[];
+  } = $props();
 
   const ROW = 40;
   const GAP = 8;
@@ -172,6 +183,24 @@
   }
   const count = (id: string) => issues.filter((i) => i.block_id === id).length;
 
+  // The button whose reach the canvas shows: the selected one, or the only one there is. What it
+  // cannot send is greyed out and says why, so the limit is seen where the block is.
+  type Button = Extract<Block, { type: 'sharing_button' }>;
+  const buttons = $derived(blocks.filter((b): b is Button => b.type === 'sharing_button'));
+  const shown = $derived.by((): Button | null => {
+    const pick = buttons.find((b) => b.id === selected);
+    if (pick) return pick;
+    return buttons.length === 1 ? buttons[0]! : null;
+  });
+  const kindOf = (b: Button) => buttonKind(b.connection_id, connections);
+  const lineOf = (b: Block): Line | null => {
+    if (!shown || b.type === 'sharing_button') return null;
+    const r = reach[shown.id]?.blocks.find((x) => x.block_id === b.id);
+    return r ? lineFor(r, shown, kindOf(shown)) : null;
+  };
+  /** The short tag on the block; the whole sentence is in its tooltip and in the side panel. */
+  const tag = (l: Line) => (l.state === 'cannot_send' ? '✕ Cannot send' : l.state === 'sent' ? '✓ Sent' : l.state === 'switched_off' ? '– Left out' : '– Not used');
+
   const gridStyle = $derived(
     `grid-template-columns:repeat(${COLUMNS},minmax(0,1fr));grid-template-rows:repeat(${rows},${ROW}px);gap:${GAP}px;`,
   );
@@ -200,17 +229,21 @@
     <div class="grid" bind:this={grid} style={gridStyle} class:dragging={drag !== null}>
       {#each blocks as b (b.id)}
         {@const w = worst(b.id)}
+        {@const l = lineOf(b)}
         <div
           class="block {b.type}"
+          class:sharing={b.type === 'sharing_button'}
+          class:greyed={l?.state === 'cannot_send' || l?.state === 'switched_off'}
+          class:unused={l?.state === 'not_used'}
           class:selected={selected === b.id}
           class:lifted={drag && drag.kind !== 'new' && drag.id === b.id}
           class:err={w === 'error'}
           class:warn={w === 'warning'}
           class:dbg={w === 'debug'}
-          style={cell(b.rect)}
+          style={cell(b.rect) + (b.type === 'sharing_button' ? kindStyle(kindOf(b)) : '')}
           role="button"
           tabindex="0"
-          aria-label="{typeLabel(b.type)} block {label(b)}, column {b.rect.x + 1}, row {b.rect.y + 1}, {b.rect.w} by {b.rect.h}. Arrow keys move it, Shift with arrows resizes it, Delete removes it."
+          aria-label="{typeLabel(b.type)} block {label(b)}, column {b.rect.x + 1}, row {b.rect.y + 1}, {b.rect.w} by {b.rect.h}. Arrow keys move it, Shift with arrows resizes it, Delete removes it.{l ? ` ${l.text}.` : ''}"
           aria-pressed={selected === b.id}
           onpointerdown={(e) => begin(e, b.id, 'move')}
           onfocus={() => (selected = b.id)}
@@ -222,6 +255,7 @@
             <span class="name" title={label(b)}>{label(b)}</span>
             <span class="kind">({typeLabel(b.type).toLowerCase()})</span>
             {#if b.type === 'text' && roleTag(b.role)}<span class="tag">{roleTag(b.role)}</span>{/if}
+            {#if l}<span class="reach {l.state}" title={l.text}>{tag(l)}</span>{/if}
             {#if count(b.id)}<span class="count {w}" title="{count(b.id)} to look at">{w === 'error' ? '✕' : w === 'warning' ? '!' : '?'} {count(b.id)}</span>{/if}
           </div>
           <button
@@ -266,6 +300,16 @@
   }
   .block.selected { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 35%, transparent); }
   .block.lifted { opacity: 0.45; }
+  /* A sharing button wears its destination's colour and outline; the label says where. */
+  .block.sharing { background: var(--kind); color: var(--on-kind); border: 2px solid var(--kind-line); }
+  .block.sharing .kind { color: inherit; opacity: 0.85; }
+  .block.greyed { opacity: 0.55; border-style: dashed; background: var(--surface-2); }
+  .block.unused { border-style: dashed; }
+  .reach { flex: none; margin-left: auto; font-size: 10.5px; font-weight: 600; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border-strong); white-space: nowrap; }
+  .reach.sent { border-color: var(--ok); }
+  .reach.cannot_send { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
+  .reach.switched_off, .reach.not_used { color: var(--quiet); }
+  .reach + .count { margin-left: 0; }
   .block.err { border-color: var(--err); }
   .block.warn { border-color: var(--warn); }
   .block.dbg { border-color: var(--dbg); }

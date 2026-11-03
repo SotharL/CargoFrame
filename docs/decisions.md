@@ -201,3 +201,63 @@ Items 8, 14, 15 and 17 of the owner's feedback of 2 Nov 2026.
   change the rule runs on a real file of the chosen project folder (or of the last capture) and
   shows the value or the problem, the file that was read, and its first lines. A late answer for
   an older version of the rule is dropped.
+
+## Phase 9: what goes to Claude, and what each button can send (3 Nov 2026)
+
+Items 1, 3 and 9 of the owner's feedback of 2 Nov 2026, and the rule from the 3 Nov test: one
+click on the share button sends everything captured, with no separate "copy prompt" step.
+
+- **One capability table per destination (item 9).** `core/layout/src/capabilities.rs` says, for
+  each kind of connection, whether it can take *text*, *dropdown choices*, the *screenshot*,
+  *files* and *links in text*: yes, with a catch, or no, each with one line in plain words. The
+  builder, the capture window and the share itself all read this table, so they cannot disagree.
+  Jira takes everything. Google takes text and links as plain text only, with one list (the Drive
+  folder). Reddit takes no files. Claude on Windows takes text, picture and files (pasted into the
+  chat); elsewhere only the message goes, and text files can still travel inside it. A Custom API
+  can carry only what its request describes: a body for text, a multipart field for the picture
+  and one for the zip, lists for dropdowns. Saving a zip on this computer keeps everything.
+- **A verdict for every block of every button.** `core/layout/src/reach.rs` gives each block one of:
+  *sent* (as the screenshot, the files, the prompt, the zip name, or in a named field),
+  *cannot be sent* (with the reason from the table), *switched off* (by the button's send rules)
+  or *not used* (nothing maps it). The interface asks the Rust code (`button_reach`) instead of
+  working it out itself. The in-memory stand-in used by tests (`ui/src/lib/demoReach.ts`) copies
+  the table only so the interface can be built without the app.
+- **The capture window says it, block by block.** Under every block, one small pill per button in
+  that button's colour: ✓ with the button's name when it sends the block, ✕ with the reason when
+  it cannot. A block no button sends gets one plain "Not sent". Hovering or focusing a button
+  rings the blocks it sends. The "This button does not send …" warning is shown there and no
+  longer repeated in the header.
+- **A live line beside the button (item 1).** "Will send: Screenshot (edited) · 3 files (12 KB) ·
+  Prompt · Note", worked out from the same verdicts and the values in the window. Empty text and
+  files nobody ticked are left out, as the share leaves them out. For a Claude button the line
+  above it says "Opening: <chat name>" (or "a new chat"), and the result says "Opened: <chat
+  name>" after a successful share, so the person sees where it went before and after.
+- **Colours.** Jira blue, Google green, Reddit orange, Claude brown, Custom API violet, "this
+  computer" grey. White text on each fill stays above 5:1; the outline is darker in the light theme
+  and lighter in the dark one so the button reads on the page either way. Colour is never the only
+  signal: every button says where it sends in its tooltip, and every mark carries a ✓ or ✕ and the
+  button's name.
+- **Send rules on the button.** Per button: send the screenshot (on or off), and what happens to
+  the ticked files: *attach*, *write text files into the message* (Claude only), or *leave out*.
+  Stored with the button as `send`, left out of the file when it is all default. The inline
+  limit is 64 KB per file by default, 1 to 512 KB; a file that is bigger, or not plain text, is
+  attached instead and the result says how many. A rule the destination cannot honour is greyed
+  out in the builder with the reason (no picture to a request without a multipart field, no
+  files to Reddit).
+- **Text files inside the message (Claude).** The message holds the prompt, then one "Name: value"
+  line per mapped field, then each inline file as `File name:` and a fenced block. The fence is
+  longer than any run of backticks in the file, so a file that contains a fence cannot close it.
+  The note under the result says how many files were written in and how many stayed attached.
+- **The chat is bound without a mapping.** A layout with a Claude chat dropdown and a Claude
+  button no longer needs a hand-made `chat` mapping: the button uses the dropdown. Picking a chat
+  opens that chat. (The link itself, spike S8, was answered by the owner's test of 3 Nov; the
+  fix lives in the one-click branch.)
+- **The builder.** Select a sharing button: the panel lists what its destination can take (✓, ◐
+  with a catch, ✕), what the button does with each block of the layout, and the send rules. Select
+  any other block: a "Sent by" list says which buttons send it. The canvas tags every block with
+  ✓ Sent, ✕ Cannot send, – Left out or – Not used for the selected button (or the only button),
+  and greys the ones that cannot go. A button with no active connection is drawn in the colour
+  of "this computer", as it will save a zip there.
+- **Still open for the owner:** the Windows-only parts (pasting the picture and files into the
+  Claude app) and the real-account runs are not exercised from the build machine; the owner's PC
+  test is what closes Phase 9, as the plan says.

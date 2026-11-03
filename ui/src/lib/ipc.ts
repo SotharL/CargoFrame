@@ -2,8 +2,9 @@ import type {
   AppInfo, Block, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
-  MemoryStatus, ShareRequest, ShareResult, TimingView, VariableInfo,
+  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, VariableInfo,
 } from './types';
+import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
 /** Whatever a failed list request rejected with, as an `OptionsError`. */
 export function asOptionsError(e: unknown): OptionsError {
@@ -48,6 +49,8 @@ export interface Api {
   deleteItem(kind: ItemKind, id: string): Promise<void>;
   newItemId(kind: ItemKind, name: string): Promise<string>;
   validateLayout(layout: Layout): Promise<IssueView[]>;
+  /** What each sharing button of the layout sends, by button id: asked of the code that does the sharing. */
+  buttonReach(layout: Layout): Promise<Record<string, Reach>>;
   /** The ready-made layouts to start from. */
   listLayoutTemplates(): Promise<LayoutTemplate[]>;
   /** A template as an unsaved layout for a connection. Nothing is written. */
@@ -139,6 +142,7 @@ async function tauriApi(): Promise<Api> {
     deleteItem: (kind, id) => invoke('delete_item', { kind, id }),
     newItemId: (kind, name) => invoke('new_item_id', { kind, name }),
     validateLayout: (layout) => invoke('validate_layout', { layout }),
+    buttonReach: (layout) => invoke('button_reach', { layout }),
     listLayoutTemplates: () => invoke('list_layout_templates'),
     layoutFromTemplate: (key, connectionId) => invoke('layout_from_template', { key, connectionId }),
     exportSettings: (selection) => invoke('export_settings', { selection }),
@@ -345,6 +349,16 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       return id;
     },
     validateLayout: async () => [],
+    buttonReach: async (layout) => {
+      const out: Record<string, Reach> = {};
+      for (const b of layout.blocks) {
+        if (b.type !== 'sharing_button') continue;
+        const c = b.connection_id ? (store.connection.get(b.connection_id) as Connection | undefined) : undefined;
+        const active = c && stateOf(b.connection_id!, c) !== 'disconnected';
+        out[b.id] = demoReach(layout, b, active ? demoCapabilities(c.kind) : LOCAL_CAPABILITIES, active ? c.kind : null);
+      }
+      return out;
+    },
     listLayoutTemplates: async () => TEMPLATE_CATALOG.map((t) => ({ ...t })),
     layoutFromTemplate: async (key, connectionId) => {
       const t = TEMPLATE_CATALOG.find((x) => x.key === key);
@@ -412,6 +426,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           state: stateOf(id, c),
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),
           describe: describeFor(c),
+          capabilities: demoCapabilities(c.kind),
         } satisfies ConnectionView;
       }),
       problems: [],

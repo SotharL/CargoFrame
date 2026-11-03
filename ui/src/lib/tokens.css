@@ -8,6 +8,16 @@
   --err: #e04f4f;
   --dbg: #b04fe0;
 
+  /* Each destination has a fill (white text on it stays above 4.5:1) and a darker outline that
+     reads on the page background. Colour is never the only signal: the label always says where. */
+  --kind-jira: #2b6cb0;    --kind-jira-line: #1e4e82;
+  --kind-google: #1b7f4f;  --kind-google-line: #135a38;
+  --kind-reddit: #c2410c;  --kind-reddit-line: #8f2f06;
+  --kind-claude: #8a5a3b;  --kind-claude-line: #5f3d27;
+  --kind-custom: #5b5fc7;  --kind-custom-line: #3f43a0;
+  --kind-local: #4b5563;   --kind-local-line: #2f3844;
+  --on-kind: #ffffff;
+
   --bg: #faf9f5;
   --surface: #ffffff;
   --surface-2: #f3f1ea;
@@ -35,6 +45,12 @@
     --border-strong: #55554f;
     --text: #f5f4ee;
     --quiet: #a3a29b;
+    --kind-jira-line: #7fb2ea;
+    --kind-google-line: #6fc79a;
+    --kind-reddit-line: #f08a5a;
+    --kind-claude-line: #d2a283;
+    --kind-custom-line: #9fa2ee;
+    --kind-local-line: #aab2bf;
     color-scheme: dark;
   }
 }
@@ -47,5 +63,11 @@
   --border-strong: #55554f;
   --text: #f5f4ee;
   --quiet: #a3a29b;
+  --kind-jira-line: #7fb2ea;
+  --kind-google-line: #6fc79a;
+  --kind-reddit-line: #f08a5a;
+  --kind-claude-line: #d2a283;
+  --kind-custom-line: #9fa2ee;
+  --kind-local-line: #aab2bf;
   color-scheme: dark;
 }

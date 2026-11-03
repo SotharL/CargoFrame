@@ -1,4 +1,5 @@
-import type { SessionView, ShareResult } from '../lib/types';
+import type { Layout, ServiceKind, SessionView, ShareResult } from '../lib/types';
+import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from '../lib/demoReach';
 
 /**
  * A sample capture for `npm run dev`, tests and screenshots. Loaded only outside the app, so it
@@ -6,7 +7,42 @@ import type { SessionView, ShareResult } from '../lib/types';
  */
 export async function demoSession(): Promise<SessionView> {
   // `?mode=local` shows the window as it is when the button has no active connection.
-  const local = new URLSearchParams(location.search).get('mode') === 'local';
+  const params = new URLSearchParams(location.search);
+  const local = params.get('mode') === 'local';
+  // `?kind=claude` or `?kind=reddit` points the button somewhere else, to look at its colours and marks.
+  const asked = params.get('kind');
+  const kind: ServiceKind = asked === 'claude' || asked === 'reddit' || asked === 'google' || asked === 'custom' ? asked : 'jira';
+  const layout: Layout = {
+    id: 'bug',
+    name: 'Bug report',
+    blocks: [
+      { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 8, h: 9 } },
+      {
+        id: 'prompt', type: 'text', rect: { x: 8, y: 0, w: 4, h: 3 },
+        title: 'Prompt', placement: 'above', role: 'prompt', default_text: 'What is wrong in {{project.name}}?',
+      },
+      {
+        id: 'note', type: 'text', rect: { x: 8, y: 3, w: 4, h: 2 },
+        title: 'Note', placement: 'inside', role: 'plain', default_text: 'Seen on {{capture.date}} {{rule.build}}',
+      },
+      { id: 'chat', type: 'dropdown', rect: { x: 8, y: 5, w: 4, h: 2 }, title: 'Claude chat', source: { type: 'claude_chats' } },
+      {
+        id: 'proj', type: 'dropdown', rect: { x: 8, y: 7, w: 4, h: 2 }, title: 'Jira project',
+        source: { type: 'web_api', connection_id: 'jira', options_id: 'projects' },
+      },
+      { id: 'logs', type: 'files', rect: { x: 0, y: 9, w: 8, h: 3 }, title: 'Logs', include: ['**/*.log'], preselect: ['*.log'], look_in: { folders: ['project'], subfolder: '' } },
+      {
+        id: 'send', type: 'sharing_button', rect: { x: 8, y: 9, w: 4, h: 2 },
+        label: 'Share', connection_id: 'jira', prompt_block_id: 'prompt', on_success: 'keep_open',
+        mappings: [
+          { field: 'description', source: { kind: 'block', value: 'note' } },
+          { field: 'project', source: { kind: 'block', value: 'proj' } },
+        ],
+      },
+    ],
+  };
+  const button = layout.blocks.find((b) => b.type === 'sharing_button')!;
+  const reach = demoReach(layout, button as Extract<typeof button, { type: 'sharing_button' }>, local ? LOCAL_CAPABILITIES : demoCapabilities(kind), local ? null : kind);
   return {
     session_id: 1,
     trigger_id: 'bug',
@@ -18,31 +54,7 @@ export async function demoSession(): Promise<SessionView> {
     image: { width: 960, height: 600 },
     variables: { 'project.name': 'Foo', 'app.exe': 'Foo', 'capture.date': '2026-10-23' },
     layout_problem: null,
-    layout: {
-      id: 'bug',
-      name: 'Bug report',
-      blocks: [
-        { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 8, h: 9 } },
-        {
-          id: 'prompt', type: 'text', rect: { x: 8, y: 0, w: 4, h: 3 },
-          title: 'Prompt', placement: 'above', role: 'prompt', default_text: 'What is wrong in {{project.name}}?',
-        },
-        {
-          id: 'note', type: 'text', rect: { x: 8, y: 3, w: 4, h: 2 },
-          title: 'Note', placement: 'inside', role: 'plain', default_text: 'Seen on {{capture.date}} {{rule.build}}',
-        },
-        { id: 'chat', type: 'dropdown', rect: { x: 8, y: 5, w: 4, h: 2 }, title: 'Claude chat', source: { type: 'claude_chats' } },
-        {
-          id: 'proj', type: 'dropdown', rect: { x: 8, y: 7, w: 4, h: 2 }, title: 'Jira project',
-          source: { type: 'web_api', connection_id: 'jira', options_id: 'projects' },
-        },
-        { id: 'logs', type: 'files', rect: { x: 0, y: 9, w: 8, h: 3 }, title: 'Logs', include: ['**/*.log'], preselect: ['*.log'], look_in: { folders: ['project'], subfolder: '' } },
-        {
-          id: 'send', type: 'sharing_button', rect: { x: 8, y: 9, w: 4, h: 2 },
-          label: 'Share', connection_id: 'jira', prompt_block_id: null, mappings: [], on_success: 'keep_open',
-        },
-      ],
-    },
+    layout,
     texts: {
       prompt: { value: 'What is wrong in Foo?', unresolved: [] },
       note: { value: 'Seen on 2026-10-23 {{rule.build}}', unresolved: ['rule.build'] },
@@ -74,8 +86,8 @@ export async function demoSession(): Promise<SessionView> {
     },
     issues: [],
     sharing: local
-      ? { send: { enabled: true, reasons: [], mode: 'save_locally', note: 'No connection: saves a zip in your “Folder for saved zips”' } }
-      : { send: { enabled: true, reasons: [], mode: 'send', note: null } },
+      ? { send: { enabled: true, reasons: [], mode: 'save_locally', note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }
+      : { send: { enabled: true, reasons: [], mode: 'send', note: null, kind, reach } },
   };
 }
 

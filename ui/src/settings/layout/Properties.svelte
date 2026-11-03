@@ -2,8 +2,11 @@
   import Field from '../../lib/components/Field.svelte';
   import LookInEditor from './LookInEditor.svelte';
   import TextAutomation from './TextAutomation.svelte';
+  import SharingPanel from './SharingPanel.svelte';
+  import { buttonKind, kindStyle } from '../../lib/connector';
+  import { blockName, lineFor } from './reach';
   import { roleHint } from '../../lib/roles';
-  import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Rect, Rule, VariableInfo } from '../../lib/types';
+  import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Reach, Rect, Rule, VariableInfo } from '../../lib/types';
   import { COLUMNS, typeLabel } from './model';
 
   let {
@@ -14,6 +17,7 @@
     connections = [],
     variables,
     issues,
+    reach = {},
     onrect,
     onremove,
   }: {
@@ -25,6 +29,8 @@
     connections?: ConnectionView[];
     variables: VariableInfo[];
     issues: IssueView[];
+    /** What each sharing button sends, by button id, as worked out by the code that shares. */
+    reach?: Record<string, Reach>;
     /** Try to give the block a new position and size; returns false when it does not fit. */
     onrect: (rect: Rect) => boolean;
     onremove: () => void;
@@ -186,6 +192,13 @@
         <option value="keep_open">Keep it open</option>
       </select>
     </Field>
+    <SharingPanel
+      {block}
+      {blocks}
+      kind={buttonKind(block.connection_id, connections)}
+      reach={reach[block.id]}
+      fallback={target?.capabilities ?? null}
+    />
     <div class="maps">
       <h3>Fill the service's fields</h3>
       {#each block.mappings as m, i (i)}
@@ -217,7 +230,7 @@
           <button type="button" aria-label="Remove this field" onclick={() => block.mappings.splice(i, 1)}>✕</button>
         </div>
       {:else}
-        <p class="quiet small">None yet. The screenshot, prompt and ticked files are always sent.</p>
+        <p class="quiet small">None yet. The screenshot, the prompt and the ticked files go unless the send rules above say otherwise.</p>
       {/each}
       <datalist id="fields-{block.id}">
         {#each fieldsFor(block.connection_id) as f (f.key)}<option value={f.key}>{f.label}</option>{/each}
@@ -228,6 +241,28 @@
     <p class="quiet">The captured picture, with crop, draw, square, circle and text tools. Nothing to set.</p>
   {/if}
 
+
+  {#if block.type !== 'sharing_button'}
+    {@const buttons = blocks.filter((b): b is Extract<Block, { type: 'sharing_button' }> => b.type === 'sharing_button')}
+    {#if buttons.length > 0}
+      <section class="sentby" aria-label="Sent by">
+        <h3>Sent by</h3>
+        <ul>
+          {#each buttons as btn (btn.id)}
+            {@const r = reach[btn.id]?.blocks.find((x) => x.block_id === block.id)}
+            {@const k = buttonKind(btn.connection_id, connections)}
+            {#if r}
+              {@const l = lineFor(r, btn, k)}
+              <li class={l.state} style={kindStyle(k)}>
+                <span class="who">{blockName(btn)}</span>
+                <span class="icon" aria-hidden="true">{l.icon}</span> {l.text}
+              </li>
+            {/if}
+          {/each}
+        </ul>
+      </section>
+    {/if}
+  {/if}
 
   <fieldset class="rect">
     <legend>Position and size</legend>
@@ -259,6 +294,16 @@
   .map > :nth-child(3) { grid-column: 1 / -1; }
   .map button { grid-column: 1 / -1; justify-self: end; width: auto; padding: 2px 8px; }
   .small { font-size: 12.5px; }
+  .sentby h3 { font-size: 13px; margin: 0 0 4px; }
+  .sentby ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+  .sentby li { font-size: 12.5px; }
+  .sentby li.cannot_send { color: var(--text); }
+  .sentby li.not_used, .sentby li.switched_off { color: var(--quiet); }
+  .who {
+    display: inline-block; padding: 0 7px; margin-right: 4px; border-radius: 999px;
+    background: var(--kind); color: var(--on-kind); border: 1px solid var(--kind-line); font-size: 11.5px;
+  }
+  .icon { font-weight: 700; }
   .hintline { grid-column: 1 / -1; }
   .rect { border: 1px solid var(--border); border-radius: var(--radius-sm); display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 8px 10px 10px; }
   .rect legend { font-size: 12px; font-weight: 600; padding: 0 4px; }

@@ -82,9 +82,24 @@ export type BlockContent =
       prompt_block_id: string | null;
       mappings: InfoMapping[];
       on_success: 'close_window' | 'keep_open';
+      /** What goes with the text. Absent while it is the default (picture, files attached). */
+      send?: SendRules;
     }
   | { type: 'dropdown'; title: string; source: DropdownSource }
   | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
+
+/** What happens to the ticked files: sent as files, written into the message, or left out. */
+export type FilesHow = 'attach' | 'inline' | 'none';
+
+export interface SendRules {
+  screenshot: boolean;
+  files: FilesHow;
+  /** With `files` set to `inline`: the most text, in kilobytes, written into the message. */
+  inline_limit_kb: number;
+}
+
+export const DEFAULT_SEND_RULES: SendRules = { screenshot: true, files: 'attach', inline_limit_kb: 64 };
+export const MAX_INLINE_KB = 512;
 
 /** A folder a Files block can look in, found from the program that had focus. */
 export type LookFolder = 'project' | 'program' | 'above_1' | 'above_2' | 'above_3';
@@ -388,6 +403,45 @@ export interface Describe {
   summary: string;
 }
 
+export type Support = 'yes' | 'limited' | 'no';
+
+export interface Capability {
+  support: Support;
+  /** One line: how it is used, or why it cannot be. */
+  note: string;
+}
+
+/** What a destination can take: the one table behind the builder, the window and the share. */
+export interface Capabilities {
+  text: Capability;
+  dropdown: Capability;
+  screenshot: Capability;
+  files: Capability;
+  link: Capability;
+}
+
+/** How a block takes part in a share. */
+export type Role =
+  | { role: 'screenshot' }
+  | { role: 'files' }
+  | { role: 'prompt' }
+  | { role: 'zip_name' }
+  | { role: 'field'; field: string };
+
+export type Verdict =
+  | ({ state: 'sent' } & Role)
+  | { state: 'cannot_send'; why: string }
+  | { state: 'switched_off' }
+  | { state: 'not_used' };
+
+export type BlockReach = { block_id: string } & Verdict;
+
+/** What one sharing button does with every other block of the layout. */
+export interface Reach {
+  capabilities: Capabilities;
+  blocks: BlockReach[];
+}
+
 export interface ConnectionView {
   id: string;
   name: string;
@@ -398,6 +452,8 @@ export interface ConnectionView {
   /** Which of the secrets the person types are stored (never their values). */
   secrets: { name: string; stored: boolean }[];
   describe: Describe;
+  /** What a button to this connection can send. */
+  capabilities: Capabilities;
 }
 
 export interface ConnectionsView {
@@ -427,6 +483,10 @@ export interface SharingView {
   mode: 'send' | 'save_locally';
   /** What pressing it does, when that is not obvious. */
   note: string | null;
+  /** The kind of destination (`jira`, `claude`...), which gives the button its colour. Null when it saves a zip here. */
+  kind: ServiceKind | null;
+  /** What this button does with each other block, and what its destination can take. */
+  reach: Reach | null;
 }
 
 export interface SavedCopy {

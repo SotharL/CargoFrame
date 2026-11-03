@@ -7,11 +7,14 @@
     onopenlink,
     onreconnect,
     onclose,
+    opened = null,
   }: {
     result: ShareResult;
     onopenlink: (url: string) => void;
     onreconnect: () => void;
     onclose: () => void;
+    /** The Claude chat that was opened, when the share went to one. */
+    opened?: string | null;
   } = $props();
 
   const placeText: Record<string, string> = {
@@ -25,6 +28,7 @@
 <div class="panel" role="status" aria-live="polite">
   {#if result.status === 'sent'}
     <Chip kind="ok" label={result.summary} />
+    {#if opened}<Chip kind="ok" label={`Opened: ${opened}`} />{/if}
     {#each result.notes as n (n)}<Chip kind="warn" label={n} />{/each}
     {#if result.url}
       <button onclick={() => onopenlink(result.url!)}>Open</button>
