@@ -74,6 +74,11 @@ those is true for each piece.
 5. Reconcile `C:\Users\Admin\Documents\GitHub\CargoFrame` with the repository. Earlier files were
    delivered there by hand and may duplicate files now in git.
 6. Confirm that "log action" in the brief means **data rule** (see `docs/decisions.md`).
+   Video (spike S9), on Windows: install ffmpeg (`winget install Gyan.FFmpeg`), open Settings,
+   Video, press "Test ffmpeg", then "Try a 5-second recording", then "Watch it here" and "Open the
+   clip". Try "Record until I stop" for a minute with Task Manager open, and "Trim, crop and mark a
+   copy". Try Capture = Desktop Duplication and an NVIDIA/Intel/AMD encoder if you have one. Write
+   what worked and what each cost into the S9 table in `docs/spikes.md`.
 7. Before making the repository public: the list at the end of `docs/signing.md` and in
    `docs/security.md`.
 
