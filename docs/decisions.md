@@ -563,9 +563,8 @@ dimmed. Drag the box to move it, its corner to resize it.
   drive them. A touch screen is not a V1 target.
 - **Checked in a real Chromium** with a real clip: the box sits where the numbers say, dims the rest, and
   follows a drag. The box and the buttons are only on the test clip, not on an exported copy.
-- **Still to build for the editor:** a timeline strip with handles instead of two number fields, marks
-  placed by clicking on the picture (the drawing of a mark is proven in part 6), and the editor in the
-  CargoFrame window instead of Settings.
+- **Still to build for the editor:** the editor in the CargoFrame window instead of Settings, with more
+  than one mark on a clip (the timeline strip is part 9, the click-to-place mark is part 8).
 
 
 ### Phase 12, part 8: click to place the drawn mark (3 Nov 2026)
@@ -581,3 +580,17 @@ circle). It starts in the middle of the clip.
   the same picture is then used to drag the crop box. Both cases are in the tests.
 - **Still to check on a real PC:** that the text is drawn with a readable font on Windows (the drawing
   uses the window's own fonts, so it is part of the owner checklist in `docs/status.md`).
+
+### Phase 12, part 9: a timeline under the picture (3 Nov 2026)
+
+Under the playing test clip there is now a strip that stands for the whole clip: the part that will be
+kept is shaded, a thin line follows the playing position, and the two ends have handles. Drag a handle to
+move the start or the end; click on the strip to take the clip to that moment. The two number fields stay
+and move with it, and "Start here" / "End here" still work.
+
+- **The trim is always in tenths of a second, and at least a tenth of a second is kept,** so the start
+  cannot pass the end and the end cannot come back below the start.
+- **From the keyboard:** each handle is a slider; the arrow keys move it a tenth of a second, with Shift
+  a second. Grabbing a handle never moves the clip (the click is not passed on to the strip).
+- **Checked in a real Chromium** with a real clip: the strip fills the width, a drag moves the handles
+  and the numbers, and a click on the strip seeks. Not shown on the edited copy, only on the test clip.

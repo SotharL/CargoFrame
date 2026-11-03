@@ -50,6 +50,9 @@
   let playing = $state<'test' | 'exported'>('test');
   let stage = $state<HTMLElement | null>(null);
   let player = $state<HTMLVideoElement | null>(null);
+  let strip = $state<HTMLElement | null>(null);
+  let now = $state(0);
+  let edgeDrag = $state<'start' | 'end' | null>(null);
   let dragging: { mode: 'move' | 'size'; sx: number; sy: number; from: { x: number; y: number; w: number; h: number } } | null = null;
   let playerUrl = $state<string | null>(null);
   let playerError = $state('');
@@ -173,6 +176,7 @@
     if (!t.ok) return;
     trimStart = 0;
     trimEnd = Math.round(t.clip_ms / 100) / 10;
+    now = 0;
     const even = (n: number) => Math.floor(n / 2) * 2;
     crop = { x: even(t.width / 4), y: even(t.height / 4), w: even(t.width / 2), h: even(t.height / 2) };
     cropOn = false;
@@ -267,6 +271,65 @@
       x: Math.round(clamp(((e.clientX - box.left) / box.width) * trial.width, 0, trial.width)),
       y: Math.round(clamp(((e.clientY - box.top) / box.height) * trial.height, 0, trial.height)),
     };
+  }
+
+  const clipSecs = $derived(trial ? trial.clip_ms / 1000 : 0);
+  const tenth = (n: number) => Math.round(n * 10) / 10;
+  const edges = $derived<{ which: 'start' | 'end'; label: string; value: number }[]>([
+    { which: 'start', label: 'Start of the copy', value: Number(trimStart) },
+    { which: 'end', label: 'End of the copy', value: Number(trimEnd) },
+  ]);
+  /** Where a second sits on the timeline, as a percentage of its width. */
+  const pct = (secs: number) => (clipSecs ? clamp(secs / clipSecs, 0, 1) * 100 : 0);
+
+  /** Moves one end of the trim, in tenths of a second, keeping at least a tenth between the two. */
+  function setEdge(which: 'start' | 'end', secs: number) {
+    if (which === 'start') trimStart = tenth(clamp(secs, 0, Number(trimEnd) - 0.1));
+    else trimEnd = tenth(clamp(secs, Number(trimStart) + 0.1, clipSecs));
+  }
+
+  function secsAt(clientX: number): number | null {
+    if (!strip) return null;
+    const box = strip.getBoundingClientRect();
+    return box.width ? clamp((clientX - box.left) / box.width, 0, 1) * clipSecs : null;
+  }
+
+  function startEdge(e: MouseEvent, which: 'start' | 'end') {
+    e.preventDefault();
+    e.stopPropagation();
+    edgeDrag = which;
+    window.addEventListener('mousemove', onEdge);
+    window.addEventListener('mouseup', endEdge);
+  }
+
+  function onEdge(e: MouseEvent) {
+    const secs = secsAt(e.clientX);
+    if (edgeDrag && secs !== null) setEdge(edgeDrag, secs);
+  }
+
+  function endEdge() {
+    edgeDrag = null;
+    window.removeEventListener('mousemove', onEdge);
+    window.removeEventListener('mouseup', endEdge);
+  }
+
+  /** From the keyboard: arrows move an end by a tenth of a second, with Shift by a second. */
+  function edgeKey(e: KeyboardEvent, which: 'start' | 'end') {
+    const step = e.shiftKey ? 1 : 0.1;
+    const at = Number(which === 'start' ? trimStart : trimEnd);
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') setEdge(which, at - step);
+    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') setEdge(which, at + step);
+    else return;
+    e.preventDefault();
+  }
+
+  /** A click on the timeline takes the playing clip to that moment. */
+  function seek(e: MouseEvent) {
+    const secs = secsAt(e.clientX);
+    if (secs !== null && player) {
+      player.currentTime = secs;
+      now = secs;
+    }
   }
 
   function startDrag(e: MouseEvent, mode: 'move' | 'size') {
@@ -406,6 +469,7 @@
     stopPolling();
     closePlayer();
     endDrag();
+    endEdge();
   });
 </script>
 
@@ -607,6 +671,7 @@
                 muted
                 aria-label={playing === 'exported' ? 'Edited copy' : 'Test clip'}
                 onerror={playerFailed}
+                ontimeupdate={() => (now = player?.currentTime ?? 0)}
               ></video>
               {#if playing === 'test' && markKind === 'drawn' && !cropOn && trial}
                 <span
@@ -633,6 +698,29 @@
                 </div>
               {/if}
             </div>
+            {#if playing === 'test' && clipSecs > 0}
+              <!-- svelte-ignore a11y_click_events_have_key_events -->
+              <div class="timeline" role="presentation" aria-label="Timeline" bind:this={strip} onclick={seek}>
+                <div class="kept" style:left="{pct(Number(trimStart))}%" style:width="{Math.max(0, pct(Number(trimEnd)) - pct(Number(trimStart)))}%"></div>
+                <span class="playhead" aria-hidden="true" style:left="{pct(now)}%"></span>
+                {#each edges as edge (edge.which)}
+                  <span
+                    class="edge"
+                    role="slider"
+                    tabindex="0"
+                    aria-label={edge.label}
+                    aria-valuemin={0}
+                    aria-valuemax={clipSecs}
+                    aria-valuenow={edge.value}
+                    aria-valuetext="{edge.value.toFixed(1)} s"
+                    style:left="{pct(edge.value)}%"
+                    onmousedown={(e) => startEdge(e, edge.which)}
+                    onkeydown={(e) => edgeKey(e, edge.which)}
+                    onclick={(e) => e.stopPropagation()}
+                  ></span>
+                {/each}
+              </div>
+            {/if}
             {#if playing === 'test'}
               <div class="row wrap">
                 <button type="button" onclick={() => (trimStart = playhead())}>Start here</button>
@@ -682,5 +770,10 @@
     position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; box-sizing: border-box;
     border: 3px solid #e5322d; border-radius: 50%; pointer-events: none;
   }
+  .timeline { position: relative; box-sizing: border-box; width: calc(100% - 10px); height: 22px; margin: 10px 5px 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
+  .timeline .kept { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 30%, transparent); pointer-events: none; }
+  .timeline .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: currentColor; pointer-events: none; }
+  .timeline .edge { position: absolute; top: -4px; bottom: -4px; width: 10px; margin-left: -5px; background: var(--accent); border: 2px solid #fff; border-radius: 3px; box-sizing: border-box; cursor: ew-resize; }
+  .timeline .edge:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
   .grip { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: var(--accent); border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; }
 </style>

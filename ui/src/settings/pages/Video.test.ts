@@ -292,9 +292,14 @@ describe('Video settings', () => {
         URL.revokeObjectURL = () => {};
         // the clip is shown at half its size: 960 px for 1920
         Element.prototype.getBoundingClientRect = function () {
-          return this.classList.contains('stage')
-            ? ({ width: 960, height: 540, left: 0, top: 0, right: 960, bottom: 540, x: 0, y: 0, toJSON() {} } as DOMRect)
-            : real.call(this);
+          if (this.classList.contains('stage')) {
+            return { width: 960, height: 540, left: 0, top: 0, right: 960, bottom: 540, x: 0, y: 0, toJSON() {} } as DOMRect;
+          }
+          // the timeline is 500 px wide: with a 5 s clip, 100 px is a second
+          if (this.classList.contains('timeline')) {
+            return { width: 500, height: 22, left: 0, top: 0, right: 500, bottom: 22, x: 0, y: 0, toJSON() {} } as DOMRect;
+          }
+          return real.call(this);
         };
       });
       afterEach(() => {
@@ -411,6 +416,84 @@ describe('Video settings', () => {
         expect(drawn.some((d) => d.startsWith('fillText'))).toBe(false);
       });
 
+      const edge = (name: string) => screen.getByRole('slider', { name });
+
+      it('shows the kept part on a timeline, and drags its start and end with the mouse', async () => {
+        await watching();
+        const timeline = document.querySelector('.timeline') as HTMLElement;
+        const kept = timeline.querySelector('.kept') as HTMLElement;
+        expect(kept.style.left).toBe('0%');
+        expect(kept.style.width).toBe('100%');
+        expect(edge('Start of the copy').getAttribute('aria-valuenow')).toBe('0');
+        expect(edge('End of the copy').getAttribute('aria-valuenow')).toBe('5');
+
+        await fireEvent.mouseDown(edge('Start of the copy'), { clientX: 0 });
+        await fireEvent.mouseMove(window, { clientX: 130 });
+        expect(value('Start (seconds)')).toBe('1.3');
+        expect(kept.style.left).toBe('26%');
+        // it cannot pass the end: a tenth of a second is always left
+        await fireEvent.mouseMove(window, { clientX: 5000 });
+        expect(value('Start (seconds)')).toBe('4.9');
+        await fireEvent.mouseUp(window);
+        await fireEvent.mouseMove(window, { clientX: 0 });
+        expect(value('Start (seconds)')).toBe('4.9');
+
+        await fireEvent.mouseDown(edge('End of the copy'), { clientX: 500 });
+        await fireEvent.mouseMove(window, { clientX: 0 });
+        expect(value('End (seconds)')).toBe('5');
+        // the start is at 4.9 s, so the end cannot come back below 5.0 s
+        await fireEvent.mouseMove(window, { clientX: 450 });
+        expect(value('End (seconds)')).toBe('5');
+        await fireEvent.mouseUp(window);
+        await fireEvent.keyDown(edge('Start of the copy'), { key: 'ArrowLeft', shiftKey: true });
+        expect(value('Start (seconds)')).toBe('3.9');
+        await fireEvent.mouseDown(edge('End of the copy'), { clientX: 500 });
+        await fireEvent.mouseMove(window, { clientX: 450 });
+        expect(value('End (seconds)')).toBe('4.5');
+        await fireEvent.mouseUp(window);
+      });
+
+      it('moves the ends from the keyboard, by a tenth of a second or a second with Shift', async () => {
+        await watching();
+        const start = edge('Start of the copy');
+        await fireEvent.keyDown(start, { key: 'ArrowRight' });
+        expect(value('Start (seconds)')).toBe('0.1');
+        await fireEvent.keyDown(start, { key: 'ArrowUp', shiftKey: true });
+        expect(value('Start (seconds)')).toBe('1.1');
+        await fireEvent.keyDown(start, { key: 'ArrowLeft' });
+        expect(value('Start (seconds)')).toBe('1');
+        await fireEvent.keyDown(start, { key: 'a' });
+        expect(value('Start (seconds)')).toBe('1');
+        const end = edge('End of the copy');
+        await fireEvent.keyDown(end, { key: 'ArrowRight' });
+        expect(value('End (seconds)')).toBe('5');
+        await fireEvent.keyDown(end, { key: 'ArrowLeft', shiftKey: true });
+        expect(value('End (seconds)')).toBe('4');
+        expect(end.getAttribute('aria-valuetext')).toBe('4.0 s');
+      });
+
+      it('takes the clip to the moment you click on the timeline, but not when you grab an end', async () => {
+        await watching();
+        const video = document.querySelector('video')!;
+        const seen: number[] = [];
+        Object.defineProperty(video, 'currentTime', { set: (v: number) => seen.push(v), get: () => 0, configurable: true });
+        await fireEvent.click(document.querySelector('.timeline')!, { clientX: 250 });
+        expect(seen).toEqual([2.5]);
+        expect((document.querySelector('.playhead') as HTMLElement).style.left).toBe('50%');
+        await fireEvent.click(edge('Start of the copy'), { clientX: 10 });
+        expect(seen).toEqual([2.5]);
+      });
+
+      it('follows the playing clip with a playhead, and starts again from the whole clip for a new test', async () => {
+        await watching();
+        const video = document.querySelector('video')!;
+        Object.defineProperty(video, 'currentTime', { value: 1, configurable: true });
+        await fireEvent.timeUpdate(video);
+        expect((document.querySelector('.playhead') as HTMLElement).style.left).toBe('20%');
+        await fireEvent.keyDown(edge('Start of the copy'), { key: 'ArrowRight', shiftKey: true });
+        expect(value('Start (seconds)')).toBe('1');
+      });
+
       it('has no crop box or start and end buttons on the edited copy', async () => {
         await watching();
         await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
@@ -420,6 +503,7 @@ describe('Video settings', () => {
         await waitFor(() => expect(document.querySelector('video')!.getAttribute('aria-label')).toBe('Edited copy'));
         expect(screen.queryByLabelText('Crop area')).toBeNull();
         expect(screen.queryByRole('button', { name: 'Start here' })).toBeNull();
+        expect(document.querySelector('.timeline')).toBeNull();
       });
     });
   });
