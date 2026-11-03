@@ -42,6 +42,9 @@
   let cropOn = $state(false);
   let crop = $state({ x: 0, y: 0, w: 0, h: 0 });
   let markKind = $state<VideoTestEdit['mark']>('none');
+  // where the drawn mark goes, in the clip's own pixels, and what its text says
+  let markAt = $state({ x: 0, y: 0 });
+  let markText = $state('CargoFrame test');
   let exporting = $state(false);
   let copy = $state<VideoTrial | null>(null);
   let playing = $state<'test' | 'exported'>('test');
@@ -174,6 +177,7 @@
     crop = { x: even(t.width / 4), y: even(t.height / 4), w: even(t.width / 2), h: even(t.height / 2) };
     cropOn = false;
     markKind = 'none';
+    markAt = { x: Math.round(t.width / 2), y: Math.round(t.height / 2) };
   }
 
   /**
@@ -187,19 +191,27 @@
     const ctx = canvas.getContext('2d');
     if (!ctx) throw 'This window cannot draw the mark';
     const red = '#e5322d';
+    const cx = clamp(markAt.x, 0, width);
+    const cy = clamp(markAt.y, 0, height);
     ctx.lineWidth = Math.max(4, Math.round(height / 120));
     ctx.strokeStyle = red;
     ctx.beginPath();
-    ctx.arc(width / 2, height / 2, Math.min(width, height) / 5, 0, Math.PI * 2);
+    ctx.arc(cx, cy, Math.min(width, height) / 10, 0, Math.PI * 2);
     ctx.stroke();
-    const size = Math.max(16, Math.round(height / 18));
-    ctx.font = `bold ${size}px sans-serif`;
-    ctx.textBaseline = 'top';
-    ctx.lineWidth = Math.max(2, Math.round(size / 8));
-    ctx.strokeStyle = '#ffffff';
-    ctx.strokeText('CargoFrame test', size / 2, size / 2);
-    ctx.fillStyle = red;
-    ctx.fillText('CargoFrame test', size / 2, size / 2);
+    const text = markText.trim();
+    if (text) {
+      // the text sits just under the circle
+      const size = Math.max(16, Math.round(height / 18));
+      ctx.font = `bold ${size}px sans-serif`;
+      ctx.textBaseline = 'top';
+      ctx.textAlign = 'center';
+      ctx.lineWidth = Math.max(2, Math.round(size / 8));
+      ctx.strokeStyle = '#ffffff';
+      const y = Math.min(cy + Math.min(width, height) / 10 + size / 3, height - size * 1.2);
+      ctx.strokeText(text, cx, y);
+      ctx.fillStyle = red;
+      ctx.fillText(text, cx, y);
+    }
     return new Promise((resolve, reject) => {
       canvas.toBlob((b) => (b ? resolve(b) : reject('The mark could not be made into a picture')), 'image/png');
     });
@@ -245,6 +257,17 @@
   const MIN_CROP = 16;
   const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), Math.max(lo, hi));
   const even = (n: number) => Math.round(n / 2) * 2;
+
+  /** A click on the picture puts the drawn mark there (when a drawn mark is chosen and not cropping). */
+  function placeMark(e: MouseEvent) {
+    if (markKind !== 'drawn' || cropOn || playing !== 'test' || !stage || !trial) return;
+    const box = stage.getBoundingClientRect();
+    if (!box.width || !box.height) return;
+    markAt = {
+      x: Math.round(clamp(((e.clientX - box.left) / box.width) * trial.width, 0, trial.width)),
+      y: Math.round(clamp(((e.clientY - box.top) / box.height) * trial.height, 0, trial.height)),
+    };
+  }
 
   function startDrag(e: MouseEvent, mode: 'move' | 'size') {
     e.preventDefault();
@@ -543,6 +566,11 @@
                 <option value="drawn">A circle and a text (drawn by this window)</option>
               </select>
             </Field>
+              {#if markKind === 'drawn'}
+                <Field label="Mark text" hint="Written under the circle. Click on the playing picture to put the mark where you want it.">
+                  <input type="text" bind:value={markText} />
+                </Field>
+              {/if}
               <div class="row">
                 <button type="button" onclick={exportCopy} disabled={exporting}>
                   {exporting ? 'Making the copy…' : 'Export a copy'}
@@ -569,7 +597,8 @@
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
           {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
           {#if playerUrl}
-            <div class="stage" bind:this={stage}>
+            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+            <div class="stage" class:placing={markKind === 'drawn' && !cropOn && playing === 'test'} bind:this={stage} onclick={placeMark}>
               <!-- svelte-ignore a11y_media_has_caption -->
               <video
                 bind:this={player}
@@ -579,6 +608,14 @@
                 aria-label={playing === 'exported' ? 'Edited copy' : 'Test clip'}
                 onerror={playerFailed}
               ></video>
+              {#if playing === 'test' && markKind === 'drawn' && !cropOn && trial}
+                <span
+                  class="markdot"
+                  aria-label="Mark position"
+                  style:left="{(markAt.x / trial.width) * 100}%"
+                  style:top="{(markAt.y / trial.height) * 100}%"
+                ></span>
+              {/if}
               {#if playing === 'test' && cropOn && trial}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
                 <div
@@ -639,6 +676,11 @@
     position: absolute; box-sizing: border-box; cursor: move;
     border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
     box-shadow: 0 0 0 9999px rgb(0 0 0 / 35%); /* dims everything outside the crop */
+  }
+  .stage.placing { cursor: crosshair; }
+  .markdot {
+    position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; box-sizing: border-box;
+    border: 3px solid #e5322d; border-radius: 50%; pointer-events: none;
   }
   .grip { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: var(--accent); border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; }
 </style>

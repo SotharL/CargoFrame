@@ -567,3 +567,17 @@ dimmed. Drag the box to move it, its corner to resize it.
   placed by clicking on the picture (the drawing of a mark is proven in part 6), and the editor in the
   CargoFrame window instead of Settings.
 
+
+### Phase 12, part 8: click to place the drawn mark (3 Nov 2026)
+
+When "Mark" is set to the window-drawn one, clicking on the picture puts the mark there: a small dot
+shows the spot, and a "Mark text" field sets the words written under the circle (empty gives only the
+circle). It starts in the middle of the clip.
+
+- **The position is kept as a share of the picture (0 to 1),** so it stays right whatever size the clip
+  is shown at, and is turned into the clip's own pixels only when the mark is drawn. The circle's size is
+  a tenth of the shorter side, so it reads the same on a small or a large clip.
+- **A click does nothing unless a drawn mark is chosen, and while "Crop to an area" is ticked,** because
+  the same picture is then used to drag the crop box. Both cases are in the tests.
+- **Still to check on a real PC:** that the text is drawn with a readable font on Windows (the drawing
+  uses the window's own fonts, so it is part of the owner checklist in `docs/status.md`).

@@ -268,7 +268,7 @@ describe('Video settings', () => {
         expect(sent).toHaveLength(1);
         expect(sent[0]!.type).toBe('image/png');
         // a circle in the middle of the 1920x1080 picture, and the text
-        expect(drawn).toContain('arc:960,540,216,0,' + Math.PI * 2);
+        expect(drawn).toContain('arc:960,540,108,0,' + Math.PI * 2);
         expect(drawn.some((d) => d.startsWith('fillText:CargoFrame test'))).toBe(true);
       });
 
@@ -359,6 +359,56 @@ describe('Video settings', () => {
         await fireEvent.mouseMove(window, { clientX: -5000, clientY: -5000 });
         expect(value('Width (px)')).toBe('16');
         await fireEvent.mouseUp(window);
+      });
+
+      function mockCanvas(): string[] {
+        const drawn: string[] = [];
+        const ctx = new Proxy({}, {
+          get: (_t, name) => (typeof name === 'string' && ['arc', 'beginPath', 'stroke', 'strokeText', 'fillText'].includes(name)
+            ? (...a: unknown[]) => { drawn.push(`${name}:${a.join(',')}`); }
+            : undefined),
+          set: () => true,
+        });
+        HTMLCanvasElement.prototype.getContext = (() => ctx) as never;
+        HTMLCanvasElement.prototype.toBlob = function (cb: BlobCallback) {
+          cb(new Blob([new Uint8Array(8)], { type: 'image/png' }));
+        };
+        return drawn;
+      }
+
+      it('puts the drawn mark where you click on the picture and writes your text under it', async () => {
+        const drawn = mockCanvas();
+        await watching();
+        await fireEvent.change(screen.getByRole('combobox', { name: 'Mark' }), { target: { value: 'drawn' } });
+        // the mark starts in the middle; the dot shows where it will go
+        expect(screen.getByLabelText('Mark position').style.left).toBe('50%');
+        // the picture is shown at half size: a click at 240,135 is at 480,270 in the clip
+        await fireEvent.click(document.querySelector('.stage')!, { clientX: 240, clientY: 135 });
+        expect(screen.getByLabelText('Mark position').style.left).toBe('25%');
+        expect(screen.getByLabelText('Mark position').style.top).toBe('25%');
+        await fireEvent.input(screen.getByRole('textbox', { name: 'Mark text' }), { target: { value: 'Look here' } });
+        await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+        await screen.findByText('Copy made');
+        expect(drawn).toContain('arc:480,270,108,0,' + Math.PI * 2);
+        expect(drawn.some((d) => d.startsWith('fillText:Look here,480,'))).toBe(true);
+      });
+
+      it('draws only the circle when the text is empty, and ignores clicks unless a drawn mark is chosen or while cropping', async () => {
+        const drawn = mockCanvas();
+        await watching();
+        // no drawn mark chosen: a click moves nothing and there is no dot
+        await fireEvent.click(document.querySelector('.stage')!, { clientX: 240, clientY: 135 });
+        expect(screen.queryByLabelText('Mark position')).toBeNull();
+        await fireEvent.change(screen.getByRole('combobox', { name: 'Mark' }), { target: { value: 'drawn' } });
+        await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
+        await fireEvent.click(document.querySelector('.stage')!, { clientX: 240, clientY: 135 });
+        await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
+        expect(screen.getByLabelText('Mark position').style.left).toBe('50%');
+        await fireEvent.input(screen.getByRole('textbox', { name: 'Mark text' }), { target: { value: '  ' } });
+        await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+        await screen.findByText('Copy made');
+        expect(drawn.some((d) => d.startsWith('arc:'))).toBe(true);
+        expect(drawn.some((d) => d.startsWith('fillText'))).toBe(false);
       });
 
       it('has no crop box or start and end buttons on the edited copy', async () => {
