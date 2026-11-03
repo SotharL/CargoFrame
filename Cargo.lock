@@ -507,12 +507,14 @@ dependencies = [
  "cargoframe-net",
  "cargoframe-rules",
  "cargoframe-safe",
+ "cargoframe-update",
  "cargoframe-window",
  "chrono",
  "keyring",
  "notify-rust",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
@@ -655,6 +657,19 @@ dependencies = [
 [[package]]
 name = "cargoframe-safe"
 version = "0.1.0"
+
+[[package]]
+name = "cargoframe-update"
+version = "0.1.0"
+dependencies = [
+ "cargoframe-net",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "cargoframe-window"

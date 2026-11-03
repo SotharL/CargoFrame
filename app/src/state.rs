@@ -2,6 +2,7 @@ use crate::connections::Connections;
 use crate::session::Sessions;
 use crate::timing::Timings;
 use crate::transfer::Entry;
+use crate::updates::Updates;
 use crate::warm::Warm;
 use cargoframe_bundle::{Sweep, Workspace};
 use cargoframe_config::Store;
@@ -27,6 +28,8 @@ pub struct AppState {
     pub warm: Warm,
     /// The last timings, for Settings, General.
     pub timings: Timings,
+    /// Looking for, downloading and installing a newer version.
+    pub updates: std::sync::Arc<Updates>,
     /// The program that had focus at the last capture, so the layout builder can show what a
     /// Files block would find without asking again. Kept in memory only.
     last_program: Mutex<Option<String>>,
@@ -56,6 +59,10 @@ impl AppState {
             sessions: Sessions::new(),
             warm: Warm::new(),
             timings: Timings::new(),
+            updates: std::sync::Arc::new(Updates::new(
+                std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
+                std::sync::Arc::new(crate::secrets::KeyringStore),
+            )),
             busy: AtomicBool::new(false),
             sharing: AtomicBool::new(false),
             share_cancelled: AtomicBool::new(false),

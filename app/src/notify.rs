@@ -99,3 +99,58 @@ pub fn problem(_app: &AppHandle, title: &str, body: &str) {
 
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn problem(_app: &AppHandle, _title: &str, _body: &str) {}
+
+/// "A newer version is available". Clicking it opens Settings, General, where Updates is.
+#[cfg(windows)]
+pub fn update_available(app: &AppHandle, version: &str) {
+    use tauri_winrt_notification::{Duration, Toast};
+
+    let app_id = if cfg!(debug_assertions) {
+        Toast::POWERSHELL_APP_ID.to_string()
+    } else {
+        app.config().identifier.clone()
+    };
+    let handle = app.clone();
+    let title = format!("CargoFrame {version} is available");
+    let shown = Toast::new(&app_id)
+        .title(&title)
+        .text1("Click here to update.")
+        .duration(Duration::Long)
+        .on_activated(move |_| {
+            crate::windowing::open_settings_at(&handle, "general");
+            Ok(())
+        })
+        .show();
+    if let Err(e) = shown {
+        tracing::warn!("update notification failed: {e}");
+    }
+}
+
+#[cfg(target_os = "linux")]
+pub fn update_available(app: &AppHandle, version: &str) {
+    use notify_rust::{Notification, Timeout};
+
+    let handle = app.clone();
+    let title = format!("CargoFrame {version} is available");
+    std::thread::spawn(move || {
+        let result = Notification::new()
+            .appname("CargoFrame")
+            .summary(&title)
+            .body("Click here to update.")
+            .icon("cargoframe")
+            .action("default", "Open settings")
+            .timeout(Timeout::Milliseconds(15_000))
+            .show();
+        match result {
+            Ok(note) => note.wait_for_action(|action| {
+                if action == "default" {
+                    crate::windowing::open_settings_at(&handle, "general");
+                }
+            }),
+            Err(e) => tracing::warn!("update notification failed: {e}"),
+        }
+    });
+}
+
+#[cfg(not(any(windows, target_os = "linux")))]
+pub fn update_available(_app: &AppHandle, _version: &str) {}

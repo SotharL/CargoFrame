@@ -169,7 +169,35 @@ pub enum NetError {
     Other(String),
 }
 
+/// How a download ended.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Download {
+    pub status: u16,
+    /// Bytes written to the destination (0 when the answer was not a success).
+    pub bytes: u64,
+    /// What the server said when it refused (a short text), empty on success.
+    pub message: String,
+}
+
+impl Download {
+    pub fn is_success(&self) -> bool {
+        (200..300).contains(&self.status)
+    }
+}
+
 /// Something that can send a request. The connectors only depend on this.
 pub trait Http: Send + Sync {
     fn send(&self, request: &Request) -> Result<Response, NetError>;
+
+    /// Fetch a large answer straight into `out`, reporting `progress(done, total)`. At most
+    /// `limit` bytes are accepted. Clients that cannot do this say so.
+    fn download(
+        &self,
+        _request: &Request,
+        _out: &mut dyn std::io::Write,
+        _limit: u64,
+        _progress: &mut dyn FnMut(u64, Option<u64>),
+    ) -> Result<Download, NetError> {
+        Err(NetError::Other("this client cannot download files".into()))
+    }
 }

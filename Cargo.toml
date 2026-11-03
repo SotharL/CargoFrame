@@ -13,6 +13,7 @@ members = [
     "core/net",
     "core/connectors",
     "core/deliver",
+    "core/update",
     "app",
 ]
 

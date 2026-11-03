@@ -529,3 +529,47 @@ export interface ShareRequest {
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;
 }
+
+// ----- updates (Settings, General) -----
+
+/** Where an update is. */
+export type UpdatePhase =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'downloading'; done: number; total: number | null }
+  | { state: 'verifying' }
+  | { state: 'installing' }
+  | {
+      state: 'failed';
+      message: string;
+      /** The verified installer, kept so it can be run by hand. */
+      installer: string | null;
+      needs_token: boolean;
+    };
+
+/** The outcome of the last check. */
+export type UpdateLast =
+  | { state: 'up_to_date'; latest: string }
+  | {
+      state: 'available';
+      version: string;
+      notes: string;
+      page: string;
+      installer: string;
+      size: number;
+      published: string | null;
+    }
+  | { state: 'failed'; message: string; needs_token: boolean };
+
+export interface UpdateView {
+  current: string;
+  repository: string;
+  /** There is an installer for this kind of computer. */
+  supported: boolean;
+  /** A GitHub token is stored. The token itself is never sent to the window. */
+  token_set: boolean;
+  /** The password store could not be read, so a token cannot be kept or used. */
+  token_problem: string | null;
+  last: UpdateLast | null;
+  phase: UpdatePhase;
+}

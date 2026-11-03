@@ -22,6 +22,7 @@ mod transfer;
 mod tray;
 mod tray_host;
 mod triggers;
+mod updates;
 mod warm;
 mod windowing;
 
@@ -119,6 +120,10 @@ pub fn run() {
             commands::report_painted,
             commands::get_timings,
             commands::get_memory_status,
+            commands::get_update_view,
+            commands::check_update,
+            commands::install_update,
+            commands::set_update_token,
         ])
         .on_window_event(|window, event| match event {
             // Settings, General, Memory decides whether a closed window is destroyed or kept.
@@ -147,6 +152,7 @@ pub fn run() {
                 }
             }
             sweep_every_hour(app.handle().clone());
+            check_for_updates_daily(app.handle().clone());
             tray::build(app.handle())?;
             triggers::reload(app.handle());
             notify::launched(app.handle());
@@ -170,6 +176,40 @@ pub fn run() {
             }
         }
     });
+}
+
+/// With "Check for updates" on in General, look for a newer version a minute after start and
+/// then once a day, and say so once per version. Nothing is downloaded or installed here: that
+/// is a button in Settings. Downloads left by an earlier run are removed first.
+fn check_for_updates_daily(app: tauri::AppHandle) {
+    let spawned = std::thread::Builder::new()
+        .name("update-check".into())
+        .spawn(move || {
+            if let Some(state) = app.try_state::<AppState>() {
+                updates::clear_downloads(&state.store.dirs().data().join("updates"));
+            }
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            loop {
+                if let Some(state) = app.try_state::<AppState>() {
+                    let on = state
+                        .store
+                        .load_or_default::<cargoframe_config::General>()
+                        .map(|g| g.check_updates)
+                        .unwrap_or(false);
+                    if on {
+                        state.updates.check();
+                        let _ = tauri::Emitter::emit(&app, "update-changed", ());
+                        if let Some(version) = state.updates.news() {
+                            notify::update_available(&app, &version);
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(24 * 3600));
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::warn!("could not start the update check: {e}");
+    }
 }
 
 /// Capture folders belong to open windows; this removes any that got left behind.

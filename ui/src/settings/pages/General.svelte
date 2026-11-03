@@ -6,6 +6,7 @@
   import Chip from '../../lib/components/Chip.svelte';
   import SafetySection from './SafetySection.svelte';
   import TransferSection from './TransferSection.svelte';
+  import UpdatesSection from './UpdatesSection.svelte';
   import { getApi } from '../../lib/ipc';
   import { applyTheme } from '../../lib/theme';
   import type { AppInfo, General, MemoryMode, MemoryStatus, ThemeChoice, TimingView } from '../../lib/types';
@@ -86,6 +87,7 @@
     return save(async () => (await getApi()).setGeneral({ ...general, theme: t }));
   };
   const onMemory = () => save(async () => (await getApi()).setGeneral({ ...general }));
+  const onAutoCheck = () => save(async () => (await getApi()).setGeneral({ ...general }));
   const onAutostart = (v: boolean) => save(async () => (await getApi()).setAutostart(v));
 </script>
 
@@ -178,15 +180,7 @@
       </div>
     </Section>
 
-    <Section title="Updates">
-      <p>
-        Version <span class="mono selectable">{info?.version}</span>
-      </p>
-      <p class="quiet">
-        Automatic checks are off while this project is private. To update, run the newer
-        installer; it upgrades CargoFrame in place and keeps your settings.
-      </p>
-    </Section>
+    <UpdatesSection bind:auto={general.check_updates} onauto={onAutoCheck} />
 
     <div class="status" role="status" aria-live="polite">
       {#if status === 'saved'}<Chip kind="ok" label="Saved" />{/if}

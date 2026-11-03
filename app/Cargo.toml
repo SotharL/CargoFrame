@@ -39,6 +39,7 @@ cargoframe-bundle = { path = "../core/bundle" }
 cargoframe-safe = { path = "../core/safe" }
 cargoframe-connectors = { path = "../core/connectors" }
 cargoframe-net = { path = "../core/net" }
+cargoframe-update = { path = "../core/update" }
 tauri-plugin-global-shortcut = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
@@ -54,4 +55,5 @@ keyring = { version = "3", default-features = false, features = ["async-secret-s
 [dev-dependencies]
 tempfile.workspace = true
 cargoframe-net = { path = "../core/net", features = ["mock"] }
+sha2 = "0.11"
 zip = { version = "9", default-features = false, features = ["deflate"] }

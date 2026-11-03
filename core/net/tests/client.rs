@@ -254,3 +254,114 @@ fn a_redirect_loop_ends_with_the_last_redirect_answer() {
     assert_eq!(resp.status, 302);
     assert_eq!(server.requests().len(), 6, "the first call plus five hops");
 }
+
+// ----- downloads straight to a writer -----
+
+#[test]
+fn a_download_is_written_as_it_arrives_and_progress_is_reported() {
+    let payload: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
+    let served = payload.clone();
+    let server = MockServer::start(move |_| MockResponse::ok().body(served.clone()));
+    let mut out = Vec::new();
+    let mut seen: Vec<(u64, Option<u64>)> = Vec::new();
+    let done = client()
+        .download(
+            &Request::get(server.url("/file.bin")).header("Accept", "application/octet-stream"),
+            &mut out,
+            10 * 1024 * 1024,
+            &mut |d, t| seen.push((d, t)),
+        )
+        .unwrap();
+    assert!(done.is_success());
+    assert_eq!(done.bytes, payload.len() as u64);
+    assert_eq!(out, payload);
+    assert!(seen.len() > 1, "progress is reported more than once");
+    assert_eq!(
+        seen.last().copied(),
+        Some((payload.len() as u64, Some(payload.len() as u64)))
+    );
+    assert!(
+        seen.windows(2).all(|w| w[0].0 < w[1].0),
+        "progress only goes forward"
+    );
+    assert_eq!(
+        server.requests()[0].header("accept"),
+        Some("application/octet-stream")
+    );
+}
+
+#[test]
+fn a_download_that_is_refused_writes_nothing_and_says_what_the_server_said() {
+    let server = MockServer::start(|_| MockResponse::text(404, "Not Found"));
+    let mut out = Vec::new();
+    let done = client()
+        .download(
+            &Request::get(server.url("/gone")),
+            &mut out,
+            1024,
+            &mut |_, _| {},
+        )
+        .unwrap();
+    assert_eq!(done.status, 404);
+    assert!(!done.is_success());
+    assert_eq!(done.message, "Not Found");
+    assert!(out.is_empty());
+}
+
+#[test]
+fn a_download_larger_than_the_limit_is_stopped() {
+    let server = MockServer::start(|_| MockResponse::ok().body(vec![7u8; 50_000]));
+    let mut out = Vec::new();
+    let err = client()
+        .download(
+            &Request::get(server.url("/big")),
+            &mut out,
+            10_000,
+            &mut |_, _| {},
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("larger than"), "{err}");
+    assert!(out.len() <= 10_000, "nothing past the limit is written");
+}
+
+#[test]
+fn a_download_follows_a_redirect_without_the_sign_in_header_to_another_host() {
+    let storage = MockServer::start(|_| MockResponse::ok().body(b"installer bytes".to_vec()));
+    let target = storage.url("/signed?token=abc");
+    let api = MockServer::start(move |_| MockResponse::new(302).header("Location", &target));
+    let mut out = Vec::new();
+    let done = client()
+        .download(
+            &Request::get(api.url("/assets/1")).header("Authorization", "Bearer secret"),
+            &mut out,
+            1024 * 1024,
+            &mut |_, _| {},
+        )
+        .unwrap();
+    assert!(done.is_success());
+    assert_eq!(out, b"installer bytes");
+    assert_eq!(
+        api.requests()[0].header("authorization"),
+        Some("Bearer secret")
+    );
+    assert_eq!(storage.requests()[0].header("authorization"), None);
+}
+
+#[test]
+fn a_client_without_downloads_says_so() {
+    struct Plain;
+    impl Http for Plain {
+        fn send(&self, _: &Request) -> Result<cargoframe_net::Response, NetError> {
+            Err(NetError::Timeout)
+        }
+    }
+    let err = Plain
+        .download(
+            &Request::get("https://example.com/x"),
+            &mut Vec::new(),
+            1,
+            &mut |_, _| {},
+        )
+        .unwrap_err();
+    assert!(err.to_string().contains("cannot download"));
+}

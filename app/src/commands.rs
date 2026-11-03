@@ -22,7 +22,7 @@ use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt as _;
@@ -927,4 +927,45 @@ mod template_tests {
         };
         assert!(b.connection_id.is_none());
     }
+}
+
+// ----- updates (Settings, General) -----
+
+fn updates_dir(state: &AppState) -> std::path::PathBuf {
+    state.store.dirs().data().join("updates")
+}
+
+/// What the Updates section shows: the version, the last check, and any download in progress.
+#[tauri::command]
+pub async fn get_update_view(app: AppHandle) -> Result<crate::updates::UpdateView, String> {
+    blocking(move || app.state::<AppState>().updates.view()).await
+}
+
+/// Ask GitHub for the newest release.
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<crate::updates::UpdateView, String> {
+    blocking(move || {
+        let view = app.state::<AppState>().updates.check();
+        let _ = app.emit("update-changed", ());
+        view
+    })
+    .await
+}
+
+/// Download the release the last check found, check its fingerprint, and hand it to the
+/// installer, which restarts CargoFrame. Returns at once; progress arrives as `update-changed`.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let dir = updates_dir(&state);
+    let handle = app.clone();
+    state.updates.begin_install(dir, move || {
+        let _ = handle.emit("update-changed", ());
+    })
+}
+
+/// Keep (or, empty, remove) the read-only GitHub token. It is never read back to the window.
+#[tauri::command]
+pub async fn set_update_token(app: AppHandle, value: String) -> Result<(), String> {
+    blocking(move || app.state::<AppState>().updates.set_token(&value)).await?
 }

@@ -77,5 +77,5 @@ those is true for each piece.
 ## Decided
 
 - **Twitter/X, BlueSky and Instagram:** v1.1 (2026-10-23).
-- **Repository:** private until V1 is solid; the in-app updater is off, updates are manual.
+- **Repository:** private until V1 is solid. "Check for updates" works with a read-only GitHub token you create; the automatic daily check is off by default.
 - **Still to confirm:** "log action" is read as "data rule".

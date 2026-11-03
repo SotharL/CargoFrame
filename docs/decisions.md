@@ -261,3 +261,42 @@ click on the share button sends everything captured, with no separate "copy prom
 - **Still open for the owner:** the Windows-only parts (pasting the picture and files into the
   Claude app) and the real-account runs are not exercised from the build machine; the owner's PC
   test is what closes Phase 9, as the plan says.
+
+## Phase 10: updates (3 Nov 2026)
+
+Item 10 of the owner's feedback: "Check for updates" asks the CargoFrame repository for the newest
+release, downloads the installer, checks it, installs it and restarts.
+
+- **Our own small updater, not the Tauri updater plugin.** The plugin needs a signing key pair
+  and a signed manifest published with every release, and cannot talk to a private repository
+  without a proxy in between. The release workflow already publishes the installers and
+  `SHA256SUMS.txt`, so the updater uses those. `core/update` is a crate of its own with no
+  Tauri in it (check, download, verify, install plan), so every step is tested without a
+  network or a real installer.
+- **The check.** `GET /repos/SotharL/CargoFrame/releases/latest` on `api.github.com`. Drafts and
+  pre-releases are ignored, tags like `v0.2.0` are compared as versions (newer only), and the
+  installer for this computer is found by name: `CargoFrame-<version>-windows-x64-setup.exe` or
+  `CargoFrame-<version>-linux-x64.tar.gz`. A release without that installer, or without
+  `SHA256SUMS.txt`, is "not installable" and says why.
+- **The token (private repository).** Pasted in Settings, General, Updates and kept in the system
+  credential store under `updates/github-token`. It is write-only from the window: the section
+  only learns *whether* one is set. It goes to `api.github.com` only; the download uses the API's
+  asset address with `Accept: application/octet-stream`, and the redirect to the file host drops
+  the sign-in header. Public repository later: remove the token, nothing else changes.
+- **The checksum is not optional.** After the download the SHA-256 is compared with the line for
+  that file in `SHA256SUMS.txt`. A missing file, a missing line or a different value means the
+  installer is deleted and nothing runs. There is no "install anyway".
+- **Installing.** Windows: the NSIS installer runs silently (`/S /UPDATE /R`), asks the running
+  CargoFrame to quit (`--quit`), keeps the settings and starts CargoFrame again. Linux: the
+  archive is unpacked and `install.sh --restart` runs. If the installer does not take over within
+  90 seconds, or fails to start, the section says so and shows where the checked installer is
+  kept, so it can be run by hand. Downloads left by an earlier run are removed at the next start.
+- **When it runs.** Only when the button "Download and install" is pressed. The daily check
+  (a minute after start, then every 24 hours) is **off by default**, switched in the same section
+  ("Look for a newer version once a day"); it never downloads or installs, and shows one
+  notification per newer version.
+- **Done when (from the plan).** Installing a newer version over an older one keeps settings,
+  tried on the owner's PC. The Windows install and restart cannot be exercised on the build
+  machine; the flags, the quit handshake and the plan are covered by tests, and the real run is
+  the owner's check.
+

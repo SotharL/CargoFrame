@@ -2,7 +2,7 @@ import type {
   AppInfo, Block, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
-  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, VariableInfo,
+  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
@@ -107,6 +107,17 @@ export interface Api {
   testSafeFolder(path: string): Promise<void>;
   /** The system folder picker; null when cancelled. */
   pickFolder(title?: string): Promise<string | null>;
+
+  // ----- updates -----
+  getUpdateView(): Promise<UpdateView>;
+  /** Ask GitHub for the newest release. Resolves with the view after the answer. */
+  checkUpdate(): Promise<UpdateView>;
+  /** Download, verify and install the release the last check found. Returns at once; progress arrives as `onUpdateChanged`. */
+  installUpdate(): Promise<void>;
+  /** Store the GitHub token. An empty value removes it. It is never read back. */
+  setUpdateToken(value: string): Promise<void>;
+  /** Called whenever the update view changed. Returns a function that stops listening. */
+  onUpdateChanged(callback: () => void): Promise<() => void>;
 }
 
 export const inTauri = (): boolean =>
@@ -191,6 +202,14 @@ async function tauriApi(): Promise<Api> {
     setSafe: (safe) => invoke('set_safe', { safe }),
     testSafeFolder: (path) => invoke('test_safe_folder', { path }),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
+    getUpdateView: () => invoke('get_update_view'),
+    checkUpdate: () => invoke('check_update'),
+    installUpdate: () => invoke('install_update'),
+    setUpdateToken: (value) => invoke('set_update_token', { value }),
+    onUpdateChanged: async (callback) => {
+      const { listen } = await import('@tauri-apps/api/event');
+      return listen('update-changed', callback);
+    },
   };
 }
 
@@ -203,6 +222,13 @@ export interface MemoryOptions {
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
   /** What `openImport` finds in the "file" the person picks; the default is a cancelled dialog. */
   importFile?: ImportPreview;
+  /** What "Check for updates" finds in the stand-in. Default: nothing newer. */
+  update?: {
+    /** A newer release. */
+    newer?: { version: string; notes?: string; size?: number };
+    /** The check fails with this message. */
+    fails?: { message: string; needs_token?: boolean };
+  };
 }
 
 const TEMPLATE_CATALOG: LayoutTemplate[] = [
@@ -254,6 +280,19 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   const secretsSet = new Set<string>();
   const signedIn = new Set<string>();
   let chats: ChatView[] = [];
+  let updateLast: UpdateLast | null = null;
+  let updatePhase: UpdateView['phase'] = { state: 'idle' };
+  let updateToken = false;
+  const updateListeners = new Set<() => void>();
+  const updateView = (): UpdateView => ({
+    current: '0.1.0-dev',
+    repository: 'SotharL/CargoFrame',
+    supported: true,
+    token_set: updateToken,
+    token_problem: null,
+    last: updateLast,
+    phase: updatePhase,
+  });
   const TYPED: Record<string, string[]> = {
     jira: ['token'], google: ['client_secret'], reddit: [], claude: [], custom: ['secret'],
   };
@@ -495,6 +534,37 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       if (!path.trim()) throw 'Choose a folder';
     },
     pickFolder: async () => '/home/me/Documents/CargoFrame zips',
+    getUpdateView: async () => updateView(),
+    checkUpdate: async () => {
+      const { newer, fails } = opts.update ?? {};
+      updateLast = fails
+        ? { state: 'failed', message: fails.message, needs_token: fails.needs_token === true }
+        : newer
+          ? {
+              state: 'available',
+              version: newer.version,
+              notes: newer.notes ?? '',
+              page: `https://github.com/SotharL/CargoFrame/releases/tag/v${newer.version}`,
+              installer: `CargoFrame-${newer.version}-windows-x64-setup.exe`,
+              size: newer.size ?? 18 * 1024 * 1024,
+              published: '2026-11-01T10:00:00Z',
+            }
+          : { state: 'up_to_date', latest: '0.1.0-dev' };
+      return updateView();
+    },
+    installUpdate: async () => {
+      updatePhase = { state: 'installing' };
+      for (const f of updateListeners) f();
+    },
+    setUpdateToken: async (value) => {
+      updateToken = value.trim() !== '';
+    },
+    onUpdateChanged: async (callback) => {
+      updateListeners.add(callback);
+      return () => {
+        updateListeners.delete(callback);
+      };
+    },
   };
 }
 
@@ -506,8 +576,16 @@ const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 /** Outside the app: the in-memory backend, with the demo's answers to a share. */
 async function demoApi(): Promise<Api> {
   const { demoShare } = await import('../capture/demo');
-  const kind = new URLSearchParams(location.search).get('share');
-  return memoryApi({ share: () => demoShare(kind) });
+  const query = new URLSearchParams(location.search);
+  const kind = query.get('share');
+  // `?update=newer` or `?update=fails` shows what Settings, General looks like after a check.
+  const update =
+    query.get('update') === 'newer'
+      ? { newer: { version: '0.2.0', notes: '- Updates can be installed from Settings.\n- The capture window marks what each button sends.', size: 18 * 1024 * 1024 } }
+      : query.get('update') === 'fails'
+        ? { fails: { message: 'GitHub says the CargoFrame repository was not found. It may be private: add a token below.', needs_token: true } }
+        : undefined;
+  return memoryApi({ share: () => demoShare(kind), update });
 }
 
 /** The backend for this page: Tauri when running in the app, an in-memory one otherwise. */

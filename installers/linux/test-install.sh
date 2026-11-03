@@ -63,6 +63,17 @@ rm -f "$auto"
 [ -f "$auto" ] || fail "--startup ignored"
 ok "startup choice preserved, --startup forces it on"
 
+# 3b. --restart starts the new copy once the files are in place
+calls_before="$(wc -l < "$work/calls.log")"
+"$work/rel2/install.sh" --restart >/dev/null
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  [ "$(wc -l < "$work/calls.log")" -gt "$((calls_before + 1))" ] && break
+  sleep 0.5
+done
+# one line for the --quit of the old copy, one for the new copy being started
+[ "$(wc -l < "$work/calls.log")" -ge "$((calls_before + 2))" ] || fail "--restart did not start the program"
+ok "--restart starts the installed program"
+
 # 4. uninstall keeps settings by default
 "$prog/uninstall.sh" >/dev/null
 [ ! -e "$prog/CargoFrame.AppImage" ] || fail "program not removed"

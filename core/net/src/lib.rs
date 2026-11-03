@@ -15,5 +15,5 @@ pub mod mock;
 
 pub use client::UreqHttp;
 pub use multipart::Multipart;
-pub use request::{Body, Http, Method, NetError, Request, Response};
+pub use request::{Body, Download, Http, Method, NetError, Request, Response};
 pub use url::{check_url, encode_component, form_encode, query_string, UrlError};
