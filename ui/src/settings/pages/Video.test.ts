@@ -284,5 +284,93 @@ describe('Video settings', () => {
         expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toContain('cannot draw the mark');
       });
     });
+
+    describe('editing on the picture', () => {
+      const real = Element.prototype.getBoundingClientRect;
+      beforeEach(() => {
+        URL.createObjectURL = () => 'blob:stage';
+        URL.revokeObjectURL = () => {};
+        // the clip is shown at half its size: 960 px for 1920
+        Element.prototype.getBoundingClientRect = function () {
+          return this.classList.contains('stage')
+            ? ({ width: 960, height: 540, left: 0, top: 0, right: 960, bottom: 540, x: 0, y: 0, toJSON() {} } as DOMRect)
+            : real.call(this);
+        };
+      });
+      afterEach(() => {
+        Element.prototype.getBoundingClientRect = real;
+      });
+
+      async function watching() {
+        open();
+        await screen.findByText('ffmpeg found');
+        await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+        await screen.findByText('It works');
+        await fireEvent.click(screen.getByRole('button', { name: 'Watch it here' }));
+        await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+      }
+
+      const value = (name: string) => (screen.getByRole('spinbutton', { name }) as HTMLInputElement).value;
+
+      it('takes the start and the end from where the clip is playing', async () => {
+        await watching();
+        const video = document.querySelector('video')!;
+        Object.defineProperty(video, 'currentTime', { value: 1.26, configurable: true });
+        await fireEvent.click(screen.getByRole('button', { name: 'Start here' }));
+        expect(value('Start (seconds)')).toBe('1.3');
+        Object.defineProperty(video, 'currentTime', { value: 3.9, configurable: true });
+        await fireEvent.click(screen.getByRole('button', { name: 'End here' }));
+        expect(value('End (seconds)')).toBe('3.9');
+      });
+
+      it('shows the crop box on the picture only while cropping and moves it with the mouse', async () => {
+        await watching();
+        expect(screen.queryByLabelText('Crop area')).toBeNull();
+        await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
+        const box = screen.getByLabelText('Crop area');
+        expect(box.style.left).toBe('25%');
+        expect(box.style.width).toBe('50%');
+        await fireEvent.mouseDown(box, { clientX: 100, clientY: 100 });
+        await fireEvent.mouseMove(window, { clientX: 150, clientY: 120 });
+        // 50 and 20 screen pixels at half size are 100 and 40 clip pixels
+        expect(value('Left (px)')).toBe('580');
+        expect(value('Top (px)')).toBe('310');
+        // it cannot leave the picture
+        await fireEvent.mouseMove(window, { clientX: 5000, clientY: 5000 });
+        expect(value('Left (px)')).toBe('960');
+        expect(value('Top (px)')).toBe('540');
+        await fireEvent.mouseUp(window);
+        await fireEvent.mouseMove(window, { clientX: 0, clientY: 0 });
+        expect(value('Left (px)')).toBe('960');
+      });
+
+      it('resizes the crop box from its corner, on even numbers, and not past the edge', async () => {
+        await watching();
+        await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
+        const grip = screen.getByLabelText('Resize the crop area');
+        await fireEvent.mouseDown(grip, { clientX: 500, clientY: 300 });
+        await fireEvent.mouseMove(window, { clientX: 531, clientY: 311 });
+        expect(value('Width (px)')).toBe('1022');
+        expect(value('Height (px)')).toBe('562');
+        await fireEvent.mouseMove(window, { clientX: 5000, clientY: 5000 });
+        // from x 480 and y 270
+        expect(value('Width (px)')).toBe('1440');
+        expect(value('Height (px)')).toBe('810');
+        await fireEvent.mouseMove(window, { clientX: -5000, clientY: -5000 });
+        expect(value('Width (px)')).toBe('16');
+        await fireEvent.mouseUp(window);
+      });
+
+      it('has no crop box or start and end buttons on the edited copy', async () => {
+        await watching();
+        await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop to an area' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+        await screen.findByText('Copy made');
+        await fireEvent.click(screen.getByRole('button', { name: 'Watch the copy here' }));
+        await waitFor(() => expect(document.querySelector('video')!.getAttribute('aria-label')).toBe('Edited copy'));
+        expect(screen.queryByLabelText('Crop area')).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Start here' })).toBeNull();
+      });
+    });
   });
 });

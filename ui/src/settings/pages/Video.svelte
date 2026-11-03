@@ -45,6 +45,9 @@
   let exporting = $state(false);
   let copy = $state<VideoTrial | null>(null);
   let playing = $state<'test' | 'exported'>('test');
+  let stage = $state<HTMLElement | null>(null);
+  let player = $state<HTMLVideoElement | null>(null);
+  let dragging: { mode: 'move' | 'size'; sx: number; sy: number; from: { x: number; y: number; w: number; h: number } } | null = null;
   let playerUrl = $state<string | null>(null);
   let playerError = $state('');
   let loadingPlayer = $state(false);
@@ -234,6 +237,47 @@
     }
   }
 
+  /** Where the playing clip is, to the tenth of a second. */
+  function playhead(): number {
+    return Math.round((player?.currentTime ?? 0) * 10) / 10;
+  }
+
+  const MIN_CROP = 16;
+  const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), Math.max(lo, hi));
+  const even = (n: number) => Math.round(n / 2) * 2;
+
+  function startDrag(e: MouseEvent, mode: 'move' | 'size') {
+    e.preventDefault();
+    e.stopPropagation();
+    dragging = { mode, sx: e.clientX, sy: e.clientY, from: { ...crop } };
+    window.addEventListener('mousemove', onDrag);
+    window.addEventListener('mouseup', endDrag);
+  }
+
+  /** The box is moved and sized in the clip's own pixels, always on even numbers, inside the picture. */
+  function onDrag(e: MouseEvent) {
+    if (!dragging || !stage || !trial) return;
+    const width = stage.getBoundingClientRect().width;
+    if (!width) return;
+    const scale = trial.width / width;
+    const dx = (e.clientX - dragging.sx) * scale;
+    const dy = (e.clientY - dragging.sy) * scale;
+    const f = dragging.from;
+    if (dragging.mode === 'move') {
+      crop.x = even(clamp(f.x + dx, 0, trial.width - f.w));
+      crop.y = even(clamp(f.y + dy, 0, trial.height - f.h));
+    } else {
+      crop.w = even(clamp(f.w + dx, MIN_CROP, trial.width - f.x));
+      crop.h = even(clamp(f.h + dy, MIN_CROP, trial.height - f.y));
+    }
+  }
+
+  function endDrag() {
+    dragging = null;
+    window.removeEventListener('mousemove', onDrag);
+    window.removeEventListener('mouseup', endDrag);
+  }
+
   function failure(message: string): VideoTrial {
     return {
       ok: false, message, capture: null, encoder: null, width: 0, height: 0,
@@ -338,6 +382,7 @@
   onDestroy(() => {
     stopPolling();
     closePlayer();
+    endDrag();
   });
 </script>
 
@@ -524,14 +569,40 @@
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
           {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
           {#if playerUrl}
-            <!-- svelte-ignore a11y_media_has_caption -->
-            <video
-              src={playerUrl}
-              controls
-              muted
-              aria-label={playing === 'exported' ? 'Edited copy' : 'Test clip'}
-              onerror={playerFailed}
-            ></video>
+            <div class="stage" bind:this={stage}>
+              <!-- svelte-ignore a11y_media_has_caption -->
+              <video
+                bind:this={player}
+                src={playerUrl}
+                controls
+                muted
+                aria-label={playing === 'exported' ? 'Edited copy' : 'Test clip'}
+                onerror={playerFailed}
+              ></video>
+              {#if playing === 'test' && cropOn && trial}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div
+                  class="cropbox"
+                  aria-label="Crop area"
+                  role="presentation"
+                  style:left="{(crop.x / trial.width) * 100}%"
+                  style:top="{(crop.y / trial.height) * 100}%"
+                  style:width="{(crop.w / trial.width) * 100}%"
+                  style:height="{(crop.h / trial.height) * 100}%"
+                  onmousedown={(e) => startDrag(e, 'move')}
+                >
+                  <!-- svelte-ignore a11y_no_static_element_interactions -->
+                  <span class="grip" aria-label="Resize the crop area" role="presentation" onmousedown={(e) => startDrag(e, 'size')}></span>
+                </div>
+              {/if}
+            </div>
+            {#if playing === 'test'}
+              <div class="row wrap">
+                <button type="button" onclick={() => (trimStart = playhead())}>Start here</button>
+                <button type="button" onclick={() => (trimEnd = playhead())}>End here</button>
+                <span class="quiet note">Play or pause the clip where you want the copy to start or end. {cropOn ? 'Drag the box to move the crop, and its corner to resize it.' : 'Tick “Crop to an area” to draw a box on the picture.'}</span>
+              </div>
+            {/if}
           {/if}
         {/if}
       </div>
@@ -562,5 +633,12 @@
   .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
   .edit { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; width: 100%; box-sizing: border-box; }
   .edit summary { cursor: pointer; font-weight: 600; font-size: 13px; }
-  video { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #000; }
+  .stage { position: relative; width: fit-content; max-width: 100%; line-height: 0; overflow: hidden; border-radius: var(--radius-sm); }
+  video { display: block; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #000; }
+  .cropbox {
+    position: absolute; box-sizing: border-box; cursor: move;
+    border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+    box-shadow: 0 0 0 9999px rgb(0 0 0 / 35%); /* dims everything outside the crop */
+  }
+  .grip { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: var(--accent); border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; }
 </style>

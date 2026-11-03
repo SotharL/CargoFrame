@@ -549,3 +549,21 @@ ffmpeg. This slice proves that path before the editor is built: "Mark" in the co
 - **Windows fonts are the open question:** the text uses `bold <size>px sans-serif`. The window's own font
   is drawn, so the owner should look at how the text comes out on Windows (S9 checklist).
 
+### Phase 12, part 7: editing on the picture (3 Nov 2026)
+
+First editor controls, inside the Video page, on the test clip: while the clip plays in the window
+(after "Watch it here"), "Start here" and "End here" take the trim from where it is playing (to a tenth
+of a second), and while "Crop to an area" is ticked a box is drawn on the picture with everything outside
+dimmed. Drag the box to move it, its corner to resize it.
+
+- **The crop is always in the clip's own pixels, on even numbers, inside the picture and at least 16
+  pixels each way,** whatever size the clip is shown at; the numbers in the fields stay in step, and
+  typing in them moves the box. The fields remain the way to do it from the keyboard.
+- **Mouse events, not pointer events,** because CargoFrame is a desktop app and the tests (jsdom) can
+  drive them. A touch screen is not a V1 target.
+- **Checked in a real Chromium** with a real clip: the box sits where the numbers say, dims the rest, and
+  follows a drag. The box and the buttons are only on the test clip, not on an exported copy.
+- **Still to build for the editor:** a timeline strip with handles instead of two number fields, marks
+  placed by clicking on the picture (the drawing of a mark is proven in part 6), and the editor in the
+  CargoFrame window instead of Settings.
+
