@@ -53,6 +53,7 @@ Destinations in V1: **Jira** (the reference), **Google** (Drive, Sheets), **Redd
 | `core/bundle` | Zip files for the fallback and the Files block |
 | `core/net` | The one HTTP client: https checks, checked redirects, multipart, mock server |
 | `core/connectors` | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, OAuth, the secret store |
+| `core/video` | Video: the recorder (ffmpeg), the ring of segments, the edit model and the export |
 | `docs/` | Decisions, status, security review, performance, signing, spike runbook |
 | `scripts/` | CI helpers, end-to-end and timing checks, signing helpers |
 | `installers/` | Windows (NSIS) and Linux (AppImage + install script) |

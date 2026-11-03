@@ -393,3 +393,53 @@ follow the same shape (a connector, a row in the capability table, a template, a
   in a useful order (the list is sorted by name, because combining `$expand=members` with
   `$orderby` is not something the mock can prove), the largest screenshot a message takes, and
   whether the organisation's policies allow posting with these permissions.
+
+## Phase 12: video, the parts that do not wait for spike S9 (3 Nov 2026)
+
+Item 16 of the owner's feedback. The plan says to answer spike S9 (capture and encoding) first.
+S9 needs real Windows and Linux desktops, so what could be built and proved here was built:
+everything after the recorded file exists, and a recorder that works on a virtual X screen.
+
+- **The recorder is ffmpeg, run as a child process.** It captures, encodes and writes the file;
+  no picture passes through CargoFrame, so the app keeps `unsafe_code = "forbid"` and no capture
+  API of any platform is called from Rust. ffmpeg is found next to the app or on the search path
+  (`locate`); whether to ship it or ask the person to install it is an S9 question (recommended
+  until measured: ask the person to install it, with a setting for its location).
+- **The rolling buffer is a ring of one-second files, not frames in memory.** Raw frames cannot be
+  kept (10 s of 1080p is 2.5 GB, of 4K 10 GB). ffmpeg writes MPEG-TS segments and a list of the
+  finished ones (`-f segment`); `Ring::poll` reads the list into a `RollingBuffer`, which drops
+  segments older than the window (10 s by default, 1 to 30) or over the disk budget (400 MB by
+  default) and deletes their files. A recording can run for an hour and hold a few MB. A segment
+  has to start on a keyframe, so the recorder asks for one every second. The clip is the window
+  plus up to one segment; the editor starts the trim at the last `window` seconds.
+- **Stopping saves the last second.** `Recorder::stop` writes `q` to ffmpeg's input, so it
+  finishes its segment and lists it; if it has not stopped after the patience given it is killed
+  and the finished segments are still used. If it dies by itself, `poll` returns its last message.
+  `cancel` stops it and removes the files. Joining the segments into one MP4 is a stream copy.
+- **The edit model.** Trim (start and end), one crop, and up to 50 marks. Times are on the
+  uncut clip's timeline, so cutting the start never moves a mark. The crop is rounded to even
+  numbers (H.264 needs them), a crop of the whole picture is no crop, a clip must stay at least
+  0.5 s, a mark only in the cut part is dropped and counted, and every problem is reported in
+  words, not just the first.
+- **Marks are pictures the editor draws.** The editor window draws a red circle or a text on a
+  transparent PNG and says where and when it shows; ffmpeg lays it over the clip (`overlay` with
+  `enable='between(t,…)'`). What the person saw in the editor is what is exported, and the core
+  needs no fonts or drawing code. Marks go on the uncropped picture and the crop comes last, so
+  moving the crop never moves a mark.
+- **Export** is H.264 in an MP4 with the index first (it plays while it downloads), `veryfast`
+  at CRF 23, no sound (CargoFrame records the screen only). The run can be cancelled and has a
+  time limit; a failure returns ffmpeg's last line. Every path is given as `file:<path>`, so a
+  mark picture named `concat:…` or `http://…`, or a path that starts with `-`, cannot become a
+  protocol or an option.
+- **Capture and encoder choices are the ones S9 measures:** Linux X11 `x11grab`; Windows
+  `gdigrab` and `ddagrab`; encoders x264 (ultrafast/veryfast), NVENC, QSV, AMF, Media Foundation
+  and VAAPI. Frames larger than 1080 lines are scaled down before encoding by default. Which is
+  the default per machine is left to S9 (`docs/spikes.md`), with `scripts/windows/s9-video.ps1`
+  and `scripts/e2e/s9-video-linux.sh` to measure it.
+- **Not built yet:** the video block and the "video layout", the recorder window (start, stop,
+  the editor with its timeline, crop and marks), per-connection sending of a video (size limits
+  differ: Discord 10 to 25 MB, Slack more, Teams needs OneDrive), the settings (encoder, frame
+  rate, window length), Windows and Wayland capture results from S9, and the shortcut that starts
+  a recording. Wayland needs the portal's PipeWire stream, which ffmpeg reads only from 7.1; S9
+  says whether that route or GStreamer is needed.
+

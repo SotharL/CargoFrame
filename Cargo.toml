@@ -14,6 +14,7 @@ members = [
     "core/connectors",
     "core/deliver",
     "core/update",
+    "core/video",
     "app",
 ]
 

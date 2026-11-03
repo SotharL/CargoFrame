@@ -13,6 +13,7 @@ the assumption. Targets here are proposals until a spike confirms them.
 | S5 | How does Claude open from a link, and what does its composer do with a pasted image? | Windows 11 with the Claude app; a Linux desktop | _not run_ |
 | S6 | Are the performance budgets reachable? | One reference machine | _not run_ |
 | S7 | Is "CargoFrame" free to use as a product name? | Web | _not run_ |
+| S9 | What does a screen recording cost, and which capture and encoder should video use? | Windows 11 and a Linux desktop (X11 and Wayland), ffmpeg | _not run_ |
 
 ## S1. Per-user installer (Windows)
 
@@ -116,3 +117,65 @@ CI fails a build that misses a target by more than 20%.
 
 Search for "CargoFrame" as a product, company, trademark (USPTO, EUIPO) and domain before icons,
 installer names and the app ID are fixed. Record the date and what was found.
+
+## S9. Video: capture and encoding
+
+**Question.** How should CargoFrame record the screen, and what does a 10 s clip cost in CPU and
+memory on Windows 11 and on Linux? (Plan, Phase 12.)
+
+**Proposed answer to check.** Recording starts on the shortcut. ffmpeg runs as a child process
+that captures the screen and encodes as it goes, writing one-second segments into a temporary
+folder and listing each finished one; CargoFrame keeps only the newest ones (10 s by default, 30 s
+at most) and deletes the rest, so the buffer is a ring of *encoded* files on disk, not frames in
+memory. When recording stops the last segments are joined into the clip, which goes to the editor.
+Why: raw frames cannot be buffered (10 s of 1080p is about 2.5 GB, of 4K about 10 GB), the
+encoder has to run while recording, and a child process keeps every frame out of CargoFrame's own
+memory and keeps `unsafe_code = "forbid"` (no capture API calls in the app). The pieces that do
+not depend on this answer are already built and tested: the rolling buffer, the edit model and
+the ffmpeg export (`core/video`).
+
+**What to run.**
+- Windows: `powershell -ExecutionPolicy Bypass -File scripts\windows\s9-video.ps1` (needs ffmpeg:
+  `winget install Gyan.FFmpeg`). It records 10 s with each of `gdigrab` and `ddagrab` and each
+  encoder it finds (software x264, NVIDIA, Intel, AMD, Windows built-in) and writes `s9-video.log`.
+  Move windows around while it runs, and watch Task Manager, Performance, GPU ("Video Encode",
+  "3D") during each run; GPU load is not measured by the script.
+- Linux, X11 session: `scripts/e2e/s9-video-linux.sh` (needs ffmpeg and python3). It writes
+  `s9-video-linux.log`. Without a display it records a virtual one, which only proves the script.
+- Linux, Wayland session: x11grab cannot see Wayland windows, so the script is no help. Record
+  with the desktop's own recorder (GNOME: Ctrl+Alt+Shift+R) or OBS for 10 s at the same size and
+  read CPU and memory from `top`/System Monitor, and note whether ffmpeg in your distribution can
+  read the portal's PipeWire stream (`ffmpeg -devices | grep -i pipewire`; ffmpeg 7.1 and later
+  can). If it cannot, the Wayland path needs GStreamer (`pipewiresrc`) instead, which changes the
+  plan for Linux and should be written down here.
+
+**Measure** (one reference machine; write down CPU, RAM, GPU, display size and scaling):
+
+| Measure | Target (proposal) | Windows | Linux X11 | Linux Wayland |
+|---------|-------------------|---------|-----------|---------------|
+| CPU while recording 1080p30, best encoder | under 10% of the machine | | | |
+| CPU while recording 1080p30, software x264 | under 25% of the machine | | | |
+| Same on the largest display, downscaled to 1080p | no worse than above | | | |
+| Peak memory of the recorder process | under 300 MB | | | |
+| Clip size for 10 s of a busy screen | under 25 MB (Discord's limit is 10 to 25 MB) | | | |
+| Dropped or duplicated frames | under 2% | | | |
+| Start of recording to first frame | under 500 ms | | | |
+| Stop to editor open (join the segments) | under 1 s | | | |
+| Idle CargoFrame while *not* recording | unchanged (about 0%) | | | |
+
+**Also answer.**
+1. Does the hardware encoder of each vendor work through ffmpeg on your machine, and does it cost
+   clearly less than software x264? (Decides the default of the *Encoder* setting: automatic,
+   hardware first.)
+2. Does `ddagrab` beat `gdigrab` enough to be the default on Windows? Does it work on a laptop
+   with two GPUs, and on a second display?
+3. Is the picture sharp enough at the CRF used (23 for veryfast, 28 for ultrafast) for small text?
+4. Licence and size: ship ffmpeg with CargoFrame (an LGPL build is about 80 MB on disk, 30 MB
+   compressed) or ask the person to install it? Recommendation until measured: ask the person to
+   install it, with the location settable, because a bundled copy doubles the installer; revisit
+   once the clip works end to end.
+
+**Settings this decides:** *Encoder* (automatic, software, or one named), *Frame rate* (30),
+*Largest picture* (downscale above 1080p or not), the capture method per platform, and whether
+Linux Wayland has video in version 1.
+
