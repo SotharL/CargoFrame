@@ -69,8 +69,18 @@ pub fn get_general(state: State<'_, AppState>) -> Result<General, String> {
 }
 
 #[tauri::command]
-pub fn set_general(state: State<'_, AppState>, general: General) -> Result<(), String> {
-    state.store.save(&general).map_err(|e| e.to_string())
+pub fn set_general(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    general: General,
+) -> Result<(), String> {
+    let accent = cargoframe_config::normalize_accent(&general.accent)
+        .ok_or("The accent colour must look like #4f8ee0")?;
+    let general = General { accent, ..general };
+    state.store.save(&general).map_err(|e| e.to_string())?;
+    // the arrow of the tray icon follows the accent
+    crate::tray::refresh_icon(&app);
+    Ok(())
 }
 
 #[tauri::command]

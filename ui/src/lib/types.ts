@@ -6,6 +6,8 @@ export interface General {
   theme: ThemeChoice;
   memory_mode: MemoryMode;
   check_updates: boolean;
+  /** `#rrggbb`: buttons, focus rings, links and the arrow of the logo. */
+  accent: string;
 }
 
 /** One line of the last timings (Settings, General). */

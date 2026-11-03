@@ -17,6 +17,7 @@
   import { chatToOpen, marksFor, willSend } from './willSend';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
+  import { applyAccent, applyTheme } from '../lib/theme';
 
   let api = $state<Api>();
   let view = $state<SessionView | null>(null);
@@ -43,6 +44,14 @@
 
   async function load() {
     if (!api) return;
+    // A window kept ready between captures picks up a theme or accent changed in Settings.
+    void api
+      .getGeneral()
+      .then((g) => {
+        applyTheme(g.theme);
+        applyAccent(g.accent);
+      })
+      .catch(() => {});
     try {
       const [v, img] = await Promise.all([api.getSession(), api.getSessionImage()]);
       view = v;

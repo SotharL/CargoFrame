@@ -45,3 +45,64 @@ describe('General settings', () => {
     expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
   });
 });
+
+describe('Accent colour', () => {
+  afterEach(() => {
+    document.documentElement.style.removeProperty('--accent');
+    document.documentElement.style.removeProperty('--on-accent');
+  });
+
+  it('sits under Theme in Appearance and starts on the design system blue', async () => {
+    render(General);
+    const hex = (await screen.findByRole('textbox', { name: /Accent colour as a code/ })) as HTMLInputElement;
+    expect(hex.value).toBe('#4f8ee0');
+    expect((screen.getByRole('button', { name: 'Reset to blue' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('a suggested colour colours the window at once and is saved', async () => {
+    render(General);
+    await screen.findByRole('textbox', { name: /Accent colour as a code/ });
+    await fireEvent.click(screen.getByRole('button', { name: 'Orange' }));
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('#e8590c');
+    await waitFor(async () => expect((await api.getGeneral()).accent).toBe('#e8590c'));
+    expect(screen.getByRole('button', { name: 'Orange' }).getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('a typed code is saved only when it is a colour, and Reset goes back to the blue', async () => {
+    render(General);
+    const hex = (await screen.findByRole('textbox', { name: /Accent colour as a code/ })) as HTMLInputElement;
+    await fireEvent.input(hex, { target: { value: '#12' } });
+    expect(screen.getByRole('alert').textContent).toContain('Type a colour like #4f8ee0');
+    await fireEvent.change(hex);
+    expect((await api.getGeneral()).accent).toBe('#4f8ee0');
+
+    await fireEvent.input(hex, { target: { value: '#ABC' } });
+    await fireEvent.change(hex);
+    await waitFor(async () => expect((await api.getGeneral()).accent).toBe('#aabbcc'));
+
+    await fireEvent.click(screen.getByRole('button', { name: 'Reset to blue' }));
+    await waitFor(async () => expect((await api.getGeneral()).accent).toBe('#4f8ee0'));
+    expect(document.documentElement.style.getPropertyValue('--accent')).toBe('');
+  });
+
+  it('says so when a colour is hard to see on one of the themes', async () => {
+    render(General);
+    const hex = (await screen.findByRole('textbox', { name: /Accent colour as a code/ })) as HTMLInputElement;
+    await fireEvent.input(hex, { target: { value: '#fff3a0' } });
+    expect(screen.getByText('Hard to see on the light theme')).toBeTruthy();
+    await fireEvent.input(hex, { target: { value: '#1d3557' } });
+    expect(screen.getByText('Hard to see on the dark theme')).toBeTruthy();
+  });
+
+  it('keeps the other settings when the accent is saved', async () => {
+    api = memoryApi({ general: { memory_mode: 'always_warm', theme: 'dark' } });
+    setApiForTests(api);
+    render(General);
+    await screen.findByRole('textbox', { name: /Accent colour as a code/ });
+    await fireEvent.click(screen.getByRole('button', { name: 'Teal' }));
+    await waitFor(async () => {
+      const g = await api.getGeneral();
+      expect(g).toMatchObject({ accent: '#1f9d8f', memory_mode: 'always_warm', theme: 'dark' });
+    });
+  });
+});
