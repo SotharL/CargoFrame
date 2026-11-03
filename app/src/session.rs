@@ -56,6 +56,72 @@ impl Session {
         Ok(f(guard.as_ref().expect("the folder was just made")))
     }
 
+    /// The files ticked by default, once each, in the order the window lists them.
+    pub fn preselected(&self) -> Vec<String> {
+        let mut seen = std::collections::BTreeSet::new();
+        let Some(layout) = self.view.layout.as_ref() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for block in &layout.blocks {
+            let Some(state) = self.view.files.get(&block.id) else {
+                continue;
+            };
+            for entry in state.entries.iter().filter(|e| e.selected) {
+                if seen.insert(entry.path.clone()) {
+                    out.push(entry.path.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// Copy the files that are ticked by default into this capture's folder, as they are right
+    /// now: a log that keeps growing is what it was at the moment of the capture, and a share
+    /// has less to do when the button is pressed. Meant for a background thread: it holds the
+    /// folder's lock while it works, so a share that starts meanwhile waits for it.
+    ///
+    /// Best effort: a file that cannot be copied is left for the share to try again (and report).
+    /// Nothing is copied beyond `max_file` bytes for one file or `max_total` for all of them, and
+    /// it stops as soon as `still_open` says the window moved on. Returns how many were copied.
+    pub fn stage_preselected(
+        &self,
+        workspace: &Workspace,
+        max_file: u64,
+        max_total: u64,
+        still_open: &dyn Fn() -> bool,
+    ) -> usize {
+        let wanted = self.preselected();
+        let (Some(root), false) = (self.project_folder.as_deref(), wanted.is_empty()) else {
+            return 0;
+        };
+        let sizes: std::collections::BTreeMap<&str, u64> = self
+            .view
+            .files
+            .values()
+            .flat_map(|f| f.entries.iter().map(|e| (e.path.as_str(), e.size)))
+            .collect();
+        let copied = self.with_dir(workspace, |dir| {
+            let mut count = 0;
+            let mut total = 0u64;
+            for rel in &wanted {
+                if !still_open() {
+                    break;
+                }
+                let size = sizes.get(rel.as_str()).copied().unwrap_or(0);
+                if size > max_file || total + size > max_total {
+                    continue;
+                }
+                if dir.stage(Path::new(root), rel, max_file).is_ok() {
+                    count += 1;
+                    total += size;
+                }
+            }
+            count
+        });
+        copied.unwrap_or(0)
+    }
+
     /// Where this capture's folder is, if it has one.
     pub fn dir_path(&self) -> Option<PathBuf> {
         self.dir
@@ -435,6 +501,126 @@ pub(crate) mod tests {
         assert_eq!(s.view.layout.as_ref().unwrap().id, "bug");
         assert_eq!(s.view.image.width, 4);
         assert_eq!(&s.png[1..4], b"PNG");
+    }
+
+    /// A capture of a project "Foo" with `run.log` ("LOGLINE") and `other.log`, and a Files block
+    /// offering `*.log` with `preselect` ticked by default.
+    fn log_capture(dir: &tempfile::TempDir, preselect: &[&str]) -> (Session, PathBuf) {
+        let store = Store::new(Dirs::under(dir.path()));
+        let project = dir.path().join("Foo");
+        std::fs::create_dir_all(project.join("bin")).unwrap();
+        std::fs::write(project.join("run.log"), "LOGLINE").unwrap();
+        std::fs::write(project.join("other.log"), "OTHER").unwrap();
+        let layout = Layout {
+            id: String::new(),
+            name: "L".into(),
+            blocks: vec![Block {
+                id: "logs".into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 2,
+                },
+                kind: BlockKind::Files(FilesBlock {
+                    title: "Logs".into(),
+                    include: vec!["*.log".into()],
+                    preselect: preselect.iter().map(|p| p.to_string()).collect(),
+                }),
+            }],
+        };
+        store.save_item(Kind::Layouts, "l", &layout).unwrap();
+        let trigger = Trigger {
+            layout_id: Some("l".into()),
+            ..Trigger::default()
+        };
+        let exe = project.join("bin").join("Foo");
+        let session = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &trigger,
+            fake_capture(Some(&exe.display().to_string())),
+            NOW,
+            3,
+        )
+        .unwrap();
+        (session, project)
+    }
+
+    const BIG: u64 = 1024 * 1024;
+
+    #[test]
+    fn staging_copies_only_the_files_ticked_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["run.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        assert_eq!(s.preselected(), vec!["run.log".to_string()]);
+        assert_eq!(s.stage_preselected(&ws, BIG, BIG, &|| true), 1);
+        let folder = s.dir_path().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(folder.join("files").join("run.log")).unwrap(),
+            "LOGLINE"
+        );
+        assert!(!folder.join("files").join("other.log").exists());
+    }
+
+    #[test]
+    fn a_staged_copy_is_a_snapshot_of_the_moment_of_the_capture() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, project) = log_capture(&dir, &["run.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        s.stage_preselected(&ws, BIG, BIG, &|| true);
+        std::fs::write(project.join("run.log"), "LOGLINE and much more").unwrap();
+        // Staging again (a share does) keeps the first copy.
+        s.with_dir(&ws, |d| {
+            d.stage(&project, "run.log", BIG).unwrap();
+        })
+        .unwrap();
+        let folder = s.dir_path().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(folder.join("files").join("run.log")).unwrap(),
+            "LOGLINE"
+        );
+    }
+
+    #[test]
+    fn nothing_ticked_means_no_folder_is_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &[]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        assert!(s.preselected().is_empty());
+        assert_eq!(s.stage_preselected(&ws, BIG, BIG, &|| true), 0);
+        assert!(s.dir_path().is_none());
+        assert!(!ws.root().exists());
+    }
+
+    #[test]
+    fn staging_leaves_out_what_is_too_big_and_stops_at_the_total() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["*.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        // run.log is 7 bytes and other.log is 5: one file may be at most 6, so only other.log.
+        assert_eq!(s.stage_preselected(&ws, 6, BIG, &|| true), 1);
+        let folder = s.dir_path().unwrap();
+        assert!(folder.join("files").join("other.log").is_file());
+        assert!(!folder.join("files").join("run.log").exists());
+
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["*.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        // Together they are 12 bytes: with room for 10, the first fits and the second does not.
+        assert_eq!(s.stage_preselected(&ws, BIG, 10, &|| true), 1);
+    }
+
+    #[test]
+    fn staging_stops_once_the_window_has_moved_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["*.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        assert_eq!(s.stage_preselected(&ws, BIG, BIG, &|| false), 0);
+        let folder = s.dir_path().unwrap();
+        assert!(!folder.join("files").exists());
     }
 
     #[test]

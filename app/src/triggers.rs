@@ -79,6 +79,40 @@ pub fn reload(app: &AppHandle) {
     tray::refresh_menu(app);
 }
 
+/// Copy the files ticked by default into the capture's temporary folder, off the thread that
+/// opens the window. A share that starts while this runs waits for it (see `Session::with_dir`).
+fn stage_files_in_background(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let Some(session) = state.sessions.current() else {
+        return;
+    };
+    if session.preselected().is_empty() {
+        return;
+    }
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("stage-files".into())
+        .spawn(move || {
+            let state = app.state::<AppState>();
+            let open = || {
+                state
+                    .sessions
+                    .current()
+                    .is_some_and(|c| std::sync::Arc::ptr_eq(&c, &session))
+            };
+            let staged = session.stage_preselected(
+                &state.workspace,
+                crate::share::MAX_STAGED_FILE_BYTES,
+                crate::share::MAX_STAGED_TOTAL_BYTES,
+                &open,
+            );
+            tracing::debug!(staged, "files copied for this capture");
+        });
+    if let Err(e) = spawned {
+        tracing::warn!("could not start copying the files: {e}");
+    }
+}
+
 /// Take a capture for `trigger_id` and open the CargoFrame window. Safe to call from any
 /// thread; does nothing while paused or while another capture is running.
 pub fn run(app: &AppHandle, trigger_id: String) {
@@ -108,6 +142,7 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         match result {
             Ok(Ok(s)) => {
                 state.sessions.set(s);
+                stage_files_in_background(&app);
                 if let Some(ms) = state.timings.mark("capture", "ready") {
                     tracing::info!(ready_ms = ms, "timing: capture ready");
                 }

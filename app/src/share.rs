@@ -117,6 +117,12 @@ pub struct Services<'a> {
     pub now: Moment,
 }
 
+/// A file larger than this is not copied ahead of time (it is also the most a Claude message
+/// takes for one file).
+pub const MAX_STAGED_FILE_BYTES: u64 = MAX_FILE_BYTES;
+/// Copies made ahead of time stop here: the same total a zip may hold.
+pub const MAX_STAGED_TOTAL_BYTES: u64 = 200 * 1024 * 1024;
+
 fn created(m: &Moment) -> Created {
     Created {
         year: m.year.clamp(1980, 2107) as u16,
@@ -159,6 +165,10 @@ struct Prepared {
     project_folder: Option<String>,
     /// The name typed in the layout's Zip name block, as a file name. `None`: the default name.
     zip_name: Option<String>,
+    /// This capture's own copies of ticked files: the folder holding them, and for each file
+    /// (by its path in the project) the path of its copy inside that folder.
+    staged_root: Option<PathBuf>,
+    staged: BTreeMap<String, String>,
     close: bool,
     notes: Vec<String>,
 }
@@ -413,6 +423,8 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         selected,
         project_folder: session.project_folder.clone(),
         zip_name,
+        staged_root: None,
+        staged: BTreeMap::new(),
         close: button.on_success == OnSuccess::CloseWindow,
         notes: Vec::new(),
     })
@@ -428,18 +440,67 @@ fn manifest_info(svc: &Services, p: &Prepared, notes: Vec<String>) -> ManifestIn
     }
 }
 
+/// Find (or make) this capture's own copy of each ticked file. A zip then holds the files as
+/// they were at the moment of the capture, not as they are when the button is pressed. Waits
+/// for the copying that started with the capture (see `Session::stage_preselected`). A file
+/// that cannot be copied is read from the project as before, so it is skipped or reported
+/// the way it always was.
+fn adopt_staged(svc: &Services, session: &Session, p: &mut Prepared) {
+    let Some(root) = p.project_folder.as_deref().map(PathBuf::from) else {
+        return;
+    };
+    if p.selected.is_empty() {
+        return;
+    }
+    let found = session.with_dir(svc.workspace, |dir| {
+        let files_dir = dir.files_dir();
+        let mut staged = BTreeMap::new();
+        let mut total = 0u64;
+        for rel in &p.selected {
+            let Ok(copy) = dir.stage(&root, rel, MAX_STAGED_FILE_BYTES) else {
+                continue;
+            };
+            total += fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
+            if total > MAX_STAGED_TOTAL_BYTES {
+                break;
+            }
+            if let Ok(inside) = copy.strip_prefix(&files_dir) {
+                staged.insert(rel.clone(), inside.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        (files_dir, staged)
+    });
+    match found {
+        Ok((files_dir, staged)) => {
+            p.staged_root = Some(files_dir);
+            p.staged = staged;
+        }
+        Err(e) => tracing::warn!("the capture's folder could not be used for the files: {e}"),
+    }
+}
+
+/// Where a ticked file is read from when zipped: this capture's copy of it, else the project.
+fn file_source(p: &Prepared, rel: &str) -> Source {
+    if let (Some(root), Some(inside)) = (&p.staged_root, p.staged.get(rel)) {
+        return Source::ProjectFile {
+            root: root.clone(),
+            relative: inside.clone(),
+        };
+    }
+    Source::ProjectFile {
+        root: PathBuf::from(p.project_folder.clone().unwrap_or_default()),
+        relative: rel.to_string(),
+    }
+}
+
 /// The ticked files as one zip, named by their path in the project.
 fn zip_selected(svc: &Services, p: &Prepared) -> Result<(Vec<u8>, Vec<String>), BundleError> {
-    let root = PathBuf::from(p.project_folder.clone().unwrap_or_default());
     let items = p
         .selected
         .iter()
         .map(|rel| Item {
             name: rel.clone(),
-            source: Source::ProjectFile {
-                root: root.clone(),
-                relative: rel.clone(),
-            },
+            source: file_source(p, rel),
             kind: "file",
         })
         .collect();
@@ -595,14 +656,11 @@ fn build_keep_zip(
             kind: "text",
         });
     }
-    if let Some(root) = &p.project_folder {
+    if p.project_folder.is_some() {
         for rel in &p.selected {
             items.push(Item {
                 name: format!("files/{rel}"),
-                source: Source::ProjectFile {
-                    root: PathBuf::from(root),
-                    relative: rel.clone(),
-                },
+                source: file_source(p, rel),
                 kind: "file",
             });
         }
@@ -762,6 +820,7 @@ pub fn run(
         connection,
     }) = prepared.destination.take()
     else {
+        adopt_staged(svc, session, &mut prepared);
         return save_locally(svc, &prepared, &session.view);
     };
 
@@ -770,10 +829,15 @@ pub fn run(
     let takes_files = matches!(connection.settings, Settings::Claude(_));
     if takes_files {
         match stage_local(svc, session, &prepared) {
-            Ok(local) => prepared.payload.local = Some(local),
+            Ok(local) => {
+                prepared.payload.local = Some(local);
+                // So a copy kept after a failed send holds the same files.
+                adopt_staged(svc, session, &mut prepared);
+            }
             Err(reason) => return blocked(reason),
         }
     } else if !prepared.selected.is_empty() {
+        adopt_staged(svc, session, &mut prepared);
         match zip_selected(svc, &prepared) {
             Ok((bytes, notes)) => {
                 prepared.notes.extend(notes);
@@ -1739,6 +1803,132 @@ mod tests {
         assert_eq!(
             Path::new(&saved.path).file_name().unwrap(),
             "Crash on save.zip"
+        );
+    }
+
+    /// The project folder of the world's capture.
+    fn project_of(w: &World) -> PathBuf {
+        PathBuf::from(w.session.project_folder.clone().unwrap())
+    }
+
+    #[test]
+    fn a_saved_zip_holds_the_files_as_they_were_at_the_capture() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        // The capture copies what is ticked by default, then the log keeps growing.
+        assert_eq!(
+            w.session.stage_preselected(
+                &w.ws,
+                MAX_STAGED_FILE_BYTES,
+                MAX_STAGED_TOTAL_BYTES,
+                &|| true
+            ),
+            1
+        );
+        fs::write(project_of(&w).join("run.log"), "LOGLINE and then some").unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
+    }
+
+    #[test]
+    fn a_file_ticked_later_is_copied_when_the_button_is_pressed() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        w.session.stage_preselected(
+            &w.ws,
+            MAX_STAGED_FILE_BYTES,
+            MAX_STAGED_TOTAL_BYTES,
+            &|| true,
+        );
+        let mut req = request();
+        req.files
+            .insert("logs".into(), vec!["run.log".into(), "other.log".into()]);
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
+        assert_eq!(zip_text(&path, "files/other.log"), "OTHER");
+    }
+
+    #[test]
+    fn nothing_copied_ahead_still_zips_the_current_file() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        fs::write(project_of(&w).join("run.log"), "NEWER").unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        // The share copies it when the button is pressed, so it is that moment's content.
+        assert_eq!(zip_text(&path, "files/run.log"), "NEWER");
+    }
+
+    #[test]
+    fn a_zip_kept_after_a_failed_send_holds_the_capture_time_files() {
+        let w = world(|_| MockResponse::json(503, json!({"message": "down"})));
+        let safe_dir = w.out.path().join("safe");
+        fs::create_dir_all(&safe_dir).unwrap();
+        set_safe(&w, Some(&safe_dir.display().to_string()), 0);
+        w.session.stage_preselected(
+            &w.ws,
+            MAX_STAGED_FILE_BYTES,
+            MAX_STAGED_TOTAL_BYTES,
+            &|| true,
+        );
+        fs::write(project_of(&w).join("run.log"), "LOGLINE and then some").unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Failed { saved, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&saved.unwrap().path, "files/run.log"), "LOGLINE");
+    }
+
+    #[test]
+    fn a_share_waits_for_the_copying_that_started_with_the_capture() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let started = std::time::Instant::now();
+        let waited = std::thread::scope(|scope| {
+            let holder = scope.spawn(|| {
+                // Stands in for a slow copy: holds the capture's folder for a while.
+                w.session
+                    .with_dir(&w.ws, |_| std::thread::sleep(Duration::from_millis(400)))
+                    .unwrap();
+            });
+            std::thread::sleep(Duration::from_millis(100));
+            let (r, _) = go(&w, &request(), vec![]);
+            assert!(matches!(r, ShareResult::SavedLocally { .. }), "{r:?}");
+            let waited = started.elapsed();
+            holder.join().unwrap();
+            waited
+        });
+        assert!(
+            waited >= Duration::from_millis(350),
+            "the share did not wait: {waited:?}"
+        );
+    }
+
+    #[test]
+    fn what_is_copied_ahead_is_capped_like_a_zip() {
+        assert_eq!(
+            MAX_STAGED_TOTAL_BYTES,
+            cargoframe_bundle::Limits::default().max_total_bytes
         );
     }
 
