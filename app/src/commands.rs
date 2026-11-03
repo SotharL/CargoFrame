@@ -588,6 +588,16 @@ fn video_test_file(state: &AppState, exported: Option<bool>) -> std::path::PathB
     state.store.dirs().data().join("video-test").join(name)
 }
 
+/// The picture the page drew as the test mark (a PNG, sent raw); an empty body forgets it.
+#[tauri::command]
+pub fn set_video_test_mark(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected a picture".into());
+    };
+    let work = state.store.dirs().data().join("video-test");
+    video::store_mark(&work, (!bytes.is_empty()).then_some(bytes.as_slice()))
+}
+
 /// Cut, crop and mark the test clip into a copy.
 #[tauri::command]
 pub async fn export_video_test(

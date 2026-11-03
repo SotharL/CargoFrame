@@ -615,7 +615,7 @@ fn the_test_clip_is_cut_cropped_and_marked_into_a_copy_and_bad_edits_are_explain
             w: 160,
             h: 120,
         }),
-        mark: true,
+        mark: TestMark::Square,
     };
     // nothing recorded yet
     let t = export_test(&video, &edit, &idle, &work);
@@ -642,7 +642,7 @@ fn the_test_clip_is_cut_cropped_and_marked_into_a_copy_and_bad_edits_are_explain
         start_ms: 0,
         end_ms: None,
         crop: None,
-        mark: false,
+        mark: TestMark::None,
     };
     let t = export_test(&video, &plain, &idle, &work);
     assert!(t.ok, "{}", t.message);
@@ -666,4 +666,82 @@ fn the_test_clip_is_cut_cropped_and_marked_into_a_copy_and_bad_edits_are_explain
     };
     let t = export_test(&video, &outside, &idle, &work);
     assert!(!t.ok && t.message.contains("outside"), "{}", t.message);
+}
+
+#[test]
+fn a_mark_the_page_drew_is_checked_kept_and_laid_over_the_copy() {
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    if locate("ffprobe", &[]).is_none() {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("video-test");
+    let idle = Recording::new();
+    let video = Video::default();
+
+    // nowhere to keep it before a test clip exists, and only a PNG is accepted
+    assert!(store_mark(
+        &work,
+        Some(&[0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A])
+    )
+    .unwrap_err()
+    .contains("no test clip yet"));
+    make_test_clip(&ffmpeg, &work);
+    assert!(store_mark(&work, Some(b"GIF89a not a png"))
+        .unwrap_err()
+        .contains("not a PNG"));
+    assert!(!work.join(DRAWN_MARK).exists());
+
+    let drawn = TestEdit {
+        start_ms: 0,
+        end_ms: None,
+        crop: None,
+        mark: TestMark::Drawn,
+    };
+    // asked to lay a mark that was never drawn
+    let t = export_test(&video, &drawn, &idle, &work);
+    assert!(!t.ok && t.message.contains("not drawn"), "{}", t.message);
+
+    // a see-through picture the size of the clip, as the page will draw it
+    let png = dir.path().join("drawn.png");
+    let made = Command::new(&ffmpeg)
+        .args([
+            "-hide_banner",
+            "-loglevel",
+            "error",
+            "-y",
+            "-f",
+            "lavfi",
+            "-i",
+        ])
+        .arg("color=c=blue@0.5:s=320x240,format=rgba")
+        .args(["-frames:v", "1"])
+        .arg(&png)
+        .output()
+        .unwrap();
+    assert!(made.status.success());
+    store_mark(&work, Some(&fs::read(&png).unwrap())).unwrap();
+    assert!(work.join(DRAWN_MARK).is_file());
+
+    let cropped = TestEdit {
+        crop: Some(Crop {
+            x: 80,
+            y: 60,
+            w: 160,
+            h: 120,
+        }),
+        ..drawn.clone()
+    };
+    let t = export_test(&video, &cropped, &idle, &work);
+    assert!(t.ok, "{}", t.message);
+    assert_eq!((t.width, t.height), (160, 120), "the crop comes last");
+
+    // forgetting it
+    store_mark(&work, None).unwrap();
+    assert!(!work.join(DRAWN_MARK).exists());
+    store_mark(&work, None).unwrap();
 }

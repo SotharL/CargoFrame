@@ -531,3 +531,21 @@ export on Windows before the editor exists.
   (usually, not always, the main one). Choosing the screen to record is part of the trigger work that is not
   built yet, and S9 should say what each does on a two-screen PC.
 
+### Phase 12, part 6: marks drawn by the window itself (3 Nov 2026)
+
+The editor's marks (red circle, text) are drawn by the window on a canvas and laid over the video by
+ffmpeg. This slice proves that path before the editor is built: "Mark" in the copy panel can be
+*A circle and a text (drawn by this window)*.
+
+- **The window draws a see-through PNG the size of the clip** (a circle in the middle, a text with a white
+  outline at the top left, in a system font) and sends it as raw bytes (`set_video_test_mark`; checked to
+  be a PNG, at most the size limit of an edited screenshot, written to `video-test/mark-drawn.png` only).
+  The export then lays it at 0,0 with the same overlay filter graph, cut and crop included (the crop
+  comes last, so a crop never moves a mark).
+- **Checked here in a real Chromium:** the picture the page draws (1920×1080, about 86 KB) composited by
+  ffmpeg over a test picture with the circle and the text placed correctly and the see-through parts
+  left clear. A mark that covers the whole picture is cheap enough (tens of KB); the editor will send one
+  picture per mark, sized to the mark, to keep it smaller.
+- **Windows fonts are the open question:** the text uses `bold <size>px sans-serif`. The window's own font
+  is drawn, so the owner should look at how the text comes out on Windows (S9 checklist).
+

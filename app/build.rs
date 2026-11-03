@@ -50,6 +50,7 @@ fn main() {
             "stop_video_recording",
             "get_video_test_clip",
             "export_video_test",
+            "set_video_test_mark",
             "open_video_test",
             "pick_folder",
             "list_connections",

@@ -359,8 +359,8 @@ export interface VideoTestEdit {
   start_ms: number;
   end_ms: number | null;
   crop: { x: number; y: number; w: number; h: number } | null;
-  /** Lay a red square over the whole clip, to check that marks are drawn. */
-  mark: boolean;
+  /** A mark laid over the whole copy: none, a square ffmpeg draws, or a picture the page draws. */
+  mark: 'none' | 'square' | 'drawn';
 }
 
 /** A recording started with "Record until I stop". */

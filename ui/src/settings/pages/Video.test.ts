@@ -229,5 +229,60 @@ describe('Video settings', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
       await waitFor(() => expect(screen.queryByText('Copy made')).toBeNull());
     });
+
+
+    describe('a mark the window draws', () => {
+      const drawn: string[] = [];
+      let canvasWorks = true;
+      beforeEach(() => {
+        drawn.length = 0;
+        canvasWorks = true;
+        const ctx = new Proxy({}, {
+          get: (_t, name) => (typeof name === 'string' && ['arc', 'beginPath', 'stroke', 'strokeText', 'fillText'].includes(name)
+            ? (...a: unknown[]) => { drawn.push(`${name}:${a.join(',')}`); }
+            : undefined),
+          set: () => true,
+        });
+        HTMLCanvasElement.prototype.getContext = (() => (canvasWorks ? ctx : null)) as never;
+        HTMLCanvasElement.prototype.toBlob = function (cb: BlobCallback) {
+          cb(new Blob([new Uint8Array(8)], { type: 'image/png' }));
+        };
+      });
+
+      it('draws a circle and a text the size of the clip, hands them over, then exports', async () => {
+        const api = memoryApi();
+        const sent: (Blob | null)[] = [];
+        const original = api.setVideoTestMark;
+        api.setVideoTestMark = async (png) => {
+          sent.push(png);
+          return original(png);
+        };
+        setApiForTests(api);
+        render(Video);
+        await screen.findByText('ffmpeg found');
+        await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+        await screen.findByText('It works');
+        await fireEvent.change(screen.getByRole('combobox', { name: 'Mark' }), { target: { value: 'drawn' } });
+        await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+        await screen.findByText('Copy made');
+        expect(sent).toHaveLength(1);
+        expect(sent[0]!.type).toBe('image/png');
+        // a circle in the middle of the 1920x1080 picture, and the text
+        expect(drawn).toContain('arc:960,540,216,0,' + Math.PI * 2);
+        expect(drawn.some((d) => d.startsWith('fillText:CargoFrame test'))).toBe(true);
+      });
+
+      it('says so when the window cannot draw', async () => {
+        canvasWorks = false;
+        open();
+        await screen.findByText('ffmpeg found');
+        await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+        await screen.findByText('It works');
+        await fireEvent.change(screen.getByRole('combobox', { name: 'Mark' }), { target: { value: 'drawn' } });
+        await fireEvent.click(screen.getByRole('button', { name: 'Export a copy' }));
+        await screen.findByText('No copy made');
+        expect(screen.getAllByRole('alert').map((a) => a.textContent).join(' ')).toContain('cannot draw the mark');
+      });
+    });
   });
 });

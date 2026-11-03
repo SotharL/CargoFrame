@@ -20,6 +20,8 @@ pub const TRIAL_SECONDS: u64 = 5;
 pub const TRIAL_CLIP: &str = "test-clip.mp4";
 /// The name of the copy made by "Export a copy".
 pub const EXPORTED_CLIP: &str = "exported.mp4";
+/// The mark the page drew (a picture with see-through parts), waiting to be laid over the copy.
+pub const DRAWN_MARK: &str = "mark-drawn.png";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Os {
@@ -768,8 +770,19 @@ pub struct TestEdit {
     /// `None` keeps the clip to its end.
     pub end_ms: Option<u64>,
     pub crop: Option<Crop>,
-    /// Lay a red square over the whole clip, to check that marks are drawn.
-    pub mark: bool,
+    pub mark: TestMark,
+}
+
+/// The mark laid over the whole of the copy, to check that marks come out right.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TestMark {
+    None,
+    /// A translucent red square that ffmpeg draws itself.
+    Square,
+    /// A picture the page drew, the size of the clip, with a circle and a text on it. This is
+    /// how the editor will make marks.
+    Drawn,
 }
 
 impl Recording {
@@ -799,34 +812,48 @@ pub fn export_test(video: &Video, edit: &TestEdit, recording: &Recording, work: 
         Err(e) => return Trial::failed(format!("The test clip could not be read: {e}"), None),
     };
     let mut overlays = Vec::new();
-    if edit.mark {
-        let image = work.join("mark.png");
-        let target = format!("file:{}", image.display());
-        // ffmpeg draws the test mark itself: a translucent red square
-        let made = ask(
-            &found.ffmpeg,
-            &[
-                "-hide_banner",
-                "-nostdin",
-                "-y",
-                "-loglevel",
-                "error",
-                "-f",
-                "lavfi",
-                "-i",
-                "color=c=red@0.6:s=120x120,format=rgba",
-                "-frames:v",
-                "1",
-                target.as_str(),
-            ],
-        );
-        if let Err(e) = made {
-            return Trial::failed(format!("The test mark could not be made: {e}"), None);
+    let (image, x, y) = match edit.mark {
+        TestMark::None => (None, 0, 0),
+        TestMark::Drawn => {
+            let drawn = work.join(DRAWN_MARK);
+            if !drawn.is_file() {
+                return Trial::failed("The mark was not drawn: try again", None);
+            }
+            // drawn the size of the clip, so it goes on the corner
+            (Some(drawn), 0, 0)
         }
+        TestMark::Square => {
+            let image = work.join("mark.png");
+            let target = format!("file:{}", image.display());
+            // ffmpeg draws the test mark itself: a translucent red square
+            let made = ask(
+                &found.ffmpeg,
+                &[
+                    "-hide_banner",
+                    "-nostdin",
+                    "-y",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=red@0.6:s=120x120,format=rgba",
+                    "-frames:v",
+                    "1",
+                    target.as_str(),
+                ],
+            );
+            if let Err(e) = made {
+                return Trial::failed(format!("The test mark could not be made: {e}"), None);
+            }
+            (Some(image), 20, 20)
+        }
+    };
+    if let Some(image) = image {
         overlays.push(Overlay {
             image,
-            x: 20,
-            y: 20,
+            x,
+            y,
             from_ms: edit.start_ms,
             to_ms: edit.end_ms.unwrap_or(info.duration_ms),
         });
@@ -872,6 +899,21 @@ pub fn export_test(video: &Video, edit: &TestEdit, recording: &Recording, work: 
         took_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
         clip: Some(output.display().to_string()),
     }
+}
+
+/// Keep the picture the page drew as the mark (`None` forgets it). The page sends a PNG, which is
+/// checked before it is written, into the test folder only.
+pub fn store_mark(work: &Path, png: Option<&[u8]>) -> Result<(), String> {
+    let path = work.join(DRAWN_MARK);
+    let Some(png) = png else {
+        let _ = std::fs::remove_file(&path);
+        return Ok(());
+    };
+    crate::session::check_png(png)?;
+    if !work.is_dir() {
+        return Err("There is no test clip yet: run a test recording first".into());
+    }
+    std::fs::write(&path, png).map_err(|e| format!("The mark could not be kept: {e}"))
 }
 
 /// The most of a clip the Settings window is sent to play (a 30 s clip is a few MB).

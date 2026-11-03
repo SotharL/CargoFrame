@@ -41,7 +41,7 @@
   let trimEnd = $state(0);
   let cropOn = $state(false);
   let crop = $state({ x: 0, y: 0, w: 0, h: 0 });
-  let markOn = $state(false);
+  let markKind = $state<VideoTestEdit['mark']>('none');
   let exporting = $state(false);
   let copy = $state<VideoTrial | null>(null);
   let playing = $state<'test' | 'exported'>('test');
@@ -170,7 +170,36 @@
     const even = (n: number) => Math.floor(n / 2) * 2;
     crop = { x: even(t.width / 4), y: even(t.height / 4), w: even(t.width / 2), h: even(t.height / 2) };
     cropOn = false;
-    markOn = false;
+    markKind = 'none';
+  }
+
+  /**
+   * A circle and a text on a see-through picture the size of the clip: how the editor will make
+   * marks, so what the window draws (fonts included) is checked against what ffmpeg lays over the video.
+   */
+  async function drawMark(width: number, height: number): Promise<Blob> {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw 'This window cannot draw the mark';
+    const red = '#e5322d';
+    ctx.lineWidth = Math.max(4, Math.round(height / 120));
+    ctx.strokeStyle = red;
+    ctx.beginPath();
+    ctx.arc(width / 2, height / 2, Math.min(width, height) / 5, 0, Math.PI * 2);
+    ctx.stroke();
+    const size = Math.max(16, Math.round(height / 18));
+    ctx.font = `bold ${size}px sans-serif`;
+    ctx.textBaseline = 'top';
+    ctx.lineWidth = Math.max(2, Math.round(size / 8));
+    ctx.strokeStyle = '#ffffff';
+    ctx.strokeText('CargoFrame test', size / 2, size / 2);
+    ctx.fillStyle = red;
+    ctx.fillText('CargoFrame test', size / 2, size / 2);
+    return new Promise((resolve, reject) => {
+      canvas.toBlob((b) => (b ? resolve(b) : reject('The mark could not be made into a picture')), 'image/png');
+    });
   }
 
   async function exportCopy() {
@@ -185,14 +214,19 @@
       start_ms: Math.max(0, Math.round(Number(trimStart) * 1000)),
       end_ms: Math.round(Number(trimEnd) * 1000),
       crop: cropOn ? { x: Math.round(crop.x), y: Math.round(crop.y), w: Math.round(crop.w), h: Math.round(crop.h) } : null,
-      mark: markOn,
+      mark: markKind,
     };
     exporting = true;
     copy = null;
     closePlayer();
     playerError = '';
     try {
-      copy = await (await getApi()).exportVideoTest(v, edit);
+      const api = await getApi();
+      // a drawn mark is made here, the size of the clip, and handed over before the export
+      if (markKind === 'drawn' && trial) {
+        await api.setVideoTestMark(await drawMark(trial.width, trial.height));
+      }
+      copy = await api.exportVideoTest(v, edit);
     } catch (e) {
       copy = failure(String(e));
     } finally {
@@ -457,7 +491,13 @@
                   <Field label="Height (px)"><input type="number" min="2" bind:value={crop.h} /></Field>
                 </div>
               {/if}
-              <label class="check"><input type="checkbox" bind:checked={markOn} /> Lay a red square over the copy (checks that marks are drawn)</label>
+              <Field label="Mark" hint="Laid over the whole copy. The drawn mark is a red circle and a text that this window draws, the way the editor will make marks.">
+              <select bind:value={markKind}>
+                <option value="none">No mark</option>
+                <option value="square">A red square (drawn by ffmpeg)</option>
+                <option value="drawn">A circle and a text (drawn by this window)</option>
+              </select>
+            </Field>
               <div class="row">
                 <button type="button" onclick={exportCopy} disabled={exporting}>
                   {exporting ? 'Making the copy…' : 'Export a copy'}

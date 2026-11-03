@@ -119,6 +119,8 @@ export interface Api {
   stopVideoRecording(): Promise<VideoTrial>;
   /** The last test clip (or, with `exported`, its edited copy), to play in the window. */
   getVideoTestClip(exported?: boolean): Promise<Blob>;
+  /** The picture the page drew as the test mark (a PNG the size of the clip); null forgets it. */
+  setVideoTestMark(png: Blob | null): Promise<void>;
   /** Cut, crop and mark the test clip into a copy. */
   exportVideoTest(video: Video, edit: VideoTestEdit): Promise<VideoTrial>;
   /** Open the clip of the last test recording (or its edited copy) in the video player. */
@@ -230,6 +232,10 @@ async function tauriApi(): Promise<Api> {
       const bytes = await invoke<ArrayBuffer>('get_video_test_clip', { exported });
       return new Blob([bytes], { type: 'video/mp4' });
     },
+    setVideoTestMark: async (png) => {
+      const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
+      await invoke('set_video_test_mark', bytes);
+    },
     exportVideoTest: (video, edit) => invoke('export_video_test', { video, edit }),
     openVideoTest: (exported) => invoke('open_video_test', { exported }),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
@@ -312,6 +318,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
   let trialRan = false;
   let copyMade = false;
+  let markDrawn = false;
   let recordingSince: number | null = null;
   let recordingEnded: string | null = null;
   const store: Record<ItemKind, Map<string, unknown>> = {
@@ -698,11 +705,20 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       if (!trialRan || (exported && !copyMade)) throw 'There is no test clip yet: run a test recording first';
       return new Blob([new Uint8Array(16)], { type: 'video/mp4' });
     },
+    setVideoTestMark: async (png) => {
+      markDrawn = png !== null;
+    },
     exportVideoTest: async (_v, edit) => {
       if (!trialRan) {
         return {
           ok: false, message: 'There is no test clip yet: run a test recording first', capture: null, encoder: null,
           width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      if (edit.mark === 'drawn' && !markDrawn) {
+        return {
+          ok: false, message: 'The mark was not drawn: try again', capture: null, encoder: null, width: 0,
+          height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
         };
       }
       const length = (edit.end_ms ?? 5000) - edit.start_ms;
