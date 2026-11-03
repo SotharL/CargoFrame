@@ -338,6 +338,79 @@ mod shipped_config_tests {
         }
     }
 
+    /// The names of the functions marked as commands in `commands.rs`.
+    fn defined_commands() -> std::collections::BTreeSet<String> {
+        include_str!("commands.rs")
+            .split("#[tauri::command]")
+            .skip(1)
+            .filter_map(|after| {
+                let at = after.find("fn ")?;
+                let rest = &after[at + 3..];
+                let end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_'))?;
+                Some(rest[..end].to_string())
+            })
+            .collect()
+    }
+
+    /// A command that is written but not registered, not listed for the web view, or not given to
+    /// a window fails only when someone uses it. This keeps the four places in step.
+    #[test]
+    fn every_command_is_registered_listed_and_given_to_a_window() {
+        let defined = defined_commands();
+        assert!(
+            defined.len() > 50,
+            "the commands were not found: {defined:?}"
+        );
+        // registered: the lines `commands::name,` in the handler
+        let lib = include_str!("lib.rs");
+        let handler = &lib[lib.find("generate_handler![").expect("a handler")..];
+        let handler = &handler[..handler.find(']').expect("the end of the handler")];
+        let registered: std::collections::BTreeSet<String> = handler
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("commands::"))
+            .map(|l| l.trim_end_matches(',').to_string())
+            .collect();
+        // listed: the strings in build.rs
+        let build = include_str!("../build.rs");
+        let listed: std::collections::BTreeSet<String> = build
+            .split('"')
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, s)| s.to_string())
+            .filter(|s| defined.contains(s))
+            .collect();
+        // given: `allow-some-name` in either window's capability
+        let given: std::collections::BTreeSet<String> = capabilities()
+            .iter()
+            .flat_map(|(_, cap)| cap["permissions"].as_array().unwrap().clone())
+            .filter_map(|p| {
+                p.as_str()
+                    .and_then(|p| p.strip_prefix("allow-"))
+                    .map(|p| p.replace('-', "_"))
+            })
+            .collect();
+        for name in &defined {
+            assert!(
+                registered.contains(name),
+                "{name} is not in the invoke handler"
+            );
+            assert!(listed.contains(name), "{name} is not listed in build.rs");
+            assert!(given.contains(name), "{name} is not given to any window");
+        }
+        for name in &registered {
+            assert!(
+                defined.contains(name),
+                "the handler names {name}, which is not a command"
+            );
+        }
+        for name in &given {
+            assert!(
+                defined.contains(name),
+                "a window is given {name}, which is not a command"
+            );
+        }
+    }
+
     /// What belongs to one capture is for the CargoFrame window only: Settings has no part in it.
     #[test]
     fn the_settings_window_holds_nothing_that_belongs_to_a_capture() {

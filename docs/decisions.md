@@ -742,3 +742,9 @@ to a recording matches what it can do to a screenshot: cut, crop and mark.
   crate's). Under a busy computer two of them had failed once each with no message: each promises the recorder
   a couple of seconds, and a recorder starved of time returns no clip. They passed alone and in loops.
 
+- **Two tests keep the commands in step.** One (in the program) checks that every command is registered, listed in
+  the build script and given to at least one window, and that a window is never given a command that does not exist.
+  It found a leftover permission for a command that was removed earlier (`allow-copy-text`), now deleted. The other
+  (in the page) checks that every command the page calls exists and that none is defined but never called. The page
+  test reads the Rust source as text; it declares the single Node function it needs instead of pulling the Node
+  types into the whole page project.
