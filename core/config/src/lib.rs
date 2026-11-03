@@ -26,7 +26,8 @@ pub mod triggers;
 pub use error::ConfigError;
 pub use infotype::{InfoKind, InfoOption, InfoOptions, InfoType};
 pub use models::{
-    CaptureMode, General, MemoryMode, Safe, Theme, Trigger, Video, VideoCapture, VideoEncoder,
+    CaptureMode, General, Media, MemoryMode, Safe, Theme, Trigger, Video, VideoCapture,
+    VideoEncoder,
 };
 pub use paths::Dirs;
 pub use store::{valid_id, Document, Kind, Loaded, Store};

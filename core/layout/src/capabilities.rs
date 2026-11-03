@@ -4,9 +4,9 @@
 //! blocks each button sends, and the share itself skips what has no place at the destination.
 //! All three read the table below, so they cannot disagree.
 //!
-//! Five things are described: free text (a message, a description, a post body), dropdown
-//! choices (picked from the service's own lists), the screenshot, the ticked files, and links
-//! written in the text. Every entry is `Yes`, `Limited` or `No`, with one line saying how or why,
+//! Six things are described: free text (a message, a description, a post body), dropdown
+//! choices (picked from the service's own lists), the screenshot, the video, the ticked files,
+//! and links written in the text. Every entry is `Yes`, `Limited` or `No`, with one line saying how or why,
 //! in words for the person.
 
 use crate::validate::ConnectionKind;
@@ -58,6 +58,8 @@ pub struct Capabilities {
     pub text: Capability,
     pub dropdown: Capability,
     pub screenshot: Capability,
+    /// The screen recording a video trigger makes.
+    pub video: Capability,
     pub files: Capability,
     pub link: Capability,
 }
@@ -84,6 +86,7 @@ impl Capabilities {
                 text: Capability::yes("Becomes the issue summary and description"),
                 dropdown: Capability::yes("Priority, labels, components and more come from your Jira"),
                 screenshot: Capability::yes("Attached to the issue"),
+                video: Capability::limited("Attached to the issue, within your Jira's attachment size limit"),
                 files: Capability::yes("Attached to the issue as one zip"),
                 link: Capability::yes("Links use Jira wiki style: [word|https://…]"),
             },
@@ -91,6 +94,7 @@ impl Capabilities {
                 text: Capability::limited("Goes into the spreadsheet columns you map, as plain text"),
                 dropdown: Capability::limited("Only the Drive folder has a list to pick from"),
                 screenshot: Capability::yes("Uploaded to Drive, with a link in the row"),
+                video: Capability::yes("Uploaded to Drive, with a link in the row"),
                 files: Capability::yes("Uploaded to Drive as one zip, with a link in the row"),
                 link: Capability::limited("Addresses stay plain text in a cell"),
             },
@@ -98,6 +102,7 @@ impl Capabilities {
                 text: Capability::yes("Becomes the post title and text"),
                 dropdown: Capability::yes("The subreddit and flair come from your Reddit"),
                 screenshot: Capability::yes("Posted as an image post"),
+                video: Capability::no("Reddit video posts are not supported yet"),
                 files: Capability::no("Reddit cannot take files on a post"),
                 link: Capability::yes("The post text understands Markdown links; the Link field makes a link post"),
             },
@@ -105,6 +110,7 @@ impl Capabilities {
                 text: Capability::yes("The prompt and title are typed into the chat"),
                 dropdown: Capability::limited("Only the chat to open can be picked"),
                 screenshot: Capability::yes("Pasted into the chat as a picture"),
+                video: Capability::no("Claude cannot watch a video"),
                 files: Capability::yes("Pasted into the chat as files (20 at most, 30 MB each), or as text"),
                 link: Capability::yes("Addresses are typed into the message as written"),
             },
@@ -112,6 +118,7 @@ impl Capabilities {
                 text: Capability::yes("The prompt and title are typed into the chat"),
                 dropdown: Capability::limited("Only the chat to open can be picked"),
                 screenshot: Capability::no("Pasting a picture into another program works on Windows only for now"),
+                video: Capability::no("Claude cannot watch a video"),
                 files: Capability::limited("Pasting files works on Windows only for now; text files can go inside the message"),
                 link: Capability::yes("Addresses are typed into the message as written"),
             },
@@ -119,6 +126,7 @@ impl Capabilities {
                 text: Capability::yes("Posted as the message (or the comment on the files)"),
                 dropdown: Capability::limited("Only the channel has a list to pick from"),
                 screenshot: Capability::yes("Uploaded to the channel as a picture"),
+                video: Capability::yes("Uploaded to the channel as a video"),
                 files: Capability::yes("Uploaded to the channel as one zip"),
                 link: Capability::yes("Addresses turn into links by themselves; <, > and & are shown as typed"),
             },
@@ -126,6 +134,7 @@ impl Capabilities {
                 text: Capability::yes("Posted as the message, up to 2000 characters (a forum post's title is the name)"),
                 dropdown: Capability::limited("The channel (or forum) and an existing thread can be picked"),
                 screenshot: Capability::yes("Attached to the message"),
+                video: Capability::limited("Attached to the message, within the server's upload limit (often 10 MB)"),
                 files: Capability::limited("Attached as one zip, within the server's upload limit"),
                 link: Capability::yes("Addresses and [word](https://…) links are shown as links"),
             },
@@ -133,6 +142,7 @@ impl Capabilities {
                 text: Capability::yes("Posted as the message (a new channel post uses the title as its headline)"),
                 dropdown: Capability::limited("Your chats and channels can be picked; a thread is chosen by its link"),
                 screenshot: Capability::yes("Shown inside the message"),
+                video: Capability::no("Teams needs files in OneDrive, which CargoFrame does not use yet"),
                 files: Capability::no("Teams needs files in OneDrive, which CargoFrame does not use yet"),
                 link: Capability::yes("Addresses are shown as typed and Teams links them by itself; markup is shown as text"),
             },
@@ -158,6 +168,7 @@ impl Capabilities {
             } else {
                 Capability::no("The request has no multipart field for the screenshot")
             },
+            video: Capability::no("A Custom API connection cannot send a video yet"),
             files: if shape.files_field {
                 Capability::yes("Sent as one zip in the multipart field you named")
             } else {
@@ -173,6 +184,7 @@ impl Capabilities {
             text: Capability::yes("Kept in share.json inside the zip"),
             dropdown: Capability::yes("The choices are kept in share.json inside the zip"),
             screenshot: Capability::yes("Kept as screenshot.png inside the zip"),
+            video: Capability::yes("Kept as recording.mp4 inside the zip"),
             files: Capability::yes("Kept in the zip's files folder"),
             link: Capability::yes("Kept as written"),
         }
@@ -199,7 +211,7 @@ mod tests {
         for kind in KINDS {
             for windows in [true, false] {
                 let c = Capabilities::for_kind(kind, windows);
-                for cap in [c.text, c.dropdown, c.screenshot, c.files, c.link] {
+                for cap in [c.text, c.dropdown, c.screenshot, c.video, c.files, c.link] {
                     assert!(!cap.note.trim().is_empty(), "{kind:?}");
                 }
             }
@@ -254,9 +266,33 @@ mod tests {
     #[test]
     fn saving_locally_keeps_everything() {
         let c = Capabilities::local();
-        assert!([c.text, c.dropdown, c.screenshot, c.files, c.link]
+        assert!([c.text, c.dropdown, c.screenshot, c.video, c.files, c.link]
             .iter()
             .all(|cap| cap.support == Support::Yes));
+    }
+
+    #[test]
+    fn a_video_goes_where_a_file_can_be_uploaded_and_nowhere_else() {
+        let video = |k| Capabilities::for_kind(k, true).video.support;
+        assert_eq!(video(ConnectionKind::Slack), Support::Yes);
+        assert_eq!(video(ConnectionKind::Google), Support::Yes);
+        assert_eq!(video(ConnectionKind::Jira), Support::Limited);
+        assert_eq!(video(ConnectionKind::Discord), Support::Limited);
+        for no in [
+            ConnectionKind::Reddit,
+            ConnectionKind::Claude,
+            ConnectionKind::Teams,
+            ConnectionKind::CustomApi,
+        ] {
+            assert_eq!(video(no), Support::No, "{no:?}");
+        }
+        // Claude cannot watch one, on Windows or elsewhere
+        assert_eq!(
+            Capabilities::for_kind(ConnectionKind::Claude, false)
+                .video
+                .support,
+            Support::No
+        );
     }
 
     #[test]
@@ -265,5 +301,6 @@ mod tests {
             serde_json::to_value(Capabilities::for_kind(ConnectionKind::Reddit, true)).unwrap();
         assert_eq!(json["files"]["support"], "no");
         assert_eq!(json["screenshot"]["support"], "yes");
+        assert_eq!(json["video"]["support"], "no");
     }
 }

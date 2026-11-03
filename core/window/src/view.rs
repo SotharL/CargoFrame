@@ -376,7 +376,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                 };
                 view.sharing.insert(block.id.clone(), sv);
             }
-            BlockKind::Screenshot => {}
+            BlockKind::Screenshot | BlockKind::Video => {}
         }
     }
     view

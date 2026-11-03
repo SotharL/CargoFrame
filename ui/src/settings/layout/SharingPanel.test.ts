@@ -119,3 +119,31 @@ describe('SharingPanel', () => {
     expect(screen.queryByText('What this button does with each block')).toBeNull();
   });
 });
+
+describe('SharingPanel for a video layout', () => {
+  afterEach(cleanup);
+
+  function videoSetup(kind: ServiceKind) {
+    const s = setup(kind);
+    s.blocks[0] = { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 4, h: 2 } };
+    const layout: Layout = { id: 'l', name: 'L', blocks: s.blocks };
+    return { ...s, reach: demoReach(layout, s.button, demoCapabilities(kind), kind) };
+  }
+
+  it('talks about the video, not the screenshot, and lets a destination that takes video have it', () => {
+    live(videoSetup('slack'), 'slack');
+    const box = screen.getByRole('checkbox', { name: 'Send the video' }) as HTMLInputElement;
+    expect(box.disabled).toBe(false);
+    expect(box.checked).toBe(true);
+    expect(screen.queryByRole('checkbox', { name: 'Send the screenshot' })).toBeNull();
+    expect(screen.getByText(/Sent as the video/)).toBeTruthy();
+  });
+
+  it('greys the switch out and says why where video cannot go', () => {
+    live(videoSetup('claude'), 'claude');
+    const box = screen.getByRole('checkbox', { name: 'Send the video' }) as HTMLInputElement;
+    expect(box.disabled).toBe(true);
+    expect(box.checked).toBe(false);
+    expect(screen.getAllByText('Claude cannot watch a video').length).toBeGreaterThan(0);
+  });
+});

@@ -14,6 +14,11 @@ describe('lineFor', () => {
     expect(lineFor({ block_id: 'a', state: 'sent', role: 'field', field: 'priority' }, button, 'jira').text).toBe('Sent in the “priority” field');
   });
 
+  it('says a sent video is sent as the video, and names the block Video', () => {
+    expect(lineFor({ block_id: 'a', state: 'sent', role: 'video' }, button, 'slack').text).toBe('Sent as the video');
+    expect(blockName({ id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 1, h: 1 } })).toBe('Video');
+  });
+
   it('says text files go into the message only for a Claude button set that way', () => {
     const inline: Button = { ...button, send: { screenshot: true, files: 'inline', inline_limit_kb: 64 } };
     const r = { block_id: 'a', state: 'sent', role: 'files' } as const;

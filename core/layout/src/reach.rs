@@ -18,6 +18,8 @@ use serde::Serialize;
 #[serde(tag = "role", rename_all = "snake_case")]
 pub enum Role {
     Screenshot,
+    /// The recording of a video trigger; sent where the screenshot would be.
+    Video,
     Files,
     /// The text block that holds the prompt.
     Prompt,
@@ -164,6 +166,17 @@ fn verdict(
             } else {
                 match usable(caps.screenshot) {
                     Ok(()) => sent(Role::Screenshot),
+                    Err(why) => Verdict::CannotSend { why },
+                }
+            }
+        }
+        BlockKind::Video => {
+            // the button's "send the picture" switch covers the recording too
+            if !button.send.screenshot {
+                Verdict::SwitchedOff
+            } else {
+                match usable(caps.video) {
+                    Ok(()) => sent(Role::Video),
                     Err(why) => Verdict::CannotSend { why },
                 }
             }
@@ -366,6 +379,52 @@ mod tests {
             Some(Verdict::CannotSend { why }) => assert!(why.contains("Reddit"), "{why}"),
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn a_video_block_is_sent_where_a_video_can_go_and_says_why_where_it_cannot() {
+        let reg = Reg::default()
+            .with("s", ConnectionKind::Slack, ConnectionState::Connected)
+            .with("r", ConnectionKind::Reddit, ConnectionState::Connected)
+            .with("c", ConnectionKind::Claude, ConnectionState::Connected);
+        let l = layout(vec![block("clip", BlockKind::Video)], to("s"));
+        let r = reach(&l, "go", &reg).unwrap();
+        assert_eq!(r.of("clip"), Some(&sent(Role::Video)));
+
+        for (conn, word) in [("r", "Reddit"), ("c", "Claude")] {
+            let l = layout(vec![block("clip", BlockKind::Video)], to(conn));
+            match reach(&l, "go", &reg).unwrap().of("clip") {
+                Some(Verdict::CannotSend { why }) => assert!(why.contains(word), "{why}"),
+                other => panic!("{other:?}"),
+            }
+        }
+
+        // the button's "send the picture" switch covers the recording as well
+        let off = SharingButton {
+            send: SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+            ..to("s")
+        };
+        let l = layout(vec![block("clip", BlockKind::Video)], off);
+        assert_eq!(
+            reach(&l, "go", &reg).unwrap().of("clip"),
+            Some(&Verdict::SwitchedOff)
+        );
+    }
+
+    #[test]
+    fn saving_locally_keeps_the_video() {
+        let reg = Reg::default();
+        let l = layout(
+            vec![block("clip", BlockKind::Video)],
+            SharingButton::default(),
+        );
+        assert_eq!(
+            reach(&l, "go", &reg).unwrap().of("clip"),
+            Some(&sent(Role::Video))
+        );
     }
 
     #[test]

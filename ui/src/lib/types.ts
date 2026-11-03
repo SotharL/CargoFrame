@@ -68,6 +68,7 @@ export type DropdownSource =
 
 export type BlockContent =
   | { type: 'screenshot' }
+  | { type: 'video' }
   | {
       type: 'text';
       title: string;
@@ -262,6 +263,9 @@ export interface ItemList<T> {
   problems: string[];
 }
 
+/** A screenshot, or a video (the first press starts recording, the next one stops). */
+export type Media = 'screenshot' | 'video';
+
 export type CaptureMode = 'active_window' | 'display' | 'all_displays';
 
 export interface Trigger {
@@ -270,6 +274,8 @@ export interface Trigger {
   /** Canonical, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only". */
   shortcut: string;
   capture: CaptureMode;
+  /** What the shortcut makes: a picture of the screen, or a recording of it. */
+  media: Media;
   layout_id: string | null;
 }
 
@@ -478,6 +484,7 @@ export interface Capabilities {
   text: Capability;
   dropdown: Capability;
   screenshot: Capability;
+  video: Capability;
   files: Capability;
   link: Capability;
 }
@@ -485,6 +492,7 @@ export interface Capabilities {
 /** How a block takes part in a share. */
 export type Role =
   | { role: 'screenshot' }
+  | { role: 'video' }
   | { role: 'files' }
   | { role: 'prompt' }
   | { role: 'zip_name' }

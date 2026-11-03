@@ -50,6 +50,8 @@ pub struct Block {
 pub enum BlockKind {
     Text(TextBlock),
     Screenshot,
+    /// The recording a video trigger made: played, trimmed, cropped and marked in the window.
+    Video,
     SharingButton(SharingButton),
     Dropdown(DropdownBlock),
     Files(FilesBlock),
@@ -409,6 +411,16 @@ mod serde_tests {
         assert_eq!(json["blocks"][3]["source"]["type"], "claude_chats");
         let back: Layout = serde_json::from_value(json).unwrap();
         assert_eq!(back, layout);
+    }
+
+    #[test]
+    fn a_video_block_is_written_and_read_as_type_video() {
+        let block: Block = serde_json::from_str(
+            r#"{"id": "clip", "type": "video", "rect": {"x":0,"y":0,"w":8,"h":8}}"#,
+        )
+        .unwrap();
+        assert_eq!(block.kind, BlockKind::Video);
+        assert_eq!(serde_json::to_value(&block).unwrap()["type"], "video");
     }
 
     #[test]

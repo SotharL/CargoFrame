@@ -172,7 +172,9 @@
   }
 
   function label(b: Block): string {
-    return b.type === 'sharing_button' ? b.label || 'Share' : b.type === 'screenshot' ? 'Screenshot' : b.title || typeLabel(b.type);
+    if (b.type === 'screenshot') return 'Screenshot';
+    if (b.type === 'video') return 'Video';
+    return b.type === 'sharing_button' ? b.label || 'Share' : b.title || typeLabel(b.type);
   }
 
   function worst(id: string): 'error' | 'warning' | 'debug' | null {
@@ -325,7 +327,7 @@
   .count.warning { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 16%, transparent); }
   .count.debug { border-color: var(--dbg); background: color-mix(in srgb, var(--dbg) 16%, transparent); }
   .name { font-weight: 600; flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .screenshot { background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px); }
+  .screenshot, .video { background: repeating-linear-gradient(45deg, var(--surface), var(--surface) 10px, var(--surface-2) 10px, var(--surface-2) 20px); }
   .handle {
     position: absolute; right: 0; bottom: 0; width: 16px; height: 16px; padding: 0; border: 0;
     border-radius: 0; background: transparent; cursor: nwse-resize; touch-action: none;

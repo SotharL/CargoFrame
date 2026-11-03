@@ -594,3 +594,23 @@ and move with it, and "Start here" / "End here" still work.
   a second. Grabbing a handle never moves the clip (the click is not passed on to the strip).
 - **Checked in a real Chromium** with a real clip: the strip fills the width, a drag moves the handles
   and the numbers, and a click on the strip seeks. Not shown on the edited copy, only on the test clip.
+
+### Phase 12, part 10: the video block, and a trigger that makes a video (3 Nov 2026)
+
+The data side of "a trigger that records". Nothing records yet from a trigger (that is the next part);
+this part is what layouts, triggers and the sending table need to say first.
+
+- **A trigger has a `media`: `screenshot` (the default, and what every trigger file written before
+  this means) or `video`.** The Triggers page has a "Makes" choice; for a video the "Capture" choice (window,
+  screen, all screens) is hidden, because the recorder follows Settings, Video. A card warns when its layout
+  does not fit (a video trigger with no Video block, a screenshot trigger whose layout has only a Video block).
+- **A layout has a `video` block, next to the screenshot block.** A trigger makes a screenshot or a video, so a layout
+  with both gets a warning ("keep the video block in a layout of its own"); it is not an error, because
+  both blocks can be there while someone is changing a layout.
+- **The send rules have no new switch:** the button's "Send the screenshot" switch is the "send the capture"
+  switch, and reads "Send the video" in a layout with a video block.
+- **The capability table has a `video` row.** Recommended answers, from what each connector already does with
+  an attachment: Slack yes; Google (Drive) yes; Jira and Discord with a catch (their attachment size limits);
+  Reddit, Teams, Claude and Custom API no, each with the reason. Saving a zip keeps it as `recording.mp4`.
+  These are claims about what the connectors can carry; the sending itself is part of the next parts, and
+  the real posts to Slack, Discord and Jira stay on the owner's list.

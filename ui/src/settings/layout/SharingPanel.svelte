@@ -36,7 +36,10 @@
   function setRules(patch: Partial<typeof rules>) {
     block.send = { ...rules, ...patch };
   }
-  const pictureOff = $derived(caps?.screenshot.support === 'no');
+  // a layout with a video block sends the recording where a screenshot layout sends the picture
+  const isVideo = $derived(blocks.some((b) => b.type === 'video'));
+  const pictureCap = $derived(isVideo ? caps?.video : caps?.screenshot);
+  const pictureOff = $derived(pictureCap?.support === 'no');
   const filesOff = $derived(caps?.files.support === 'no');
   const limit = $derived(Math.min(MAX_INLINE_KB, Math.max(1, rules.inline_limit_kb)));
 </script>
@@ -73,18 +76,18 @@
 
   <h3>Send rules</h3>
   <Field
-    label="Screenshot"
-    hint={pictureOff ? caps?.screenshot.note : 'Turn off to leave the picture out of what this button sends.'}
+    label={isVideo ? 'Video' : 'Screenshot'}
+    hint={pictureOff ? pictureCap?.note : isVideo ? 'Turn off to leave the video out of what this button sends.' : 'Turn off to leave the picture out of what this button sends.'}
   >
     <span class="check">
       <input
         type="checkbox"
-        aria-label="Send the screenshot"
+        aria-label={isVideo ? 'Send the video' : 'Send the screenshot'}
         checked={rules.screenshot && !pictureOff}
         disabled={pictureOff}
         onchange={(e) => setRules({ screenshot: e.currentTarget.checked })}
       />
-      Send the screenshot
+      {isVideo ? 'Send the video' : 'Send the screenshot'}
     </span>
   </Field>
   <Field

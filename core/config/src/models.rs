@@ -172,6 +172,17 @@ pub enum CaptureMode {
     AllDisplays,
 }
 
+/// What a trigger makes: a picture of the screen, or a recording of it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Media {
+    #[default]
+    Screenshot,
+    /// The first press starts recording, the next one stops it and opens the window with the
+    /// clip (see Settings, Video).
+    Video,
+}
+
 /// `triggers/<id>.json`: a shortcut that captures and opens one layout.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
@@ -182,6 +193,8 @@ pub struct Trigger {
     /// Canonical form, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only".
     pub shortcut: String,
     pub capture: CaptureMode,
+    /// A screenshot (the default, and what a trigger file without this field means) or a video.
+    pub media: Media,
     /// `layouts/<id>.json`. Each trigger has its own layout in V1.
     pub layout_id: Option<String>,
 }
@@ -194,6 +207,7 @@ impl Default for Trigger {
             enabled: true,
             shortcut: String::new(),
             capture: CaptureMode::default(),
+            media: Media::default(),
             layout_id: None,
         }
     }

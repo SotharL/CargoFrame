@@ -180,6 +180,8 @@
             <div class="body">
             {#if b.type === 'screenshot' && image}
               <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
+            {:else if b.type === 'video'}
+              <p class="quiet videonote">The recording of a video trigger appears here.</p>
             {:else if b.type === 'text'}
               <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
             {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
@@ -225,6 +227,7 @@
 </div>
 
 <style>
+  .videonote { margin: 0; padding: 12px; font-size: 13px; }
   .frame { height: 100%; display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
   header {
     display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px;

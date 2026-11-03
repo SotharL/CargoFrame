@@ -561,6 +561,43 @@ mod load_all_tests {
     }
 
     #[test]
+    fn a_trigger_file_from_before_video_is_a_screenshot_trigger() {
+        use crate::models::Media;
+        let dir = tempfile::tempdir().unwrap();
+        let s = Store::new(Dirs::under(dir.path()));
+        let folder = s.dirs().config().join("triggers");
+        std::fs::create_dir_all(&folder).unwrap();
+        std::fs::write(
+            folder.join("old.json"),
+            r#"{"schema_version": 1, "name": "Old", "shortcut": "F9", "capture": "display"}"#,
+        )
+        .unwrap();
+        let old = s
+            .load_item::<Trigger>(Kind::Triggers, "old")
+            .unwrap()
+            .unwrap();
+        assert_eq!(old.media, Media::Screenshot);
+
+        s.save_item(
+            Kind::Triggers,
+            "clip",
+            &Trigger {
+                name: "Clip".into(),
+                media: Media::Video,
+                ..Trigger::default()
+            },
+        )
+        .unwrap();
+        let text = std::fs::read_to_string(folder.join("clip.json")).unwrap();
+        assert!(text.contains("\"media\": \"video\""), "{text}");
+        let back = s
+            .load_item::<Trigger>(Kind::Triggers, "clip")
+            .unwrap()
+            .unwrap();
+        assert_eq!(back.media, Media::Video);
+    }
+
+    #[test]
     fn layouts_and_chats_use_the_same_machinery() {
         use cargoframe_layout::Layout;
         let dir = tempfile::tempdir().unwrap();
