@@ -41,6 +41,9 @@ describe('willSend', () => {
     view.video = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 };
     view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('slack'), 'slack');
     expect(willSend(view, button, initialValues(view), false)[0]).toBe('Video (9.5 s, 3.0 MB)');
+    // a recording that was cut says how much of it goes
+    expect(willSend(view, button, initialValues(view), false, { start_ms: 1_000, end_ms: 4_000 })[0]).toBe('Video (3.0 s of 9.5 s, cut)');
+    expect(willSend(view, button, initialValues(view), false, { start_ms: 2_000, end_ms: null })[0]).toBe('Video (7.5 s of 9.5 s, cut)');
     // where video cannot go, it is not listed
     view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('teams'), 'teams');
     expect(willSend(view, button, initialValues(view), false).join()).not.toContain('Video');

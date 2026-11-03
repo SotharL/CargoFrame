@@ -653,3 +653,24 @@ Four starting points in the layout builder for a trigger that makes a video: **S
   put a Video block in a Discord layout; the window says what the server answers.
 - **No new validation noise:** the four are clean for a signed-in connection and ready to send, like the others.
 
+### Phase 12, part 13: cutting the recording in the CargoFrame window (3 Nov 2026)
+
+The first editing the CargoFrame window offers on a recording: **keep only a part of it.** Crop and marks on a
+recording are still in Settings, Video only.
+
+- **A strip under the recording** (the same one as in Settings: kept part shaded, a handle for each end, a thin
+  line for the playing position, a click moves the picture there) with "Start here", "End here" and "Keep it all".
+  The handles also work from the keyboard (arrows a tenth of a second, Shift a second, Home and End).
+- **Playing stays inside the kept part:** it stops at the end of it and starts again from its start.
+- **The window does not cut anything while the person moves the handles.** The choice travels with the share
+  request (`clip_trim`) and the cut is made once, just before sending or saving, into the capture's own folder
+  (`recording-cut.mp4`, deleted with the capture). The original recording is never changed, so "Keep it all"
+  always works, and a share that is retried does not cut twice.
+- **A cut that keeps everything is not made,** and then ffmpeg is not needed at all. A cut that cannot be made
+  (ffmpeg missing, a recording ffmpeg cannot read) stops the share with the reason, and nothing is sent or saved.
+- **The line beside the button says what goes:** "Video (3.0 s of 9.5 s, cut)"; the size is not shown for a cut
+  because it is not known before the cut is made. The 100 MB limit applies to what is sent, after the cut.
+- **Tested** with a real ffmpeg (6 s clip, 2 s kept: the zip holds a 2 s video), and with fake recordings for the
+  paths that need no ffmpeg. How the strip looks in the real window, and whether a given WebView plays the
+  recording at all, are owner checks.
+

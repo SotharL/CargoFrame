@@ -23,6 +23,17 @@ describe('collectShare', () => {
     expect(req.button_id).toBe('send');
   });
 
+  it('carries the part of the recording that was kept, and only for a recording', async () => {
+    const view = await demoSession();
+    const button = view.layout!.blocks.find((b) => b.id === 'send') as Sharing;
+    const trim = { start_ms: 1000, end_ms: 4000 };
+    // a screenshot capture has no recording to cut
+    expect(collectShare(view, button, initialValues(view), false, trim).clip_trim).toBeNull();
+    view.video = { width: 1280, height: 720, duration_ms: 9_500, bytes: 1024 };
+    expect(collectShare(view, button, initialValues(view), false, trim).clip_trim).toEqual(trim);
+    expect(collectShare(view, button, initialValues(view), false).clip_trim).toBeNull();
+  });
+
   it('has no prompt when none is bound', async () => {
     const view = await demoSession();
     const button = { ...(view.layout!.blocks.find((b) => b.id === 'send') as Sharing), prompt_block_id: null };

@@ -1,4 +1,4 @@
-import type { Block, BlockReach, ServiceKind, SessionView } from '../lib/types';
+import type { Block, BlockReach, ClipTrim, ServiceKind, SessionView } from '../lib/types';
 import type { FormValues } from './values';
 import { formatSize } from './values';
 
@@ -25,6 +25,7 @@ export function willSend(
   button: SharingBlock,
   values: FormValues,
   imageEdited: boolean,
+  clipTrim: ClipTrim | null = null,
 ): string[] {
   const blocks = view.layout?.blocks ?? [];
   const sent = (b: Block) => reachOf(view, button, b.id);
@@ -37,7 +38,14 @@ export function willSend(
       parts.push(imageEdited ? 'Screenshot (edited)' : 'Screenshot');
     }
     if (b.type === 'video' && r?.state === 'sent' && view.video) {
-      parts.push(`Video (${(view.video.duration_ms / 1000).toFixed(1)} s, ${formatSize(view.video.bytes)})`);
+      const whole = view.video.duration_ms / 1000;
+      if (clipTrim) {
+        const from = clipTrim.start_ms / 1000;
+        const to = (clipTrim.end_ms ?? view.video.duration_ms) / 1000;
+        parts.push(`Video (${(to - from).toFixed(1)} s of ${whole.toFixed(1)} s, cut)`);
+      } else {
+        parts.push(`Video (${whole.toFixed(1)} s, ${formatSize(view.video.bytes)})`);
+      }
     }
   }
   for (const b of blocks) {

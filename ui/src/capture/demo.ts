@@ -41,6 +41,9 @@ export async function demoSession(): Promise<SessionView> {
       },
     ],
   };
+  // `?media=video` shows a recording where the picture would be.
+  const video = params.get('media') === 'video';
+  if (video) layout.blocks[0] = { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 9 } };
   const button = layout.blocks.find((b) => b.type === 'sharing_button')!;
   const reach = demoReach(layout, button as Extract<typeof button, { type: 'sharing_button' }>, local ? LOCAL_CAPABILITIES : demoCapabilities(kind), local ? null : kind);
   return {
@@ -84,6 +87,7 @@ export async function demoSession(): Promise<SessionView> {
       },
       proj: { status: 'loading', selected: null, options: [], message: null },
     },
+    ...(video ? { video: { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 } } : {}),
     issues: [],
     sharing: local
       ? { send: { enabled: true, reasons: [], mode: 'save_locally', note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }

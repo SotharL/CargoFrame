@@ -608,6 +608,14 @@ export interface ShareRequest {
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;
+  /** For a recording: the part to send. Left out (or `null`) sends all of it. */
+  clip_trim?: ClipTrim | null;
+}
+
+/** The part of a recording the person kept: `end_ms` of `null` is the end of the recording. */
+export interface ClipTrim {
+  start_ms: number;
+  end_ms: number | null;
 }
 
 // ----- updates (Settings, General) -----

@@ -55,6 +55,9 @@ pub struct Request {
     pub files: BTreeMap<String, Vec<String>>,
     /// The picture was edited: send the edited one the window uploaded.
     pub image_edited: bool,
+    /// For a video capture: the part of the recording to send. `None` sends all of it.
+    #[serde(default)]
+    pub clip_trim: Option<crate::video::ClipTrim>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -386,10 +389,16 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
 
     // A video capture sends its recording where a screenshot capture sends the picture.
     let image = match &session.clip {
-        Some(clip) if button.send.screenshot => match video_attachment(clip, kind) {
-            Ok(a) => Some(a),
-            Err(why) => return Err(vec![why]),
-        },
+        Some(clip) if button.send.screenshot => {
+            let cut = match cut_recording(svc, session, clip, req.clip_trim) {
+                Ok(c) => c,
+                Err(why) => return Err(vec![why]),
+            };
+            match video_attachment(cut.as_deref().unwrap_or(&clip.path), kind) {
+                Ok(a) => Some(a),
+                Err(why) => return Err(vec![why]),
+            }
+        }
         Some(_) => None,
         None if !button.send.screenshot => None,
         None => Some(Attachment {
@@ -449,10 +458,33 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
 /// their own, which they report when a file is too big).
 pub const MAX_VIDEO_BYTES: u64 = 100 * 1024 * 1024;
 
+/// The file to send for a video capture whose recording the person cut in the window: a new file
+/// in the capture's own folder, or `None` when nothing is cut (the whole recording is sent).
+fn cut_recording(
+    svc: &Services,
+    session: &Session,
+    clip: &crate::session::Clip,
+    trim: Option<crate::video::ClipTrim>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(trim) = trim.filter(|t| !t.keeps_all(clip.duration_ms)) else {
+        return Ok(None);
+    };
+    let output = session
+        .with_dir(svc.workspace, |d| d.path().join("recording-cut.mp4"))
+        .map_err(|e| format!("CargoFrame could not make room for the cut recording: {e}"))?;
+    let settings = svc
+        .store
+        .load_or_default::<cargoframe_config::Video>()
+        .map(crate::video::normalized)
+        .unwrap_or_default();
+    crate::video::trim_clip(&settings, &clip.path, &output, trim)?;
+    Ok(Some(output))
+}
+
 /// The recording of a video capture as the attachment a connector sends, or why it cannot go to
 /// this destination.
 fn video_attachment(
-    clip: &crate::session::Clip,
+    path: &Path,
     kind: Option<cargoframe_layout::ConnectionKind>,
 ) -> Result<Attachment, String> {
     if let Some(kind) = kind {
@@ -464,7 +496,7 @@ fn video_attachment(
             ));
         }
     }
-    let size = fs::metadata(&clip.path)
+    let size = fs::metadata(path)
         .map(|m| m.len())
         .map_err(|_| "The recording is no longer there: record it again".to_string())?;
     if size > MAX_VIDEO_BYTES {
@@ -474,7 +506,7 @@ fn video_attachment(
             MAX_VIDEO_BYTES / (1024 * 1024),
         ));
     }
-    let data = fs::read(&clip.path).map_err(|e| format!("The recording could not be read: {e}"))?;
+    let data = fs::read(path).map_err(|e| format!("The recording could not be read: {e}"))?;
     Ok(Attachment {
         name: crate::session::CLIP_NAME.into(),
         mime: "video/mp4".into(),
@@ -1206,6 +1238,7 @@ mod tests {
             dropdowns: BTreeMap::new(),
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
+            clip_trim: None,
         }
     }
 
@@ -2073,6 +2106,146 @@ mod tests {
             "{reasons:?}"
         );
         assert!(w.deliver.seen.lock().unwrap().is_empty());
+    }
+
+    /// A real clip `secs` seconds long, or `None` when ffmpeg is not installed here.
+    fn real_clip(path: &Path, secs: u32) -> Option<()> {
+        let made = std::process::Command::new("ffmpeg")
+            .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error"])
+            .args(["-f", "lavfi", "-i"])
+            .arg(format!("testsrc=duration={secs}:size=320x240:rate=15"))
+            .args(["-pix_fmt", "yuv420p", "-g", "15"])
+            .arg(path)
+            .status()
+            .ok()?;
+        made.success().then_some(())
+    }
+
+    /// How long a clip is, in seconds, as ffprobe says (`None` when ffprobe is not installed).
+    fn seconds_of(path: &Path) -> Option<f64> {
+        let out = std::process::Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "format=duration"])
+            .args(["-of", "default=nw=1:nk=1"])
+            .arg(path)
+            .output()
+            .ok()?;
+        String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    }
+
+    #[test]
+    fn a_video_capture_cut_in_the_window_sends_only_the_part_that_was_kept() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source.mp4");
+        if real_clip(&source, 6).is_none() || seconds_of(&source).is_none() {
+            eprintln!("skipped: ffmpeg or ffprobe is not installed");
+            return;
+        }
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"placeholder");
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = source;
+        clip.duration_ms = 6_000;
+        w.session.clip = Some(clip);
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_trim = Some(crate::video::ClipTrim {
+            start_ms: 1_000,
+            end_ms: Some(3_000),
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        z.by_name("recording.mp4")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        let sent = tmp.path().join("sent.mp4");
+        fs::write(&sent, &bytes).unwrap();
+        let length = seconds_of(&sent).expect("the zip holds a video");
+        assert!(
+            (1.5..2.8).contains(&length),
+            "2 seconds were kept of 6, the zip holds {length} s"
+        );
+        // the cut is made in the capture's own folder; the original is not touched
+        assert!(
+            seconds_of(&w.session.clip.as_ref().unwrap().path).unwrap() > 5.5,
+            "the recording is as it was"
+        );
+    }
+
+    #[test]
+    fn a_cut_that_keeps_everything_sends_the_recording_as_it_is() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        for trim in [
+            crate::video::ClipTrim {
+                start_ms: 0,
+                end_ms: None,
+            },
+            crate::video::ClipTrim {
+                start_ms: 0,
+                end_ms: Some(9_000),
+            },
+        ] {
+            let mut req = request();
+            req.clip_trim = Some(trim);
+            let (r, _) = go(&w, &req, vec![]);
+            let ShareResult::SavedLocally { path, .. } = r else {
+                panic!("{r:?}");
+            };
+            // no ffmpeg is needed, and nothing is changed
+            assert!(zip_text(&path, "recording.mp4").starts_with("MP4 BYTES"));
+        }
+    }
+
+    #[test]
+    fn a_cut_that_cannot_be_made_stops_the_share_and_says_why() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        // not a video: the cut cannot be made, with or without ffmpeg on this computer
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_trim = Some(crate::video::ClipTrim {
+            start_ms: 1_000,
+            end_ms: Some(2_000),
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(reasons.len(), 1, "{reasons:?}");
+        assert!(
+            reasons[0].contains("recording") || reasons[0].contains("ffmpeg"),
+            "{reasons:?}"
+        );
+        assert!(
+            fs::read_dir(&dir).unwrap().next().is_none(),
+            "no zip was made"
+        );
+    }
+
+    #[test]
+    fn keeping_all_is_told_from_cutting_something() {
+        use crate::video::ClipTrim;
+        let t = |start_ms, end_ms| ClipTrim { start_ms, end_ms };
+        assert!(t(0, None).keeps_all(5_000));
+        assert!(t(0, Some(5_000)).keeps_all(5_000));
+        assert!(t(0, Some(6_000)).keeps_all(5_000));
+        assert!(!t(100, None).keeps_all(5_000));
+        assert!(!t(0, Some(4_900)).keeps_all(5_000));
     }
 
     #[test]

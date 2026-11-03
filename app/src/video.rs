@@ -964,6 +964,70 @@ pub fn export_test(video: &Video, edit: &TestEdit, recording: &Recording, work: 
     }
 }
 
+/// The part of a recording the person kept in the CargoFrame window: from `start_ms`, to `end_ms`
+/// (`None` is to the end of the recording). Times are on the recording's own timeline.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct ClipTrim {
+    pub start_ms: u64,
+    pub end_ms: Option<u64>,
+}
+
+impl ClipTrim {
+    /// Nothing is cut: the whole of a recording `duration_ms` long is kept.
+    pub fn keeps_all(&self, duration_ms: u64) -> bool {
+        self.start_ms == 0
+            && match self.end_ms {
+                None => true,
+                Some(end) => end >= duration_ms,
+            }
+    }
+}
+
+/// Cut `input` to the part `trim` keeps and write it to `output` (replacing what is there).
+/// Returns the new clip's length, size and weight. Used when a video capture is sent or saved.
+pub fn trim_clip(
+    video: &Video,
+    input: &Path,
+    output: &Path,
+    trim: ClipTrim,
+) -> Result<Trial, String> {
+    let found = find(video, program_beside_app().as_deref())?;
+    let info = probe(&found.ffprobe, input)
+        .map_err(|e| format!("The recording could not be read: {e}"))?;
+    let edit = Edit {
+        start_ms: trim.start_ms,
+        end_ms: trim.end_ms,
+        crop: None,
+        overlays: Vec::new(),
+    };
+    let planned = plan(input, output, &edit, &info).map_err(|problems| {
+        problems
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<_>>()
+            .join(". ")
+    })?;
+    let began = Instant::now();
+    let _ = std::fs::remove_file(output);
+    run(&found.ffmpeg, &planned, &|| false, Duration::from_secs(120))
+        .map_err(|e| format!("The recording could not be cut: {e}"))?;
+    let out = probe(&found.ffprobe, output)
+        .map_err(|e| format!("The cut recording could not be read back: {e}"))?;
+    let bytes = std::fs::metadata(output).map(|m| m.len()).unwrap_or(0);
+    Ok(Trial {
+        ok: true,
+        message: String::new(),
+        capture: None,
+        encoder: None,
+        width: out.width,
+        height: out.height,
+        clip_ms: out.duration_ms,
+        clip_bytes: bytes,
+        took_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
+        clip: Some(output.display().to_string()),
+    })
+}
+
 /// Keep the picture the page drew as the mark (`None` forgets it). The page sends a PNG, which is
 /// checked before it is written, into the test folder only.
 pub fn store_mark(work: &Path, png: Option<&[u8]>) -> Result<(), String> {
