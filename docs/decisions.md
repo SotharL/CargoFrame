@@ -158,3 +158,44 @@ Requested by the owner after trying the app; each point and how it was read:
 - **Linux.** Needs X11 and `xdotool`; files cannot be pasted from CargoFrame there yet, so only
   the message goes, with a note. Wayland offers no way to press keys in another program.
 - **Later (Phase 9).** Per-button rules for what goes to Claude, with a live "will send" line.
+
+## Phase 8: the capture workspace (3 Nov 2026)
+
+Items 8, 14, 15 and 17 of the owner's feedback of 2 Nov 2026.
+
+- **Files are copied when the capture opens (item 8).** The files that are ticked in advance are
+  copied into the capture folder in the background as soon as the window opens, so the share
+  button has nothing left to do but send. A share that is pressed while the copying runs waits
+  for it. What is sent is the files **as they were at capture time**; a zip kept after a failed
+  send holds the same copies. Limits: 30 MB per file and 200 MB in total; a file above them is
+  skipped with a notice, never half copied. The capture folder is still deleted when the window
+  closes, and a start-up sweep (no age limit, since no window can exist yet) removes whatever a
+  crash left; the hourly sweep keeps the two-minute grace for windows that are opening.
+- **"Look in" for the Files block (item 17).** A Files block looks in any mix of: the project
+  folder (the default, unchanged), the program's folder, and one, two or three folders above the
+  program, each optionally narrowed to a named subfolder such as `logs`. A subfolder must be a
+  plain relative folder: absolute paths, drive letters and `..` are refused when the layout is
+  saved. A folder that does not exist (a program only two levels deep has no "three above") is
+  skipped, not an error. The builder shows how many files each choice finds, using the folders of
+  the last capture.
+- **One root for file names.** Every file path shown, ticked or sent is relative to the highest
+  folder any Files block of the layout looks in (the project folder when none looks higher).
+  Two folders can hold a file of the same relative name only if they are different folders, so
+  names do not collide; each read still goes through the same "stays inside the root" check as
+  before.
+- **A text block can name the zip (item 15).** Role *Use as zip name*: variables are filled in,
+  characters Windows or Linux would refuse are removed, `.zip` is added, the stem is cut at 80
+  characters, and an empty result falls back to the default name. A zip never overwrites an
+  existing one (a number is added). A layout may have **one** such block; a second is reported
+  when the layout is saved.
+- **Data rules can read any file (item 14).** A new format, *Any file*, gives the name, size
+  (`size`, `size: human`), modified time (`modified`, `modified: date`), line count and SHA-256
+  fingerprint (`sha256`, `sha256: short`) of any file, text or not. Text search gains
+  `between: a | b`. *If there are several values* gains **the one at a number** (1 is the first,
+  -1 the last), and a regular expression can **build its value from groups** (`$1.$2`, `${name}`,
+  `$0`); naming a group the pattern does not have is an error, not an empty value. Reading text
+  out of PDF and Office files stays out until someone needs it.
+- **The Rules page tries the rule by itself.** The Test button is gone: 0.4 s after the last
+  change the rule runs on a real file of the chosen project folder (or of the last capture) and
+  shows the value or the problem, the file that was read, and its first lines. A late answer for
+  an older version of the rule is dropped.
