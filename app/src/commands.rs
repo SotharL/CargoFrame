@@ -522,14 +522,12 @@ pub async fn detect_video_tools(video: Video) -> Result<video::ToolsView, String
 
 /// Record the screen for a few seconds with the settings as they are in the form.
 #[tauri::command]
-pub async fn try_video_recording(
-    state: State<'_, AppState>,
-    video: Video,
-) -> Result<video::Trial, String> {
+pub async fn try_video_recording(app: AppHandle, video: Video) -> Result<video::Trial, String> {
     let video = video::normalized(video);
-    let work = state.store.dirs().data().join("video-test");
     blocking(move || {
-        video::trial(
+        let state = app.state::<AppState>();
+        let work = state.store.dirs().data().join("video-test");
+        state.recording.trial(
             &video,
             video::Os::current(),
             &video::Session::current(),
@@ -538,6 +536,36 @@ pub async fn try_video_recording(
         )
     })
     .await
+}
+
+/// Start recording until told to stop, keeping only the last seconds, as a real recording will.
+#[tauri::command]
+pub async fn start_video_recording(app: AppHandle, video: Video) -> Result<(), String> {
+    let video = video::normalized(video);
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let work = state.store.dirs().data().join("video-test");
+        state.recording.start(
+            &video,
+            video::Os::current(),
+            &video::Session::current(),
+            &work,
+            video.window_secs,
+        )
+    })
+    .await?
+}
+
+/// How the recording started by hand is doing.
+#[tauri::command]
+pub fn get_video_recording(state: State<'_, AppState>) -> video::RecordingView {
+    state.recording.view()
+}
+
+/// Stop the recording, make the clip and report it like a test recording.
+#[tauri::command]
+pub async fn stop_video_recording(app: AppHandle) -> Result<video::Trial, String> {
+    blocking(move || app.state::<AppState>().recording.stop()).await
 }
 
 /// Open the clip of the last test recording in the person's video player.

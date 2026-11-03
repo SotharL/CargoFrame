@@ -399,7 +399,17 @@ fn a_test_recording_of_a_real_screen_gives_a_clip_and_a_report() {
         ..Video::default()
     };
 
-    let t = run_trial(&f, &choice, &video, &session, &work, 3);
+    let rec = Recording::new();
+    rec.start_with(
+        f.clone(),
+        choice.clone(),
+        &video,
+        &session,
+        &work,
+        trial_window(3),
+    )
+    .unwrap();
+    let t = rec.run_for(3);
     assert!(t.ok, "{}", t.message);
     assert_eq!((t.width, t.height), (640, 480));
     assert!(
@@ -414,42 +424,117 @@ fn a_test_recording_of_a_real_screen_gives_a_clip_and_a_report() {
         !work.join("ring").exists(),
         "the pieces are cleaned up; only the clip is kept"
     );
+    assert_eq!(rec.view(), RecordingView::Idle);
 
     // no X server on this display: a plain failure, and the old clip is gone with the old test
     let gone = Session {
         wayland: false,
         display: Some(":90".into()),
     };
-    let t = run_trial(&f, &choice, &video, &gone, &work, 3);
+    rec.start_with(
+        f.clone(),
+        choice.clone(),
+        &video,
+        &gone,
+        &work,
+        trial_window(3),
+    )
+    .unwrap();
+    let t = rec.run_for(3);
     assert!(!t.ok);
     assert!(!t.message.is_empty());
     assert_eq!(t.clip, None);
     assert!(!work.join(TRIAL_CLIP).exists());
+    assert_eq!(rec.view(), RecordingView::Idle, "told once, then idle");
 }
 
 #[test]
-fn only_one_test_recording_runs_at_a_time_and_bad_settings_never_start_one() {
+fn a_recording_started_by_hand_keeps_only_the_last_seconds_until_it_is_stopped() {
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    let Some(ffprobe) = locate("ffprobe", &[]) else {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    };
+    let Some(screen) = Screen::start(92) else {
+        eprintln!("skipped: no virtual X screen (Xvfb) to record");
+        return;
+    };
     let work = tempfile::tempdir().unwrap();
-    let busy = TRIAL.lock().unwrap();
-    let t = trial(
-        &Video::default(),
-        Os::Linux,
-        &Session::default(),
-        work.path(),
-        1,
+    let work = work.path().join("video-test");
+    let f = Found {
+        ffmpeg,
+        ffprobe,
+        ..found(&[VideoEncoder::Software], &[VideoCapture::X11])
+    };
+    let session = Session {
+        wayland: false,
+        display: Some(screen.display.clone()),
+    };
+    let choice = Choice {
+        capture: VideoCapture::X11,
+        encoder: VideoEncoder::Software,
+    };
+    let video = Video {
+        fps: 10,
+        ..Video::default()
+    };
+    let rec = Recording::new();
+    assert_eq!(rec.view(), RecordingView::Idle);
+    assert!(rec.stop().message.contains("No recording is running"));
+
+    rec.start_with(f.clone(), choice.clone(), &video, &session, &work, 2)
+        .unwrap();
+    assert!(rec
+        .start_with(f.clone(), choice.clone(), &video, &session, &work, 2)
+        .unwrap_err()
+        .contains("already running"));
+    std::thread::sleep(Duration::from_millis(5_500));
+    let RecordingView::Recording {
+        elapsed_ms,
+        buffered_ms,
+        keep_secs,
+        ..
+    } = rec.view()
+    else {
+        panic!("it should be recording: {:?}", rec.view());
+    };
+    assert!(elapsed_ms >= 5_000, "{elapsed_ms}");
+    assert_eq!(keep_secs, 2);
+    assert!(
+        buffered_ms <= 2_500,
+        "{buffered_ms} ms are kept of a 2 s window"
+    );
+
+    let t = rec.stop();
+    assert!(t.ok, "{}", t.message);
+    assert!(
+        (1_500..=4_000).contains(&t.clip_ms),
+        "5 s were recorded, 2 s kept, and the clip is {} ms",
+        t.clip_ms
     );
     assert!(
-        !t.ok && t.message.contains("already running"),
+        t.message.contains("only the last 2 s are kept"),
         "{}",
         t.message
     );
-    drop(busy);
+    assert_eq!(rec.view(), RecordingView::Idle);
+    // cancelling when nothing runs is fine, and the folder is left tidy
+    rec.cancel();
+    assert!(!work.join("ring").exists());
+}
 
+#[test]
+fn bad_settings_never_start_a_recording_and_a_cancelled_one_leaves_nothing() {
+    let work = tempfile::tempdir().unwrap();
+    let rec = Recording::new();
     let bad = Video {
         fps: 1,
         ..Video::default()
     };
-    let t = trial(&bad, Os::Linux, &Session::default(), work.path(), 1);
+    let t = rec.trial(&bad, Os::Linux, &Session::default(), work.path(), 1);
     assert!(
         !t.ok && t.message.contains("Frames per second"),
         "{}",
@@ -459,4 +544,6 @@ fn only_one_test_recording_runs_at_a_time_and_bad_settings_never_start_one() {
         fs::read_dir(work.path()).unwrap().next().is_none(),
         "nothing was created"
     );
+    assert_eq!(rec.view(), RecordingView::Idle);
+    rec.cancel();
 }

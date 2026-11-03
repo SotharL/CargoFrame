@@ -38,6 +38,8 @@ fn an_x11_recording_is_captured_scaled_encoded_and_cut_into_segments() {
     assert_eq!(after(&a, "-vf"), "scale=-2:min(ih\\,1080),format=yuv420p");
     // a keyframe every second, because a segment starts on one
     assert_eq!(after(&a, "-g"), "30");
+    // a backstop: ffmpeg ends by itself after an hour
+    assert_eq!(after(&a, "-t"), "3600");
     assert_eq!(after(&a, "-c:v"), "libx264");
     assert_eq!(after(&a, "-preset"), "ultrafast");
     // the ring's own part comes last
@@ -292,4 +294,39 @@ fn a_recorder_that_cannot_start_reports_why_and_a_cancelled_one_leaves_nothing()
     rec.cancel();
     let list = ring_dir.join("segments.csv");
     assert!(!list.exists(), "the list is removed");
+}
+
+#[test]
+fn a_recorder_that_is_let_go_while_running_stops_ffmpeg() {
+    let Some((ffmpeg, _)) = find_tools(&[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    let Some(screen) = Screen::start(94) else {
+        eprintln!("skipped: no virtual X screen");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = Config::new(
+        ffmpeg,
+        Capture::X11 {
+            display: screen.display.clone(),
+            size: Some((640, 480)),
+        },
+        dir.path().to_path_buf(),
+    );
+    cfg.fps = 10;
+    let mut rec = Recorder::start(&cfg).unwrap();
+    std::thread::sleep(Duration::from_millis(2_500));
+    rec.poll().unwrap();
+    drop(rec);
+
+    let count = || fs::read_dir(dir.path()).unwrap().count();
+    let after_drop = count();
+    std::thread::sleep(Duration::from_millis(2_200));
+    assert_eq!(
+        count(),
+        after_drop,
+        "ffmpeg was still writing after the recorder was dropped"
+    );
 }

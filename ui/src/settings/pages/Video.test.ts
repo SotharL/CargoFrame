@@ -88,4 +88,38 @@ describe('Video settings', () => {
     expect(screen.getByRole('alert').textContent).toContain('choose Software to carry on');
     expect(screen.queryByRole('button', { name: 'Open the clip' })).toBeNull();
   });
+
+  it('records until stopped, shows how it is going, then makes the clip', async () => {
+    open({ video: { window_secs: 3 } });
+    await screen.findByText('ffmpeg found');
+    await fireEvent.click(screen.getByRole('button', { name: 'Record until I stop' }));
+    await screen.findByText('Recording', { selector: '.chip' });
+    expect(screen.getByText(/The last \d+ s are kept \(up to 3 s\)/)).toBeTruthy();
+    // while it runs the 5-second test is not offered and the other button turns into Stop
+    expect((screen.getByRole('button', { name: 'Try a 5-second recording' }) as HTMLButtonElement).disabled).toBe(true);
+    await fireEvent.click(screen.getByRole('button', { name: 'Stop and make the clip' }));
+    await screen.findByText('It works');
+    expect(screen.queryByText('Recording', { selector: '.chip' })).toBeNull();
+    expect(screen.getByRole('button', { name: 'Record until I stop' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Open the clip' })).toBeTruthy();
+  });
+
+  it('tells why a recording ended by itself, and goes back to the start', async () => {
+    open({ recordingFails: true });
+    await screen.findByText('ffmpeg found');
+    await fireEvent.click(screen.getByRole('button', { name: 'Record until I stop' }));
+    await screen.findByText('It did not work', undefined, { timeout: 3000 });
+    expect(screen.getByRole('alert').textContent).toContain('choose Software to carry on');
+    expect(screen.getByRole('button', { name: 'Record until I stop' })).toBeTruthy();
+  });
+
+  it('picks up a recording that is already running when the page opens', async () => {
+    const api = memoryApi();
+    setApiForTests(api);
+    await api.startVideoRecording({ ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080 });
+    render(Video);
+    await screen.findByText('Recording', { selector: '.chip' });
+    expect(screen.getByRole('button', { name: 'Stop and make the clip' })).toBeTruthy();
+    cleanup();
+  });
 });

@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onDestroy, onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
   import Section from '../../lib/components/Section.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { Video, VideoCapture, VideoEncoder, VideoTools, VideoTrial } from '../../lib/types';
+  import type { Video, VideoCapture, VideoEncoder, VideoRecording, VideoTools, VideoTrial } from '../../lib/types';
 
   const CAPTURES: { id: VideoCapture; label: string }[] = [
     { id: 'auto', label: 'Automatic' },
@@ -31,6 +31,10 @@
   let trying = $state(false);
   let trial = $state<VideoTrial | null>(null);
   let openError = $state('');
+  let recording = $state<VideoRecording>({ state: 'idle' });
+  let stopping = $state(false);
+  let timer: ReturnType<typeof setInterval> | undefined;
+  const running = $derived(recording.state === 'recording' || recording.state === 'finishing' || stopping);
 
   function name(list: { id: string; label: string }[], id: string | null): string {
     const full = list.find((x) => x.id === id)?.label ?? String(id);
@@ -113,6 +117,65 @@
     }
   }
 
+  function failure(message: string): VideoTrial {
+    return {
+      ok: false, message, capture: null, encoder: null, width: 0, height: 0,
+      clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+    };
+  }
+
+  function stopPolling() {
+    if (timer) clearInterval(timer);
+    timer = undefined;
+  }
+
+  async function refresh() {
+    try {
+      recording = await (await getApi()).getVideoRecording();
+    } catch {
+      return;
+    }
+    if (recording.state === 'failed') {
+      // stopping hands over the reason and clears it
+      await stopRecording();
+    } else if (recording.state === 'idle') {
+      stopPolling();
+    }
+  }
+
+  async function startRecording() {
+    const v = current();
+    if (!v) return;
+    trial = null;
+    openError = '';
+    try {
+      await (await getApi()).startVideoRecording(v);
+    } catch (e) {
+      trial = failure(String(e));
+      return;
+    }
+    await refresh();
+    stopPolling();
+    timer = setInterval(refresh, 500);
+  }
+
+  async function stopRecording() {
+    stopPolling();
+    stopping = true;
+    try {
+      trial = await (await getApi()).stopVideoRecording();
+    } catch (e) {
+      trial = failure(String(e));
+    } finally {
+      stopping = false;
+      recording = { state: 'idle' };
+    }
+  }
+
+  function seconds(ms: number): string {
+    return (ms / 1000).toFixed(0);
+  }
+
   async function openClip() {
     openError = '';
     try {
@@ -142,8 +205,18 @@
     video = await (await getApi()).getVideo();
     ffmpegText = video.ffmpeg ?? '';
     loaded = true;
+    // a recording started earlier may still be running
+    try {
+      recording = await (await getApi()).getVideoRecording();
+    } catch {
+      recording = { state: 'idle' };
+    }
+    if (recording.state === 'recording') timer = setInterval(refresh, 500);
+    else if (recording.state === 'failed') await stopRecording();
     await detect();
   });
+
+  onDestroy(stopPolling);
 </script>
 
 {#if loaded}
@@ -225,15 +298,37 @@
 
   <Section
     title="Try it on this PC"
-    hint="Records the screen for 5 seconds with the settings above and keeps the clip so you can watch it. Move something on the screen while it records. Recording from a shortcut is not available yet; this only checks what your PC can do."
+    hint="Records the screen with the settings above and keeps the clip so you can watch it. Move something on the screen while it records. Recording from a shortcut is not available yet; this only checks what your PC can do."
   >
-    <div class="row">
-      <button type="button" class="primary" onclick={tryRecording} disabled={trying || (tools !== null && !tools.found)}>
+    <div class="row wrap">
+      <button type="button" class="primary" onclick={tryRecording} disabled={trying || running || (tools !== null && !tools.found)}>
         {trying ? 'Recording…' : 'Try a 5-second recording'}
       </button>
+      {#if running}
+        <button type="button" onclick={stopRecording} disabled={stopping}>
+          {stopping ? 'Making the clip…' : 'Stop and make the clip'}
+        </button>
+      {:else}
+        <button type="button" onclick={startRecording} disabled={trying || (tools !== null && !tools.found)}>
+          Record until I stop
+        </button>
+      {/if}
     </div>
     {#if trying}
       <p class="quiet" role="status">Recording for 5 seconds. Move something on the screen…</p>
+    {/if}
+    {#if recording.state === 'recording'}
+      <div class="facts" role="status" aria-label="Recording">
+        <Chip kind="warn" label="Recording" />
+        <p>
+          {seconds(recording.elapsed_ms)} s so far. The last {seconds(recording.buffered_ms)} s are kept (up to {recording.keep_secs} s),
+          as in a real recording.
+        </p>
+        {#if recording.squeezed}<p class="quiet note">The disk limit cut the start short.</p>{/if}
+        <p class="quiet note">
+          Open Task Manager now (Performance: CPU, GPU) to see what recording costs on this PC. It stops by itself after 10 minutes, or when you close Settings.
+        </p>
+      </div>
     {/if}
     {#if trial}
       <div class="facts" aria-label="Test result">
@@ -257,6 +352,7 @@
 
 <style>
   .row { display: flex; gap: 8px; }
+  .row.wrap { flex-wrap: wrap; }
   .row input { flex: 1; min-width: 0; }
   .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }

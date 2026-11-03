@@ -28,6 +28,8 @@ pub struct AppState {
     pub warm: Warm,
     /// The last timings, for Settings, General.
     pub timings: Timings,
+    /// The screen recording that is running, if any.
+    pub recording: crate::video::Recording,
     /// Looking for, downloading and installing a newer version.
     pub updates: std::sync::Arc<Updates>,
     /// The program that had focus at the last capture, so the layout builder can show what a
@@ -59,6 +61,7 @@ impl AppState {
             sessions: Sessions::new(),
             warm: Warm::new(),
             timings: Timings::new(),
+            recording: crate::video::Recording::new(),
             updates: std::sync::Arc::new(Updates::new(
                 std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
                 std::sync::Arc::new(crate::secrets::KeyringStore),

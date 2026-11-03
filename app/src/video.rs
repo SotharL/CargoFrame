@@ -19,9 +19,6 @@ pub const TRIAL_SECONDS: u64 = 5;
 /// The name of the test clip, kept in `video-test/` until the next test replaces it.
 pub const TRIAL_CLIP: &str = "test-clip.mp4";
 
-/// Only one test recording at a time.
-static TRIAL: Mutex<()> = Mutex::new(());
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Os {
     Windows,
@@ -461,59 +458,258 @@ fn hint(choice: &Choice) -> &'static str {
     }
 }
 
-/// Record the screen for a few seconds with the chosen settings and report what came out.
-/// `work` is a folder for this test; the clip stays in it as [`TRIAL_CLIP`].
-pub fn trial(video: &Video, os: Os, session: &Session, work: &Path, seconds: u64) -> Trial {
-    let Ok(_one_at_a_time) = TRIAL.try_lock() else {
-        return Trial::failed("A test recording is already running.", None);
-    };
-    if let Err(e) = validate(video) {
-        return Trial::failed(e, None);
-    }
-    let found = match find(video, program_beside_app().as_deref()) {
-        Ok(f) => f,
-        Err(e) => return Trial::failed(e, None),
-    };
-    let choice = match choose(video, &found, os, session) {
-        Ok(c) => c,
-        Err(e) => return Trial::failed(e, None),
-    };
-    run_trial(&found, &choice, video, session, work, seconds)
+/// How long a recording started from Settings may run before it is stopped for the person.
+const MANUAL_LIMIT: Duration = Duration::from_secs(600);
+
+/// A recording that is running.
+struct Active {
+    recorder: Recorder,
+    found: Found,
+    choice: Choice,
+    work: PathBuf,
+    /// How many seconds the clip keeps; the rest of a long recording is thrown away as it goes.
+    keep_secs: u32,
+    began: Instant,
 }
 
-fn run_trial(
-    found: &Found,
-    choice: &Choice,
-    video: &Video,
-    session: &Session,
-    work: &Path,
-    seconds: u64,
-) -> Trial {
-    let fail = |m: String| Trial::failed(format!("{m}{}", hint(choice)), Some(choice));
-    let _ = std::fs::remove_dir_all(work);
-    let ring = work.join("ring");
-    if let Err(e) = std::fs::create_dir_all(&ring) {
-        return fail(format!(
-            "CargoFrame could not make a folder for the test: {e}"
-        ));
+enum Slot {
+    Idle {
+        /// Why the last recording ended by itself, until the person has been told.
+        failure: Option<String>,
+    },
+    Running(Box<Active>),
+    /// Stopped; the clip is being joined.
+    Finishing,
+}
+
+/// What the settings window shows of a recording.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum RecordingView {
+    Idle,
+    Recording {
+        elapsed_ms: u64,
+        /// How much of the end of the recording is kept right now.
+        buffered_ms: u64,
+        /// The disk budget, not the window, cut the start.
+        squeezed: bool,
+        keep_secs: u32,
+    },
+    Finishing,
+    /// It ended by itself.
+    Failed {
+        message: String,
+    },
+}
+
+/// The one recording that can run at a time: started, watched and stopped by commands.
+pub struct Recording {
+    slot: Mutex<Slot>,
+}
+
+impl Default for Recording {
+    fn default() -> Self {
+        Self::new()
     }
-    let mut cfg = recorder_config(found, choice, video, session, &ring);
-    // the clip is the whole test, not just the last seconds of a long recording
-    cfg.window = Window::seconds(u32::try_from(seconds).unwrap_or(5).max(2) + 5);
-    let began = Instant::now();
-    let mut rec = match Recorder::start(&cfg) {
-        Ok(r) => r,
-        Err(e) => return fail(e.to_string()),
-    };
-    while rec.elapsed() < Duration::from_secs(seconds) {
-        if let Err(e) = rec.poll() {
-            rec.cancel();
-            let _ = std::fs::remove_dir_all(&ring);
-            return fail(e.to_string());
+}
+
+impl Recording {
+    pub fn new() -> Self {
+        Self {
+            slot: Mutex::new(Slot::Idle { failure: None }),
         }
-        std::thread::sleep(Duration::from_millis(100));
     }
-    let segments = match rec.stop(Duration::from_secs(10)) {
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, Slot> {
+        self.slot.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// Find ffmpeg, choose how to record, and start. `keep_secs` is how much of the end the
+    /// clip keeps.
+    pub fn start(
+        &self,
+        video: &Video,
+        os: Os,
+        session: &Session,
+        work: &Path,
+        keep_secs: u32,
+    ) -> Result<(), String> {
+        validate(video)?;
+        // refuse early, before looking for ffmpeg, so the message is the right one
+        match &*self.lock() {
+            Slot::Idle { .. } => {}
+            Slot::Running(_) => return Err("A recording is already running.".into()),
+            Slot::Finishing => return Err("The last recording is still being finished.".into()),
+        }
+        let found = find(video, program_beside_app().as_deref())?;
+        let choice = choose(video, &found, os, session)?;
+        self.start_with(found, choice, video, session, work, keep_secs)
+    }
+
+    fn start_with(
+        &self,
+        found: Found,
+        choice: Choice,
+        video: &Video,
+        session: &Session,
+        work: &Path,
+        keep_secs: u32,
+    ) -> Result<(), String> {
+        let mut slot = self.lock();
+        match &*slot {
+            Slot::Idle { .. } => {}
+            Slot::Running(_) => return Err("A recording is already running.".into()),
+            Slot::Finishing => return Err("The last recording is still being finished.".into()),
+        }
+        let _ = std::fs::remove_dir_all(work);
+        let ring = work.join("ring");
+        std::fs::create_dir_all(&ring)
+            .map_err(|e| format!("CargoFrame could not make a folder for the recording: {e}"))?;
+        let mut cfg = recorder_config(&found, &choice, video, session, &ring);
+        cfg.window = Window::seconds(keep_secs);
+        let recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
+        *slot = Slot::Running(Box::new(Active {
+            recorder,
+            found,
+            choice,
+            work: work.to_path_buf(),
+            keep_secs: cfg.window.as_secs(),
+            began: Instant::now(),
+        }));
+        Ok(())
+    }
+
+    /// Where the recording stands. Also notices a recorder that has stopped by itself, and stops
+    /// one that has run past the limit for a recording started by hand.
+    pub fn view(&self) -> RecordingView {
+        let mut slot = self.lock();
+        let (progress, elapsed) = match &mut *slot {
+            Slot::Idle { failure: None } => return RecordingView::Idle,
+            Slot::Idle {
+                failure: Some(message),
+            } => {
+                return RecordingView::Failed {
+                    message: message.clone(),
+                }
+            }
+            Slot::Finishing => return RecordingView::Finishing,
+            Slot::Running(a) => (a.recorder.poll(), a.recorder.elapsed()),
+        };
+        let message = match progress {
+            Ok(p) if elapsed <= MANUAL_LIMIT => {
+                let Slot::Running(a) = &*slot else {
+                    return RecordingView::Idle;
+                };
+                return RecordingView::Recording {
+                    elapsed_ms: u64::try_from(elapsed.as_millis()).unwrap_or(u64::MAX),
+                    buffered_ms: p.buffered_ms,
+                    squeezed: p.squeezed,
+                    keep_secs: a.keep_secs,
+                };
+            }
+            Ok(_) => {
+                "The recording was stopped after 10 minutes. Start it again to go on.".to_string()
+            }
+            Err(e) => e.to_string(),
+        };
+        // it is over: throw it away and remember why
+        let advice = match std::mem::replace(&mut *slot, Slot::Idle { failure: None }) {
+            Slot::Running(a) => {
+                let advice = hint(&a.choice);
+                a.recorder.cancel();
+                let _ = std::fs::remove_dir_all(a.work.join("ring"));
+                advice
+            }
+            _ => "",
+        };
+        let message = format!("{message}{advice}");
+        *slot = Slot::Idle {
+            failure: Some(message.clone()),
+        };
+        RecordingView::Failed { message }
+    }
+
+    /// Stop, join the pieces into a clip and read it back. If the recording had ended by itself,
+    /// this says why.
+    pub fn stop(&self) -> Trial {
+        let active = {
+            let mut slot = self.lock();
+            match std::mem::replace(&mut *slot, Slot::Finishing) {
+                Slot::Running(a) => a,
+                Slot::Idle { failure } => {
+                    *slot = Slot::Idle { failure: None };
+                    return Trial::failed(
+                        failure.unwrap_or_else(|| "No recording is running.".into()),
+                        None,
+                    );
+                }
+                Slot::Finishing => {
+                    return Trial::failed("The recording is already being finished.", None)
+                }
+            }
+        };
+        let trial = finish(*active);
+        *self.lock() = Slot::Idle { failure: None };
+        trial
+    }
+
+    /// Stop and throw away whatever is running (CargoFrame is closing).
+    pub fn cancel(&self) {
+        if let Slot::Running(a) = std::mem::replace(&mut *self.lock(), Slot::Idle { failure: None })
+        {
+            let work = a.work.clone();
+            a.recorder.cancel();
+            let _ = std::fs::remove_dir_all(work.join("ring"));
+        }
+    }
+
+    /// Record for `seconds` and report. The whole recording is kept (the window is a little
+    /// longer than the test), so the clip is as long as the test.
+    pub fn trial(
+        &self,
+        video: &Video,
+        os: Os,
+        session: &Session,
+        work: &Path,
+        seconds: u64,
+    ) -> Trial {
+        match self.start(video, os, session, work, trial_window(seconds)) {
+            Ok(()) => self.run_for(seconds),
+            Err(e) => Trial::failed(e, None),
+        }
+    }
+
+    fn run_for(&self, seconds: u64) -> Trial {
+        let began = Instant::now();
+        while began.elapsed() < Duration::from_secs(seconds) {
+            if matches!(self.view(), RecordingView::Failed { .. }) {
+                // say why, once
+                return self.stop();
+            }
+            std::thread::sleep(Duration::from_millis(100));
+        }
+        self.stop()
+    }
+}
+
+fn trial_window(seconds: u64) -> u32 {
+    u32::try_from(seconds).unwrap_or(5).max(2) + 5
+}
+
+/// Stop the recorder, join the pieces and read the clip back.
+fn finish(active: Active) -> Trial {
+    let Active {
+        recorder,
+        found,
+        choice,
+        work,
+        keep_secs,
+        began,
+    } = active;
+    let fail = |m: String| Trial::failed(format!("{m}{}", hint(&choice)), Some(&choice));
+    let ring = work.join("ring");
+    let ran = recorder.elapsed();
+    let segments = match recorder.stop(Duration::from_secs(10)) {
         Ok(s) => s,
         Err(e) => {
             let _ = std::fs::remove_dir_all(&ring);
@@ -521,7 +717,7 @@ fn run_trial(
         }
     };
     let clip = work.join(TRIAL_CLIP);
-    let joined = recorder::assemble(&found.ffmpeg, &segments, work, &clip, &|| false);
+    let joined = recorder::assemble(&found.ffmpeg, &segments, &work, &clip, &|| false);
     drop(segments);
     let _ = std::fs::remove_dir_all(&ring);
     if let Err(e) = joined {
@@ -533,16 +729,25 @@ fn run_trial(
     };
     let bytes = std::fs::metadata(&clip).map(|m| m.len()).unwrap_or(0);
     let took_ms = u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let mut message = format!(
+        "Recorded {:.1} s at {}×{} with {} and {}.",
+        info.duration_ms as f64 / 1000.0,
+        info.width,
+        info.height,
+        capture_name(choice.capture),
+        encoder_name(choice.encoder),
+    );
+    if u64::try_from(ran.as_millis()).unwrap_or(u64::MAX) > info.duration_ms + 2_500 {
+        message.push_str(&format!(
+            " The recording ran for {:.0} s and only the last {} s are kept, as they will be in a real recording.",
+            ran.as_secs_f64(),
+            keep_secs
+        ));
+    }
+    message.push_str(" Open the clip to check that it shows your screen.");
     Trial {
         ok: true,
-        message: format!(
-            "Recorded {:.1} s at {}×{} with {} and {}. Open the clip to check that it shows your screen.",
-            info.duration_ms as f64 / 1000.0,
-            info.width,
-            info.height,
-            capture_name(choice.capture),
-            encoder_name(choice.encoder),
-        ),
+        message,
         capture: Some(choice.capture),
         encoder: Some(choice.encoder),
         width: info.width,

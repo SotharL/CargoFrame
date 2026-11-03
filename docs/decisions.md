@@ -475,3 +475,21 @@ important part of it without a script: Settings, Video.
 - **Not verified:** the Windows paths (GDI, Desktop Duplication, the hardware encoders, the
   hidden console) have not run on a Windows machine. The Linux X11 path ran against a virtual
   screen in the tests.
+
+### Phase 12, part 3: record until stopped, and never leave ffmpeg running (3 Nov 2026)
+
+- **One recording at a time, owned by one service** (`Recording` in `app/src/video.rs`): idle,
+  recording, finishing, or failed-with-a-reason. Settings, Video, "Record until I stop" starts it,
+  the page watches it twice a second (time so far, how much is kept, whether the disk limit cut the
+  start) and "Stop and make the clip" joins the pieces and reports the clip like the 5-second test.
+  A long recording keeps only the last N seconds, so what the owner watches in Task Manager is what
+  a real recording will cost. The trigger that will start the same service is not built yet.
+- **ffmpeg can never be left capturing.** Dropping a `Recorder` that is still running kills ffmpeg
+  and removes its pieces; CargoFrame quitting (`RunEvent::Exit`) and the Settings window closing
+  cancel a running recording; and ffmpeg is given `-t 3600`, so even if CargoFrame is killed the
+  leftovers stop growing after an hour. A recording started by hand stops itself after 10 minutes
+  (checked while the page is open). A crash can still leave an `ffmpeg` process for up to an hour
+  and its pieces in `video-test/ring`; the next start of a test replaces the folder.
+- **A failure while recording is reported once, in words,** with the same hint as a failed test
+  (hardware encoder: choose Software; Desktop Duplication: try GDI).
+

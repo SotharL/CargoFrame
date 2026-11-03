@@ -354,6 +354,13 @@ export interface VideoTools {
   problem: string | null;
 }
 
+/** A recording started with "Record until I stop". */
+export type VideoRecording =
+  | { state: 'idle' }
+  | { state: 'recording'; elapsed_ms: number; buffered_ms: number; squeezed: boolean; keep_secs: number }
+  | { state: 'finishing' }
+  | { state: 'failed'; message: string };
+
 export interface VideoTrial {
   ok: boolean;
   message: string;

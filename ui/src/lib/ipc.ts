@@ -3,7 +3,7 @@ import type {
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
-  VideoTools, VideoTrial,
+  VideoRecording, VideoTools, VideoTrial,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
@@ -112,6 +112,11 @@ export interface Api {
   detectVideoTools(video: Video): Promise<VideoTools>;
   /** Record the screen for a few seconds with the settings as they are in the form. */
   tryVideoRecording(video: Video): Promise<VideoTrial>;
+  /** Start recording until `stopVideoRecording`, keeping only the last seconds. */
+  startVideoRecording(video: Video): Promise<void>;
+  getVideoRecording(): Promise<VideoRecording>;
+  /** Stop, make the clip, and report it like a test recording. */
+  stopVideoRecording(): Promise<VideoTrial>;
   /** Open the clip of the last test recording. */
   openVideoTest(): Promise<void>;
   /** The system folder picker; null when cancelled. */
@@ -214,6 +219,9 @@ async function tauriApi(): Promise<Api> {
     setVideo: (video) => invoke('set_video', { video }),
     detectVideoTools: (video) => invoke('detect_video_tools', { video }),
     tryVideoRecording: (video) => invoke('try_video_recording', { video }),
+    startVideoRecording: (video) => invoke('start_video_recording', { video }),
+    getVideoRecording: () => invoke('get_video_recording'),
+    stopVideoRecording: () => invoke('stop_video_recording'),
     openVideoTest: () => invoke('open_video_test'),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
     getUpdateView: () => invoke('get_update_view'),
@@ -294,6 +302,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
   let trialRan = false;
+  let recordingSince: number | null = null;
+  let recordingEnded: string | null = null;
   const store: Record<ItemKind, Map<string, unknown>> = {
     trigger: new Map(),
     layout: new Map(),
@@ -629,6 +639,49 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         capture: v.capture === 'auto' ? 'gdigrab' : v.capture, encoder: v.encoder === 'auto' ? 'software' : v.encoder,
         width: 1920, height: 1080, clip_ms: 5000, clip_bytes: 2_400_000, took_ms: 6100,
         clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
+      };
+    },
+    startVideoRecording: async () => {
+      if (recordingSince !== null) throw 'A recording is already running.';
+      recordingSince = Date.now();
+      recordingEnded = opts.recordingFails
+        ? 'The recorder stopped by itself: Cannot load nvcuda.dll. Hardware encoders need the matching graphics card and driver: choose Software to carry on.'
+        : null;
+    },
+    getVideoRecording: async () => {
+      if (recordingEnded) return { state: 'failed', message: recordingEnded };
+      if (recordingSince === null) return { state: 'idle' };
+      const elapsed = Date.now() - recordingSince;
+      return {
+        state: 'recording', elapsed_ms: elapsed, buffered_ms: Math.min(elapsed, video.window_secs * 1000),
+        squeezed: false, keep_secs: video.window_secs,
+      };
+    },
+    stopVideoRecording: async () => {
+      const ended = recordingEnded;
+      const since = recordingSince;
+      recordingSince = null;
+      recordingEnded = null;
+      if (ended) {
+        return {
+          ok: false, message: ended, capture: null, encoder: null, width: 0, height: 0, clip_ms: 0,
+          clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      if (since === null) {
+        return {
+          ok: false, message: 'No recording is running.', capture: null, encoder: null, width: 0, height: 0,
+          clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      trialRan = true;
+      const ran = Date.now() - since;
+      const kept = Math.min(ran, video.window_secs * 1000);
+      return {
+        ok: true,
+        message: `Recorded ${(kept / 1000).toFixed(1)} s at 1920×1080 with GDI and software (x264). Open the clip to check that it shows your screen.`,
+        capture: 'gdigrab', encoder: 'software', width: 1920, height: 1080, clip_ms: kept, clip_bytes: kept * 480,
+        took_ms: ran, clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
       };
     },
     openVideoTest: async () => {

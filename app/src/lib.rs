@@ -129,6 +129,9 @@ pub fn run() {
             commands::set_video,
             commands::detect_video_tools,
             commands::try_video_recording,
+            commands::start_video_recording,
+            commands::get_video_recording,
+            commands::stop_video_recording,
             commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
@@ -171,15 +174,23 @@ pub fn run() {
         .expect("error while building CargoFrame");
 
     app.run(|app, event| {
-        if let RunEvent::ExitRequested { api, code, .. } = event {
-            // Closing the last window must not quit: the tray keeps the app alive. Only an
-            // explicit exit (a code is set) ends it.
-            if code.is_none() {
-                api.prevent_exit();
-            } else {
-                tracing::info!("exiting");
-                let _ = app.try_state::<AppState>();
+        match event {
+            RunEvent::ExitRequested { api, code, .. } => {
+                // Closing the last window must not quit: the tray keeps the app alive. Only an
+                // explicit exit (a code is set) ends it.
+                if code.is_none() {
+                    api.prevent_exit();
+                } else {
+                    tracing::info!("exiting");
+                }
             }
+            // however the program ends, ffmpeg must not be left recording the screen
+            RunEvent::Exit => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.recording.cancel();
+                }
+            }
+            _ => {}
         }
     });
 }
@@ -341,6 +352,9 @@ mod shipped_config_tests {
             "allow-set-safe",
             "allow-set-video",
             "allow-try-video-recording",
+            "allow-start-video-recording",
+            "allow-get-video-recording",
+            "allow-stop-video-recording",
             "allow-open-video-test",
             "allow-pick-folder",
             "allow-list-layout-templates",

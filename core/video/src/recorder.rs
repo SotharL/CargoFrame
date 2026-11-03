@@ -22,6 +22,8 @@ use std::time::{Duration, Instant};
 pub const MIN_FPS: u32 = 5;
 pub const MAX_FPS: u32 = 60;
 pub const DEFAULT_FPS: u32 = 30;
+/// One hour.
+pub const DEFAULT_MAX_RUN_SECS: u32 = 3600;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Capture {
@@ -72,6 +74,10 @@ pub struct Config {
     pub max_bytes: usize,
     /// Larger pictures are scaled down to this height before encoding.
     pub max_height: Option<u32>,
+    /// ffmpeg ends the recording by itself after this long. A backstop: if CargoFrame is killed
+    /// in the middle of a recording nobody is left to delete old pieces, and this keeps the
+    /// leftovers from growing for ever.
+    pub max_run_secs: u32,
 }
 
 impl Config {
@@ -87,6 +93,7 @@ impl Config {
             dir,
             max_bytes: 400 * 1024 * 1024,
             max_height: Some(1080),
+            max_run_secs: DEFAULT_MAX_RUN_SECS,
         }
     }
 
@@ -162,6 +169,7 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         Encoder::Vaapi { .. } => &["-c:v", "h264_vaapi", "-qp", "24"],
     };
     a.extend(enc.iter().map(OsString::from));
+    a.extend(["-t".into(), cfg.max_run_secs.max(1).to_string().into()]);
     a.extend(ring.output_args(1));
     a
 }
@@ -295,6 +303,18 @@ impl Recorder {
         let _ = self.child.kill();
         let _ = self.child.wait();
         self.ring.clear();
+    }
+}
+
+impl Drop for Recorder {
+    /// A recorder that is let go while running is stopped: ffmpeg must never be left capturing
+    /// the screen with nobody to look after the pieces it writes.
+    fn drop(&mut self) {
+        if matches!(self.child.try_wait(), Ok(None)) {
+            let _ = self.child.kill();
+            let _ = self.child.wait();
+            self.ring.clear();
+        }
     }
 }
 
