@@ -3,5 +3,6 @@
 //! one serializable [`view::SessionView`] out, so the web view only has to draw it.
 
 pub mod files;
+pub mod places;
 pub mod vars;
 pub mod view;

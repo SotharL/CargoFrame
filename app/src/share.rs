@@ -162,7 +162,8 @@ struct Prepared {
     payload: Payload,
     /// The ticked files, as offered by the capture.
     selected: Vec<String>,
-    project_folder: Option<String>,
+    /// The folder the ticked files are read from; their paths are relative to it.
+    files_root: Option<String>,
     /// The name typed in the layout's Zip name block, as a file name. `None`: the default name.
     zip_name: Option<String>,
     /// This capture's own copies of ticked files: the folder holding them, and for each file
@@ -373,8 +374,8 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             }
         }
     }
-    if !selected.is_empty() && session.project_folder.is_none() {
-        reasons.push("There is no project folder to read the ticked files from".to_string());
+    if !selected.is_empty() && session.files_root.is_none() {
+        reasons.push("There is no folder to read the ticked files from".to_string());
     }
     if !reasons.is_empty() {
         return Err(reasons);
@@ -421,7 +422,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         trigger_name: view.trigger_name.clone(),
         payload,
         selected,
-        project_folder: session.project_folder.clone(),
+        files_root: session.files_root.clone(),
         zip_name,
         staged_root: None,
         staged: BTreeMap::new(),
@@ -446,7 +447,7 @@ fn manifest_info(svc: &Services, p: &Prepared, notes: Vec<String>) -> ManifestIn
 /// that cannot be copied is read from the project as before, so it is skipped or reported
 /// the way it always was.
 fn adopt_staged(svc: &Services, session: &Session, p: &mut Prepared) {
-    let Some(root) = p.project_folder.as_deref().map(PathBuf::from) else {
+    let Some(root) = p.files_root.as_deref().map(PathBuf::from) else {
         return;
     };
     if p.selected.is_empty() {
@@ -488,7 +489,7 @@ fn file_source(p: &Prepared, rel: &str) -> Source {
         };
     }
     Source::ProjectFile {
-        root: PathBuf::from(p.project_folder.clone().unwrap_or_default()),
+        root: PathBuf::from(p.files_root.clone().unwrap_or_default()),
         relative: rel.to_string(),
     }
 }
@@ -530,7 +531,7 @@ fn check_file_count(ticked: usize) -> Result<(), String> {
 fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalCopies, String> {
     check_file_count(p.selected.len())?;
     let screenshot_bytes = p.payload.image.as_ref().map(|a| a.data.as_slice());
-    let root = p.project_folder.as_deref().map(PathBuf::from);
+    let root = p.files_root.as_deref().map(PathBuf::from);
     let total_limit = Limits::default().max_total_bytes;
     session
         .with_dir(svc.workspace, |dir| {
@@ -545,7 +546,7 @@ fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalC
             for rel in &p.selected {
                 let root = root
                     .as_deref()
-                    .ok_or("There is no project folder to read the ticked files from")?;
+                    .ok_or("There is no folder to read the ticked files from")?;
                 let copy = dir
                     .stage(root, rel, MAX_FILE_BYTES)
                     .map_err(|e| format!("\u{201c}{rel}\u{201d} cannot be sent: {e}"))?;
@@ -656,7 +657,7 @@ fn build_keep_zip(
             kind: "text",
         });
     }
-    if p.project_folder.is_some() {
+    if p.files_root.is_some() {
         for rel in &p.selected {
             items.push(Item {
                 name: format!("files/{rel}"),
@@ -1808,7 +1809,7 @@ mod tests {
 
     /// The project folder of the world's capture.
     fn project_of(w: &World) -> PathBuf {
-        PathBuf::from(w.session.project_folder.clone().unwrap())
+        PathBuf::from(w.session.files_root.clone().unwrap())
     }
 
     #[test]

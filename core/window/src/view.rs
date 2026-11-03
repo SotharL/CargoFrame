@@ -1,6 +1,6 @@
 //! The JSON the CargoFrame window receives when it opens.
 
-use crate::files::{FileEntry, Scan};
+use crate::files::{FileEntry, PlaceFound, Scan};
 use cargoframe_context::template;
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::{
@@ -79,6 +79,9 @@ pub struct FilesState {
     pub entries: Vec<FileEntry>,
     pub truncated: bool,
     pub problem: Option<String>,
+    /// What each folder looked in held. One entry (or none) for the default; the window says
+    /// where the files came from when there are several.
+    pub places: Vec<PlaceFound>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -297,6 +300,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                         entries: scan.entries,
                         truncated: scan.truncated,
                         problem: scan.problem,
+                        places: scan.places,
                     },
                 );
             }
@@ -411,6 +415,7 @@ mod tests {
                         title: "Logs".into(),
                         include: vec!["*.log".into()],
                         preselect: vec![],
+                        look_in: Default::default(),
                     }),
                 },
                 Block {

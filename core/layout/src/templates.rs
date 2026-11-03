@@ -105,6 +105,7 @@ fn files(title: &str) -> BlockKind {
         title: title.to_string(),
         include: vec!["*.log".to_string(), "*.txt".to_string()],
         preselect: Vec::new(),
+        look_in: Default::default(),
     })
 }
 

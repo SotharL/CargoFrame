@@ -42,6 +42,7 @@ pub enum Code {
     MappingRuleMissing,
     UnresolvedVariable,
     SeveralZipNames,
+    BadSubfolder,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -163,7 +164,17 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                     }
                 }
             }
-            BlockKind::Files(f) => check_variables(block, &f.title, reg, &mut out),
+            BlockKind::Files(f) => {
+                check_variables(block, &f.title, reg, &mut out);
+                if f.look_in.clean_subfolder().is_err() {
+                    out.push(issue(
+                        block,
+                        Severity::Warning,
+                        Code::BadSubfolder,
+                        "The subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
+                    ));
+                }
+            }
             BlockKind::Screenshot => {}
         }
     }
@@ -526,6 +537,27 @@ mod tests {
         assert_eq!(codes(&issues), vec![Code::SeveralZipNames]);
         assert_eq!(issues[0].severity, Severity::Warning);
         assert_eq!(issues[0].block_id.as_deref(), Some("z2"));
+    }
+
+    #[test]
+    fn a_subfolder_that_could_leave_the_folder_warns() {
+        let files = |sub: &str| {
+            BlockKind::Files(FilesBlock {
+                title: "Logs".into(),
+                include: vec!["*.log".into()],
+                preselect: vec![],
+                look_in: LookIn {
+                    folders: vec![LookFolder::Program],
+                    subfolder: sub.into(),
+                },
+            })
+        };
+        let reg = Reg::default();
+        assert!(validate(&layout(vec![at("f", 0, files("logs"))]), &reg).is_empty());
+        assert!(validate(&layout(vec![at("f", 0, files(""))]), &reg).is_empty());
+        let issues = validate(&layout(vec![at("f", 0, files("../secrets"))]), &reg);
+        assert_eq!(codes(&issues), vec![Code::BadSubfolder]);
+        assert_eq!(issues[0].severity, Severity::Warning);
     }
 
     #[test]

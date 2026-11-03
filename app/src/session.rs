@@ -9,6 +9,7 @@ use cargoframe_handoff::ChatList;
 use cargoframe_layout::Layout;
 use cargoframe_rules::{run_all, FsFiles, Rule};
 use cargoframe_window::files::{self, Limits, Scan};
+use cargoframe_window::places;
 use cargoframe_window::vars::{self, Moment};
 use cargoframe_window::view::{self, AppView, ImageView, LayoutProblem, ProjectView, SessionView};
 use chrono::{Datelike, Local, Timelike};
@@ -23,9 +24,11 @@ pub struct Session {
     /// The picture as the person edited it (crop, drawings), sent by the window just before a
     /// share. Replaced each time; `None` while the picture is untouched.
     edited: Mutex<Option<Vec<u8>>>,
-    /// The folder the project files are read from, as resolved at capture time. Kept here so a
-    /// share never trusts a folder name sent back by the window.
-    pub project_folder: Option<String>,
+    /// The folder the ticked files are read from, as worked out at capture time: the highest
+    /// folder any Files block looks in (the project folder unless a block looks higher). Every
+    /// file path the window shows is relative to it. Kept here so a share never trusts a folder
+    /// name sent back by the window.
+    pub files_root: Option<String>,
     /// The folder this capture keeps copies in (the screenshot, the ticked files), made when a
     /// destination first needs real files. It is deleted when the capture is closed.
     dir: Mutex<Option<CaptureDir>>,
@@ -33,14 +36,20 @@ pub struct Session {
 
 impl Session {
     pub fn new(png: Vec<u8>, view: SessionView) -> Self {
-        let project_folder = view.project.as_ref().map(|p| p.folder.clone());
+        let files_root = view.project.as_ref().map(|p| p.folder.clone());
         Self {
             png,
             view,
             edited: Mutex::new(None),
-            project_folder,
+            files_root,
             dir: Mutex::new(None),
         }
+    }
+
+    /// Read the files from another folder than the project folder (see `files_root`).
+    pub fn with_files_root(mut self, root: Option<String>) -> Self {
+        self.files_root = root;
+        self
     }
 
     /// Use this capture's folder (made now if it does not exist yet).
@@ -92,7 +101,7 @@ impl Session {
         still_open: &dyn Fn() -> bool,
     ) -> usize {
         let wanted = self.preselected();
-        let (Some(root), false) = (self.project_folder.as_deref(), wanted.is_empty()) else {
+        let (Some(root), false) = (self.files_root.as_deref(), wanted.is_empty()) else {
             return 0;
         };
         let sizes: std::collections::BTreeMap<&str, u64> = self
@@ -344,19 +353,43 @@ pub fn prepare_with(
         }
     }
 
+    // Where the Files blocks look. File paths are relative to the highest folder any of them
+    // looks in; with the default that is the project folder.
+    let project_dir = project.as_ref().map(|p| p.folder.as_str());
+    let files_root = layout
+        .as_ref()
+        .ok()
+        .and_then(|l| places::files_root(l, project_dir, exe.as_deref()))
+        .or_else(|| project_dir.map(PathBuf::from));
     let scan = |f: &cargoframe_layout::FilesBlock| -> Scan {
-        match &project {
-            Some(p) => files::scan(
-                Path::new(&p.folder),
-                &f.include,
-                &f.preselect,
-                Limits::default(),
-            ),
-            None => Scan {
+        let Some(root) = &files_root else {
+            return Scan {
                 problem: Some("No project folder could be found for this capture".into()),
                 ..Scan::default()
-            },
+            };
+        };
+        let found = places::places_for(&f.look_in, project_dir, exe.as_deref());
+        if found.places.is_empty() {
+            let why = found
+                .missing
+                .iter()
+                .map(|(which, why)| format!("{}: {why}", places::label(*which)))
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Scan {
+                problem: Some(format!("No folder to look in ({why})")),
+                ..Scan::default()
+            };
         }
+        let look: Vec<files::Where> = found
+            .places
+            .iter()
+            .map(|p| files::Where {
+                label: places::label(p.which).to_string(),
+                dir: PathBuf::from(&p.dir),
+            })
+            .collect();
+        files::scan_places(root, &look, &f.include, &f.preselect, Limits::default())
     };
     let subject = match captured.subject {
         cap::Subject::Window => "window",
@@ -391,7 +424,7 @@ pub fn prepare_with(
         .frame
         .to_png()
         .map_err(|e| PrepareError::Capture(e.to_string()))?;
-    Ok(Session::new(png, view))
+    Ok(Session::new(png, view).with_files_root(files_root.map(|r| r.display().to_string())))
 }
 
 #[cfg(test)]
@@ -472,6 +505,7 @@ pub(crate) mod tests {
                         title: "Logs".into(),
                         include: vec!["*.log".into()],
                         preselect: vec!["*.log".into()],
+                        look_in: Default::default(),
                     }),
                 },
             ],
@@ -526,6 +560,7 @@ pub(crate) mod tests {
                     title: "Logs".into(),
                     include: vec!["*.log".into()],
                     preselect: preselect.iter().map(|p| p.to_string()).collect(),
+                    look_in: Default::default(),
                 }),
             }],
         };
@@ -549,6 +584,146 @@ pub(crate) mod tests {
     }
 
     const BIG: u64 = 1024 * 1024;
+
+    /// Project `dev/foo` with its program at `dev/foo/bin/release/foo`, and logs in three places.
+    fn deep_capture(dir: &tempfile::TempDir, blocks: Vec<Block>) -> Session {
+        let store = Store::new(Dirs::under(dir.path()));
+        let w = |p: &str, body: &str| {
+            let path = dir.path().join(p);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        };
+        w("dev/foo/bin/release/foo", "");
+        w("dev/foo/bin/release/logs/run.log", "RUN");
+        w("dev/foo/logs/app.log", "APP");
+        w("dev/logs/shared.log", "SHARED");
+        w("dev/foo/readme.log", "README");
+        let layout = Layout {
+            id: String::new(),
+            name: "L".into(),
+            blocks,
+        };
+        store.save_item(Kind::Layouts, "l", &layout).unwrap();
+        let trigger = Trigger {
+            layout_id: Some("l".into()),
+            ..Trigger::default()
+        };
+        let exe = dir.path().join("dev/foo/bin/release/foo");
+        prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &trigger,
+            fake_capture(Some(&exe.display().to_string())),
+            NOW,
+            5,
+        )
+        .unwrap()
+    }
+
+    fn files_block(id: &str, y: u32, look_in: cargoframe_layout::LookIn) -> Block {
+        Block {
+            id: id.into(),
+            rect: Rect {
+                x: 0,
+                y,
+                w: 6,
+                h: 2,
+            },
+            kind: BlockKind::Files(FilesBlock {
+                title: id.into(),
+                include: vec!["*.log".into()],
+                preselect: vec!["*.log".into()],
+                look_in,
+            }),
+        }
+    }
+
+    fn paths(s: &Session, block: &str) -> Vec<String> {
+        s.view.files[block]
+            .entries
+            .iter()
+            .map(|e| e.path.clone())
+            .collect()
+    }
+
+    #[test]
+    fn files_are_found_in_folders_above_the_program_with_one_name_each() {
+        use cargoframe_layout::{LookFolder, LookIn};
+        let dir = tempfile::tempdir().unwrap();
+        let s = deep_capture(
+            &dir,
+            vec![
+                // The default: the project folder, as it always was.
+                files_block("project", 0, LookIn::default()),
+                files_block(
+                    "logs",
+                    2,
+                    LookIn {
+                        folders: vec![LookFolder::Program, LookFolder::Above2, LookFolder::Above3],
+                        subfolder: "logs".into(),
+                    },
+                ),
+            ],
+        );
+        // Paths are relative to the highest folder looked in: dev.
+        assert_eq!(
+            s.files_root.as_deref(),
+            Some(dir.path().join("dev").display().to_string().as_str())
+        );
+        assert_eq!(paths(&s, "project"), ["foo/readme.log"]);
+        assert_eq!(
+            paths(&s, "logs"),
+            [
+                "foo/bin/release/logs/run.log",
+                "foo/logs/app.log",
+                "logs/shared.log"
+            ]
+        );
+        let places = &s.view.files["logs"].places;
+        assert_eq!(places.len(), 3);
+        assert!(
+            places.iter().all(|p| p.exists && p.found == 1),
+            "{places:?}"
+        );
+        assert!(s.view.files["logs"].problem.is_none());
+    }
+
+    #[test]
+    fn with_only_the_default_the_paths_stay_relative_to_the_project_folder() {
+        use cargoframe_layout::LookIn;
+        let dir = tempfile::tempdir().unwrap();
+        let s = deep_capture(&dir, vec![files_block("project", 0, LookIn::default())]);
+        assert_eq!(
+            s.files_root.as_deref(),
+            Some(dir.path().join("dev/foo").display().to_string().as_str())
+        );
+        assert_eq!(paths(&s, "project"), ["readme.log"]);
+    }
+
+    #[test]
+    fn a_choice_that_cannot_be_found_says_why_and_the_rest_still_work() {
+        use cargoframe_layout::{LookFolder, LookIn};
+        let dir = tempfile::tempdir().unwrap();
+        // Above3 from dev/foo/bin/release is dev, which exists; a missing subfolder is skipped.
+        let s = deep_capture(
+            &dir,
+            vec![files_block(
+                "logs",
+                0,
+                LookIn {
+                    folders: vec![LookFolder::Project, LookFolder::Above3],
+                    subfolder: "nothing-here".into(),
+                },
+            )],
+        );
+        assert!(s.view.files["logs"].entries.is_empty());
+        assert_eq!(
+            s.view.files["logs"].problem.as_deref(),
+            Some("None of the folders to look in exist")
+        );
+        assert!(s.view.files["logs"].places.iter().all(|p| !p.exists));
+    }
 
     #[test]
     fn staging_copies_only_the_files_ticked_by_default() {
@@ -724,6 +899,7 @@ pub(crate) mod tests {
                     title: "Logs".into(),
                     include: vec!["*".into()],
                     preselect: vec![],
+                    look_in: Default::default(),
                 }),
             }],
         };

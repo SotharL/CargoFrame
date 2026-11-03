@@ -70,6 +70,27 @@ pub fn resolve_project_folder(program_path: &str) -> Option<Resolution> {
     })
 }
 
+/// The folder `levels_up` above the folder the program file sits in (0 is that folder itself).
+///
+/// `C:\Dev\Foo\bin\Release\Foo.exe` gives `C:\Dev\Foo\bin\Release` for 0, `C:\Dev\Foo` for 2 and
+/// `C:\Dev` for 3. `None` when the path does not go that high, or when what is left is only a drive
+/// or the root of the file system: such a folder is never searched.
+pub fn folder_above(program_path: &str, levels_up: usize) -> Option<String> {
+    let sep = if program_path.contains('\\') {
+        '\\'
+    } else {
+        '/'
+    };
+    let parts = split(program_path);
+    let (_, dirs) = parts.split_last()?;
+    let keep = dirs.len().checked_sub(levels_up)?;
+    let kept = &dirs[..keep];
+    if kept.iter().all(|d| is_drive(d)) {
+        return None;
+    }
+    Some(join(&root_prefix(program_path, sep), kept, sep))
+}
+
 /// Split on both separators and drop empty segments.
 fn split(path: &str) -> Vec<&str> {
     path.split(['\\', '/']).filter(|s| !s.is_empty()).collect()
@@ -121,6 +142,40 @@ mod tests {
 
     fn folder(p: &str) -> String {
         resolve_project_folder(p).unwrap().folder
+    }
+
+    #[test]
+    fn folders_above_the_program_count_from_its_own_folder() {
+        let win = r"C:\Dev\Foo\bin\Release\Foo.exe";
+        assert_eq!(
+            folder_above(win, 0).as_deref(),
+            Some(r"C:\Dev\Foo\bin\Release")
+        );
+        assert_eq!(folder_above(win, 1).as_deref(), Some(r"C:\Dev\Foo\bin"));
+        assert_eq!(folder_above(win, 2).as_deref(), Some(r"C:\Dev\Foo"));
+        assert_eq!(folder_above(win, 3).as_deref(), Some(r"C:\Dev"));
+        // Only the drive is left: not a folder to search.
+        assert_eq!(folder_above(win, 4), None);
+        assert_eq!(folder_above(win, 9), None);
+        let nix = "/home/ann/src/foo/target/release/foo";
+        assert_eq!(
+            folder_above(nix, 0).as_deref(),
+            Some("/home/ann/src/foo/target/release")
+        );
+        assert_eq!(folder_above(nix, 3).as_deref(), Some("/home/ann/src"));
+        assert_eq!(folder_above(nix, 5).as_deref(), Some("/home"));
+        assert_eq!(folder_above(nix, 6), None, "never the root");
+    }
+
+    #[test]
+    fn folders_above_handles_unc_paths_and_bare_names() {
+        assert_eq!(
+            folder_above(r"\\srv\share\app\run.exe", 1).as_deref(),
+            Some(r"\\srv\share")
+        );
+        assert_eq!(folder_above("run.exe", 0), None);
+        assert_eq!(folder_above("", 0), None);
+        assert_eq!(folder_above("/run", 0), None);
     }
 
     #[test]
