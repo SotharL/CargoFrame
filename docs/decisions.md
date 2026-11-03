@@ -663,8 +663,8 @@ recording are still in Settings, Video only.
   The handles also work from the keyboard (arrows a tenth of a second, Shift a second, Home and End).
 - **Playing stays inside the kept part:** it stops at the end of it and starts again from its start.
 - **The window does not cut anything while the person moves the handles.** The choice travels with the share
-  request (`clip_trim`) and the cut is made once, just before sending or saving, into the capture's own folder
-  (`recording-cut.mp4`, deleted with the capture). The original recording is never changed, so "Keep it all"
+  request (`clip_edit`) and the cut is made once, just before sending or saving, into the capture's own folder
+  (`recording-edited.mp4`, deleted with the capture). The original recording is never changed, so "Keep it all"
   always works, and a share that is retried does not cut twice.
 - **A cut that keeps everything is not made,** and then ffmpeg is not needed at all. A cut that cannot be made
   (ffmpeg missing, a recording ffmpeg cannot read) stops the share with the reason, and nothing is sent or saved.
@@ -673,4 +673,21 @@ recording are still in Settings, Video only.
 - **Tested** with a real ffmpeg (6 s clip, 2 s kept: the zip holds a 2 s video), and with fake recordings for the
   paths that need no ffmpeg. How the strip looks in the real window, and whether a given WebView plays the
   recording at all, are owner checks.
+
+### Phase 12, part 14: cropping the recording in the CargoFrame window (3 Nov 2026)
+
+A **Crop** tick next to the cut buttons puts a box over the recording (80% of the picture, centred).
+
+- **Drag the box to move it, its corner to resize it;** from the keyboard, the arrows move it (Shift: a bigger
+  step) and Alt with an arrow resizes it. What is outside the box is dimmed. The box cannot leave the picture and
+  is never smaller than 16 pixels.
+- **While cropping, the player's own controls give way to a Play/Pause button,** because the box covers the picture
+  and would swallow the clicks. Cropping off brings the controls back.
+- **Sizes are kept even in the window, and made even again by the program before cutting** (the encoder needs an even
+  picture): a crop of 161×101 at 41,21 comes out as 160×100 at 40,20. This is tested with a real clip.
+- **The window's edit is now one thing, `clip_edit` (start, end, crop),** replacing the first version's `clip_trim`.
+  "Keep it all" undoes the cut and the crop together. A crop alone is enough to make a copy; nothing changes while
+  the person drags, the copy is made once when sending or saving, as for the cut.
+- **The line beside the button says it:** "Video (9.5 s, cropped)", "Video (3.0 s of 9.5 s, cut and cropped)".
+- **Still only in Settings, Video:** marks (a drawn circle or text) on the recording.
 

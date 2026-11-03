@@ -964,18 +964,22 @@ pub fn export_test(video: &Video, edit: &TestEdit, recording: &Recording, work: 
     }
 }
 
-/// The part of a recording the person kept in the CargoFrame window: from `start_ms`, to `end_ms`
-/// (`None` is to the end of the recording). Times are on the recording's own timeline.
+/// What the person did to a recording in the CargoFrame window: kept from `start_ms` to `end_ms`
+/// (`None` is to the end of the recording), and perhaps cropped to an area. Times are on the
+/// recording's own timeline, the crop is in the recording's pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub struct ClipTrim {
+pub struct ClipEdit {
     pub start_ms: u64,
     pub end_ms: Option<u64>,
+    #[serde(default)]
+    pub crop: Option<Crop>,
 }
 
-impl ClipTrim {
-    /// Nothing is cut: the whole of a recording `duration_ms` long is kept.
-    pub fn keeps_all(&self, duration_ms: u64) -> bool {
-        self.start_ms == 0
+impl ClipEdit {
+    /// Nothing is cut and nothing is cropped: the recording is sent as it was recorded.
+    pub fn changes_nothing(&self, duration_ms: u64) -> bool {
+        self.crop.is_none()
+            && self.start_ms == 0
             && match self.end_ms {
                 None => true,
                 Some(end) => end >= duration_ms,
@@ -983,21 +987,32 @@ impl ClipTrim {
     }
 }
 
-/// Cut `input` to the part `trim` keeps and write it to `output` (replacing what is there).
+/// Make `input` into what `edit` keeps and write it to `output` (replacing what is there).
 /// Returns the new clip's length, size and weight. Used when a video capture is sent or saved.
-pub fn trim_clip(
+pub fn edit_clip(
     video: &Video,
     input: &Path,
     output: &Path,
-    trim: ClipTrim,
+    edit: ClipEdit,
 ) -> Result<Trial, String> {
     let found = find(video, program_beside_app().as_deref())?;
     let info = probe(&found.ffprobe, input)
         .map_err(|e| format!("The recording could not be read: {e}"))?;
+    // The encoder wants an even picture: round the crop to even numbers, inside the picture.
+    let crop = edit.crop.map(|c| {
+        let even = |n: u32| n & !1;
+        let (x, y) = (even(c.x), even(c.y));
+        Crop {
+            x,
+            y,
+            w: even(c.w).min(info.width.saturating_sub(x) & !1),
+            h: even(c.h).min(info.height.saturating_sub(y) & !1),
+        }
+    });
     let edit = Edit {
-        start_ms: trim.start_ms,
-        end_ms: trim.end_ms,
-        crop: None,
+        start_ms: edit.start_ms,
+        end_ms: edit.end_ms,
+        crop,
         overlays: Vec::new(),
     };
     let planned = plan(input, output, &edit, &info).map_err(|problems| {
@@ -1010,9 +1025,9 @@ pub fn trim_clip(
     let began = Instant::now();
     let _ = std::fs::remove_file(output);
     run(&found.ffmpeg, &planned, &|| false, Duration::from_secs(120))
-        .map_err(|e| format!("The recording could not be cut: {e}"))?;
+        .map_err(|e| format!("The recording could not be edited: {e}"))?;
     let out = probe(&found.ffprobe, output)
-        .map_err(|e| format!("The cut recording could not be read back: {e}"))?;
+        .map_err(|e| format!("The edited recording could not be read back: {e}"))?;
     let bytes = std::fs::metadata(output).map(|m| m.len()).unwrap_or(0);
     Ok(Trial {
         ok: true,

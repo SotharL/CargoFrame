@@ -2,7 +2,7 @@
   import { onMount } from 'svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi, type Api } from '../lib/ipc';
-  import type { Block, ClipTrim, SessionView, ShareResult } from '../lib/types';
+  import type { Block, ClipEdit, SessionView, ShareResult } from '../lib/types';
   import ScreenshotBlock from './blocks/ScreenshotBlock.svelte';
   import VideoBlock from './blocks/VideoBlock.svelte';
   import TextBlock from './blocks/TextBlock.svelte';
@@ -24,7 +24,7 @@
   let values = $state<FormValues>({ texts: {}, dropdowns: {}, files: {} });
   let imageEdited = $state(false);
   /** The part of the recording to send; `null` sends all of it. */
-  let clipTrim = $state<ClipTrim | null>(null);
+  let clipEdit = $state<ClipEdit | null>(null);
   let failure = $state<string | null>(null);
   let notice = $state<string | null>(null);
   /** The sharing button being sent, if any; every button waits while one is sending. */
@@ -48,7 +48,7 @@
       image = img;
       values = initialValues(v);
       imageEdited = false;
-      clipTrim = null;
+      clipEdit = null;
       failure = null;
       notice = null;
       result = null;
@@ -93,7 +93,7 @@
 
   async function share(button: Extract<Block, { type: 'sharing_button' }>) {
     if (!view || !api || sending) return;
-    const request = collectShare(view, button, values, imageEdited, clipTrim);
+    const request = collectShare(view, button, values, imageEdited, clipEdit);
     result = null;
     opened = null;
     if (promptIsEmpty(request)) {
@@ -186,7 +186,7 @@
               <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
             {:else if b.type === 'video'}
               {#if view.video}
-                {#key view.session_id}<VideoBlock info={view.video} bind:trim={clipTrim} />{/key}
+                {#key view.session_id}<VideoBlock info={view.video} bind:edit={clipEdit} />{/key}
               {:else}
                 <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
               {/if}
@@ -205,7 +205,7 @@
                 mode={view.sharing[b.id]?.mode ?? 'send'}
                 note={view.sharing[b.id]?.note ?? null}
                 kind={view.sharing[b.id]?.kind ?? null}
-                parts={willSend(view, b, values, imageEdited, clipTrim)}
+                parts={willSend(view, b, values, imageEdited, clipEdit)}
                 opening={chatToOpen(view, b, values)}
                 onshare={() => share(b)}
                 onhover={(on) => (hovered = on ? b.id : hovered === b.id ? null : hovered)}

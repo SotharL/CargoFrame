@@ -55,9 +55,9 @@ pub struct Request {
     pub files: BTreeMap<String, Vec<String>>,
     /// The picture was edited: send the edited one the window uploaded.
     pub image_edited: bool,
-    /// For a video capture: the part of the recording to send. `None` sends all of it.
+    /// For a video capture: what was done to the recording (cut, cropped). `None` sends it as it is.
     #[serde(default)]
-    pub clip_trim: Option<crate::video::ClipTrim>,
+    pub clip_edit: Option<crate::video::ClipEdit>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -390,11 +390,11 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     // A video capture sends its recording where a screenshot capture sends the picture.
     let image = match &session.clip {
         Some(clip) if button.send.screenshot => {
-            let cut = match cut_recording(svc, session, clip, req.clip_trim) {
+            let edited = match edited_recording(svc, session, clip, req.clip_edit) {
                 Ok(c) => c,
                 Err(why) => return Err(vec![why]),
             };
-            match video_attachment(cut.as_deref().unwrap_or(&clip.path), kind) {
+            match video_attachment(edited.as_deref().unwrap_or(&clip.path), kind) {
                 Ok(a) => Some(a),
                 Err(why) => return Err(vec![why]),
             }
@@ -458,26 +458,27 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
 /// their own, which they report when a file is too big).
 pub const MAX_VIDEO_BYTES: u64 = 100 * 1024 * 1024;
 
-/// The file to send for a video capture whose recording the person cut in the window: a new file
-/// in the capture's own folder, or `None` when nothing is cut (the whole recording is sent).
-fn cut_recording(
+/// The file to send for a video capture whose recording the person edited in the window: a new
+/// file in the capture's own folder, or `None` when nothing was changed (the whole recording is
+/// sent as it is).
+fn edited_recording(
     svc: &Services,
     session: &Session,
     clip: &crate::session::Clip,
-    trim: Option<crate::video::ClipTrim>,
+    edit: Option<crate::video::ClipEdit>,
 ) -> Result<Option<PathBuf>, String> {
-    let Some(trim) = trim.filter(|t| !t.keeps_all(clip.duration_ms)) else {
+    let Some(edit) = edit.filter(|e| !e.changes_nothing(clip.duration_ms)) else {
         return Ok(None);
     };
     let output = session
-        .with_dir(svc.workspace, |d| d.path().join("recording-cut.mp4"))
-        .map_err(|e| format!("CargoFrame could not make room for the cut recording: {e}"))?;
+        .with_dir(svc.workspace, |d| d.path().join("recording-edited.mp4"))
+        .map_err(|e| format!("CargoFrame could not make room for the edited recording: {e}"))?;
     let settings = svc
         .store
         .load_or_default::<cargoframe_config::Video>()
         .map(crate::video::normalized)
         .unwrap_or_default();
-    crate::video::trim_clip(&settings, &clip.path, &output, trim)?;
+    crate::video::edit_clip(&settings, &clip.path, &output, edit)?;
     Ok(Some(output))
 }
 
@@ -1238,7 +1239,7 @@ mod tests {
             dropdowns: BTreeMap::new(),
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
-            clip_trim: None,
+            clip_edit: None,
         }
     }
 
@@ -2151,9 +2152,10 @@ mod tests {
         set_safe(&w, Some(&dir.display().to_string()), 0);
         disconnect(&w);
         let mut req = request();
-        req.clip_trim = Some(crate::video::ClipTrim {
+        req.clip_edit = Some(crate::video::ClipEdit {
             start_ms: 1_000,
             end_ms: Some(3_000),
+            crop: None,
         });
         let (r, _) = go(&w, &req, vec![]);
         let ShareResult::SavedLocally { path, .. } = r else {
@@ -2188,17 +2190,19 @@ mod tests {
         set_safe(&w, Some(&dir.display().to_string()), 0);
         disconnect(&w);
         for trim in [
-            crate::video::ClipTrim {
+            crate::video::ClipEdit {
                 start_ms: 0,
                 end_ms: None,
+                crop: None,
             },
-            crate::video::ClipTrim {
+            crate::video::ClipEdit {
                 start_ms: 0,
                 end_ms: Some(9_000),
+                crop: None,
             },
         ] {
             let mut req = request();
-            req.clip_trim = Some(trim);
+            req.clip_edit = Some(trim);
             let (r, _) = go(&w, &req, vec![]);
             let ShareResult::SavedLocally { path, .. } = r else {
                 panic!("{r:?}");
@@ -2218,9 +2222,10 @@ mod tests {
         set_safe(&w, Some(&dir.display().to_string()), 0);
         disconnect(&w);
         let mut req = request();
-        req.clip_trim = Some(crate::video::ClipTrim {
+        req.clip_edit = Some(crate::video::ClipEdit {
             start_ms: 1_000,
             end_ms: Some(2_000),
+            crop: None,
         });
         let (r, _) = go(&w, &req, vec![]);
         let ShareResult::Blocked { reasons } = r else {
@@ -2238,14 +2243,84 @@ mod tests {
     }
 
     #[test]
-    fn keeping_all_is_told_from_cutting_something() {
-        use crate::video::ClipTrim;
-        let t = |start_ms, end_ms| ClipTrim { start_ms, end_ms };
-        assert!(t(0, None).keeps_all(5_000));
-        assert!(t(0, Some(5_000)).keeps_all(5_000));
-        assert!(t(0, Some(6_000)).keeps_all(5_000));
-        assert!(!t(100, None).keeps_all(5_000));
-        assert!(!t(0, Some(4_900)).keeps_all(5_000));
+    fn changing_nothing_is_told_from_cutting_or_cropping_something() {
+        use crate::video::ClipEdit;
+        use cargoframe_video::Crop;
+        let t = |start_ms, end_ms| ClipEdit {
+            start_ms,
+            end_ms,
+            crop: None,
+        };
+        assert!(t(0, None).changes_nothing(5_000));
+        assert!(t(0, Some(5_000)).changes_nothing(5_000));
+        assert!(t(0, Some(6_000)).changes_nothing(5_000));
+        assert!(!t(100, None).changes_nothing(5_000));
+        assert!(!t(0, Some(4_900)).changes_nothing(5_000));
+        let cropped = ClipEdit {
+            crop: Some(Crop {
+                x: 0,
+                y: 0,
+                w: 64,
+                h: 64,
+            }),
+            ..t(0, None)
+        };
+        assert!(!cropped.changes_nothing(5_000));
+    }
+
+    #[test]
+    fn a_video_capture_cropped_in_the_window_sends_the_cropped_picture_for_the_whole_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source.mp4");
+        if real_clip(&source, 4).is_none() || seconds_of(&source).is_none() {
+            eprintln!("skipped: ffmpeg or ffprobe is not installed");
+            return;
+        }
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"placeholder");
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = source;
+        clip.duration_ms = 4_000;
+        w.session.clip = Some(clip);
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        // odd numbers, as a mouse gives them: the picture still comes out even
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 0,
+            end_ms: None,
+            crop: Some(cargoframe_video::Crop {
+                x: 41,
+                y: 21,
+                w: 161,
+                h: 101,
+            }),
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        z.by_name("recording.mp4")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        let sent = tmp.path().join("sent.mp4");
+        fs::write(&sent, &bytes).unwrap();
+        let probed = std::process::Command::new("ffprobe")
+            .args(["-v", "error", "-select_streams", "v:0"])
+            .args(["-show_entries", "stream=width,height"])
+            .args(["-of", "csv=s=x:p=0"])
+            .arg(&sent)
+            .output()
+            .unwrap();
+        let size = String::from_utf8_lossy(&probed.stdout).trim().to_string();
+        assert_eq!(size, "160x100", "the crop, made even");
+        let length = seconds_of(&sent).unwrap();
+        assert!(length > 3.0, "the whole time is kept: {length} s");
     }
 
     #[test]
