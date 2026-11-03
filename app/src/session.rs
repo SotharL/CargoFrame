@@ -39,6 +39,9 @@ pub struct Session {
     /// The picture as the person edited it (crop, drawings), sent by the window just before a
     /// share. Replaced each time; `None` while the picture is untouched.
     edited: Mutex<Option<Vec<u8>>>,
+    /// For a recording: the mark the window drew on a see-through picture the size of the
+    /// recording (a PNG), sent just before a share. `None` while there is no mark.
+    clip_mark: Mutex<Option<Vec<u8>>>,
     /// The folder the ticked files are read from, as worked out at capture time: the highest
     /// folder any Files block looks in (the project folder unless a block looks higher). Every
     /// file path the window shows is relative to it. Kept here so a share never trusts a folder
@@ -57,6 +60,7 @@ impl Session {
             view,
             clip: None,
             edited: Mutex::new(None),
+            clip_mark: Mutex::new(None),
             files_root,
             dir: Mutex::new(None),
         }
@@ -170,6 +174,18 @@ impl Session {
 
     pub fn set_edited(&self, png: Option<Vec<u8>>) {
         *self.edited.lock().unwrap_or_else(|e| e.into_inner()) = png;
+    }
+
+    pub fn set_clip_mark(&self, png: Option<Vec<u8>>) {
+        *self.clip_mark.lock().unwrap_or_else(|e| e.into_inner()) = png;
+    }
+
+    /// The mark the window drew for the recording, if there is one.
+    pub fn clip_mark(&self) -> Option<Vec<u8>> {
+        self.clip_mark
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// The picture to send: the edited one if there is one, else the capture.

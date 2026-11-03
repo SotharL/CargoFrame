@@ -825,6 +825,37 @@ pub async fn fetch_options(
     fetch(app, connection_id, options_id).await
 }
 
+/// The mark the window drew over a recording (a PNG the size of the recording, see-through
+/// except for the drawing), sent just before a share. An empty body clears it. Named by
+/// `x-session-id` like the edited picture.
+#[tauri::command]
+pub fn set_clip_mark(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected a picture".into());
+    };
+    let id: u64 = request
+        .headers()
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .ok_or("The capture is not named")?;
+    let session = state
+        .sessions
+        .current()
+        .filter(|s| s.view.session_id == id)
+        .ok_or("This capture is no longer open")?;
+    if session.clip.is_none() {
+        return Err("This capture has no recording".into());
+    }
+    if bytes.is_empty() {
+        session.set_clip_mark(None);
+        return Ok(());
+    }
+    check_png(bytes)?;
+    session.set_clip_mark(Some(bytes.clone()));
+    Ok(())
+}
+
 /// The picture as edited (crop, drawings), sent just before a share. An empty body clears it.
 /// The capture is named in the `x-session-id` header so a late call cannot reach a newer one.
 #[tauri::command]

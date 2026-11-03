@@ -67,6 +67,7 @@ fn main() {
             "remove_chat",
             "fetch_options",
             "set_edited_image",
+            "set_clip_mark",
             "share",
             "open_link",
         ]),

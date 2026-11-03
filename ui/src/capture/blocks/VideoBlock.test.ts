@@ -88,9 +88,9 @@ describe('VideoBlock', () => {
       expect(last()).toBeNull();
       expect((screen.getByRole('button', { name: 'Keep it all' }) as HTMLButtonElement).disabled).toBe(true);
       await fireEvent.keyDown(startHandle(), { key: 'ArrowRight', shiftKey: true });
-      expect(last()).toEqual({ start_ms: 1000, end_ms: null, crop: null });
+      expect(last()).toEqual({ start_ms: 1000, end_ms: null, crop: null, mark: false });
       await fireEvent.keyDown(endHandle(), { key: 'ArrowLeft' });
-      expect(last()).toEqual({ start_ms: 1000, end_ms: 9400, crop: null });
+      expect(last()).toEqual({ start_ms: 1000, end_ms: 9400, crop: null, mark: false });
       expect(screen.getByText('Keeping 1.0 s to 9.4 s (8.4 s of 9.5 s)')).toBeTruthy();
     });
 
@@ -100,7 +100,7 @@ describe('VideoBlock', () => {
       await fireEvent.click(screen.getByRole('button', { name: 'Start here' }));
       await playingAt(video, 6.5);
       await fireEvent.click(screen.getByRole('button', { name: 'End here' }));
-      expect(last()).toEqual({ start_ms: 2000, end_ms: 6500, crop: null });
+      expect(last()).toEqual({ start_ms: 2000, end_ms: 6500, crop: null, mark: false });
     });
 
     it('keeps it all again with one button', async () => {
@@ -129,7 +129,7 @@ describe('VideoBlock', () => {
     it('starts a crop from a box inside the picture, and takes it away again', async () => {
       const { last } = await ready();
       await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop' }));
-      expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: { x: 128, y: 72, w: 1024, h: 576 } });
+      expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: { x: 128, y: 72, w: 1024, h: 576 }, mark: false });
       expect(screen.getByText('Keeping all 9.5 s, cropped to 1024×576')).toBeTruthy();
       // the player's own controls give way to a button, because the box covers the picture
       expect(document.querySelector('video')!.hasAttribute('controls')).toBe(false);
@@ -166,13 +166,65 @@ describe('VideoBlock', () => {
       expect((screen.getByRole('checkbox', { name: 'Crop' }) as HTMLInputElement).checked).toBe(false);
     });
 
+    it('puts a mark in the middle of the picture, with a text, and takes it away again', async () => {
+      const { last } = await ready();
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark' }));
+      expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: null, mark: true });
+      expect(screen.getByRole('group', { name: 'Mark at 640,360. Click the picture or use the arrow keys to move it.' })).toBeTruthy();
+      expect(screen.getByText('Keeping all 9.5 s, marked')).toBeTruthy();
+      // the player's own controls give way to a button, as when cropping
+      expect(document.querySelector('video')!.hasAttribute('controls')).toBe(false);
+      await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'Look here' } });
+      expect(screen.getByText('Look here')).toBeTruthy();
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark' }));
+      expect(last()).toBeNull();
+      expect(screen.queryByLabelText('Text under the mark')).toBeNull();
+      expect(document.querySelector('video')!.hasAttribute('controls')).toBe(true);
+    });
+
+    it('keeps the player controls off while either the crop or the mark is on', async () => {
+      await ready();
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop' }));
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark' }));
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Crop' }));
+      expect(document.querySelector('video')!.hasAttribute('controls')).toBe(false);
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark' }));
+      expect(document.querySelector('video')!.hasAttribute('controls')).toBe(true);
+    });
+
+    it('keeps it all again, mark included, with one button', async () => {
+      const { last } = await ready();
+      await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark' }));
+      await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'x' } });
+      await fireEvent.click(screen.getByRole('button', { name: 'Keep it all' }));
+      expect(last()).toBeNull();
+      expect((screen.getByRole('checkbox', { name: 'Mark' }) as HTMLInputElement).checked).toBe(false);
+    });
+
     it('can still be cut when this window cannot play the recording', async () => {
       const { video, last } = await ready();
       await fireEvent.error(video);
       await screen.findByText(/cannot play the recording/);
       await fireEvent.keyDown(startHandle(), { key: 'ArrowRight', shiftKey: true });
-      expect(last()).toEqual({ start_ms: 1000, end_ms: null, crop: null });
+      expect(last()).toEqual({ start_ms: 1000, end_ms: null, crop: null, mark: false });
       expect((screen.getByRole('button', { name: 'Start here' }) as HTMLButtonElement).disabled).toBe(true);
     });
   });
 });
+
+describe('VideoBlock mark picture', () => {
+  it('draws the mark the size of the recording, where it is and with its text, and nothing without a mark', async () => {
+    const draw = vi.spyOn(await import('./drawMark'), 'drawMark').mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+    setApiForTests(memoryApi());
+    const { component } = render(VideoBlock, { info });
+    await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+    expect(await (component as unknown as { exportMark: () => Promise<Blob | null> }).exportMark()).toBeNull();
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Mark' }));
+    await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'Here' } });
+    const blob = await (component as unknown as { exportMark: () => Promise<Blob | null> }).exportMark();
+    expect(blob?.type).toBe('image/png');
+    expect(draw).toHaveBeenCalledWith(1280, 720, { x: 640, y: 360 }, 'Here');
+    draw.mockRestore();
+  });
+});
+

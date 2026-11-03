@@ -97,6 +97,8 @@ export interface Api {
   fetchOptions(sessionId: number, blockId: string): Promise<DropdownOption[]>;
   /** The picture as edited, uploaded before a share. `null` goes back to the capture. */
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
+  /** The mark drawn over a recording (a see-through PNG the size of the recording), or none. */
+  setClipMark(sessionId: number, png: Blob | null): Promise<void>;
   share(request: ShareRequest): Promise<ShareResult>;
   openLink(url: string): Promise<void>;
   /** Tell the app the window has painted its first usable content (for the timings). */
@@ -218,6 +220,10 @@ async function tauriApi(): Promise<Api> {
     setEditedImage: async (sessionId, png) => {
       const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
       await invoke('set_edited_image', bytes, { headers: { 'x-session-id': String(sessionId) } });
+    },
+    setClipMark: async (sessionId, png) => {
+      const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
+      await invoke('set_clip_mark', bytes, { headers: { 'x-session-id': String(sessionId) } });
     },
     share: (request) => invoke<ShareResult>('share', { request }),
     openLink: (url) => invoke('open_link', { url }),
@@ -612,6 +618,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     fetchOptions: async (_sessionId, blockId) =>
       opts.options ? opts.options('demo', blockId) : [{ value: 'P1', label: 'Demo project', group: null }],
     setEditedImage: async () => {},
+    setClipMark: async () => {},
     share: async (request) =>
       opts.share
         ? opts.share(request)

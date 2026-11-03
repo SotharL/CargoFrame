@@ -39,15 +39,15 @@ export function willSend(
     }
     if (b.type === 'video' && r?.state === 'sent' && view.video) {
       const whole = view.video.duration_ms / 1000;
-      const cropped = clipEdit?.crop ? 'cropped' : '';
       const from = (clipEdit?.start_ms ?? 0) / 1000;
       const to = (clipEdit?.end_ms ?? view.video.duration_ms) / 1000;
-      const cut = from > 0 || to < whole ? 'cut' : '';
-      if (clipEdit && (cut || cropped)) {
-        const said = [cut, cropped].filter(Boolean).join(' and ');
-        parts.push(cut ? `Video (${(to - from).toFixed(1)} s of ${whole.toFixed(1)} s, ${said})` : `Video (${whole.toFixed(1)} s, ${said})`);
-      } else {
+      const done = [from > 0 || to < whole ? 'cut' : '', clipEdit?.crop ? 'cropped' : '', clipEdit?.mark ? 'marked' : ''].filter(Boolean);
+      if (done.length === 0) {
         parts.push(`Video (${whole.toFixed(1)} s, ${formatSize(view.video.bytes)})`);
+      } else {
+        const said = done.length > 1 ? `${done.slice(0, -1).join(', ')} and ${done[done.length - 1]}` : done[0];
+        const length = done[0] === 'cut' ? `${(to - from).toFixed(1)} s of ${whole.toFixed(1)} s` : `${whole.toFixed(1)} s`;
+        parts.push(`Video (${length}, ${said})`);
       }
     }
   }

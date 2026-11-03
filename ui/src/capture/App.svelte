@@ -35,6 +35,7 @@
   /** The Claude chat the last share opened, kept to say "Opened: …" once it is done. */
   let opened = $state<string | null>(null);
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
+  let clip = $state<ReturnType<typeof VideoBlock>>();
 
   function reportPainted() {
     void api?.reportPainted('capture').catch(() => {});
@@ -108,6 +109,8 @@
         view.session_id,
         imageEdited && screenshot ? await screenshot.exportImage() : null,
       );
+      // The mark on a recording is drawn here too; the backend lays it over the recording.
+      if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
       const chat = chatToOpen(view, button, values);
       result = await api.share(request);
       if (result.status === 'sent' && chat) opened = chat;
@@ -186,7 +189,7 @@
               <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
             {:else if b.type === 'video'}
               {#if view.video}
-                {#key view.session_id}<VideoBlock info={view.video} bind:edit={clipEdit} />{/key}
+                {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} />{/key}
               {:else}
                 <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
               {/if}

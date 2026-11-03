@@ -4,6 +4,7 @@
   // the size of the space. Drag the box to move it, its corner to resize it; the arrow keys move
   // it (Shift: a bigger step) and Alt with an arrow resizes it. Sizes stay even, as the encoder needs.
   import { onMount } from 'svelte';
+  import { containRect } from './contain';
 
   type Box = { x: number; y: number; w: number; h: number };
   let { width, height, crop = $bindable() }: { width: number; height: number; crop: Box } = $props();
@@ -29,13 +30,7 @@
   }
 
   /** Where the picture really is inside the space, in CSS pixels. */
-  const shown = $derived.by(() => {
-    if (space.w <= 0 || space.h <= 0 || width <= 0 || height <= 0) return { left: 0, top: 0, w: 0, h: 0 };
-    const k = Math.min(space.w / width, space.h / height);
-    const w = width * k;
-    const h = height * k;
-    return { left: (space.w - w) / 2, top: (space.h - h) / 2, w, h };
-  });
+  const shown = $derived(containRect(space, width, height));
   const scale = $derived(shown.w > 0 ? width / shown.w : 1);
 
   function begin(e: MouseEvent, mode: 'move' | 'size') {

@@ -5,6 +5,8 @@
   import { formatSize } from '../values';
   import TrimStrip from './TrimStrip.svelte';
   import CropBox from './CropBox.svelte';
+  import MarkLayer from './MarkLayer.svelte';
+  import { drawMark } from './drawMark';
 
   /**
    * `edit` is what the person chose: the part to keep and perhaps an area to crop to. It is
@@ -24,10 +26,15 @@
   let strip = $state<{ setEdge: (which: 'start' | 'end', secs: number) => void } | null>(null);
 
   let crop = $state<{ x: number; y: number; w: number; h: number } | null>(null);
+  let markOn = $state(false);
+  let markAt = $state({ x: 0, y: 0 });
+  let markText = $state('');
   let playing = $state(false);
+  /** The player's own controls would be under the boxes, so a button stands in while one is on. */
+  const bare = $derived(crop !== null || markOn);
 
   const kept = $derived(Math.max(0, end - start));
-  const wholeClip = $derived(start <= 0 && end >= total && crop === null);
+  const wholeClip = $derived(start <= 0 && end >= total && crop === null && !markOn);
 
   $effect(() => {
     edit = wholeClip
@@ -36,6 +43,7 @@
           start_ms: Math.round(start * 1000),
           end_ms: end >= total ? null : Math.round(end * 1000),
           crop: crop ? { ...crop } : null,
+          mark: markOn,
         };
   });
 
@@ -49,6 +57,15 @@
     const w = even(info.width * 0.8);
     const h = even(info.height * 0.8);
     crop = { x: even((info.width - w) / 2), y: even((info.height - h) / 2), w, h };
+  }
+  function toggleMark(on: boolean) {
+    markOn = on;
+    // starts in the middle of the picture, so there is something to see and to move
+    if (on) markAt = { x: Math.round(info.width / 2), y: Math.round(info.height / 2) };
+  }
+  /** The picture of the mark the share uploads, or `null` while there is no mark. */
+  export async function exportMark(): Promise<Blob | null> {
+    return markOn ? drawMark(info.width, info.height, markAt, markText) : null;
   }
   function playOrPause() {
     if (!player) return;
@@ -91,6 +108,8 @@
     start = 0;
     end = total;
     crop = null;
+    markOn = false;
+    markText = '';
   }
 </script>
 
@@ -105,7 +124,7 @@
       <video
         bind:this={player}
         src={url}
-        controls={crop === null}
+        controls={!bare}
         muted
         aria-label="Recording"
         ontimeupdate={tick}
@@ -113,6 +132,7 @@
         onpause={() => (playing = false)}
         onerror={() => (cannotPlay = true)}
       ></video>
+      {#if markOn}<MarkLayer width={info.width} height={info.height} bind:at={markAt} text={markText} />{/if}
       {#if crop}<CropBox width={info.width} height={info.height} bind:crop />{/if}
     </div>
   {:else}
@@ -124,16 +144,20 @@
       <div class="row">
         <button type="button" class="small" onclick={startHere} disabled={!url || cannotPlay}>Start here</button>
         <button type="button" class="small" onclick={endHere} disabled={!url || cannotPlay}>End here</button>
-        {#if crop && url && !cannotPlay}
+        {#if bare && url && !cannotPlay}
           <button type="button" class="small" onclick={playOrPause}>{playing ? 'Pause' : 'Play'}</button>
         {/if}
         <label class="check"><input type="checkbox" checked={crop !== null} onchange={(e) => toggleCrop(e.currentTarget.checked)} /> Crop</label>
+        <label class="check"><input type="checkbox" checked={markOn} onchange={(e) => toggleMark(e.currentTarget.checked)} /> Mark</label>
+        {#if markOn}
+          <input class="marktext" type="text" maxlength="80" placeholder="Text under the mark" aria-label="Text under the mark" bind:value={markText} />
+        {/if}
         <button type="button" class="small" onclick={keepAll} disabled={wholeClip}>Keep it all</button>
         <span class="quiet meta" aria-live="polite">
           {#if wholeClip}
             {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
           {:else}
-            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{/if}
+            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{/if}{#if markOn}, marked{/if}
           {/if}
         </span>
       </div>
@@ -153,4 +177,5 @@
   .meta { margin: 0; font-size: 12px; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .small { padding: 2px 8px; font-size: 12px; }
+  .marktext { font-size: 12px; padding: 2px 6px; width: 150px; }
 </style>

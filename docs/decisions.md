@@ -711,3 +711,25 @@ Nothing here changes what the program does.
 - **Kept on purpose:** `scripts/windows/try-claude.cmd` (the hand-run Claude delivery test, still on the owner's list),
   `scripts/dev/check.cmd` (the same checks as `check.sh`, for Windows), and every spike script.
 
+### Phase 12, part 15: a mark on the recording in the CargoFrame window (3 Nov 2026)
+
+A **Mark** tick puts a red ring on the recording, with an optional text under it. With this, what the window can do
+to a recording matches what it can do to a screenshot: cut, crop and mark.
+
+- **The ring starts in the middle of the picture; click the picture to move it,** or focus it and use the arrow keys
+  (Shift: a bigger step). The text is typed in a box that appears next to the tick. One mark, in red: the same ring and
+  text as the Settings test (a tenth of the shorter side in radius, the text just under it, outlined in white).
+- **The window draws the mark itself on a see-through picture the size of the recording** and uploads it just before
+  sharing (`set_clip_mark`, a command only the CargoFrame window has, named by the capture like the edited picture);
+  the program then lays it over the kept part with ffmpeg, on the uncropped picture, so a crop and a mark
+  together come out as they look in the window. What is shown in the window is drawn by the same numbers, so the two match.
+- **The mark shows for the whole kept part.** Marks that appear and disappear at chosen moments are not in the window
+  (the program can do it; the window has no place to choose the times yet).
+- **While the crop or the mark is on, the player's own controls give way to a Play/Pause button,** because the boxes
+  cover the picture. "Keep it all" undoes the cut, the crop and the mark together.
+- **A mark that was not uploaded** (the window closed in between, say) stops the share with "The mark was not drawn:
+  try again"; nothing is sent. The line beside the button says it: "Video (3.0 s of 9.5 s, cut, cropped and marked)".
+- **Tested** with a real clip and a real overlay: a red square in the corner of the mark shows as red in the first picture
+  of what is sent, and is not red in the recording itself. Whether the text comes out the same on Windows fonts is an
+  owner check, as for the Settings test.
+

@@ -478,7 +478,19 @@ fn edited_recording(
         .load_or_default::<cargoframe_config::Video>()
         .map(crate::video::normalized)
         .unwrap_or_default();
-    crate::video::edit_clip(&settings, &clip.path, &output, edit)?;
+    let mark = if edit.mark {
+        let png = session
+            .clip_mark()
+            .ok_or("The mark was not drawn: try again")?;
+        let path = session
+            .with_dir(svc.workspace, |d| d.path().join("clip-mark.png"))
+            .map_err(|e| format!("CargoFrame could not keep the mark: {e}"))?;
+        fs::write(&path, png).map_err(|e| format!("CargoFrame could not keep the mark: {e}"))?;
+        Some(path)
+    } else {
+        None
+    };
+    crate::video::edit_clip(&settings, &clip.path, &output, edit, mark.as_deref())?;
     Ok(Some(output))
 }
 
@@ -2156,6 +2168,7 @@ mod tests {
             start_ms: 1_000,
             end_ms: Some(3_000),
             crop: None,
+            mark: false,
         });
         let (r, _) = go(&w, &req, vec![]);
         let ShareResult::SavedLocally { path, .. } = r else {
@@ -2194,11 +2207,13 @@ mod tests {
                 start_ms: 0,
                 end_ms: None,
                 crop: None,
+                mark: false,
             },
             crate::video::ClipEdit {
                 start_ms: 0,
                 end_ms: Some(9_000),
                 crop: None,
+                mark: false,
             },
         ] {
             let mut req = request();
@@ -2226,6 +2241,7 @@ mod tests {
             start_ms: 1_000,
             end_ms: Some(2_000),
             crop: None,
+            mark: false,
         });
         let (r, _) = go(&w, &req, vec![]);
         let ShareResult::Blocked { reasons } = r else {
@@ -2250,6 +2266,7 @@ mod tests {
             start_ms,
             end_ms,
             crop: None,
+            mark: false,
         };
         assert!(t(0, None).changes_nothing(5_000));
         assert!(t(0, Some(5_000)).changes_nothing(5_000));
@@ -2266,6 +2283,11 @@ mod tests {
             ..t(0, None)
         };
         assert!(!cropped.changes_nothing(5_000));
+        let marked = ClipEdit {
+            mark: true,
+            ..t(0, None)
+        };
+        assert!(!marked.changes_nothing(5_000));
     }
 
     #[test]
@@ -2297,6 +2319,7 @@ mod tests {
                 w: 161,
                 h: 101,
             }),
+            mark: false,
         });
         let (r, _) = go(&w, &req, vec![]);
         let ShareResult::SavedLocally { path, .. } = r else {
@@ -2321,6 +2344,114 @@ mod tests {
         assert_eq!(size, "160x100", "the crop, made even");
         let length = seconds_of(&sent).unwrap();
         assert!(length > 3.0, "the whole time is kept: {length} s");
+    }
+
+    /// The first picture of a video as raw RGB, with its width, via ffmpeg.
+    fn first_frame(path: &Path, width: usize) -> Option<Vec<u8>> {
+        let out = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(path)
+            .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .output()
+            .ok()?;
+        (out.stdout.len() >= width * 3).then_some(out.stdout)
+    }
+
+    #[test]
+    fn a_video_capture_with_a_mark_sends_the_recording_with_the_mark_on_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source.mp4");
+        if real_clip(&source, 3).is_none() || seconds_of(&source).is_none() {
+            eprintln!("skipped: ffmpeg or ffprobe is not installed");
+            return;
+        }
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"placeholder");
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = source;
+        clip.duration_ms = 3_000;
+        w.session.clip = Some(clip);
+        // the mark the window draws: see-through, with a red square in the top-left corner
+        let (mw, mh) = (320u32, 240u32);
+        let mut rgba = vec![0u8; (mw * mh * 4) as usize];
+        for y in 0..80u32 {
+            for x in 0..80u32 {
+                let i = ((y * mw + x) * 4) as usize;
+                rgba[i..i + 4].copy_from_slice(&[255, 0, 0, 255]);
+            }
+        }
+        let png = cargoframe_capture::Frame::new(mw, mh, rgba)
+            .unwrap()
+            .to_png()
+            .unwrap();
+        w.session.set_clip_mark(Some(png));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 0,
+            end_ms: None,
+            crop: None,
+            mark: true,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        z.by_name("recording.mp4")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        let sent = tmp.path().join("sent.mp4");
+        fs::write(&sent, &bytes).unwrap();
+        let marked = first_frame(&sent, mw as usize).expect("a picture");
+        let at = |x: usize, y: usize| {
+            let i = (y * mw as usize + x) * 3;
+            (marked[i], marked[i + 1], marked[i + 2])
+        };
+        let (r, g, b) = at(20, 20);
+        assert!(
+            r > 180 && g < 90 && b < 90,
+            "the corner of the picture is red where the mark is: {:?}",
+            at(20, 20)
+        );
+        // the same clip without the mark is not red there
+        let plain = first_frame(&w.session.clip.as_ref().unwrap().path, mw as usize).unwrap();
+        let i = (20 * mw as usize + 20) * 3;
+        assert!(
+            !(plain[i] > 180 && plain[i + 1] < 90 && plain[i + 2] < 90),
+            "the recording itself is not red there"
+        );
+    }
+
+    #[test]
+    fn a_mark_that_was_not_uploaded_stops_the_share_and_says_so() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 0,
+            end_ms: None,
+            crop: None,
+            mark: true,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(reasons, ["The mark was not drawn: try again"]);
+        assert!(
+            fs::read_dir(&dir).unwrap().next().is_none(),
+            "no zip was made"
+        );
     }
 
     #[test]

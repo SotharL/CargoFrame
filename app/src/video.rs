@@ -973,12 +973,17 @@ pub struct ClipEdit {
     pub end_ms: Option<u64>,
     #[serde(default)]
     pub crop: Option<Crop>,
+    /// A mark was drawn: lay the picture the window uploaded (see `set_clip_mark`) over the
+    /// kept part, on the uncropped picture.
+    #[serde(default)]
+    pub mark: bool,
 }
 
 impl ClipEdit {
     /// Nothing is cut and nothing is cropped: the recording is sent as it was recorded.
     pub fn changes_nothing(&self, duration_ms: u64) -> bool {
         self.crop.is_none()
+            && !self.mark
             && self.start_ms == 0
             && match self.end_ms {
                 None => true,
@@ -994,6 +999,7 @@ pub fn edit_clip(
     input: &Path,
     output: &Path,
     edit: ClipEdit,
+    mark: Option<&Path>,
 ) -> Result<Trial, String> {
     let found = find(video, program_beside_app().as_deref())?;
     let info = probe(&found.ffprobe, input)
@@ -1009,11 +1015,22 @@ pub fn edit_clip(
             h: even(c.h).min(info.height.saturating_sub(y) & !1),
         }
     });
+    // the mark is drawn the size of the picture, so it goes on the corner and shows all along
+    let overlays = mark
+        .map(|image| Overlay {
+            image: image.to_path_buf(),
+            x: 0,
+            y: 0,
+            from_ms: edit.start_ms,
+            to_ms: edit.end_ms.unwrap_or(info.duration_ms),
+        })
+        .into_iter()
+        .collect();
     let edit = Edit {
         start_ms: edit.start_ms,
         end_ms: edit.end_ms,
         crop,
-        overlays: Vec::new(),
+        overlays,
     };
     let planned = plan(input, output, &edit, &info).map_err(|problems| {
         problems

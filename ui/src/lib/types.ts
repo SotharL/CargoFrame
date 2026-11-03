@@ -620,6 +620,8 @@ export interface ClipEdit {
   start_ms: number;
   end_ms: number | null;
   crop?: { x: number; y: number; w: number; h: number } | null;
+  /** A mark was drawn: the window uploads it just before the share. */
+  mark?: boolean;
 }
 
 // ----- updates (Settings, General) -----

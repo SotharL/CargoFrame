@@ -15,6 +15,7 @@
     "allow-get-general",
     "allow-fetch-options",
     "allow-set-edited-image",
+    "allow-set-clip-mark",
     "allow-share",
     "allow-copy-text",
     "allow-open-link",
