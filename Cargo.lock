@@ -598,6 +598,8 @@ version = "0.1.0"
 dependencies = [
  "arboard",
  "cargoframe-capture",
+ "cargoframe-handoff",
+ "png",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",

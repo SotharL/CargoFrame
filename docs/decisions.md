@@ -18,7 +18,8 @@ the plan.
 
 - **v1:** Jira (reference destination), Google (Drive, Sheets), Reddit, Claude, Custom API.
 - **Claude is a one-way share target.** There is no chat inside CargoFrame and no API key. A share
-  puts the screenshot on the clipboard and opens a chat by link. The dropdown lists pinned
+  opens a chat by link and pastes the capture into its window (see "Sending into a Claude chat"
+  below). The dropdown lists pinned
   chats, then recent chats, then "New chat"; the person pastes a chat link once to pin it. The
   prompt is a text block with the **Prompt** role, bound to the sharing button; the button stays
   disabled until one is bound. An AI provider interface stays open for later.
