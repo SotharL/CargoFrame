@@ -372,10 +372,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         description: `Data rule: ${(r as Rule).name}`,
       })),
     ],
-    testRule: async (_rule, folder) => ({
+    testRule: async (rule, folder) => ({
       folder: folder ?? '/home/me/dev/Foo',
       value: '1.2.3',
       problem: null,
+      file: rule.file.trim() || null,
+      excerpt: '{\n  "version": "1.2.3"\n}',
     }),
     previewFiles: async (block, program) => {
       const folders = block.look_in.folders.length ? block.look_in.folders : (['project'] as LookFolder[]);

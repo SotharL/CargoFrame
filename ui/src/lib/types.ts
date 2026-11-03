@@ -258,8 +258,8 @@ export interface Trigger {
   layout_id: string | null;
 }
 
-export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text';
-export type RuleMultiple = 'first' | 'last' | 'join';
+export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text' | 'file';
+export type RuleMultiple = 'first' | 'last' | 'join' | 'nth';
 
 export interface Rule {
   name: string;
@@ -268,6 +268,10 @@ export interface Rule {
   query: string;
   multiple: RuleMultiple;
   separator: string;
+  /** Which one when `multiple` is `nth`: 1 is the first, -1 the last. */
+  nth: number;
+  /** Regex only: the value built from each match, such as `$1.$2`. Empty gives group 1 or the match. */
+  output: string;
   fallback: string | null;
   max_bytes: number;
 }
@@ -276,6 +280,9 @@ export interface RuleTest {
   folder: string | null;
   value: string | null;
   problem: string | null;
+  /** The file the rule's pattern means, relative to the folder, and the start of it. */
+  file: string | null;
+  excerpt: string | null;
 }
 
 export type InfoKind = 'text' | 'choice' | 'multi_choice' | 'number' | 'flag';

@@ -415,13 +415,23 @@ pub async fn test_rule(
     rule: Rule,
     folder: Option<String>,
 ) -> Result<RuleTest, String> {
-    let folder = folder.filter(|f| !f.trim().is_empty()).or_else(|| {
-        state
-            .sessions
-            .current()
-            .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
-    });
-    Ok(tools::test_rule(&rule, folder.as_deref()))
+    // The folder typed in, else the open capture's, else the one of the last capture's program.
+    let folder = folder
+        .filter(|f| !f.trim().is_empty())
+        .or_else(|| {
+            state
+                .sessions
+                .current()
+                .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
+        })
+        .or_else(|| {
+            state
+                .last_program()
+                .and_then(|p| cargoframe_context::climb::resolve_project_folder(&p))
+                .map(|r| r.folder)
+        });
+    // Reading a big file can take a moment: not on the thread that draws the window.
+    blocking(move || tools::test_rule(&rule, folder.as_deref())).await
 }
 
 /// What a Files block would find. Without a program, the one of the last capture is used.

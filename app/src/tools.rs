@@ -16,23 +16,41 @@ pub struct RuleTest {
     pub folder: Option<String>,
     pub value: Option<String>,
     pub problem: Option<String>,
+    /// The file the rule's pattern means in that folder, and the start of it, so the person sees
+    /// what the rule is looking at.
+    pub file: Option<String>,
+    pub excerpt: Option<String>,
 }
 
-/// Run one rule against `folder` (or say there is none). Never writes anything.
+/// Run one rule against `folder` (or say there is none). Never writes anything. A rule that is
+/// not finished yet (no name, a query being typed) still shows the file it points at.
 pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
-    if let Err(e) = cargoframe_rules::check(rule) {
+    let seen = folder
+        .map(Path::new)
+        .filter(|f| f.is_dir())
+        .map(|f| cargoframe_rules::peek(rule, f, &FsFiles))
+        .unwrap_or_default();
+    let mut named = rule.clone();
+    if named.name.trim().is_empty() {
+        named.name = "preview".into();
+    }
+    if let Err(e) = cargoframe_rules::check(&named) {
         return RuleTest {
             folder: folder.map(str::to_string),
             value: None,
             problem: Some(e),
+            file: seen.file,
+            excerpt: seen.excerpt,
         };
     }
-    let outcomes = run_all([("test", rule)], folder.map(Path::new), &FsFiles);
+    let outcomes = run_all([("test", &named)], folder.map(Path::new), &FsFiles);
     let o = &outcomes["test"];
     RuleTest {
         folder: folder.map(str::to_string),
         value: o.value.clone(),
         problem: o.problem.clone(),
+        file: seen.file,
+        excerpt: seen.excerpt,
     }
 }
 
@@ -224,6 +242,48 @@ mod tests {
         // The default is the project folder: dev/foo, where only a subfolder holds logs.
         let none = preview_files(&files_block(&[Project], ""), Some(&program));
         assert_eq!(none.total, 0);
+    }
+
+    #[test]
+    fn a_rule_test_shows_the_file_it_reads_even_before_the_rule_is_finished() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("run.log"), "first\nsecond\n").unwrap();
+        let folder = dir.path().to_str().unwrap();
+        // No name and a half-typed query: not saved yet, but the person sees what it points at.
+        let draft = Rule {
+            file: "*.log".into(),
+            format: cargoframe_rules::Format::Text,
+            query: "between: a".into(),
+            ..Rule::default()
+        };
+        let t = test_rule(&draft, Some(folder));
+        assert!(t.problem.unwrap().contains("two texts"));
+        assert_eq!(t.file.as_deref(), Some("run.log"));
+        assert_eq!(t.excerpt.as_deref(), Some("first\nsecond"));
+        // A finished one gives its value as well.
+        let done = Rule {
+            query: "line: -1".into(),
+            ..draft.clone()
+        };
+        let t = test_rule(&done, Some(folder));
+        assert_eq!(t.value.as_deref(), Some("second"));
+        assert_eq!(t.problem, None);
+        assert_eq!(t.file.as_deref(), Some("run.log"));
+        // File details of the same file.
+        let size = Rule {
+            format: cargoframe_rules::Format::File,
+            query: "size".into(),
+            ..draft
+        };
+        assert_eq!(test_rule(&size, Some(folder)).value.as_deref(), Some("13"));
+        // No folder, or no such file: nothing to show, and no crash.
+        let none = test_rule(&done, None);
+        assert_eq!((none.file, none.excerpt), (None, None));
+        let gone = Rule {
+            file: "nothing.log".into(),
+            ..done
+        };
+        assert_eq!(test_rule(&gone, Some(folder)).file, None);
     }
 
     #[test]
