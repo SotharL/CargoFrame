@@ -41,6 +41,7 @@ pub enum Code {
     MappingBlockMissing,
     MappingRuleMissing,
     UnresolvedVariable,
+    SeveralZipNames,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -120,11 +121,23 @@ fn issue(block: &Block, severity: Severity, code: Code, message: impl Into<Strin
 pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
     let mut out = Vec::new();
     check_geometry(layout, &mut out);
+    let mut zip_names = 0;
     for block in &layout.blocks {
         match &block.kind {
             BlockKind::Text(t) => {
                 check_variables(block, &t.title, reg, &mut out);
                 check_variables(block, &t.default_text, reg, &mut out);
+                if t.role == TextRole::ZipName {
+                    zip_names += 1;
+                    if zip_names > 1 {
+                        out.push(issue(
+                            block,
+                            Severity::Warning,
+                            Code::SeveralZipNames,
+                            "Only the first block with the Zip name role names the zip: this one is ignored",
+                        ));
+                    }
+                }
             }
             BlockKind::SharingButton(s) => {
                 check_variables(block, &s.label, reg, &mut out);
@@ -498,6 +511,31 @@ mod tests {
         ]);
         assert!(validate(&l, &reg).is_empty());
         assert_eq!(sharing_state(&l, "s", &reg), SharingState::Ready);
+    }
+
+    #[test]
+    fn one_zip_name_block_is_fine_and_a_second_is_ignored_with_a_warning() {
+        let reg = Reg::default();
+        let one = layout(vec![at("z", 0, text(TextRole::ZipName, ""))]);
+        assert!(validate(&one, &reg).is_empty());
+        let two = layout(vec![
+            at("z1", 0, text(TextRole::ZipName, "")),
+            at("z2", 1, text(TextRole::ZipName, "")),
+        ]);
+        let issues = validate(&two, &reg);
+        assert_eq!(codes(&issues), vec![Code::SeveralZipNames]);
+        assert_eq!(issues[0].severity, Severity::Warning);
+        assert_eq!(issues[0].block_id.as_deref(), Some("z2"));
+    }
+
+    #[test]
+    fn a_zip_name_block_is_not_a_prompt() {
+        let reg = Reg::default().with("claude", ConnectionKind::Claude, ConnectionState::Connected);
+        let l = layout(vec![
+            at("z", 0, text(TextRole::ZipName, "")),
+            at("s", 1, button(Some("claude"), Some("z"))),
+        ]);
+        assert_eq!(codes(&validate(&l, &reg)), vec![Code::PromptBlockNotPrompt]);
     }
 
     #[test]

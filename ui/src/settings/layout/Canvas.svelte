@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { roleTag } from '../../lib/roles';
   import type { Block, IssueView, Rect } from '../../lib/types';
   import {
     BLOCK_TYPES, COLUMNS, canPlace, makeBlock, moveTo, removeBlock, resizeTo, rowsNeeded, typeLabel,
@@ -220,7 +221,7 @@
           <div class="line">
             <span class="name" title={label(b)}>{label(b)}</span>
             <span class="kind">({typeLabel(b.type).toLowerCase()})</span>
-            {#if b.type === 'text' && b.role === 'prompt'}<span class="tag">Prompt</span>{/if}
+            {#if b.type === 'text' && roleTag(b.role)}<span class="tag">{roleTag(b.role)}</span>{/if}
             {#if count(b.id)}<span class="count {w}" title="{count(b.id)} to look at">{w === 'error' ? '✕' : w === 'warning' ? '!' : '?'} {count(b.id)}</span>{/if}
           </div>
           <button

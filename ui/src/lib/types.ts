@@ -72,7 +72,7 @@ export type BlockContent =
       type: 'text';
       title: string;
       placement: 'above' | 'inside';
-      role: 'plain' | 'prompt';
+      role: 'plain' | 'prompt' | 'zip_name';
       default_text: string;
     }
   | {

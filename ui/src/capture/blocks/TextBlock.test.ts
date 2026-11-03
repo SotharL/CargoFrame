@@ -31,6 +31,14 @@ describe('TextBlock title', () => {
     expect(document.querySelector('.field')?.getAttribute('title')).toBe('Description');
   });
 
+  it('wears a small tag for the roles that mean something', () => {
+    render(TextBlock, { block: block('above', 'zip_name'), value: '' });
+    expect(document.querySelector('.role')?.textContent).toBe('Zip name');
+    cleanup();
+    render(TextBlock, { block: block('above', 'plain'), value: '' });
+    expect(document.querySelector('.role')).toBeNull();
+  });
+
   it('keeps the box named for screen readers either way', async () => {
     render(TextBlock, { block: block('inside'), value: 'already filled in' });
     expect(screen.getByRole('textbox', { name: 'Description' })).toBeTruthy();

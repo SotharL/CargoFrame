@@ -25,10 +25,11 @@ use cargoframe_connectors::{
 use cargoframe_context::template;
 use cargoframe_layout::{
     sharing_mode, sharing_state, validate, BlockKind, DropdownSource, Layout, OnSuccess,
-    SharingButton, SharingMode, SharingState, ValueSource,
+    SharingButton, SharingMode, SharingState, TextRole, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
+use cargoframe_safe::naming::custom_zip_file_name;
 use cargoframe_safe::retry::{run_with_retry, RetryPolicy, RetryResult};
 use cargoframe_safe::SendError;
 use cargoframe_window::vars::Moment;
@@ -156,6 +157,8 @@ struct Prepared {
     /// The ticked files, as offered by the capture.
     selected: Vec<String>,
     project_folder: Option<String>,
+    /// The name typed in the layout's Zip name block, as a file name. `None`: the default name.
+    zip_name: Option<String>,
     close: bool,
     notes: Vec<String>,
 }
@@ -396,6 +399,12 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         Some(d) if d.connection.name.trim().is_empty() => d.id.clone(),
         Some(d) => d.connection.name.trim().to_string(),
     };
+    // Only the first block with the Zip name role counts.
+    let zip_name = layout
+        .blocks
+        .iter()
+        .find(|b| matches!(&b.kind, BlockKind::Text(t) if t.role == TextRole::ZipName))
+        .and_then(|b| custom_zip_file_name(&text_value(view, req, &b.id)));
     Ok(Prepared {
         service,
         destination,
@@ -403,6 +412,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         payload,
         selected,
         project_folder: session.project_folder.clone(),
+        zip_name,
         close: button.on_success == OnSuccess::CloseWindow,
         notes: Vec::new(),
     })
@@ -617,13 +627,17 @@ fn build_keep_zip(
     Some(source)
 }
 
-/// The zip's file name for the moment the share happened.
-fn zip_name(svc: &Services, service: &str) -> String {
+/// The zip's file name: what the person typed in the Zip name block, else one made from the
+/// moment the share happened.
+fn zip_name(svc: &Services, p: &Prepared) -> String {
+    if let Some(name) = &p.zip_name {
+        return name.clone();
+    }
     let m = &svc.now;
     file_name_for(
         (m.year.clamp(0, 9999) as u16, m.month, m.day),
         (m.hour, m.minute, m.second),
-        service,
+        &p.service,
     )
 }
 
@@ -639,7 +653,7 @@ fn keep_a_copy(
     attempts: u32,
 ) -> Option<SavedCopy> {
     let source = build_keep_zip(svc, p, view, Some((failure, attempts)))?;
-    let file_name = zip_name(svc, &p.service);
+    let file_name = zip_name(svc, p);
     let cfg = LadderConfig {
         safe_folder: safe.folder.clone(),
         ..LadderConfig::default()
@@ -711,7 +725,7 @@ fn save_locally(svc: &Services, p: &Prepared, view: &SessionView) -> ShareResult
     let Some(source) = build_keep_zip(svc, p, view, None) else {
         return blocked("The zip could not be built");
     };
-    let saved = copy_atomic(&source, Path::new(&folder), &zip_name(svc, &p.service));
+    let saved = copy_atomic(&source, Path::new(&folder), &zip_name(svc, p));
     let _ = fs::remove_file(&source);
     match saved {
         Ok(path) => {
@@ -1607,6 +1621,125 @@ mod tests {
         );
         assert!(!missing.exists());
         assert!(!w.f.store.dirs().data().join("kept").exists());
+    }
+
+    /// Adds a Zip name block to the capture, holding `typed` (its value in the window).
+    fn add_zip_name(w: &mut World, typed: &str) -> String {
+        let layout = w.session.view.layout.as_mut().unwrap();
+        layout.blocks.push(
+            serde_json::from_value(json!({
+                "id": "zipname", "rect": {"x":0,"y":4,"w":6,"h":1}, "type": "text",
+                "title": "Zip name", "role": "zip_name", "default_text": ""
+            }))
+            .unwrap(),
+        );
+        typed.to_string()
+    }
+
+    fn request_with_zip_name(typed: &str) -> Request {
+        let mut req = request();
+        req.texts.insert("zipname".into(), typed.into());
+        req
+    }
+
+    #[test]
+    fn the_zip_name_block_names_a_zip_saved_locally() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let typed = add_zip_name(&mut w, "Bug in login");
+        let (r, _) = go(&w, &request_with_zip_name(&typed), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path), dir.join("Bug in login.zip"));
+        // The same name twice keeps both.
+        let (r, _) = go(&w, &request_with_zip_name(&typed), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path), dir.join("Bug in login-2.zip"));
+    }
+
+    #[test]
+    fn an_empty_or_unusable_zip_name_keeps_the_default_name() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        add_zip_name(&mut w, "");
+        for typed in ["", "   ", "..."] {
+            let (r, _) = go(&w, &request_with_zip_name(typed), vec![]);
+            let ShareResult::SavedLocally { path, .. } = r else {
+                panic!("{r:?}");
+            };
+            assert!(
+                path.contains("CargoFrame_2026-10-23_080001_local"),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_zip_name_cannot_write_outside_the_folder() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        add_zip_name(&mut w, "");
+        let (r, _) = go(&w, &request_with_zip_name("../../escape"), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path).parent(), Some(dir.as_path()), "{path}");
+        assert_eq!(Path::new(&path).file_name().unwrap(), "escape.zip");
+    }
+
+    #[test]
+    fn only_the_first_zip_name_block_counts() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        add_zip_name(&mut w, "");
+        w.session.view.layout.as_mut().unwrap().blocks.push(
+            serde_json::from_value(json!({
+                "id": "zipname2", "rect": {"x":6,"y":4,"w":6,"h":1}, "type": "text",
+                "title": "Other", "role": "zip_name", "default_text": ""
+            }))
+            .unwrap(),
+        );
+        let mut req = request_with_zip_name("first");
+        req.texts.insert("zipname2".into(), "second".into());
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path).file_name().unwrap(), "first.zip");
+    }
+
+    #[test]
+    fn a_failed_share_keeps_its_copy_under_the_typed_zip_name() {
+        let mut w = world(|_| MockResponse::json(503, json!({"message": "down"})));
+        let safe_dir = w.out.path().join("safe");
+        fs::create_dir_all(&safe_dir).unwrap();
+        set_safe(&w, Some(&safe_dir.display().to_string()), 0);
+        add_zip_name(&mut w, "");
+        let (r, _) = go(&w, &request_with_zip_name("Crash on save"), vec![]);
+        let ShareResult::Failed { saved, .. } = r else {
+            panic!("{r:?}");
+        };
+        let saved = saved.unwrap();
+        assert_eq!(saved.place, "safe_folder");
+        assert_eq!(
+            Path::new(&saved.path).file_name().unwrap(),
+            "Crash on save.zip"
+        );
     }
 
     #[test]

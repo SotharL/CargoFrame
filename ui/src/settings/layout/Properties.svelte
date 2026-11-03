@@ -1,6 +1,7 @@
 <script lang="ts">
   import Field from '../../lib/components/Field.svelte';
   import TextAutomation from './TextAutomation.svelte';
+  import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Rect, Rule, VariableInfo } from '../../lib/types';
   import { COLUMNS, typeLabel } from './model';
 
@@ -82,10 +83,11 @@
         <option value="inside">Inside the box</option>
       </select>
     </Field>
-    <Field label="Role" hint={block.role === 'prompt' ? 'The text sent to an AI chat. A sharing button to Claude needs one.' : 'Plain notes that are sent along with the capture.'}>
+    <Field label="Role" hint={roleHint(block.role)}>
       <select bind:value={block.role}>
         <option value="plain">Plain text</option>
         <option value="prompt">Prompt</option>
+        <option value="zip_name">Zip name</option>
       </select>
     </Field>
     <div class="auto-field">

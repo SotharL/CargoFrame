@@ -70,6 +70,9 @@ pub enum TextRole {
     Plain,
     /// The text sent to an AI destination. A sharing button to an AI tool needs one.
     Prompt,
+    /// The name of the zip saved locally (a share with no connection, or one that kept a copy).
+    /// Only the first block with this role is used.
+    ZipName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -235,6 +238,18 @@ mod serde_tests {
         assert_eq!(json["blocks"][3]["source"]["type"], "claude_chats");
         let back: Layout = serde_json::from_value(json).unwrap();
         assert_eq!(back, layout);
+    }
+
+    #[test]
+    fn the_zip_name_role_is_written_in_snake_case() {
+        let text =
+            r#"{"id": "z", "type": "text", "rect": {"x":0,"y":0,"w":6,"h":1}, "role": "zip_name"}"#;
+        let block: Block = serde_json::from_str(text).unwrap();
+        match &block.kind {
+            BlockKind::Text(t) => assert_eq!(t.role, TextRole::ZipName),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(serde_json::to_value(&block).unwrap()["role"], "zip_name");
     }
 
     #[test]
