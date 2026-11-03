@@ -568,6 +568,18 @@ pub async fn stop_video_recording(app: AppHandle) -> Result<video::Trial, String
     blocking(move || app.state::<AppState>().recording.stop()).await
 }
 
+/// The last test clip's bytes, to play in the Video page (sent raw, not as JSON numbers).
+#[tauri::command]
+pub fn get_video_test_clip(state: State<'_, AppState>) -> Result<Response, String> {
+    let clip = state
+        .store
+        .dirs()
+        .data()
+        .join("video-test")
+        .join(video::TRIAL_CLIP);
+    video::read_clip(&clip, video::PREVIEW_LIMIT).map(Response::new)
+}
+
 /// Open the clip of the last test recording in the person's video player.
 #[tauri::command]
 pub fn open_video_test(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {

@@ -547,3 +547,22 @@ fn bad_settings_never_start_a_recording_and_a_cancelled_one_leaves_nothing() {
     assert_eq!(rec.view(), RecordingView::Idle);
     rec.cancel();
 }
+
+#[test]
+fn a_clip_is_sent_to_the_window_only_when_it_is_there_and_not_huge() {
+    let dir = tempfile::tempdir().unwrap();
+    let missing = read_clip(&dir.path().join(TRIAL_CLIP), PREVIEW_LIMIT).unwrap_err();
+    assert!(missing.contains("no test clip yet"), "{missing}");
+    // a folder is not a clip
+    let err = read_clip(dir.path(), PREVIEW_LIMIT).unwrap_err();
+    assert!(err.contains("no test clip yet"), "{err}");
+
+    let clip = dir.path().join(TRIAL_CLIP);
+    fs::write(&clip, [1u8; 2048]).unwrap();
+    assert_eq!(read_clip(&clip, PREVIEW_LIMIT).unwrap().len(), 2048);
+    let err = read_clip(&clip, 1024).unwrap_err();
+    assert!(
+        err.contains("too large") && err.contains("video player"),
+        "{err}"
+    );
+}

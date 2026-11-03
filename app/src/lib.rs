@@ -132,6 +132,7 @@ pub fn run() {
             commands::start_video_recording,
             commands::get_video_recording,
             commands::stop_video_recording,
+            commands::get_video_test_clip,
             commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
@@ -299,6 +300,8 @@ mod shipped_config_tests {
         assert!(directive(csp, "script-src")
             .map(|s| !s.contains("'unsafe-inline'"))
             .unwrap_or(true));
+        // A clip can be played from a blob the page made itself, and from nowhere else.
+        assert_eq!(directive(csp, "media-src"), Some("'self' blob:"));
         // The page talks to the backend and nothing else.
         assert_eq!(
             directive(csp, "connect-src"),
@@ -355,7 +358,11 @@ mod shipped_config_tests {
             "allow-start-video-recording",
             "allow-get-video-recording",
             "allow-stop-video-recording",
+            "allow-get-video-test-clip",
             "allow-open-video-test",
+            "allow-start-video-recording",
+            "allow-stop-video-recording",
+            "allow-get-video-test-clip",
             "allow-pick-folder",
             "allow-list-layout-templates",
             "allow-layout-from-template",

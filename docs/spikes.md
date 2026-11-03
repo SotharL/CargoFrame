@@ -136,7 +136,9 @@ the ffmpeg export (`core/video`).
 
 **Quickest check (Windows or Linux):** open Settings, Video, press "Test ffmpeg" and then "Try a
 5-second recording". It uses the same recorder the product will, reports whether it worked, and
-keeps the clip so you can watch it. Change Capture and Compression and try again to compare;
+keeps the clip so you can watch it ("Watch it here" also tells whether the Settings window itself
+can play H.264, which decides how the editor shows the clip). Change Capture and Compression and
+try again to compare;
 the scripts below measure CPU and memory as well.
 
 **What to run.**

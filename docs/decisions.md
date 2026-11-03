@@ -493,3 +493,18 @@ important part of it without a script: Settings, Video.
 - **A failure while recording is reported once, in words,** with the same hint as a failed test
   (hardware encoder: choose Software; Desktop Duplication: try GDI).
 
+### Phase 12, part 4: can the window play the clip? (3 Nov 2026)
+
+The editor will show the clip in the window, so whether the web view can play H.264 is a question to
+answer before building it. Settings, Video, "Watch it here" sends the test clip to the page as bytes,
+the page makes a blob URL and plays it in a `<video>`; if the web view cannot, it says so and points
+to the video player. Expected: WebView2 on Windows plays H.264; WebKitGTK on Linux needs the
+GStreamer H.264 plugins (`gst-libav` / `gst-plugins-bad`) and may not. If it cannot play it, the
+editor falls back to scrubbing through still frames that ffmpeg extracts, and that is a decision for
+after the owner has tried it.
+
+- **The content security policy gains one directive, `media-src 'self' blob:`.** Nothing else
+  changes: still no remote source of any kind, and a test pins the directive. The clip is sent as raw
+  bytes (not JSON numbers), at most 100 MB, only by the Settings window's own permission; the CargoFrame
+  window is not granted it (a test lists the video commands it must not hold).
+

@@ -117,6 +117,8 @@ export interface Api {
   getVideoRecording(): Promise<VideoRecording>;
   /** Stop, make the clip, and report it like a test recording. */
   stopVideoRecording(): Promise<VideoTrial>;
+  /** The last test clip, to play in the window. */
+  getVideoTestClip(): Promise<Blob>;
   /** Open the clip of the last test recording. */
   openVideoTest(): Promise<void>;
   /** The system folder picker; null when cancelled. */
@@ -222,6 +224,10 @@ async function tauriApi(): Promise<Api> {
     startVideoRecording: (video) => invoke('start_video_recording', { video }),
     getVideoRecording: () => invoke('get_video_recording'),
     stopVideoRecording: () => invoke('stop_video_recording'),
+    getVideoTestClip: async () => {
+      const bytes = await invoke<ArrayBuffer>('get_video_test_clip');
+      return new Blob([bytes], { type: 'video/mp4' });
+    },
     openVideoTest: () => invoke('open_video_test'),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
     getUpdateView: () => invoke('get_update_view'),
@@ -683,6 +689,10 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         capture: 'gdigrab', encoder: 'software', width: 1920, height: 1080, clip_ms: kept, clip_bytes: kept * 480,
         took_ms: ran, clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
       };
+    },
+    getVideoTestClip: async () => {
+      if (!trialRan) throw 'There is no test clip yet: run a test recording first';
+      return new Blob([new Uint8Array(16)], { type: 'video/mp4' });
     },
     openVideoTest: async () => {
       if (!trialRan) throw 'There is no test clip yet: run a test recording first';

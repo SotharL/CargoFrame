@@ -759,6 +759,25 @@ fn finish(active: Active) -> Trial {
     }
 }
 
+/// The most of a clip the Settings window is sent to play (a 30 s clip is a few MB).
+pub const PREVIEW_LIMIT: u64 = 100 * 1024 * 1024;
+
+/// A clip's bytes, to play in the window. Refuses anything big, so a wrong file cannot flood it.
+pub fn read_clip(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
+    let meta = std::fs::metadata(path)
+        .map_err(|_| "There is no test clip yet: run a test recording first".to_string())?;
+    if !meta.is_file() {
+        return Err("There is no test clip yet: run a test recording first".into());
+    }
+    if meta.len() > limit {
+        return Err(format!(
+            "The clip is {:.0} MB, too large to play in this window. Open it in your video player instead.",
+            meta.len() as f64 / (1024.0 * 1024.0)
+        ));
+    }
+    std::fs::read(path).map_err(|e| format!("The clip could not be read: {e}"))
+}
+
 #[cfg(test)]
 #[path = "video_tests.rs"]
 mod tests;

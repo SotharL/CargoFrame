@@ -34,6 +34,9 @@
   let recording = $state<VideoRecording>({ state: 'idle' });
   let stopping = $state(false);
   let timer: ReturnType<typeof setInterval> | undefined;
+  let playerUrl = $state<string | null>(null);
+  let playerError = $state('');
+  let loadingPlayer = $state(false);
   const running = $derived(recording.state === 'recording' || recording.state === 'finishing' || stopping);
 
   function name(list: { id: string; label: string }[], id: string | null): string {
@@ -105,6 +108,8 @@
     trying = true;
     trial = null;
     openError = '';
+    closePlayer();
+    playerError = '';
     try {
       trial = await (await getApi()).tryVideoRecording(v);
     } catch (e) {
@@ -115,6 +120,32 @@
     } finally {
       trying = false;
     }
+  }
+
+  function closePlayer() {
+    if (playerUrl) URL.revokeObjectURL(playerUrl);
+    playerUrl = null;
+  }
+
+  /** Play the clip in this window. Whether the window can play H.264 is itself worth knowing. */
+  async function watch() {
+    closePlayer();
+    playerError = '';
+    loadingPlayer = true;
+    try {
+      playerUrl = URL.createObjectURL(await (await getApi()).getVideoTestClip());
+    } catch (e) {
+      playerError = String(e);
+    } finally {
+      loadingPlayer = false;
+    }
+  }
+
+  function playerFailed(e: Event) {
+    const err = (e.currentTarget as HTMLVideoElement).error;
+    const why = err?.message ? ` (${err.message})` : err ? ` (error ${err.code})` : '';
+    playerError = `This window cannot play the clip${why}. The clip itself is fine: open it in your video player instead.`;
+    closePlayer();
   }
 
   function failure(message: string): VideoTrial {
@@ -148,6 +179,8 @@
     if (!v) return;
     trial = null;
     openError = '';
+    closePlayer();
+    playerError = '';
     try {
       await (await getApi()).startVideoRecording(v);
     } catch (e) {
@@ -216,7 +249,10 @@
     await detect();
   });
 
-  onDestroy(stopPolling);
+  onDestroy(() => {
+    stopPolling();
+    closePlayer();
+  });
 </script>
 
 {#if loaded}
@@ -342,8 +378,16 @@
           </dl>
           <div class="row">
             <button type="button" onclick={openClip}>Open the clip</button>
+            <button type="button" onclick={watch} disabled={loadingPlayer}>
+              {loadingPlayer ? 'Loading…' : 'Watch it here'}
+            </button>
           </div>
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
+          {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
+          {#if playerUrl}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video src={playerUrl} controls muted aria-label="Test clip" onerror={playerFailed}></video>
+          {/if}
         {/if}
       </div>
     {/if}
@@ -368,4 +412,5 @@
     border-radius: var(--radius-sm); padding: 6px 8px; width: 100%;
   }
   .primary { font-weight: 600; }
+  video { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #000; }
 </style>

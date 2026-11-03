@@ -122,4 +122,51 @@ describe('Video settings', () => {
     expect(screen.getByRole('button', { name: 'Stop and make the clip' })).toBeTruthy();
     cleanup();
   });
+
+  describe('watching the clip in the window', () => {
+    const made: string[] = [];
+    const revoked: string[] = [];
+    beforeEach(() => {
+      made.length = 0;
+      revoked.length = 0;
+      URL.createObjectURL = () => {
+        made.push(`blob:clip-${made.length}`);
+        return made[made.length - 1]!;
+      };
+      URL.revokeObjectURL = (u: string) => {
+        revoked.push(u);
+      };
+    });
+
+    async function recordATest() {
+      open();
+      await screen.findByText('ffmpeg found');
+      await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+      await screen.findByText('It works');
+    }
+
+    it('plays the clip from a blob the page made, and lets go of it afterwards', async () => {
+      await recordATest();
+      expect(document.querySelector('video')).toBeNull();
+      await fireEvent.click(screen.getByRole('button', { name: 'Watch it here' }));
+      await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+      expect(document.querySelector('video')!.getAttribute('src')).toBe('blob:clip-0');
+      // a new recording takes the old player away
+      await fireEvent.click(screen.getByRole('button', { name: 'Try a 5-second recording' }));
+      await screen.findByText('It works');
+      expect(document.querySelector('video')).toBeNull();
+      expect(revoked).toEqual(['blob:clip-0']);
+    });
+
+    it('says so, and points to the player, when the window cannot play the clip', async () => {
+      await recordATest();
+      await fireEvent.click(screen.getByRole('button', { name: 'Watch it here' }));
+      await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+      await fireEvent.error(document.querySelector('video')!);
+      await waitFor(() => expect(document.querySelector('video')).toBeNull());
+      expect(screen.getByRole('alert').textContent).toContain('cannot play the clip');
+      expect(screen.getByRole('alert').textContent).toContain('video player');
+      expect(revoked).toEqual(['blob:clip-0']);
+    });
+  });
 });
