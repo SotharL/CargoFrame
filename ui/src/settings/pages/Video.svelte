@@ -351,7 +351,7 @@
 
   <Section title="Capture and compression" hint="Automatic is a safe choice. Change these only to try what your PC does best.">
     <div class="two">
-      <Field label="Capture" hint="How the screen is read.">
+      <Field label="Capture" hint="How the screen is read. GDI records all your screens together; Desktop Duplication records the first one Windows lists, usually your main screen.">
         <select bind:value={video.capture} onchange={save}>
           {#each CAPTURES as c (c.id)}
             <option value={c.id} disabled={missing('capture', c.id)}>

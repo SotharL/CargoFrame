@@ -526,4 +526,8 @@ export on Windows before the editor exists.
   ffmpeg read or write anywhere else. It refuses while a recording is running.
 - **Not built yet:** the editor itself (timeline, drawing crop and marks over the picture), the
   video block and layout, sending a video, and the shortcut that starts a recording.
+- **More than one screen.** GDI (`gdigrab desktop`) records every screen as one wide picture, then scales it
+  to the largest height; Desktop Duplication (`ddagrab`) records output 0, the first screen Windows lists
+  (usually, not always, the main one). Choosing the screen to record is part of the trigger work that is not
+  built yet, and S9 should say what each does on a two-screen PC.
 
