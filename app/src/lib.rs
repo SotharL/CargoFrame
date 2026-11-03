@@ -338,6 +338,32 @@ mod shipped_config_tests {
         }
     }
 
+    /// What belongs to one capture is for the CargoFrame window only: Settings has no part in it.
+    #[test]
+    fn the_settings_window_holds_nothing_that_belongs_to_a_capture() {
+        let caps = capabilities();
+        let (_, settings) = &caps[1];
+        let granted: Vec<&str> = settings["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        for forbidden in [
+            "allow-get-session",
+            "allow-get-session-image",
+            "allow-get-session-clip",
+            "allow-set-edited-image",
+            "allow-set-clip-mark",
+            "allow-share",
+        ] {
+            assert!(
+                !granted.contains(&forbidden),
+                "the Settings window must not hold {forbidden}"
+            );
+        }
+    }
+
     #[test]
     fn the_capture_window_cannot_change_settings_or_manage_connections() {
         let caps = capabilities();
