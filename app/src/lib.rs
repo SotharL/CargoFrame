@@ -95,6 +95,7 @@ pub fn run() {
             commands::list_variables,
             commands::test_rule,
             commands::preview_files,
+            commands::button_reach,
             commands::get_safe,
             commands::set_safe,
             commands::test_safe_folder,

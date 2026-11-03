@@ -29,6 +29,7 @@
     "allow-list-variables",
     "allow-test-rule",
     "allow-preview-files",
+    "allow-button-reach",
     "allow-get-safe",
     "allow-set-safe",
     "allow-test-safe-folder",

@@ -12,9 +12,11 @@
 //! * a dropdown whose connection is disconnected is an error;
 //! * a `{{variable}}` nothing defines is shown as unresolved (debug).
 
+use crate::capabilities::Capabilities;
 use crate::model::{
     Block, BlockKind, DropdownSource, Layout, SharingButton, TextRole, ValueSource,
 };
+use crate::reach::{reach, Verdict};
 use crate::GRID_COLUMNS;
 use cargoframe_context::template;
 
@@ -43,6 +45,8 @@ pub enum Code {
     UnresolvedVariable,
     SeveralZipNames,
     BadSubfolder,
+    /// A block the destination has no place for, so this button leaves it out.
+    CannotSend,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -63,6 +67,17 @@ pub enum ConnectionKind {
 }
 
 impl ConnectionKind {
+    /// The name the interface uses for the kind (the same as the connection's `kind`).
+    pub fn key(self) -> &'static str {
+        match self {
+            ConnectionKind::Jira => "jira",
+            ConnectionKind::Google => "google",
+            ConnectionKind::Reddit => "reddit",
+            ConnectionKind::Claude => "claude",
+            ConnectionKind::CustomApi => "custom",
+        }
+    }
+
     /// Destinations that need a prompt.
     pub fn is_ai_destination(self) -> bool {
         matches!(self, ConnectionKind::Claude)
@@ -81,6 +96,20 @@ pub enum ConnectionState {
 pub struct ConnectionInfo {
     pub kind: ConnectionKind,
     pub state: ConnectionState,
+    /// What this connection can take. The kind's table, unless the connection's own setup (a
+    /// Custom API) or the system (Claude on Linux) narrows it.
+    pub capabilities: Capabilities,
+}
+
+impl ConnectionInfo {
+    /// A connection with the table of its kind, as on Windows.
+    pub fn new(kind: ConnectionKind, state: ConnectionState) -> Self {
+        Self {
+            kind,
+            state,
+            capabilities: Capabilities::for_kind(kind, true),
+        }
+    }
 }
 
 /// What the builder knows about the rest of the configuration.
@@ -233,7 +262,10 @@ pub fn sharing_state(layout: &Layout, block_id: &str, reg: &dyn Registry) -> Sha
 fn is_blocking(code: Code) -> bool {
     !matches!(
         code,
-        Code::ConnectionExpired | Code::MappingRuleMissing | Code::UnresolvedVariable
+        Code::ConnectionExpired
+            | Code::MappingRuleMissing
+            | Code::UnresolvedVariable
+            | Code::CannotSend
     )
 }
 
@@ -334,7 +366,47 @@ fn sharing_issues(
             _ => {}
         }
     }
+    out.extend(cannot_send_issues(layout, block, reg));
     out
+}
+
+/// One warning for each block this button's destination has no place for, so the builder can say
+/// what a button leaves out and why.
+fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry) -> Vec<Issue> {
+    let Some(r) = reach(layout, &button_block.id, reg) else {
+        return Vec::new();
+    };
+    r.blocks
+        .iter()
+        .filter_map(|b| match &b.verdict {
+            Verdict::CannotSend { why } => {
+                let name = layout
+                    .block(&b.block_id)
+                    .map(|blk| match &blk.kind {
+                        BlockKind::Screenshot => "the screenshot".to_string(),
+                        BlockKind::Files(f) if f.title.trim().is_empty() => "the files".to_string(),
+                        BlockKind::Files(f) => {
+                            format!("the files in \u{201c}{}\u{201d}", f.title.trim())
+                        }
+                        BlockKind::Text(t) if !t.title.trim().is_empty() => {
+                            format!("\u{201c}{}\u{201d}", t.title.trim())
+                        }
+                        BlockKind::Dropdown(d) if !d.title.trim().is_empty() => {
+                            format!("\u{201c}{}\u{201d}", d.title.trim())
+                        }
+                        _ => format!("block \"{}\"", blk.id),
+                    })
+                    .unwrap_or_else(|| b.block_id.clone());
+                Some(issue(
+                    button_block,
+                    Severity::Warning,
+                    Code::CannotSend,
+                    format!("This button does not send {name}: {why}"),
+                ))
+            }
+            _ => None,
+        })
+        .collect()
 }
 
 fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
@@ -404,7 +476,7 @@ mod tests {
     impl Reg {
         fn with(mut self, id: &str, kind: ConnectionKind, state: ConnectionState) -> Self {
             self.connections
-                .insert(id.into(), ConnectionInfo { kind, state });
+                .insert(id.into(), ConnectionInfo::new(kind, state));
             self
         }
         fn rule(mut self, id: &str) -> Self {
@@ -440,6 +512,7 @@ mod tests {
             prompt_block_id: prompt.map(String::from),
             mappings: vec![],
             on_success: OnSuccess::CloseWindow,
+            send: Default::default(),
         })
     }
 
@@ -709,6 +782,7 @@ mod tests {
                     },
                 ],
                 on_success: OnSuccess::KeepOpen,
+                send: Default::default(),
             }),
         )]);
         let issues = validate(&l, &reg);
@@ -739,6 +813,61 @@ mod tests {
         assert!(c.contains(&Code::Overlap));
         assert!(c.contains(&Code::OutOfBounds));
         assert!(c.contains(&Code::EmptySize));
+    }
+
+    fn files_block() -> BlockKind {
+        BlockKind::Files(FilesBlock {
+            title: "Logs".into(),
+            include: vec![],
+            preselect: vec![],
+            look_in: LookIn::default(),
+        })
+    }
+
+    #[test]
+    fn a_button_says_which_block_its_destination_cannot_take_and_still_works() {
+        let reg = Reg::default().with("r", ConnectionKind::Reddit, ConnectionState::Connected);
+        let l = layout(vec![
+            at("shot", 0, BlockKind::Screenshot),
+            at("files", 1, files_block()),
+            at("go", 2, button(Some("r"), None)),
+        ]);
+        let issues = validate(&l, &reg);
+        assert_eq!(codes(&issues), vec![Code::CannotSend]);
+        assert_eq!(issues[0].severity, Severity::Warning);
+        assert_eq!(issues[0].block_id.as_deref(), Some("go"));
+        assert!(
+            issues[0].message.contains("files in \u{201c}Logs\u{201d}")
+                && issues[0].message.contains("Reddit"),
+            "{}",
+            issues[0].message
+        );
+        // Only a warning: the rest of the share still goes.
+        assert_eq!(sharing_state(&l, "go", &reg), SharingState::Ready);
+    }
+
+    #[test]
+    fn a_destination_that_takes_the_block_gets_no_such_warning() {
+        let reg = Reg::default().with("j", ConnectionKind::Jira, ConnectionState::Connected);
+        let l = layout(vec![
+            at("files", 0, files_block()),
+            at("go", 1, button(Some("j"), None)),
+        ]);
+        assert!(validate(&l, &reg).is_empty());
+    }
+
+    #[test]
+    fn switching_the_files_off_on_the_button_removes_nothing_to_warn_about() {
+        let reg = Reg::default().with("r", ConnectionKind::Reddit, ConnectionState::Connected);
+        let BlockKind::SharingButton(mut b) = button(Some("r"), None) else {
+            unreachable!()
+        };
+        b.send.files = FilesHow::None;
+        let l = layout(vec![
+            at("files", 0, files_block()),
+            at("go", 1, BlockKind::SharingButton(b)),
+        ]);
+        assert!(validate(&l, &reg).is_empty());
     }
 
     #[test]

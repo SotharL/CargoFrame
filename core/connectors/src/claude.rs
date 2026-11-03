@@ -10,7 +10,7 @@
 use crate::ctx::Ctx;
 use crate::error::invalid;
 use crate::model::{self, OpenWith};
-use crate::payload::{OptionItem, Payload, SendOutcome};
+use crate::payload::{InlineFile, OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
 use cargoframe_deliver::{DeliverError, Delivery, Target, Timing};
 use cargoframe_handoff::{open_url, ChatId, Destination, Scheme};
@@ -53,12 +53,32 @@ impl ClaudeConnector {
     }
 }
 
-/// The message that is pasted: the title (if there is one), the prompt, and what is attached.
+/// A fence for a block of text: longer than any run of backticks inside it, so the text cannot
+/// close it early.
+fn fence_for(text: &str) -> String {
+    let mut longest = 0;
+    let mut run = 0;
+    for c in text.chars() {
+        if c == '`' {
+            run += 1;
+            longest = longest.max(run);
+        } else {
+            run = 0;
+        }
+    }
+    "`".repeat((longest + 1).max(3))
+}
+
+/// The message that is pasted: the title (if there is one), the prompt, the values the button
+/// maps, the window's name, the names of the attached files, and then the text files the person
+/// chose to write into the message.
 pub fn compose_message(
     title: Option<&str>,
     prompt: &str,
     window: &str,
     attached: &[&str],
+    values: &[(&str, &str)],
+    inline: &[InlineFile],
 ) -> String {
     let mut out = String::new();
     if let Some(title) = title.map(str::trim).filter(|t| !t.is_empty()) {
@@ -68,6 +88,9 @@ pub fn compose_message(
     }
     out.push_str(prompt.trim());
     let mut facts = Vec::new();
+    for (label, value) in values {
+        facts.push(format!("{}: {}", label.trim(), value.trim()));
+    }
     if !window.trim().is_empty() {
         facts.push(format!("Captured window: {}", window.trim()));
     }
@@ -77,6 +100,14 @@ pub fn compose_message(
     if !facts.is_empty() {
         out.push_str("\n\n");
         out.push_str(&facts.join("\n"));
+    }
+    for file in inline {
+        let body = file.text.trim_end_matches(['\n', '\r']);
+        let fence = fence_for(body);
+        out.push_str(&format!(
+            "\n\nFile {}:\n{fence}\n{body}\n{fence}",
+            file.name
+        ));
     }
     out
 }
@@ -98,7 +129,7 @@ impl Connector for ClaudeConnector {
                 FieldSpec {
                     key: "title",
                     label: "Title",
-                    hint: "Goes at the top of the message",
+                    hint: "Goes at the top of the message. Any other field you add is written under the prompt as \"Name: value\"",
                     list: None,
                 },
             ],
@@ -149,26 +180,37 @@ impl Connector for ClaudeConnector {
 
         // The screenshot first, then the ticked files.
         let mut files: Vec<PathBuf> = Vec::new();
+        // The names of the ticked files that travel with the message (the screenshot is not one).
         let mut names: Vec<&str> = Vec::new();
         let mut notes = Vec::new();
         let local = payload.local.as_ref();
         match local.and_then(|l| l.screenshot.clone()) {
-            Some(shot) => {
-                files.push(shot);
-                names.push("screenshot.png");
+            Some(shot) => files.push(shot),
+            // Left out on purpose (the button's rules) is not a problem; losing it is.
+            None if payload.image.is_some() => {
+                notes.push("There was no screenshot to attach".to_string())
             }
-            None => notes.push("There was no screenshot to attach".to_string()),
+            None => {}
         }
         for (name, path) in local.map(|l| l.files.as_slice()).unwrap_or_default() {
             files.push(path.clone());
             names.push(name);
         }
 
+        // Every field but the chat and the title is a value to show under the prompt.
+        let values: Vec<(&str, &str)> = payload
+            .fields
+            .iter()
+            .filter(|f| f.key != "chat" && f.key != "title" && !f.value.trim().is_empty())
+            .map(|f| (f.key.as_str(), f.value.as_str()))
+            .collect();
         let text = compose_message(
             payload.value("title"),
             prompt,
             &payload.title,
-            &names.iter().skip(1).copied().collect::<Vec<_>>(),
+            &names,
+            &values,
+            &payload.inline_files,
         );
         let delivery = Delivery {
             open_url: open_url(&destination, scheme),
@@ -186,6 +228,13 @@ impl Connector for ClaudeConnector {
             .deliver(&delivery, &|url| ctx.browser.open(url), ctx.cancelled)
             .map_err(undelivered)?;
 
+        if !payload.inline_files.is_empty() {
+            let n = payload.inline_files.len();
+            notes.push(format!(
+                "{n} file{} written into the message as text",
+                if n == 1 { " was" } else { "s were" }
+            ));
+        }
         if done.skipped_files > 0 {
             notes.push(format!(
                 "This system cannot attach files from CargoFrame yet, so {} file{} not attached",
@@ -249,6 +298,11 @@ mod tests {
                     ("logs/app.log".into(), "/c/files/logs/app.log".into()),
                     ("config.json".into(), "/c/files/config.json".into()),
                 ],
+            }),
+            image: Some(crate::payload::Attachment {
+                name: "screenshot.png".into(),
+                mime: "image/png".into(),
+                data: vec![1],
             }),
             prompt: prompt.map(String::from),
             fields: chat
@@ -332,8 +386,87 @@ mod tests {
             "Title: Login fails on staging\n\nWhy?\n\nCaptured window: Foo - Editor"
         );
         assert!(s.files.is_empty());
+        // The payload carries a picture that was not staged: that is a loss worth saying.
         assert!(out.notes.iter().any(|n| n.contains("no screenshot")));
-        assert!(compose_message(None, "p", "", &[]) == "p");
+        assert!(compose_message(None, "p", "", &[], &[], &[]) == "p");
+    }
+
+    #[test]
+    fn leaving_the_screenshot_out_on_purpose_is_not_a_problem() {
+        let d = FakeDeliver::default();
+        let mut p = payload(Some("Why?"), None);
+        p.image = None;
+        p.local = Some(LocalCopies {
+            screenshot: None,
+            files: vec![("a.log".into(), "/c/files/a.log".into())],
+        });
+        let (r, _) = run(&connector(true), &p, &d);
+        let out = r.unwrap();
+        let s = d.deliveries.lock().unwrap()[0].clone();
+        assert_eq!(s.files, vec![PathBuf::from("/c/files/a.log")]);
+        // The first file is still named: nothing is skipped over for a missing picture.
+        assert!(s.text.ends_with("Attached files: a.log"), "{}", s.text);
+        assert!(!out.notes.iter().any(|n| n.contains("no screenshot")));
+    }
+
+    #[test]
+    fn mapped_values_are_written_under_the_prompt_as_name_and_value() {
+        let d = FakeDeliver::default();
+        let mut p = payload(Some("Why?"), Some(CHAT));
+        p.local = None;
+        p.fields.push(Field::text("Build", " 1.2.3 "));
+        p.fields.push(Field::text("Branch", "main"));
+        p.fields.push(Field::text("Empty", "  "));
+        p.fields.push(Field::text("title", "T"));
+        let (r, _) = run(&connector(true), &p, &d);
+        r.unwrap();
+        let s = d.deliveries.lock().unwrap()[0].clone();
+        assert_eq!(
+            s.text,
+            "Title: T\n\nWhy?\n\nBuild: 1.2.3\nBranch: main\nCaptured window: Foo - Editor"
+        );
+    }
+
+    #[test]
+    fn text_files_are_written_into_the_message_in_a_fence_that_cannot_be_closed_early() {
+        let inline = [
+            InlineFile {
+                name: "logs/app.log".into(),
+                text: "one\ntwo\n".into(),
+            },
+            InlineFile {
+                name: "README.md".into(),
+                text: "```rust\nfn main() {}\n```\n".into(),
+            },
+        ];
+        let text = compose_message(None, "Why?", "", &[], &[], &inline);
+        assert_eq!(
+            text,
+            "Why?\n\nFile logs/app.log:\n```\none\ntwo\n```\n\nFile README.md:\n````\n```rust\nfn main() {}\n```\n````"
+        );
+    }
+
+    #[test]
+    fn inline_files_travel_in_the_message_and_not_as_files() {
+        let d = FakeDeliver::default();
+        let mut p = payload(Some("Why?"), None);
+        p.local = Some(LocalCopies {
+            screenshot: Some("/c/screenshot.png".into()),
+            files: vec![],
+        });
+        p.inline_files = vec![InlineFile {
+            name: "a.log".into(),
+            text: "boom".into(),
+        }];
+        let (r, _) = run(&connector(true), &p, &d);
+        let out = r.unwrap();
+        let s = d.deliveries.lock().unwrap()[0].clone();
+        assert_eq!(s.files, vec![PathBuf::from("/c/screenshot.png")]);
+        assert!(s.text.contains("File a.log:\n```\nboom\n```"), "{}", s.text);
+        assert!(out
+            .notes
+            .iter()
+            .any(|n| n.contains("1 file was written into the message as text")));
     }
 
     #[test]

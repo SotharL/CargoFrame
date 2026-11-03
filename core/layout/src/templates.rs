@@ -142,6 +142,7 @@ fn button(
             prompt_block_id: prompt_block_id.map(String::from),
             mappings,
             on_success: OnSuccess::CloseWindow,
+            send: Default::default(),
         }),
     )
 }
@@ -389,8 +390,18 @@ mod tests {
     impl Registry for One {
         fn connection(&self, id: &str) -> Option<ConnectionInfo> {
             (id == "c").then_some(ConnectionInfo {
-                kind: self.0,
-                state: self.1,
+                // A Custom API carries what its request describes: this one describes everything.
+                capabilities: if self.0 == ConnectionKind::CustomApi {
+                    crate::capabilities::Capabilities::custom(crate::capabilities::CustomShape {
+                        has_body: true,
+                        screenshot_field: true,
+                        files_field: true,
+                        has_lists: true,
+                    })
+                } else {
+                    crate::capabilities::Capabilities::for_kind(self.0, true)
+                },
+                ..ConnectionInfo::new(self.0, self.1)
             })
         }
         fn rule_exists(&self, _: &str) -> bool {

@@ -3,12 +3,23 @@
 
 use cargoframe_config::{Kind, Store};
 use cargoframe_context::climb;
-use cargoframe_layout::FilesBlock;
+use cargoframe_layout::{reach, BlockKind, FilesBlock, Layout, Reach, Registry};
 use cargoframe_rules::{run_all, FsFiles, Rule};
 use cargoframe_window::files::{self, PlaceFound};
 use cargoframe_window::{places, vars};
 use serde::Serialize;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+
+/// For every sharing button of `layout`, what it does with the other blocks.
+pub fn button_reach(layout: &Layout, registry: &dyn Registry) -> BTreeMap<String, Reach> {
+    layout
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.kind, BlockKind::SharingButton(_)))
+        .filter_map(|b| reach(layout, &b.id, registry).map(|r| (b.id.clone(), r)))
+        .collect()
+}
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct RuleTest {
@@ -191,6 +202,56 @@ mod tests {
     use super::*;
     use cargoframe_config::Dirs;
     use cargoframe_rules::Format;
+
+    #[test]
+    fn every_button_of_a_layout_gets_its_own_reach() {
+        use crate::registry::AppRegistry;
+        use cargoframe_layout::{
+            Block, ConnectionInfo, ConnectionKind, ConnectionState, Rect, SharingButton, Verdict,
+        };
+        let reg = AppRegistry::with(Default::default(), |id| match id {
+            "jira" => Some(ConnectionInfo::new(
+                ConnectionKind::Jira,
+                ConnectionState::Connected,
+            )),
+            "reddit" => Some(ConnectionInfo::new(
+                ConnectionKind::Reddit,
+                ConnectionState::Connected,
+            )),
+            _ => None,
+        });
+        let button = |id: &str, connection: &str| Block {
+            id: id.into(),
+            rect: Rect::new(0, 1, 6, 1),
+            kind: BlockKind::SharingButton(SharingButton {
+                connection_id: Some(connection.into()),
+                ..SharingButton::default()
+            }),
+        };
+        let layout = Layout {
+            id: "l".into(),
+            name: "L".into(),
+            blocks: vec![
+                Block {
+                    id: "files".into(),
+                    rect: Rect::new(0, 0, 6, 1),
+                    kind: BlockKind::Files(files_block(&[], "")),
+                },
+                button("to-jira", "jira"),
+                button("to-reddit", "reddit"),
+            ],
+        };
+        let all = button_reach(&layout, &reg);
+        assert_eq!(all.keys().collect::<Vec<_>>(), ["to-jira", "to-reddit"]);
+        assert!(matches!(
+            all["to-jira"].of("files"),
+            Some(Verdict::Sent { .. })
+        ));
+        assert!(matches!(
+            all["to-reddit"].of("files"),
+            Some(Verdict::CannotSend { .. })
+        ));
+    }
 
     fn files_block(folders: &[cargoframe_layout::LookFolder], sub: &str) -> FilesBlock {
         FilesBlock {

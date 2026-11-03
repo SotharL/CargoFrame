@@ -8,7 +8,9 @@ use cargoframe_connectors::{
     self as conn, Browser, Connection, Connector, Ctx, Deliver, DeliverError, Delivered, Delivery,
     Describe, Kind, OptionItem, Progress, SecretStore, Status,
 };
-use cargoframe_layout::{ConnectionInfo, ConnectionKind, ConnectionState};
+use cargoframe_layout::{
+    Capabilities, ConnectionInfo, ConnectionKind, ConnectionState, CustomShape,
+};
 use cargoframe_net::Http;
 use cargoframe_safe::SendError;
 use serde::Serialize;
@@ -70,6 +72,27 @@ pub fn layout_kind(kind: Kind) -> ConnectionKind {
     }
 }
 
+/// What a connection can take. A kind has one table; a Custom API carries only what its request
+/// describes, and Claude pastes pictures and files on Windows only.
+pub fn capabilities_of(connection: &Connection) -> Capabilities {
+    use conn::model::{CustomBody, Settings};
+    match &connection.settings {
+        Settings::Custom(c) => Capabilities::custom(CustomShape {
+            has_body: !matches!(c.send.body, CustomBody::None),
+            screenshot_field: matches!(
+                &c.send.body,
+                CustomBody::Multipart { image_field, .. } if !image_field.trim().is_empty()
+            ),
+            files_field: matches!(
+                &c.send.body,
+                CustomBody::Multipart { files_field, .. } if !files_field.trim().is_empty()
+            ),
+            has_lists: !c.lists.is_empty(),
+        }),
+        other => Capabilities::for_kind(layout_kind(other.kind()), cfg!(windows)),
+    }
+}
+
 pub fn unix_now() -> u64 {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -90,6 +113,8 @@ pub struct ConnectionView {
     /// Which of the secrets the person types are stored (never their values).
     pub secrets: Vec<SecretFlag>,
     pub describe: Describe,
+    /// What a button to this connection can send.
+    pub capabilities: Capabilities,
 }
 
 #[derive(Debug, Serialize)]
@@ -221,6 +246,7 @@ impl Connections {
         Some(ConnectionInfo {
             kind: layout_kind(connection.settings.kind()),
             state: self.status_of(id, &connection),
+            capabilities: capabilities_of(&connection),
         })
     }
 
@@ -288,6 +314,7 @@ impl Connections {
                     state: state_name(self.status_of(id, c), c.enabled),
                     secrets,
                     describe,
+                    capabilities: capabilities_of(c),
                 }
             })
             .collect();

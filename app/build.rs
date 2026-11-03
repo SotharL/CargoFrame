@@ -33,6 +33,7 @@ fn main() {
             "list_variables",
             "test_rule",
             "preview_files",
+            "button_reach",
             "get_safe",
             "set_safe",
             "test_safe_folder",

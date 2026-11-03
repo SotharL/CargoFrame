@@ -64,10 +64,10 @@ mod tests {
     #[test]
     fn built_ins_and_known_rules_resolve() {
         let reg = AppRegistry::with(["version".to_string()].into(), |id| {
-            (id == "jira").then_some(ConnectionInfo {
-                kind: ConnectionKind::Jira,
-                state: ConnectionState::Connected,
-            })
+            (id == "jira").then_some(ConnectionInfo::new(
+                ConnectionKind::Jira,
+                ConnectionState::Connected,
+            ))
         });
         assert!(reg.is_known_variable("app.exe"));
         assert!(reg.is_known_variable("rule.version"));

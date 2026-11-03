@@ -21,6 +21,14 @@ pub struct LocalCopies {
     pub files: Vec<(String, PathBuf)>,
 }
 
+/// A text file written into a message instead of being attached.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InlineFile {
+    /// The name the file has in the project (`logs/app.log`).
+    pub name: String,
+    pub text: String,
+}
+
 /// How a service field is shaped, from the person's info type.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum FieldKind {
@@ -74,6 +82,8 @@ pub struct Payload {
     /// Copies of the screenshot and the ticked files on disk, in the capture's own folder, for a
     /// destination that takes real files (a chat they are pasted into). `None` for the others.
     pub local: Option<LocalCopies>,
+    /// Small text files the person chose to write into the message (Claude only).
+    pub inline_files: Vec<InlineFile>,
     /// The prompt, for destinations that use one.
     pub prompt: Option<String>,
     /// Mapped fields, in the order the layout lists them.

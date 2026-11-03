@@ -230,6 +230,18 @@ pub fn validate_layout(state: State<'_, AppState>, layout: Layout) -> Vec<IssueV
     issue_views(&validate(&layout, &registry))
 }
 
+/// What each sharing button of a layout does with the other blocks, for the builder: which it
+/// sends, which its destination cannot take (and why), and what the destination can take at all.
+/// Asked of the same code the share uses, so the builder never keeps a table of its own.
+#[tauri::command]
+pub fn button_reach(
+    state: State<'_, AppState>,
+    layout: Layout,
+) -> std::collections::BTreeMap<String, cargoframe_layout::Reach> {
+    let registry = AppRegistry::from_store(&state.store, &state.connections);
+    tools::button_reach(&layout, &registry)
+}
+
 // ----- layout templates -----
 
 /// A starting point for a layout, as the list shows it.

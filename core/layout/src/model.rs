@@ -114,7 +114,67 @@ pub enum OnSuccess {
     KeepOpen,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// What happens to the ticked files when a button is pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FilesHow {
+    /// Sent as files (attached, pasted, or zipped, as the destination does it).
+    #[default]
+    Attach,
+    /// Text files that fit the size cap are written into the message; the rest are attached.
+    /// Only a destination that takes a message (a Claude chat) can do this.
+    Inline,
+    /// The ticked files stay out of this button's share.
+    None,
+}
+
+/// The size cap for files written into a message, in kilobytes, and the most it may be set to.
+pub const DEFAULT_INLINE_KB: u32 = 64;
+pub const MAX_INLINE_KB: u32 = 512;
+
+fn yes() -> bool {
+    true
+}
+
+fn default_inline_kb() -> u32 {
+    DEFAULT_INLINE_KB
+}
+
+/// What one button sends beyond its text: the picture and the files. The prompt, the title and
+/// the values are chosen by the button's own prompt block and field list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendRules {
+    #[serde(default = "yes")]
+    pub screenshot: bool,
+    #[serde(default)]
+    pub files: FilesHow,
+    /// With `files` set to inline: the most text, in kilobytes, written into the message.
+    #[serde(default = "default_inline_kb")]
+    pub inline_limit_kb: u32,
+}
+
+impl Default for SendRules {
+    fn default() -> Self {
+        Self {
+            screenshot: true,
+            files: FilesHow::Attach,
+            inline_limit_kb: DEFAULT_INLINE_KB,
+        }
+    }
+}
+
+impl SendRules {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The cap in bytes, kept inside what can be set.
+    pub fn inline_limit_bytes(&self) -> usize {
+        self.inline_limit_kb.clamp(1, MAX_INLINE_KB) as usize * 1024
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SharingButton {
     #[serde(default)]
     pub label: String,
@@ -127,6 +187,9 @@ pub struct SharingButton {
     pub mappings: Vec<InfoMapping>,
     #[serde(default)]
     pub on_success: OnSuccess,
+    /// Whether the picture and the files go with it. Absent from the file when untouched.
+    #[serde(default, skip_serializing_if = "SendRules::is_default")]
+    pub send: SendRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -319,6 +382,7 @@ mod serde_tests {
                             source: ValueSource::Rule("version".into()),
                         }],
                         on_success: OnSuccess::KeepOpen,
+                        send: Default::default(),
                     }),
                 },
                 Block {

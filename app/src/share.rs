@@ -19,13 +19,13 @@ use cargoframe_bundle::{
 use cargoframe_config::{InfoKind, InfoOptions, InfoType, Kind, Safe, Store};
 use cargoframe_connectors::{
     claude::{MAX_FILES, MAX_FILE_BYTES},
-    Attachment, Browser, Connection, Deliver, Field, FieldKind, LocalCopies, Payload, Progress,
-    Settings,
+    Attachment, Browser, Connection, Deliver, Field, FieldKind, InlineFile, LocalCopies, Payload,
+    Progress, Settings,
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
-    sharing_mode, sharing_state, validate, BlockKind, DropdownSource, Layout, OnSuccess,
-    SharingButton, SharingMode, SharingState, TextRole, ValueSource,
+    effective_mappings, sharing_mode, sharing_state, validate, BlockKind, DropdownSource, FilesHow,
+    Layout, OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
@@ -170,6 +170,8 @@ struct Prepared {
     /// (by its path in the project) the path of its copy inside that folder.
     staged_root: Option<PathBuf>,
     staged: BTreeMap<String, String>,
+    /// What this button sends beyond its text: the picture, and the files (attached or as text).
+    send: SendRules,
     close: bool,
     notes: Vec<String>,
 }
@@ -277,11 +279,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         Some(Destination { id, connection })
     };
     let connection_id: Option<&str> = destination.as_ref().map(|d| d.id.as_str());
-    let is_ai = connection_id.is_some_and(|id| {
-        svc.connections
-            .info(svc.store, id)
-            .is_some_and(|i| i.kind.is_ai_destination())
-    });
+    let kind = connection_id
+        .and_then(|id| svc.connections.info(svc.store, id))
+        .map(|i| i.kind);
+    let is_ai = kind.is_some_and(|k| k.is_ai_destination());
 
     let mut reasons: Vec<String> = Vec::new();
 
@@ -308,7 +309,9 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             .find(|t| Some(t.connection_id.as_str()) == connection_id && t.field == field)
     };
     let mut fields: Vec<Field> = Vec::new();
-    for mapping in &button.mappings {
+    // A button to Claude with no chat field uses the layout's chat dropdown.
+    let mappings = effective_mappings(layout, &button, kind);
+    for mapping in &mappings {
         let (mut value, from_dropdown_list, is_dropdown) =
             source_value(layout, view, req, &mapping.source);
         let info = info_for(&mapping.field);
@@ -341,7 +344,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .iter()
         .filter(|t| Some(t.connection_id.as_str()) == connection_id && t.required)
     {
-        if !button.mappings.iter().any(|m| m.field == t.field) {
+        if !mappings.iter().any(|m| m.field == t.field) {
             reasons.push(format!(
                 "\u{201c}{}\u{201d} is required: map it to a block in the layout",
                 t.name
@@ -353,7 +356,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let mut selected: Vec<String> = Vec::new();
     let mut seen = BTreeSet::new();
     for block in &layout.blocks {
-        if !matches!(block.kind, BlockKind::Files(_)) {
+        if !matches!(block.kind, BlockKind::Files(_)) || button.send.files == FilesHow::None {
             continue;
         }
         let Some(wanted) = req.files.get(&block.id) else {
@@ -381,10 +384,12 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         return Err(reasons);
     }
 
-    let png = if req.image_edited {
-        session.image_to_send()
+    let png = if !button.send.screenshot {
+        None
+    } else if req.image_edited {
+        Some(session.image_to_send())
     } else {
-        session.png.clone()
+        Some(session.png.clone())
     };
     let title = view
         .app
@@ -394,13 +399,14 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .unwrap_or_else(|| "Screen".to_string());
     let payload = Payload {
         title,
-        image: Some(Attachment {
+        image: png.map(|data| Attachment {
             name: "screenshot.png".into(),
             mime: "image/png".into(),
-            data: png,
+            data,
         }),
         files_zip: None,
         local: None,
+        inline_files: Vec::new(),
         prompt,
         fields,
         vars: view.variables.clone(),
@@ -426,6 +432,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         zip_name,
         staged_root: None,
         staged: BTreeMap::new(),
+        send: button.send,
         close: button.on_success == OnSuccess::CloseWindow,
         notes: Vec::new(),
     })
@@ -516,20 +523,66 @@ fn zip_selected(svc: &Services, p: &Prepared) -> Result<(Vec<u8>, Vec<String>), 
 }
 
 /// A chat takes a limited number of files in one message, and the screenshot is one of them.
-fn check_file_count(ticked: usize) -> Result<(), String> {
-    if 1 + ticked > MAX_FILES {
+fn check_file_count(ticked: usize, with_screenshot: bool) -> Result<(), String> {
+    let total = ticked + usize::from(with_screenshot);
+    if total > MAX_FILES {
         return Err(format!(
-            "Claude takes at most {MAX_FILES} files in one message, including the screenshot: untick {} of the files",
-            1 + ticked - MAX_FILES
+            "Claude takes at most {MAX_FILES} files in one message{}: untick {} of the files",
+            if with_screenshot {
+                ", including the screenshot"
+            } else {
+                ""
+            },
+            total - MAX_FILES
         ));
     }
     Ok(())
 }
 
+/// A file's bytes as text, if they are text: valid UTF-8 with no NUL byte. A byte-order mark at
+/// the start is dropped.
+fn as_text(bytes: &[u8]) -> Option<String> {
+    if bytes.contains(&0) {
+        return None;
+    }
+    let text = std::str::from_utf8(bytes).ok()?;
+    Some(text.trim_start_matches('\u{feff}').to_string())
+}
+
+/// Take the text files that fit into `limit` bytes (all together) out of the files to attach,
+/// in the order they were ticked, to be written into the message. The rest stay as files.
+fn move_text_inline(local: &mut LocalCopies, limit: usize) -> Vec<InlineFile> {
+    let mut inline = Vec::new();
+    let mut used = 0usize;
+    let mut stay = Vec::new();
+    for (name, path) in std::mem::take(&mut local.files) {
+        let room = limit.saturating_sub(used);
+        let text = fs::metadata(&path)
+            .ok()
+            .filter(|m| m.len() as usize <= room)
+            .and_then(|_| fs::read(&path).ok())
+            .and_then(|bytes| as_text(&bytes))
+            .filter(|t| t.len() <= room);
+        match text {
+            Some(text) => {
+                used += text.len();
+                inline.push(InlineFile { name, text });
+            }
+            None => stay.push((name, path)),
+        }
+    }
+    local.files = stay;
+    inline
+}
+
 /// The screenshot as shown and the ticked files, as copies in this capture's folder, for a
 /// destination that takes real files. The folder goes when the capture window closes.
 fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalCopies, String> {
-    check_file_count(p.selected.len())?;
+    // Files written into the message are not files in the chat: they are counted once the text
+    // ones have moved out.
+    if p.send.files != FilesHow::Inline {
+        check_file_count(p.selected.len(), p.payload.image.is_some())?;
+    }
     let screenshot_bytes = p.payload.image.as_ref().map(|a| a.data.as_slice());
     let root = p.files_root.as_deref().map(PathBuf::from);
     let total_limit = Limits::default().max_total_bytes;
@@ -626,24 +679,20 @@ fn build_keep_zip(
             .collect::<Vec<_>>(),
         "variables": view.variables,
     });
-    let mut items = vec![
-        Item {
+    let mut items = Vec::new();
+    // The picture is left out when the button's rules leave it out.
+    if let Some(image) = &p.payload.image {
+        items.push(Item {
             name: "screenshot.png".into(),
-            source: Source::Bytes(
-                p.payload
-                    .image
-                    .as_ref()
-                    .map(|a| a.data.clone())
-                    .unwrap_or_default(),
-            ),
+            source: Source::Bytes(image.data.clone()),
             kind: "screenshot",
-        },
-        Item {
-            name: "share.json".into(),
-            source: Source::Bytes(serde_json::to_vec_pretty(&share_json).unwrap_or_default()),
-            kind: "text",
-        },
-    ];
+        });
+    }
+    items.push(Item {
+        name: "share.json".into(),
+        source: Source::Bytes(serde_json::to_vec_pretty(&share_json).unwrap_or_default()),
+        kind: "text",
+    });
     if let Some((failure, attempts)) = failure {
         let error_json = serde_json::json!({
             "failure": failure.kind.label(),
@@ -830,7 +879,25 @@ pub fn run(
     let takes_files = matches!(connection.settings, Settings::Claude(_));
     if takes_files {
         match stage_local(svc, session, &prepared) {
-            Ok(local) => {
+            Ok(mut local) => {
+                if prepared.send.files == FilesHow::Inline {
+                    let limit = prepared.send.inline_limit_bytes();
+                    prepared.payload.inline_files = move_text_inline(&mut local, limit);
+                    let stayed = local.files.len();
+                    if stayed > 0 {
+                        prepared.notes.push(format!(
+                            "{stayed} file{} not plain text or past the {} KB limit, so {} attached instead of written into the message",
+                            if stayed == 1 { " was" } else { "s were" },
+                            limit / 1024,
+                            if stayed == 1 { "it was" } else { "they were" },
+                        ));
+                    }
+                    if let Err(reason) =
+                        check_file_count(local.files.len(), prepared.payload.image.is_some())
+                    {
+                        return blocked(reason);
+                    }
+                }
                 prepared.payload.local = Some(local);
                 // So a copy kept after a failed send holds the same files.
                 adopt_staged(svc, session, &mut prepared);
@@ -1244,12 +1311,258 @@ mod tests {
 
     #[test]
     fn claude_has_a_limit_on_files_per_message() {
-        assert!(check_file_count(0).is_ok());
-        assert!(check_file_count(MAX_FILES - 1).is_ok());
-        let err = check_file_count(MAX_FILES + 2).unwrap_err();
+        assert!(check_file_count(0, true).is_ok());
+        assert!(check_file_count(MAX_FILES - 1, true).is_ok());
+        let err = check_file_count(MAX_FILES + 2, true).unwrap_err();
         assert!(
             err.contains("at most 20") && err.contains("untick 3"),
             "{err}"
+        );
+        // Without the screenshot there is room for one more file.
+        assert!(check_file_count(MAX_FILES, false).is_ok());
+        let err = check_file_count(MAX_FILES + 1, false).unwrap_err();
+        assert!(
+            !err.contains("screenshot") && err.contains("untick 1"),
+            "{err}"
+        );
+    }
+
+    /// Set the picture and file rules of the test layout's button.
+    fn set_rules(w: &mut World, rules: SendRules) {
+        let layout = w.session.view.layout.as_mut().unwrap();
+        for b in &mut layout.blocks {
+            if let BlockKind::SharingButton(btn) = &mut b.kind {
+                btn.send = rules;
+            }
+        }
+    }
+
+    fn project_file(w: &World, name: &str) -> PathBuf {
+        w.f._dir.path().join("Foo").join(name)
+    }
+
+    #[test]
+    fn a_button_can_leave_the_picture_out() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(summary, "Sent 1 file and the message to Claude");
+        let seen = w.deliver.seen.lock().unwrap();
+        assert_eq!(
+            seen[0].files,
+            vec![("run.log".to_string(), b"LOGLINE".to_vec())]
+        );
+        assert!(
+            seen[0].text.contains("Attached files: run.log"),
+            "{}",
+            seen[0].text
+        );
+        assert!(!notes.iter().any(|n| n.contains("screenshot")), "{notes:?}");
+    }
+
+    #[test]
+    fn a_button_can_leave_the_files_out_even_when_some_are_ticked() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::None,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png"]);
+        assert!(!seen[0].text.contains("Attached files"), "{}", seen[0].text);
+    }
+
+    #[test]
+    fn a_zip_kept_after_leaving_the_picture_out_has_no_picture() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        set_safe(&w, Some(&w.out.path().display().to_string()), 0);
+        // The test layout posts to the mock server (which refuses), so the share is kept.
+        set_rules(
+            &mut w,
+            SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Failed {
+            saved: Some(saved), ..
+        } = r
+        else {
+            panic!("{r:?}")
+        };
+        let names = zip_names(&saved.path);
+        assert!(!names.iter().any(|n| n == "screenshot.png"), "{names:?}");
+        assert!(names.iter().any(|n| n == "share.json"), "{names:?}");
+    }
+
+    #[test]
+    fn text_files_can_go_into_the_message_instead_of_being_attached() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::Inline,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(summary, "Sent 1 file and the message to Claude");
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png"], "the log is text now, not a file");
+        assert!(
+            seen[0].text.contains("File run.log:\n```\nLOGLINE\n```"),
+            "{}",
+            seen[0].text
+        );
+        assert!(!seen[0].text.contains("Attached files"), "{}", seen[0].text);
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("1 file was written into the message as text")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_that_is_too_big_or_not_text_is_attached_when_inline_was_asked() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::Inline,
+                inline_limit_kb: 1,
+                ..SendRules::default()
+            },
+        );
+        // Too big for 1 KB.
+        fs::write(project_file(&w, "run.log"), "x".repeat(2048)).unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        {
+            let seen = w.deliver.seen.lock().unwrap();
+            let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+            assert_eq!(names, ["screenshot.png", "run.log"]);
+            assert!(!seen[0].text.contains("File run.log"), "{}", seen[0].text);
+            assert!(seen[0].text.contains("Attached files: run.log"));
+        }
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("past the 1 KB limit") && n.contains("attached instead")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_that_is_not_text_stays_a_file_when_inline_was_asked() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::Inline,
+                ..SendRules::default()
+            },
+        );
+        fs::write(project_file(&w, "run.log"), [0u8, 1, 2, 255]).unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png", "run.log"]);
+        assert!(
+            notes.iter().any(|n| n.contains("not plain text")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn the_inline_limit_is_shared_by_all_the_files_together() {
+        let mut files = LocalCopies::default();
+        let dir = tempfile::tempdir().unwrap();
+        for (name, body) in [
+            ("a.txt", "x".repeat(600)),
+            ("b.txt", "y".repeat(600)),
+            ("c.txt", "z".repeat(100)),
+        ] {
+            let p = dir.path().join(name);
+            fs::write(&p, body).unwrap();
+            files.files.push((name.to_string(), p));
+        }
+        let inline = move_text_inline(&mut files, 1024);
+        // The first fits, the second would pass the limit, the small third still fits after it.
+        let names: Vec<&str> = inline.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["a.txt", "c.txt"]);
+        assert_eq!(files.files.len(), 1);
+        assert_eq!(files.files[0].0, "b.txt");
+    }
+
+    #[test]
+    fn what_counts_as_text() {
+        assert_eq!(as_text(b"hello").as_deref(), Some("hello"));
+        assert_eq!(as_text("\u{feff}bom".as_bytes()).as_deref(), Some("bom"));
+        assert_eq!(as_text("héllo".as_bytes()).as_deref(), Some("héllo"));
+        assert!(as_text(&[104, 0, 105]).is_none(), "a NUL byte is binary");
+        assert!(as_text(&[0xff, 0xfe, 0x41]).is_none(), "not UTF-8");
+    }
+
+    #[test]
+    fn picking_a_chat_works_without_mapping_the_chat_field() {
+        const CHAT: &str = "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0";
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let layout = w.session.view.layout.as_mut().unwrap();
+        layout.blocks.push(cargoframe_layout::Block {
+            id: "chat".into(),
+            rect: cargoframe_layout::Rect::new(0, 4, 6, 1),
+            kind: BlockKind::Dropdown(cargoframe_layout::DropdownBlock {
+                title: "Chat".into(),
+                source: DropdownSource::ClaudeChats,
+            }),
+        });
+        let mut req = request();
+        req.dropdowns.insert("chat".into(), Some(CHAT.into()));
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let seen = w.deliver.seen.lock().unwrap();
+        assert!(
+            seen[0].url.ends_with(&format!("/chat/{CHAT}")),
+            "{}",
+            seen[0].url
         );
     }
 

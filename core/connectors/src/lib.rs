@@ -23,7 +23,8 @@ pub use cargoframe_deliver::{Deliver, DeliverError, Delivered, Delivery, Target,
 pub use ctx::{Browser, Ctx};
 pub use model::{Connection, Kind, Settings};
 pub use payload::{
-    Attachment, Field, FieldKind, LocalCopies, OptionItem, Payload, Progress, SendOutcome,
+    Attachment, Field, FieldKind, InlineFile, LocalCopies, OptionItem, Payload, Progress,
+    SendOutcome,
 };
 pub use secrets::{MemorySecrets, SecretError, SecretStore};
 
