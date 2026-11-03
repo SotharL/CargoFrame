@@ -37,6 +37,7 @@ impl ClaudeConnector {
     }
 
     /// For tests: pretend to be on another system.
+    #[cfg(test)]
     pub fn on_windows(mut self, windows: bool) -> Self {
         self.windows = windows;
         self

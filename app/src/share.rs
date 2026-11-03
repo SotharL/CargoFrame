@@ -849,7 +849,7 @@ fn keep_a_copy(
     };
     let mut io = ZipIo {
         source: source.clone(),
-        local: svc.store.dirs().data().join("kept"),
+        local: svc.store.dirs().kept_zips(),
         picker,
     };
     let report = run_ladder(&cfg, &mut io, &file_name);

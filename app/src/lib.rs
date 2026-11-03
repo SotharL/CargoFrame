@@ -83,7 +83,6 @@ pub fn run() {
             commands::edit_layout,
             commands::open_settings,
             commands::get_shortcut_errors,
-            commands::reload_triggers,
             commands::list_items,
             commands::save_item,
             commands::delete_item,

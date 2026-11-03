@@ -19,7 +19,6 @@ fn main() {
             "get_timings",
             "get_memory_status",
             "get_shortcut_errors",
-            "reload_triggers",
             "list_items",
             "save_item",
             "delete_item",

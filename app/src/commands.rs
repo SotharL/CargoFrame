@@ -178,12 +178,6 @@ pub fn get_shortcut_errors(
     state.shortcut_errors()
 }
 
-/// Call after triggers are saved or deleted: re-registers the shortcuts and the tray entries.
-#[tauri::command]
-pub fn reload_triggers(app: AppHandle) {
-    crate::triggers::reload(&app);
-}
-
 // ----- items: triggers, layouts, data rules, info types -----
 
 #[tauri::command]

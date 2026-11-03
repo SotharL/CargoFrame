@@ -64,6 +64,7 @@ impl Multipart {
     }
 
     /// For tests that compare bodies exactly.
+    #[cfg(test)]
     pub fn with_boundary(mut self, boundary: &str) -> Self {
         self.boundary = boundary.to_string();
         self

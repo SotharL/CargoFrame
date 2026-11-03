@@ -14,7 +14,6 @@
     "allow-set-autostart",
     "allow-open-config-folder",
     "allow-get-shortcut-errors",
-    "allow-reload-triggers",
     "allow-list-items",
     "allow-save-item",
     "allow-delete-item",

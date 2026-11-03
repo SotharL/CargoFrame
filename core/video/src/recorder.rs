@@ -10,7 +10,7 @@
 //! only proposals until it is run.
 
 use crate::buffer::Window;
-use crate::export::{self, locate, ExportError, Plan};
+use crate::export::{self, ExportError, Plan};
 use crate::segments::{join, Ring, Segment};
 use std::ffi::OsString;
 use std::io::{Read, Write};
@@ -343,7 +343,10 @@ pub fn assemble(
 }
 
 /// ffmpeg and ffprobe, looked for in `dirs` (a copy next to the app) and then the search path.
+/// (The program itself finds them through the Video settings; this is for the tests.)
+#[cfg(test)]
 pub fn find_tools(dirs: &[PathBuf]) -> Option<(PathBuf, PathBuf)> {
+    use crate::export::locate;
     Some((locate("ffmpeg", dirs)?, locate("ffprobe", dirs)?))
 }
 

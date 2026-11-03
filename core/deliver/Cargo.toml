@@ -16,7 +16,6 @@ all = { level = "warn", priority = -1 }
 [dependencies]
 cargoframe-capture = { path = "../capture" }
 thiserror.workspace = true
-tracing.workspace = true
 arboard = { version = "3.7", features = ["wayland-data-control"] }
 
 [target.'cfg(windows)'.dependencies]

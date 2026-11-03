@@ -691,3 +691,23 @@ A **Crop** tick next to the cut buttons puts a box over the recording (80% of th
 - **The line beside the button says it:** "Video (9.5 s, cropped)", "Video (3.0 s of 9.5 s, cut and cropped)".
 - **Still only in Settings, Video:** marks (a drawn circle or text) on the recording.
 
+### Cleanup after Phase 12 (3 Nov 2026)
+
+A pass over what is in the repository and what is no longer used, done when the video work reached the window.
+Nothing here changes what the program does.
+
+- **Branches:** the four branches whose pull requests were merged (`chore/windows-build-script`, `docs/v1-on-main`,
+  `feat/phase7-polish`, `feature/settings-update`) and the old local ones (`chore/local-gate`, `dev/v1`, and the
+  local copies of those four) were checked to be inside `main` and removed. The local label `feat/claude-one-click`
+  pointed at a commit that is already part of `feat/phase8-capture-files` and the branches after it, so it was removed
+  too (no work is lost). The remote copies of the four merged branches could not be deleted from the cloud
+  session (GitHub refused the delete); the owner can delete them on GitHub, they hold nothing that is not in `main`.
+- **Code that nothing used:** `Frame::into_rgba`, `Frame::to_png_small`, `Layout::first_free_position` (the builder page
+  places new blocks itself, in `model.ts`), the Tauri command `reload_triggers` and its permission (saving or deleting
+  a trigger already reloads the shortcuts in the program), and the unused dependencies `tracing` in `cargoframe-deliver`
+  and `@testing-library/jest-dom`.
+- **Test-only helpers are test-only:** `find_tools`, `Multipart::with_boundary` and `ClaudeConnector::on_windows` are
+  compiled only for tests. `Dirs::kept_zips` was already there and is now the one place that names the "kept" folder.
+- **Kept on purpose:** `scripts/windows/try-claude.cmd` (the hand-run Claude delivery test, still on the owner's list),
+  `scripts/dev/check.cmd` (the same checks as `check.sh`, for Windows), and every spike script.
+
