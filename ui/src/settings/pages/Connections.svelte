@@ -25,6 +25,7 @@
     { kind: 'claude', label: 'Claude', blurb: 'Copy the screenshot and open a chat, so you can paste it into your message.' },
     { kind: 'slack', label: 'Slack', blurb: 'Post a message with the screenshot and files into a channel or thread.' },
     { kind: 'discord', label: 'Discord', blurb: 'Post a message with the screenshot and files into a channel, thread or forum.' },
+    { kind: 'teams', label: 'Teams', blurb: 'Post a message with the screenshot into a chat, channel or channel thread, as you.' },
     { kind: 'custom', label: 'Custom API', blurb: 'Send to any web service that has an HTTP API.' },
   ];
 
@@ -42,6 +43,8 @@
         return { kind, name: 'Slack', enabled: true };
       case 'discord':
         return { kind, name: 'Discord', enabled: true };
+      case 'teams':
+        return { kind, name: 'Teams', enabled: true, client_id: '', tenant: 'organizations' };
       case 'custom':
         return {
           kind, name: 'My API', enabled: true, base_url: 'https://', auth: { type: 'none' },
@@ -62,7 +65,7 @@
   onMount(refresh);
 
   const viewOf = (id: string): ConnectionView | undefined => view?.items.find((c) => c.id === id);
-  const oauth = (k: ServiceKind) => k === 'google' || k === 'reddit';
+  const oauth = (k: ServiceKind) => k === 'google' || k === 'reddit' || k === 'teams';
 
   function stateChip(c: ConnectionView): { kind: 'ok' | 'warn' | 'err' | 'dbg'; label: string } {
     switch (c.state) {

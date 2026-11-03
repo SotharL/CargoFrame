@@ -27,6 +27,7 @@ pub enum Settings {
     Claude(Claude),
     Slack(Slack),
     Discord(Discord),
+    Teams(Teams),
     Custom(Custom),
 }
 
@@ -39,6 +40,7 @@ pub enum Kind {
     Claude,
     Slack,
     Discord,
+    Teams,
     Custom,
 }
 
@@ -51,6 +53,7 @@ impl Settings {
             Settings::Claude(_) => Kind::Claude,
             Settings::Slack(_) => Kind::Slack,
             Settings::Discord(_) => Kind::Discord,
+            Settings::Teams(_) => Kind::Teams,
             Settings::Custom(_) => Kind::Custom,
         }
     }
@@ -65,6 +68,7 @@ impl Kind {
             Kind::Claude => "Claude",
             Kind::Slack => "Slack",
             Kind::Discord => "Discord",
+            Kind::Teams => "Teams",
             Kind::Custom => "Custom API",
         }
     }
@@ -77,6 +81,7 @@ impl Kind {
             Kind::Reddit => &["oauth"],
             Kind::Claude => &[],
             Kind::Slack | Kind::Discord => &["token"],
+            Kind::Teams => &["oauth"],
             Kind::Custom => &["secret"],
         }
     }
@@ -87,7 +92,7 @@ impl Kind {
             Kind::Jira => &["token"],
             Kind::Google => &["client_secret"],
             Kind::Slack | Kind::Discord => &["token"],
-            Kind::Reddit | Kind::Claude => &[],
+            Kind::Reddit | Kind::Claude | Kind::Teams => &[],
             Kind::Custom => &["secret"],
         }
     }
@@ -147,6 +152,26 @@ pub struct Google {
     /// Upload into any of your Drive folders. Off, CargoFrame can only use folders it created
     /// itself (a narrower permission).
     pub full_drive: bool,
+}
+
+// ----- Teams -----
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Teams {
+    /// The Application (client) ID of an app registration in the person's Microsoft Entra ID.
+    pub client_id: String,
+    /// `organizations` (any work or school account), or the Directory (tenant) ID or domain.
+    pub tenant: String,
+}
+
+impl Default for Teams {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            tenant: "organizations".into(),
+        }
+    }
 }
 
 // ----- Claude -----
@@ -314,8 +339,42 @@ pub fn check(c: &Connection) -> Result<(), String> {
                 return Err("Write the client id of your Google OAuth client".into());
             }
         }
+        Settings::Teams(t) => check_teams(t)?,
         Settings::Claude(_) | Settings::Slack(_) | Settings::Discord(_) => {}
         Settings::Custom(cu) => check_custom(cu)?,
+    }
+    Ok(())
+}
+
+/// A GUID, the shape of an application (client) id and of a tenant id.
+pub fn is_guid(s: &str) -> bool {
+    let parts: Vec<&str> = s.split('-').collect();
+    parts.len() == 5
+        && [8, 4, 4, 4, 12]
+            .iter()
+            .zip(&parts)
+            .all(|(n, p)| p.len() == *n && p.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn check_teams(t: &Teams) -> Result<(), String> {
+    if !is_guid(t.client_id.trim()) {
+        return Err(
+            "Write the Application (client) ID of your Microsoft app: it looks like 3f2a1b4c-…"
+                .into(),
+        );
+    }
+    let tenant = t.tenant.trim();
+    let word_ok = tenant
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '.');
+    if tenant.is_empty()
+        || !word_ok
+        || tenant.eq_ignore_ascii_case("common")
+        || tenant.eq_ignore_ascii_case("consumers")
+    {
+        return Err(
+            "Write \"organizations\", or the Directory (tenant) ID or domain of your organisation. Personal Microsoft accounts cannot use Teams this way".into(),
+        );
     }
     Ok(())
 }

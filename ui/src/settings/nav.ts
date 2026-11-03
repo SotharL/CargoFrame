@@ -15,7 +15,7 @@ export interface PageMeta {
 /** Order matches the settings window's sidebar. */
 export const PAGES: PageMeta[] = [
   { id: 'general', title: 'General', blurb: 'Appearance, startup, safety, export and import, files, performance and updates.' },
-  { id: 'connections', title: 'Connections', blurb: 'Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, or your own API.' },
+  { id: 'connections', title: 'Connections', blurb: 'Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, or your own API.' },
   { id: 'triggers', title: 'Triggers', blurb: 'Shortcuts that capture your screen and open a CargoFrame window.' },
   { id: 'rules', title: 'Data from files', blurb: 'Pull a value out of a file in the project folder (a version, a log line) to use in your text and fields.' },
   { id: 'infotypes', title: 'Destination fields', blurb: 'The boxes on the service you share to (Jira priority, labels…) and what fills each one.' },

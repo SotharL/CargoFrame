@@ -95,6 +95,7 @@ impl GoogleConnector {
             pkce: true,
             client_auth: ClientAuth::Body,
             redirect_port: None,
+            redirect: oauth::Redirect::Ip,
             wait: self.wait,
         })
     }

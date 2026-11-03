@@ -71,6 +71,7 @@ impl RedditConnector {
             pkce: false,
             client_auth: ClientAuth::Basic,
             redirect_port: Some(self.settings.redirect_port),
+            redirect: oauth::Redirect::Ip,
             wait: self.wait,
         }
     }

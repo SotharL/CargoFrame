@@ -241,6 +241,7 @@ const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt and hand the screenshot and prompt to Claude.', service: 'claude' },
   { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.', service: 'discord' },
   { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
+  { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
   { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
 ];
 
@@ -296,9 +297,9 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     phase: updatePhase,
   });
   const TYPED: Record<string, string[]> = {
-    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], discord: ['token'], custom: ['secret'],
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], discord: ['token'], teams: [], custom: ['secret'],
   };
-  const OAUTH = new Set(['google', 'reddit']);
+  const OAUTH = new Set(['google', 'reddit', 'teams']);
   const describeFor = (c: Connection): Describe => {
     if (c.kind === 'jira') {
       return {
@@ -317,6 +318,18 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           { id: 'priorities', label: 'Priorities', param: null },
           { id: 'components', label: 'Components of a project', param: 'project key' },
         ],
+      };
+    }
+    if (c.kind === 'teams') {
+      return {
+        summary: 'Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The ticked files cannot be sent yet: Teams needs them in OneDrive.',
+        fields: [
+          { key: 'target', label: 'Chat or channel', hint: 'Where to post. You must be a member of it', list: 'targets' },
+          { key: 'thread', label: 'Reply in a channel thread', hint: 'A message link (Copy link in Teams) in a channel', list: null },
+          { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
+          { key: 'title', label: 'Headline', hint: 'The headline of a new channel post, or a bold first line', list: null },
+        ],
+        lists: [{ id: 'targets', label: 'Your chats and the channels of your teams', param: null }],
       };
     }
     if (c.kind === 'discord') {
@@ -489,7 +502,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           id,
           name: c.name,
           kind: c.kind,
-          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', discord: 'Discord', custom: 'Custom API' }[c.kind],
+          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', discord: 'Discord', teams: 'Teams', custom: 'Custom API' }[c.kind],
           enabled: c.enabled,
           state: stateOf(id, c),
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),

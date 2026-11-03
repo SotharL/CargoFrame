@@ -205,7 +205,7 @@ export interface LayoutTemplate {
   name: string;
   description: string;
   /** `null`: the one that saves locally and needs no connection. */
-  service: 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'custom' | null;
+  service: 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | null;
 }
 
 // ----- export and import of settings -----
@@ -331,7 +331,7 @@ export interface VariableInfo {
 
 // ----- connections and sharing (mirror core/connectors and app/src/share.rs) -----
 
-export type ServiceKind = 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'custom';
+export type ServiceKind = 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom';
 export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled';
 
 export interface Pair {
@@ -374,6 +374,7 @@ export type Connection = ConnectionCommon &
     | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; send_automatically: boolean; extra_wait_seconds: number }
     | { kind: 'slack' }
     | { kind: 'discord' }
+    | { kind: 'teams'; client_id: string; tenant: string }
     | {
         kind: 'custom';
         base_url: string;

@@ -58,6 +58,14 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         files: limited("Attached as one zip, within the server's upload limit"),
         link: yes('Addresses and [word](https://…) links are shown as links'),
       };
+    case 'teams':
+      return {
+        text: yes('Posted as the message (a new channel post uses the title as its headline)'),
+        dropdown: limited('Your chats and channels can be picked; a thread is chosen by its link'),
+        screenshot: yes('Shown inside the message'),
+        files: no('Teams needs files in OneDrive, which CargoFrame does not use yet'),
+        link: yes('Addresses are shown as typed and Teams links them by itself; markup is shown as text'),
+      };
     default:
       return {
         text: yes('Placed in the request where you write {{prompt}} or {{field}}'),

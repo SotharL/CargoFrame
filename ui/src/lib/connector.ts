@@ -10,6 +10,7 @@ export const KIND_NAME: Record<KindKey, string> = {
   claude: 'Claude',
   slack: 'Slack',
   discord: 'Discord',
+  teams: 'Teams',
   custom: 'Custom API',
   local: 'This computer',
 };

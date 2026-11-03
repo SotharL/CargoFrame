@@ -65,6 +65,7 @@ pub enum ConnectionKind {
     Claude,
     Slack,
     Discord,
+    Teams,
     CustomApi,
 }
 
@@ -78,6 +79,7 @@ impl ConnectionKind {
             ConnectionKind::Claude => "claude",
             ConnectionKind::Slack => "slack",
             ConnectionKind::Discord => "discord",
+            ConnectionKind::Teams => "teams",
             ConnectionKind::CustomApi => "custom",
         }
     }

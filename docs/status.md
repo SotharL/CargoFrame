@@ -56,14 +56,16 @@ those is true for each piece.
 | 1 Shell and installer | Tray, single instance, launch notice, Settings window, installers | Done and built in CI |
 | 2 Capture and window | Triggers, capture, CargoFrame window, themes | Done; Windows, X11 and the Wayland portal are implemented, Wayland is untested |
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
-| 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Custom API, Connections page, share flow | Done against mock servers |
+| 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, Connections page, share flow | Done against mock servers |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
 
 ## What the owner needs to do before calling V1 solid
 
 1. Run spikes S1 to S7 on real machines and write the answers into `docs/spikes.md`; change the
    named setting in code where an answer differs from the assumption.
-2. Use it with real accounts: one Jira (Cloud or Server), one Reddit, one Google, one Claude chat.
+2. Use it with real accounts: one Jira (Cloud or Server), one Reddit, one Google, one Claude chat,
+   and one workspace each for Slack, Discord and Teams (a Teams app registration needs a work or
+   school account; see the form on the Connections page).
 3. Run `scripts/windows/new-signing-material.ps1`, add the repository secrets it prints, and push
    a tag (`git tag v0.1.0 && git push origin v0.1.0`) to try the release workflow. It makes a
    **draft** release; nothing is published until you publish it.

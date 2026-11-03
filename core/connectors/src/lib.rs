@@ -17,6 +17,7 @@ pub mod payload;
 pub mod reddit;
 pub mod secrets;
 pub mod slack;
+pub mod teams;
 
 #[cfg(test)]
 mod testkit;
@@ -105,6 +106,7 @@ pub fn build(connection: &Connection) -> Option<Box<dyn Connector>> {
         Settings::Claude(s) => Box::new(claude::ClaudeConnector::new(s.clone())),
         Settings::Slack(s) => Box::new(slack::SlackConnector::new(s.clone())),
         Settings::Discord(s) => Box::new(discord::DiscordConnector::new(s.clone())),
+        Settings::Teams(s) => Box::new(teams::TeamsConnector::new(s.clone())),
         Settings::Custom(s) => Box::new(custom::CustomConnector::new(s.clone())),
     })
 }

@@ -101,6 +101,41 @@
       <li>Save this connection, then paste the token below. Test connection says how many servers the bot is in.</li>
     </ol>
   </details>
+{:else if value.kind === 'teams'}
+  {@const t = value}
+  <p class="quiet">
+    CargoFrame posts as you, through an app you register in your own Microsoft Entra ID (free).
+    Work and school accounts only; a personal Microsoft account cannot be used.
+  </p>
+  <Field label="Application (client) ID" hint="From the Overview page of your app registration.">
+    <input type="text" bind:value={t.client_id} placeholder="00000000-0000-0000-0000-000000000000" />
+  </Field>
+  <Field
+    label="Directory"
+    hint="“organizations” works for any work or school account. Or write your Directory (tenant) ID or domain, to allow only your organisation."
+  >
+    <input type="text" bind:value={t.tenant} />
+  </Field>
+  <details class="steps">
+    <summary>How to register the app</summary>
+    <ol>
+      <li>Open <span class="mono">entra.microsoft.com</span>, then App registrations, New registration. Name it CargoFrame.</li>
+      <li>Under Supported account types choose <span class="mono">Accounts in any organizational directory</span> (or this directory only).</li>
+      <li>
+        Under Redirect URI choose <span class="mono">Public client/native (mobile &amp; desktop)</span> and write
+        <span class="mono">http://localhost</span>. Register.
+      </li>
+      <li>On Overview, copy the Application (client) ID and paste it above.</li>
+      <li>
+        Under API permissions, Add a permission, Microsoft Graph, Delegated permissions:
+        <span class="mono">Chat.ReadBasic</span>, <span class="mono">ChatMessage.Send</span>,
+        <span class="mono">ChannelMessage.Send</span>, <span class="mono">Team.ReadBasic.All</span>,
+        <span class="mono">Channel.ReadBasic.All</span> and <span class="mono">User.Read</span>.
+      </li>
+      <li>Under Authentication, make sure “Allow public client flows” is Yes.</li>
+      <li>Save this connection and press Sign in. If your organisation asks for an administrator's approval, send them the page that appears.</li>
+    </ol>
+  </details>
 {:else if value.kind === 'custom'}
   <CustomForm bind:value />
 {/if}

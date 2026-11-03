@@ -60,6 +60,33 @@ describe('Connections page', () => {
     await waitFor(() => expect(screen.getByText('Claude chats')).toBeTruthy());
   });
 
+  it('adds a Teams connection: app registration steps, the app id, then a browser sign-in', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Teams/ }));
+    // The steps for registering the app are on the form, with what to give it.
+    const steps = screen.getByText('How to register the app').closest('details')!;
+    for (const word of ['http://localhost', 'ChatMessage.Send', 'ChannelMessage.Send', 'Chat.ReadBasic', 'public client flows']) {
+      expect(steps.textContent).toContain(word);
+    }
+    // There is no token to paste: the person signs in with the browser.
+    expect(screen.queryByText('Needs its token')).toBeNull();
+    const id = screen.getByLabelText('Application (client) ID');
+    await fireEvent.input(id, { target: { value: '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b' } });
+    expect((screen.getByLabelText('Directory') as HTMLInputElement).value).toBe('organizations');
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+    expect(await screen.findByText('Not signed in')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Sign in' }));
+    expect(await screen.findByText('Connected')).toBeTruthy();
+    const saved = await api.listItems('connection');
+    expect(saved.items[0]!.item).toMatchObject({
+      kind: 'teams',
+      name: 'Teams',
+      client_id: '3f2a1b4c-5d6e-4f70-8a9b-0c1d2e3f4a5b',
+      tenant: 'organizations',
+    });
+  });
+
   it('adds a Discord connection: the steps, a bot token, then it is ready', async () => {
     render(Connections);
     await fireEvent.click(await screen.findByRole('button', { name: /^Discord/ }));

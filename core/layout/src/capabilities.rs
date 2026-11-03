@@ -129,6 +129,13 @@ impl Capabilities {
                 files: Capability::limited("Attached as one zip, within the server's upload limit"),
                 link: Capability::yes("Addresses and [word](https://…) links are shown as links"),
             },
+            ConnectionKind::Teams => Self {
+                text: Capability::yes("Posted as the message (a new channel post uses the title as its headline)"),
+                dropdown: Capability::limited("Your chats and channels can be picked; a thread is chosen by its link"),
+                screenshot: Capability::yes("Shown inside the message"),
+                files: Capability::no("Teams needs files in OneDrive, which CargoFrame does not use yet"),
+                link: Capability::yes("Addresses are shown as typed and Teams links them by itself; markup is shown as text"),
+            },
             ConnectionKind::CustomApi => Self::custom(CustomShape::default()),
         }
     }
@@ -176,13 +183,14 @@ impl Capabilities {
 mod tests {
     use super::*;
 
-    const KINDS: [ConnectionKind; 7] = [
+    const KINDS: [ConnectionKind; 8] = [
         ConnectionKind::Jira,
         ConnectionKind::Google,
         ConnectionKind::Reddit,
         ConnectionKind::Claude,
         ConnectionKind::Slack,
         ConnectionKind::Discord,
+        ConnectionKind::Teams,
         ConnectionKind::CustomApi,
     ];
 

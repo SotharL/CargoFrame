@@ -29,6 +29,34 @@ pub enum ClientAuth {
     Body,
 }
 
+/// How the address the service sends the person back to is spelled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Redirect {
+    /// `http://127.0.0.1:<port>/callback` (Reddit, Google).
+    #[default]
+    Ip,
+    /// `http://localhost:<port>`: what Microsoft accepts for a desktop app (it ignores the port
+    /// when it compares). The answer arrives at `/`, and only a request that carries a code, a
+    /// state or an error counts as the answer.
+    Localhost,
+}
+
+impl Redirect {
+    fn path(self) -> &'static str {
+        match self {
+            Redirect::Ip => "/callback",
+            Redirect::Localhost => "/",
+        }
+    }
+
+    fn uri(self, port: u16) -> String {
+        match self {
+            Redirect::Ip => format!("http://127.0.0.1:{port}/callback"),
+            Redirect::Localhost => format!("http://localhost:{port}"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct OAuthClient {
     pub auth_url: String,
@@ -42,6 +70,8 @@ pub struct OAuthClient {
     pub client_auth: ClientAuth,
     /// The port the service's app registration allows (Reddit); `None` picks a free one.
     pub redirect_port: Option<u16>,
+    /// How the redirect address is spelled.
+    pub redirect: Redirect,
     /// How long to wait for the person to finish signing in.
     pub wait: Duration,
 }
@@ -111,7 +141,7 @@ fn parse_tokens(
         let detail = json
             .get("error_description")
             .and_then(|d| d.as_str())
-            .map(|d| format!(": {d}"))
+            .map(|d| format!(": {}", first_line(d)))
             .unwrap_or_default();
         // A refused code or an expired refresh token means: sign in again.
         let kind = if matches!(
@@ -248,7 +278,7 @@ pub(crate) fn query_pairs(q: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-fn decode(s: &str) -> String {
+pub(crate) fn decode(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::new();
     let mut i = 0;
@@ -282,10 +312,21 @@ fn decode(s: &str) -> String {
     String::from_utf8_lossy(&out).into_owned()
 }
 
+/// The first line of a service's explanation, cut short: Microsoft appends trace ids and times.
+fn first_line(s: &str) -> String {
+    let line = s.lines().next().unwrap_or("").trim();
+    if line.chars().count() > 240 {
+        format!("{}…", line.chars().take(240).collect::<String>())
+    } else {
+        line.to_string()
+    }
+}
+
 /// Wait for the service to send the person back. Returns the authorization code.
 fn wait_for_code(
     listener: &TcpListener,
     state: &str,
+    redirect: Redirect,
     wait: Duration,
     cancelled: &dyn Fn() -> bool,
 ) -> Result<String, SendError> {
@@ -327,12 +368,15 @@ fn wait_for_code(
         let mut parts = line.split(' ');
         let (method, target) = (parts.next().unwrap_or(""), parts.next().unwrap_or(""));
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
-        if method != "GET" || path != "/callback" {
+        let pairs = query_pairs(query);
+        let answers = |k: &str| pairs.iter().any(|(n, _)| n == k);
+        let is_answer = redirect != Redirect::Localhost
+            || (answers("code") || answers("state") || answers("error"));
+        if method != "GET" || path != redirect.path() || !is_answer {
             // a favicon request, a probe: not the callback
             respond(&mut stream, "404 Not Found", "Not found");
             continue;
         }
-        let pairs = query_pairs(query);
         let get = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
         if get("state") != Some(state) {
             respond(&mut stream, "400 Bad Request", FAILED_PAGE);
@@ -342,7 +386,12 @@ fn wait_for_code(
         }
         if let Some(err) = get("error") {
             respond(&mut stream, "200 OK", FAILED_PAGE);
-            return Err(invalid(format!("The service refused the sign-in ({err})")));
+            let why = get("error_description").map(first_line).unwrap_or_default();
+            return Err(invalid(if why.is_empty() {
+                format!("The service refused the sign-in ({err})")
+            } else {
+                format!("The service refused the sign-in ({err}): {why}")
+            }));
         }
         match get("code") {
             Some(code) if !code.is_empty() => {
@@ -373,7 +422,7 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
         .local_addr()
         .map_err(|e| invalid(e.to_string()))?
         .port();
-    let redirect_uri = format!("http://127.0.0.1:{port}/callback");
+    let redirect_uri = client.redirect.uri(port);
     let state = random_hex(16);
     if state.is_empty() {
         return Err(invalid(
@@ -396,7 +445,13 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
         .open(&url)
         .map_err(|e| invalid(format!("Could not open the browser: {e}")))?;
 
-    let code = wait_for_code(&listener, &state, client.wait, ctx.cancelled)?;
+    let code = wait_for_code(
+        &listener,
+        &state,
+        client.redirect,
+        client.wait,
+        ctx.cancelled,
+    )?;
     drop(listener);
 
     let mut fields = vec![
@@ -484,6 +539,7 @@ mod tests {
         Approve,
         WrongState,
         Deny,
+        DenyWhy,
         Nothing,
     }
 
@@ -501,6 +557,9 @@ mod tests {
                     Mode::Approve => format!("{redirect}?code=CODE%201&state={state}"),
                     Mode::WrongState => format!("{redirect}?code=CODE&state=evil"),
                     Mode::Deny => format!("{redirect}?error=access_denied&state={state}"),
+                    Mode::DenyWhy => format!(
+                        "{redirect}?error=access_denied&error_description=AADSTS65001%3A+Admin+approval+is+needed.%0D%0ATrace+ID%3A+abc&state={state}"
+                    ),
                     Mode::Nothing => return,
                 };
                 // a stray request first: it must be ignored
@@ -525,6 +584,7 @@ mod tests {
             pkce: true,
             client_auth: ClientAuth::Body,
             redirect_port: None,
+            redirect: Redirect::Ip,
             wait: Duration::from_secs(5),
         }
     }
@@ -644,6 +704,51 @@ mod tests {
             URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()))
         );
         assert!(w.with(&browser, is_signed_in));
+    }
+
+    #[test]
+    fn the_localhost_style_redirects_to_a_bare_localhost_address() {
+        let server = token_server();
+        let w = World::new();
+        let browser = FakeBrowser {
+            opened: Mutex::new(vec![]),
+            mode: Mode::Approve,
+        };
+        let mut c = client(&server);
+        c.redirect = Redirect::Localhost;
+        c.client_secret = None;
+        let tokens = w.with(&browser, |ctx| authorize(&c, ctx)).unwrap();
+        assert_eq!(tokens.access_token, "AT1");
+        let req = &server.requests_to("/token")[0];
+        let redirect = req.form_value("redirect_uri").unwrap();
+        assert!(redirect.starts_with("http://localhost:"), "{redirect}");
+        assert!(!redirect.contains("/callback"), "{redirect}");
+        // a public client sends no secret at all
+        assert_eq!(req.form_value("client_secret"), None);
+    }
+
+    #[test]
+    fn a_refusal_in_the_browser_shows_the_first_line_of_the_explanation() {
+        let server = token_server();
+        let w = World::new();
+        let browser = FakeBrowser {
+            opened: Mutex::new(vec![]),
+            mode: Mode::DenyWhy,
+        };
+        let err = w
+            .with(&browser, |ctx| authorize(&client(&server), ctx))
+            .unwrap_err();
+        assert!(
+            err.message
+                .contains("(access_denied): AADSTS65001: Admin approval is needed."),
+            "{}",
+            err.message
+        );
+        assert!(!err.message.contains("Trace ID"), "{}", err.message);
+        assert_eq!(
+            first_line("AADSTS65001: Admin approval is needed.\r\nTrace ID: abc"),
+            "AADSTS65001: Admin approval is needed."
+        );
     }
 
     #[test]

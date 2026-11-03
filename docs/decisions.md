@@ -352,6 +352,44 @@ follow the same shape (a connector, a row in the capability table, a template, a
 - **Test connection** says who the bot is and how many servers it is in, or that it is in none
   yet, which is the usual first mistake.
 - **Colour.** Discord purple `--kind-discord`, next to Slack's berry and Custom's periwinkle.
-- **Still to do for this phase.** Teams (a Microsoft sign-in through an app registration the
-  owner creates; chat, channel or meeting chat), then "each posts to a test workspace" on the
-  owner's side. Slack and Discord have only run against mock servers so far.
+- **Teams (a Microsoft sign-in, posted as the person).** Following the plan's decision, the
+  person registers an app in their own Microsoft Entra ID (free): a "Public client/native" app
+  with the redirect `http://localhost`, and six delegated Graph permissions (`Chat.ReadBasic`,
+  `ChatMessage.Send`, `ChannelMessage.Send`, `Team.ReadBasic.All`, `Channel.ReadBasic.All`,
+  `User.Read`). They paste the Application (client) ID; there is no secret. The sign-in is the
+  shared OAuth code (browser, PKCE, a one-time server on this computer) and the refresh token
+  stays in the credential store (`offline_access`). Work and school accounts only: Graph does not
+  let a personal account post to Teams this way. Some organisations want an administrator to
+  approve the permissions; the browser page says so and the sign-in error repeats the first line
+  of what Microsoft said.
+- **`http://localhost`, not `127.0.0.1`.** Microsoft ignores the port of a `localhost` redirect
+  but not of `127.0.0.1`, and its portal does not accept `http://127.0.0.1` at all. The shared
+  OAuth code got a second spelling for this (`Redirect::Localhost`: `http://localhost:<port>`,
+  answered at `/`, and a request without a code, a state or an error is not taken for the
+  answer). The one-time server still listens on `127.0.0.1` only. Google and Reddit keep their
+  spelling.
+- **What a button can fill.** `target` (one list: the channels of the teams the person joined,
+  grouped by team, then their chats grouped as direct, group and meeting chats; values are
+  `channel:<team>/<channel>` and `chat:<id>`), `thread` (a "Copy link" address of a channel
+  message; it names the team and channel by itself, and a different channel than `target` is
+  refused), `message` and `title`. In a new channel post the title is the post's headline; in a
+  chat or a reply it is a bold first line.
+- **The screenshot is inside the message** (`hostedContents`). **Ticked files are not sent:** a
+  Teams file is a OneDrive or SharePoint file, which needs another permission and an upload
+  session. The capability table says "no" for files, the template has no files block, and a share
+  that still carries a zip sends the rest and notes that the files were left out.
+- **Text is escaped** (`& < > " '`) and put in `<p>` and `<br>`: a window title cannot write
+  markup or an `<at>` mention.
+- **A post is not retried when its outcome is unknown.** A Graph message has no key that makes a
+  repeat harmless, so a lost answer or a Graph server error ends the share with "look in Teams";
+  a 429 waits for `Retry-After` and tries again, because nothing was posted. Shared channels
+  (from another organisation) are left out of the list.
+- **The token only goes to Graph.** A "next page" link in a list that is not on the Graph address
+  is not followed. Lists read at most three pages of chats (150) and forty teams.
+- **Colour.** Teams blue `--kind-teams`, darker than Jira's.
+- **Still to do for this phase.** "Each posts to a test workspace" on the owner's side. Slack,
+  Discord and Teams have only run against mock servers. Things only a real tenant can settle: that
+  Microsoft accepts the `http://localhost` redirect with the answer at `/`, that chats come back
+  in a useful order (the list is sorted by name, because combining `$expand=members` with
+  `$orderby` is not something the mock can prove), the largest screenshot a message takes, and
+  whether the organisation's policies allow posting with these permissions.
