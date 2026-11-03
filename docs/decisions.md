@@ -733,3 +733,12 @@ to a recording matches what it can do to a screenshot: cut, crop and mark.
   of what is sent, and is not red in the recording itself. Whether the text comes out the same on Windows fonts is an
   owner check, as for the Settings test.
 
+### Phase 12, part 16: small things that came up (3 Nov 2026)
+
+- **The tray's tooltip says when the screen is being recorded** by a video trigger ("CargoFrame is recording your
+  screen. Press the video shortcut again to stop."), next to the notice shown when it starts and the tray entry that
+  throws the recording away. A recording started from Settings keeps its own indicator on that page.
+- **The tests that record a real virtual screen run one at a time** (in the program's tests and in the video
+  crate's). Under a busy computer two of them had failed once each with no message: each promises the recorder
+  a couple of seconds, and a recorder starved of time returns no clip. They passed alone and in loops.
+

@@ -133,6 +133,13 @@ fn a_missing_ffmpeg_is_said_plainly() {
 // ----- with a real ffmpeg and a virtual screen (skipped where there is none) -----
 
 /// A virtual X screen that goes away with the guard.
+/// The tests that record a real screen share the computer, and each promises the recorder a
+/// little time: one at a time, so a busy computer does not starve one of them.
+fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 struct Screen {
     server: Child,
     display: String,
@@ -180,6 +187,7 @@ fn recording_the_screen_for_a_while_gives_a_clip_of_the_last_seconds() {
         eprintln!("skipped: ffmpeg and ffprobe are not installed");
         return;
     };
+    let _one = one_at_a_time();
     let Some(screen) = Screen::start(97) else {
         eprintln!("skipped: no virtual X screen (Xvfb) to record");
         return;
@@ -273,6 +281,7 @@ fn a_recorder_that_cannot_start_reports_why_and_a_cancelled_one_leaves_nothing()
     assert!(!err.to_string().is_empty());
     rec.cancel();
 
+    let _one = one_at_a_time();
     let Some(screen) = Screen::start(95) else {
         eprintln!("skipped the cancel check: no virtual X screen");
         return;
@@ -302,6 +311,7 @@ fn a_recorder_that_is_let_go_while_running_stops_ffmpeg() {
         eprintln!("skipped: ffmpeg is not installed");
         return;
     };
+    let _one = one_at_a_time();
     let Some(screen) = Screen::start(94) else {
         eprintln!("skipped: no virtual X screen");
         return;

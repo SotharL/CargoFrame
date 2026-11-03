@@ -324,6 +324,13 @@ fn a_failure_gets_a_hint_that_fits_what_was_tried() {
     assert_eq!(hint(&plain), "");
 }
 
+/// The tests that record a real screen share the computer, and each promises the recorder a
+/// little time: one at a time, so a busy computer does not starve one of them.
+fn one_at_a_time() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    LOCK.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 struct Screen {
     server: Child,
     display: String,
@@ -375,6 +382,7 @@ fn a_test_recording_of_a_real_screen_gives_a_clip_and_a_report() {
         eprintln!("skipped: ffprobe is not installed");
         return;
     };
+    let _one = one_at_a_time();
     let Some(screen) = Screen::start(91) else {
         eprintln!("skipped: no virtual X screen (Xvfb) to record");
         return;
@@ -458,6 +466,7 @@ fn a_recording_started_by_hand_keeps_only_the_last_seconds_until_it_is_stopped()
         eprintln!("skipped: ffprobe is not installed");
         return;
     };
+    let _one = one_at_a_time();
     let Some(screen) = Screen::start(92) else {
         eprintln!("skipped: no virtual X screen (Xvfb) to record");
         return;
@@ -811,6 +820,7 @@ fn a_recording_from_a_trigger_becomes_a_session_whose_clip_plays_back() {
         eprintln!("skipped: ffprobe is not installed");
         return;
     };
+    let _one = one_at_a_time();
     let Some(screen) = Screen::start(88) else {
         eprintln!("skipped: no virtual X screen (Xvfb) to record");
         return;
