@@ -436,48 +436,50 @@
           </div>
           <details class="edit">
             <summary>Trim, crop and mark a copy</summary>
-            <p class="quiet note">
-              Makes an edited copy of the test clip the way an edited video will be saved. The test clip itself is not changed.
-            </p>
-            <div class="two">
-              <Field label="Start (seconds)">
-                <input type="number" min="0" step="0.1" bind:value={trimStart} />
-              </Field>
-              <Field label="End (seconds)">
-                <input type="number" min="0" step="0.1" bind:value={trimEnd} />
-              </Field>
-            </div>
-            <label class="check"><input type="checkbox" bind:checked={cropOn} /> Crop to an area</label>
-            {#if cropOn}
-              <div class="four">
-                <Field label="Left (px)"><input type="number" min="0" bind:value={crop.x} /></Field>
-                <Field label="Top (px)"><input type="number" min="0" bind:value={crop.y} /></Field>
-                <Field label="Width (px)"><input type="number" min="2" bind:value={crop.w} /></Field>
-                <Field label="Height (px)"><input type="number" min="2" bind:value={crop.h} /></Field>
+            <div class="editbody">
+              <p class="quiet note">
+                Makes an edited copy of the test clip the way an edited video will be saved. The test clip itself is not changed.
+              </p>
+              <div class="two">
+                <Field label="Start (seconds)">
+                  <input type="number" min="0" step="0.1" bind:value={trimStart} />
+                </Field>
+                <Field label="End (seconds)">
+                  <input type="number" min="0" step="0.1" bind:value={trimEnd} />
+                </Field>
               </div>
-            {/if}
-            <label class="check"><input type="checkbox" bind:checked={markOn} /> Lay a red square over the copy (checks that marks are drawn)</label>
-            <div class="row">
-              <button type="button" onclick={exportCopy} disabled={exporting}>
-                {exporting ? 'Making the copy…' : 'Export a copy'}
-              </button>
-            </div>
-            {#if copy}
-              <div class="facts" aria-label="Copy result">
-                <Chip kind={copy.ok ? 'ok' : 'err'} label={copy.ok ? 'Copy made' : 'No copy made'} />
-                <p class={copy.ok ? '' : 'problem'} role={copy.ok ? 'status' : 'alert'}>{copy.message}</p>
-                {#if copy.ok}
-                  <dl>
-                    <dt>Copy</dt><dd>{(copy.clip_ms / 1000).toFixed(1)} s, {copy.width}×{copy.height}, {mb(copy.clip_bytes)} MB</dd>
-                    {#if copy.clip}<dt>File</dt><dd><code>{copy.clip}</code></dd>{/if}
-                  </dl>
-                  <div class="row">
-                    <button type="button" onclick={() => openClip(true)}>Open the copy</button>
-                    <button type="button" onclick={() => watch(true)} disabled={loadingPlayer}>Watch the copy here</button>
-                  </div>
-                {/if}
+              <label class="check"><input type="checkbox" bind:checked={cropOn} /> Crop to an area</label>
+              {#if cropOn}
+                <div class="four">
+                  <Field label="Left (px)"><input type="number" min="0" bind:value={crop.x} /></Field>
+                  <Field label="Top (px)"><input type="number" min="0" bind:value={crop.y} /></Field>
+                  <Field label="Width (px)"><input type="number" min="2" bind:value={crop.w} /></Field>
+                  <Field label="Height (px)"><input type="number" min="2" bind:value={crop.h} /></Field>
+                </div>
+              {/if}
+              <label class="check"><input type="checkbox" bind:checked={markOn} /> Lay a red square over the copy (checks that marks are drawn)</label>
+              <div class="row">
+                <button type="button" onclick={exportCopy} disabled={exporting}>
+                  {exporting ? 'Making the copy…' : 'Export a copy'}
+                </button>
               </div>
-            {/if}
+              {#if copy}
+                <div class="facts" aria-label="Copy result">
+                  <Chip kind={copy.ok ? 'ok' : 'err'} label={copy.ok ? 'Copy made' : 'No copy made'} />
+                  <p class={copy.ok ? '' : 'problem'} role={copy.ok ? 'status' : 'alert'}>{copy.message}</p>
+                  {#if copy.ok}
+                    <dl>
+                      <dt>Copy</dt><dd>{(copy.clip_ms / 1000).toFixed(1)} s, {copy.width}×{copy.height}, {mb(copy.clip_bytes)} MB</dd>
+                      {#if copy.clip}<dt>File</dt><dd><code>{copy.clip}</code></dd>{/if}
+                    </dl>
+                    <div class="row">
+                      <button type="button" onclick={() => openClip(true)}>Open the copy</button>
+                      <button type="button" onclick={() => watch(true)} disabled={loadingPlayer}>Watch the copy here</button>
+                    </div>
+                  {/if}
+                </div>
+              {/if}
+            </div>
           </details>
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
           {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
@@ -501,8 +503,8 @@
   .row { display: flex; gap: 8px; }
   .row.wrap { flex-wrap: wrap; }
   .row input { flex: 1; min-width: 0; }
-  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
-  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .three { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; }
   .facts { display: grid; gap: 8px; justify-items: start; }
   dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 14px; margin: 0; font-size: 13px; }
   dt { font-weight: 600; }
@@ -515,9 +517,10 @@
     border-radius: var(--radius-sm); padding: 6px 8px; width: 100%;
   }
   .primary { font-weight: 600; }
-  .four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+  .four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
+  .editbody { display: grid; gap: 12px; margin-top: 10px; }
   .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .edit { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; display: grid; gap: 10px; width: 100%; box-sizing: border-box; }
+  .edit { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; width: 100%; box-sizing: border-box; }
   .edit summary { cursor: pointer; font-weight: 600; font-size: 13px; }
   video { max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #000; }
 </style>
