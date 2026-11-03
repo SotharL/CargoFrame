@@ -3,6 +3,7 @@
 
 use crate::payload::Progress;
 use crate::secrets::SecretStore;
+use cargoframe_deliver::Deliver;
 use cargoframe_net::Http;
 use std::time::Duration;
 
@@ -11,22 +12,13 @@ pub trait Browser: Send + Sync {
     fn open(&self, url: &str) -> Result<(), String>;
 }
 
-/// The system clipboard.
-pub trait Clipboard: Send + Sync {
-    fn copy_image(&self, png: &[u8]) -> Result<(), String>;
-    fn copy_text(&self, text: &str) -> Result<(), String>;
-    /// Picture and text in one go, where the platform allows it.
-    fn copy_image_and_text(&self, _png: &[u8], _text: &str) -> Result<(), String> {
-        Err("this clipboard cannot hold a picture and text together".into())
-    }
-}
-
 pub struct Ctx<'a> {
     pub connection_id: &'a str,
     pub http: &'a dyn Http,
     pub secrets: &'a dyn SecretStore,
     pub browser: &'a dyn Browser,
-    pub clipboard: &'a dyn Clipboard,
+    /// Pastes a capture into another program's window (a Claude chat).
+    pub deliver: &'a dyn Deliver,
     pub progress: &'a Progress,
     /// Time allowed for one request (the safe settings' timeout).
     pub timeout: Duration,

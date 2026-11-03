@@ -5,8 +5,8 @@
 
 use cargoframe_config::{Kind as ConfigKind, Store};
 use cargoframe_connectors::{
-    self as conn, Browser, Clipboard, Connection, Connector, Ctx, Describe, Kind, OptionItem,
-    Progress, SecretStore, Status,
+    self as conn, Browser, Connection, Connector, Ctx, Deliver, DeliverError, Delivered, Delivery,
+    Describe, Kind, OptionItem, Progress, SecretStore, Status,
 };
 use cargoframe_layout::{ConnectionInfo, ConnectionKind, ConnectionState};
 use cargoframe_net::Http;
@@ -46,13 +46,17 @@ impl Browser for NoBrowser {
     }
 }
 
-struct NoClipboard;
-impl Clipboard for NoClipboard {
-    fn copy_image(&self, _png: &[u8]) -> Result<(), String> {
-        Err("the clipboard is not available here".into())
-    }
-    fn copy_text(&self, _text: &str) -> Result<(), String> {
-        Err("the clipboard is not available here".into())
+struct NoDeliver;
+impl Deliver for NoDeliver {
+    fn deliver(
+        &self,
+        _: &Delivery,
+        _: &dyn Fn(&str) -> Result<(), String>,
+        _: &dyn Fn() -> bool,
+    ) -> Result<Delivered, DeliverError> {
+        Err(DeliverError::Desk(
+            "pasting into another program is not available here".into(),
+        ))
     }
 }
 
@@ -146,7 +150,7 @@ impl Connections {
         id: &str,
         connection: &Connection,
         browser: &dyn Browser,
-        clipboard: &dyn Clipboard,
+        deliver: &dyn Deliver,
         progress: &Progress,
         timeout: Duration,
         cancelled: &dyn Fn() -> bool,
@@ -164,7 +168,7 @@ impl Connections {
             http: self.http.as_ref(),
             secrets: self.secrets.as_ref(),
             browser,
-            clipboard,
+            deliver,
             progress,
             timeout,
             now: &now,
@@ -173,7 +177,7 @@ impl Connections {
         f(connector.as_ref(), &ctx)
     }
 
-    /// Run `f` for something that needs neither browser nor clipboard.
+    /// Run `f` for something that needs neither browser nor desktop.
     fn quietly<R>(
         &self,
         id: &str,
@@ -185,7 +189,7 @@ impl Connections {
             id,
             connection,
             &NoBrowser,
-            &NoClipboard,
+            &NoDeliver,
             &progress,
             Duration::from_secs(30),
             &|| false,
@@ -338,7 +342,7 @@ impl Connections {
         store: &Store,
         id: &str,
         browser: &dyn Browser,
-        clipboard: &dyn Clipboard,
+        deliver: &dyn Deliver,
     ) -> Result<String, String> {
         let connection = self.load(store, id)?;
         self.begin_sign_in();
@@ -348,7 +352,7 @@ impl Connections {
             id,
             &connection,
             browser,
-            clipboard,
+            deliver,
             &progress,
             Duration::from_secs(30),
             &cancelled,

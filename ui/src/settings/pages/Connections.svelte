@@ -35,7 +35,7 @@
       case 'reddit':
         return { kind, name: 'Reddit', enabled: true, client_id: '', redirect_port: 53682 };
       case 'claude':
-        return { kind, name: 'Claude', enabled: true, open_with: 'auto', image_and_text_together: false };
+        return { kind, name: 'Claude', enabled: true, open_with: 'auto', send_automatically: true, extra_wait_seconds: 0 };
       case 'custom':
         return {
           kind, name: 'My API', enabled: true, base_url: 'https://', auth: { type: 'none' },

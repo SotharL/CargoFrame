@@ -48,15 +48,20 @@
       oninput={(e) => (r.redirect_port = Number(e.currentTarget.value) || 0)} />
   </Field>
 {:else if value.kind === 'claude'}
-  <Field label="Open Claude with" hint="Nothing is sent to Claude by CargoFrame: the picture goes to your clipboard and the chat opens.">
-    <select bind:value={value.open_with}>
+  {@const claude = value}
+  <Field label="Open Claude with" hint="The chat is opened by link, then CargoFrame pastes the screenshot, the ticked files and your message into it. Leave Claude in front for a few seconds while it works.">
+    <select bind:value={claude.open_with}>
       <option value="auto">The desktop app on Windows, the browser on Linux</option>
       <option value="app">The desktop app</option>
       <option value="browser">The browser</option>
     </select>
   </Field>
-  <Toggle label="Put the prompt on the clipboard with the picture" bind:checked={value.image_and_text_together} />
-  <p class="quiet">Leave this off unless a single paste brings both into Claude's message box.</p>
+  <Toggle label="Send the message for me (press Enter)" bind:checked={claude.send_automatically} />
+  <p class="quiet">Turn this off to look at the message in Claude first and press Enter yourself.</p>
+  <Field label="Extra seconds to wait before pasting" hint="Raise this if the chat is slow to open and the paste lands too early.">
+    <input type="text" inputmode="numeric" value={String(claude.extra_wait_seconds)}
+      oninput={(e) => (claude.extra_wait_seconds = Math.min(30, Math.max(0, Math.floor(Number(e.currentTarget.value)) || 0)))} />
+  </Field>
 {:else if value.kind === 'custom'}
   <CustomForm bind:value />
 {/if}

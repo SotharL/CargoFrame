@@ -483,7 +483,6 @@ impl Connector for RedditConnector {
             summary,
             url,
             notes,
-            ..SendOutcome::default()
         })
     }
 }

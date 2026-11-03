@@ -41,6 +41,7 @@ fn payload() -> Payload {
             mime: "application/zip".into(),
             data: vec![b'P', b'K', 3, 4],
         }),
+        local: None,
         prompt: None,
         fields: vec![
             Field::choice("project", "PROJ", true),

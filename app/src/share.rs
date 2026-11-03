@@ -2,7 +2,7 @@
 //! connection with retries, and when that fails keep everything in a zip (the safe folder, a
 //! folder the person picks, or CargoFrame's own data folder) so nothing is lost.
 //!
-//! Nothing here knows about Tauri: the browser, clipboard, folder picker, clock and sleeping are
+//! Nothing here knows about Tauri: the browser, desktop, folder picker, clock and sleeping are
 //! all passed in, so the whole path is tested against a local mock server.
 //!
 //! What a share trusts, and what it does not. The window sends what the person typed, picked
@@ -14,11 +14,13 @@ use crate::connections::Connections;
 use crate::registry::AppRegistry;
 use crate::session::Session;
 use cargoframe_bundle::{
-    build_zip, copy_atomic, BundleError, Created, Item, Limits, ManifestInfo, Source,
+    build_zip, copy_atomic, BundleError, Created, Item, Limits, ManifestInfo, Source, Workspace,
 };
 use cargoframe_config::{InfoKind, InfoOptions, InfoType, Kind, Safe, Store};
 use cargoframe_connectors::{
-    Attachment, Browser, Clipboard, Connection, Field, FieldKind, Payload, Progress,
+    claude::{MAX_FILES, MAX_FILE_BYTES},
+    Attachment, Browser, Connection, Deliver, Field, FieldKind, LocalCopies, Payload, Progress,
+    Settings,
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
@@ -70,8 +72,6 @@ pub enum ShareResult {
         summary: String,
         url: Option<String>,
         notes: Vec<String>,
-        /// Text the window offers to copy next (a second paste).
-        copy_next: Option<String>,
         /// The layout asks to close the window after a successful share.
         close: bool,
     },
@@ -106,7 +106,10 @@ pub struct Services<'a> {
     pub store: &'a Store,
     pub connections: &'a Connections,
     pub browser: &'a dyn Browser,
-    pub clipboard: &'a dyn Clipboard,
+    /// Pastes into another program's window (a Claude chat).
+    pub deliver: &'a dyn Deliver,
+    /// Where this capture's temporary copies go.
+    pub workspace: &'a Workspace,
     /// True once the person gave up (closed the window): no more retries.
     pub cancelled: &'a dyn Fn() -> bool,
     /// Local time, for file names.
@@ -383,6 +386,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             data: png,
         }),
         files_zip: None,
+        local: None,
         prompt,
         fields,
         vars: view.variables.clone(),
@@ -437,6 +441,55 @@ fn zip_selected(svc: &Services, p: &Prepared) -> Result<(Vec<u8>, Vec<String>), 
         Limits::default(),
     )?;
     Ok((out.into_inner(), manifest.notes))
+}
+
+/// A chat takes a limited number of files in one message, and the screenshot is one of them.
+fn check_file_count(ticked: usize) -> Result<(), String> {
+    if 1 + ticked > MAX_FILES {
+        return Err(format!(
+            "Claude takes at most {MAX_FILES} files in one message, including the screenshot: untick {} of the files",
+            1 + ticked - MAX_FILES
+        ));
+    }
+    Ok(())
+}
+
+/// The screenshot as shown and the ticked files, as copies in this capture's folder, for a
+/// destination that takes real files. The folder goes when the capture window closes.
+fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalCopies, String> {
+    check_file_count(p.selected.len())?;
+    let screenshot_bytes = p.payload.image.as_ref().map(|a| a.data.as_slice());
+    let root = p.project_folder.as_deref().map(PathBuf::from);
+    let total_limit = Limits::default().max_total_bytes;
+    session
+        .with_dir(svc.workspace, |dir| {
+            let screenshot = screenshot_bytes
+                .map(|bytes| {
+                    dir.write_screenshot(bytes)
+                        .map_err(|e| format!("The screenshot could not be saved for sending: {e}"))
+                })
+                .transpose()?;
+            let mut files = Vec::new();
+            let mut total = 0u64;
+            for rel in &p.selected {
+                let root = root
+                    .as_deref()
+                    .ok_or("There is no project folder to read the ticked files from")?;
+                let copy = dir
+                    .stage(root, rel, MAX_FILE_BYTES)
+                    .map_err(|e| format!("\u{201c}{rel}\u{201d} cannot be sent: {e}"))?;
+                total += std::fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
+                if total > total_limit {
+                    return Err(format!(
+                        "The ticked files are larger than {} MB together: untick some",
+                        total_limit / (1024 * 1024)
+                    ));
+                }
+                files.push((rel.clone(), copy));
+            }
+            Ok(LocalCopies { screenshot, files })
+        })
+        .map_err(|e| format!("The temporary folder for this capture could not be made: {e}"))?
 }
 
 /// Walk the safe-settings ladder with a zip of everything the share held.
@@ -698,7 +751,15 @@ pub fn run(
         return save_locally(svc, &prepared, &session.view);
     };
 
-    if !prepared.selected.is_empty() {
+    // Claude takes real files pasted into the chat, not a zip: copy them into the capture's own
+    // folder, as they are now.
+    let takes_files = matches!(connection.settings, Settings::Claude(_));
+    if takes_files {
+        match stage_local(svc, session, &prepared) {
+            Ok(local) => prepared.payload.local = Some(local),
+            Err(reason) => return blocked(reason),
+        }
+    } else if !prepared.selected.is_empty() {
         match zip_selected(svc, &prepared) {
             Ok((bytes, notes)) => {
                 prepared.notes.extend(notes);
@@ -726,7 +787,7 @@ pub fn run(
                 &connection_id,
                 &connection,
                 svc.browser,
-                svc.clipboard,
+                svc.deliver,
                 &progress,
                 timeout,
                 svc.cancelled,
@@ -753,7 +814,6 @@ pub fn run(
                 summary: outcome.summary,
                 url: outcome.url,
                 notes,
-                copy_next: outcome.copy_next,
                 close: prepared.close,
             }
         }
@@ -791,31 +851,73 @@ mod tests {
     use serde_json::json;
     use std::cell::RefCell;
     use std::io::Read;
+    use std::sync::Mutex;
 
     const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 1, 2, 3];
     const SECRET: &str = "TOP-SECRET-TOKEN-123";
 
+    /// Opens links without doing anything.
     struct NoBrowser;
     impl Browser for NoBrowser {
         fn open(&self, _: &str) -> Result<(), String> {
-            Err("no browser".into())
+            Ok(())
         }
     }
-    struct NoClipboard;
-    impl Clipboard for NoClipboard {
-        fn copy_image(&self, _: &[u8]) -> Result<(), String> {
-            Err("none".into())
-        }
-        fn copy_text(&self, _: &str) -> Result<(), String> {
-            Err("none".into())
-        }
+    /// Reads what it is asked to paste while the files still exist, and says it was sent.
+    #[derive(Default)]
+    struct RecordingDeliver {
+        seen: Mutex<Vec<Seen>>,
     }
 
+    struct Seen {
+        url: String,
+        /// File name and content, in the order they would be pasted.
+        files: Vec<(String, Vec<u8>)>,
+        text: String,
+        submit: bool,
+    }
+
+    impl Deliver for RecordingDeliver {
+        fn deliver(
+            &self,
+            d: &cargoframe_connectors::Delivery,
+            open: &dyn Fn(&str) -> Result<(), String>,
+            _: &dyn Fn() -> bool,
+        ) -> Result<cargoframe_connectors::Delivered, cargoframe_connectors::DeliverError> {
+            open(&d.open_url).map_err(cargoframe_connectors::DeliverError::Open)?;
+            let files = d
+                .files
+                .iter()
+                .map(|p| {
+                    (
+                        p.file_name().unwrap().to_string_lossy().into_owned(),
+                        fs::read(p).unwrap(),
+                    )
+                })
+                .collect();
+            self.seen.lock().unwrap().push(Seen {
+                url: d.open_url.clone(),
+                files,
+                text: d.text.clone(),
+                submit: d.submit,
+            });
+            Ok(cargoframe_connectors::Delivered {
+                window: "Claude".into(),
+                files: d.files.len(),
+                skipped_files: 0,
+                text: true,
+                submitted: d.submit,
+            })
+        }
+    }
     struct World {
         f: Fixture,
         server: MockServer,
         session: Session,
         out: tempfile::TempDir,
+        /// Where captures keep their temporary copies.
+        ws: Workspace,
+        deliver: RecordingDeliver,
     }
 
     /// A project with a log file, a layout with a note, a files block and a sharing button that
@@ -887,11 +989,14 @@ mod tests {
             .insert("rule.version".into(), "1.2.3".into());
         session.png = PNG.to_vec();
         let out = tempfile::tempdir().unwrap();
+        let ws = Workspace::new(out.path().join("captures"));
         World {
             f,
             server,
             session,
             out,
+            ws,
+            deliver: RecordingDeliver::default(),
         }
     }
 
@@ -915,7 +1020,8 @@ mod tests {
             store: &w.f.store,
             connections: &w.f.connections,
             browser: &NoBrowser,
-            clipboard: &NoClipboard,
+            deliver: &w.deliver,
+            workspace: &w.ws,
             cancelled,
             now: NOW,
         }
@@ -957,6 +1063,115 @@ mod tests {
         let mut s = String::new();
         z.by_name(name).unwrap().read_to_string(&mut s).unwrap();
         s
+    }
+
+    /// Point the test layout's button at a Claude connection.
+    fn use_claude(w: &mut World, settings: serde_json::Value) {
+        let mut conn = json!({"name": "Claude", "kind": "claude"});
+        for (k, v) in settings.as_object().unwrap() {
+            conn[k] = v.clone();
+        }
+        save(&w.f.store, "claude", conn);
+        let layout = w.session.view.layout.as_mut().unwrap();
+        for b in &mut layout.blocks {
+            if let BlockKind::SharingButton(btn) = &mut b.kind {
+                btn.connection_id = Some("claude".into());
+                btn.mappings.clear();
+            }
+        }
+    }
+
+    #[test]
+    fn a_share_to_claude_delivers_the_screenshot_the_files_and_the_message_in_one_go() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, close, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(summary, "Sent 2 files and the message to Claude");
+        assert!(close);
+        let seen = w.deliver.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1, "one delivery, not a copy step per item");
+        let s = &seen[0];
+        assert_eq!(s.url, "https://claude.ai/new");
+        assert!(s.submit);
+        // The screenshot first, then the ticked file, each with the content it had.
+        assert_eq!(
+            s.files,
+            vec![
+                ("screenshot.png".to_string(), PNG.to_vec()),
+                ("run.log".to_string(), b"LOGLINE".to_vec()),
+            ]
+        );
+        assert!(s.text.starts_with("why?"), "{}", s.text);
+        assert!(s.text.contains("Captured window: Editor"), "{}", s.text);
+        assert!(s.text.contains("Attached files: run.log"), "{}", s.text);
+        // Nothing went to the mock service: Claude is not a web request.
+        assert!(w.server.requests_to("/hook").is_empty());
+    }
+
+    #[test]
+    fn the_edited_picture_is_what_claude_gets() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let edited = [0x89, b'P', b'N', b'G', 9, 9, 9, 9];
+        w.session.set_edited(Some(edited.to_vec()));
+        let mut req = request();
+        req.image_edited = true;
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        assert_eq!(
+            w.deliver.seen.lock().unwrap()[0].files[0].1,
+            edited.to_vec()
+        );
+    }
+
+    #[test]
+    fn the_capture_folder_goes_with_the_capture() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        assert!(
+            w.session.dir_path().is_none(),
+            "no folder until a destination needs files"
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let dir = w.session.dir_path().expect("the share made the folder");
+        assert!(dir.join("screenshot.png").is_file());
+        assert!(dir.join("files").join("run.log").is_file());
+        // The window closes: the capture is dropped, and so is its folder.
+        let World { session, ws, .. } = w;
+        drop(session);
+        assert!(!dir.exists(), "the folder outlived its capture");
+        assert_eq!(ws.sweep(&[], Duration::ZERO).removed, 0);
+    }
+
+    #[test]
+    fn claude_gets_the_files_as_they_were_when_it_was_shared_not_a_zip() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({"send_automatically": false}));
+        set_safe(&w, None, 0);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert!(summary.starts_with("Pasted"), "{summary}");
+        assert!(!w.deliver.seen.lock().unwrap()[0].submit);
+    }
+
+    #[test]
+    fn claude_has_a_limit_on_files_per_message() {
+        assert!(check_file_count(0).is_ok());
+        assert!(check_file_count(MAX_FILES - 1).is_ok());
+        let err = check_file_count(MAX_FILES + 2).unwrap_err();
+        assert!(
+            err.contains("at most 20") && err.contains("untick 3"),
+            "{err}"
+        );
     }
 
     #[test]

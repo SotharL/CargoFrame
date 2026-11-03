@@ -94,7 +94,7 @@
         imageEdited && screenshot ? await screenshot.exportImage() : null,
       );
       result = await api.share(request);
-      if (result.status === 'sent' && result.close && !result.url && !result.copy_next) {
+      if (result.status === 'sent' && result.close && !result.url) {
         // Nothing left to use from the result: let the confirmation be read, then go.
         setTimeout(() => void api?.closeCapture(), 1500);
       }
@@ -194,7 +194,6 @@
           <ResultPanel
             {result}
             onopenlink={(url) => void api?.openLink(url)}
-            oncopy={(text) => void api?.copyText(text)}
             onreconnect={() => void api?.openSettings('connections')}
             onclose={() => void api?.closeCapture()}
           />

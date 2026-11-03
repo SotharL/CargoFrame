@@ -340,7 +340,6 @@ impl Connector for CustomConnector {
             summary: format!("Sent (the server answered {})", resp.status),
             url,
             notes,
-            ..SendOutcome::default()
         })
     }
 }
@@ -386,6 +385,7 @@ mod tests {
                 mime: "application/zip".into(),
                 data: vec![9, 9],
             }),
+            local: None,
             prompt: Some("line1\nline2 \"q\"".into()),
             fields: vec![Field::text("channel", "dev ops"), Field::text("empty", "")],
             vars: [("rule.version".to_string(), "1.2.3".to_string())].into(),

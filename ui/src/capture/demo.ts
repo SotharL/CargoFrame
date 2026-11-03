@@ -139,15 +139,15 @@ export function demoShare(kind: string | null): ShareResult {
       return { status: 'blocked', reasons: ['\u201cSummary\u201d needs a value', 'Write the prompt before sharing'] };
     case 'handoff':
       return {
-        status: 'sent', summary: 'Copied the screenshot and opened Claude', url: null,
-        notes: [], copy_next: 'What is wrong in Foo?', close: false,
+        status: 'sent', summary: 'Sent 2 files and the message to Claude', url: null,
+        notes: ['CargoFrame cannot see inside Claude: check the chat that the message went through'], close: false,
       };
     case 'slow':
       return new Promise((resolve) => setTimeout(() => resolve({ status: 'blocked', reasons: ['done'] }), 1500)) as never;
     default:
       return {
         status: 'sent', summary: 'Created PROJ-123', url: 'https://example.atlassian.net/browse/PROJ-123',
-        notes: ['1 file was skipped: logs/old.log could not be read'], copy_next: null, close: false,
+        notes: ['1 file was skipped: logs/old.log could not be read'], close: false,
       };
   }
 }

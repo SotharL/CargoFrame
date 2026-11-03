@@ -151,12 +151,24 @@ pub enum OpenWith {
     Browser,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Claude {
     pub open_with: OpenWith,
-    /// Put the prompt on the clipboard together with the picture (settled by spike S1).
-    pub image_and_text_together: bool,
+    /// Press Enter after pasting, so the message is sent. Off: it waits in the message box.
+    pub send_automatically: bool,
+    /// Seconds to wait, on top of the usual, before pasting (for a slow computer).
+    pub extra_wait_seconds: u32,
+}
+
+impl Default for Claude {
+    fn default() -> Self {
+        Self {
+            open_with: OpenWith::default(),
+            send_automatically: true,
+            extra_wait_seconds: 0,
+        }
+    }
 }
 
 // ----- Custom API -----

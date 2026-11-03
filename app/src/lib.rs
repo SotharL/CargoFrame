@@ -59,7 +59,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::new(
             Store::new(dirs),
             tray_available,
@@ -114,7 +113,6 @@ pub fn run() {
             commands::fetch_options,
             commands::set_edited_image,
             commands::share,
-            commands::copy_text,
             commands::open_link,
             commands::report_painted,
             commands::get_timings,
@@ -139,6 +137,14 @@ pub fn run() {
                 app.handle().exit(0);
                 return Ok(());
             }
+            // Nothing is open yet, so every capture folder found now was left by a crash.
+            if let Some(state) = app.handle().try_state::<AppState>() {
+                let swept = state.sweep_captures(std::time::Duration::ZERO);
+                if swept.removed > 0 {
+                    tracing::info!(removed = swept.removed, "removed old capture folders");
+                }
+            }
+            sweep_every_hour(app.handle().clone());
             tray::build(app.handle())?;
             triggers::reload(app.handle());
             notify::launched(app.handle());
@@ -162,6 +168,28 @@ pub fn run() {
             }
         }
     });
+}
+
+/// Capture folders belong to open windows; this removes any that got left behind.
+fn sweep_every_hour(app: tauri::AppHandle) {
+    let spawned = std::thread::Builder::new()
+        .name("capture-sweep".into())
+        .spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+            if let Some(state) = app.try_state::<AppState>() {
+                let swept = state.sweep_captures(std::time::Duration::from_secs(120));
+                if swept.removed > 0 || swept.failed > 0 {
+                    tracing::info!(
+                        removed = swept.removed,
+                        failed = swept.failed,
+                        "swept capture folders"
+                    );
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::warn!("could not start the capture folder sweep: {e}");
+    }
 }
 
 /// Guards on the shipped security configuration: what the web views may load and which backend

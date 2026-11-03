@@ -72,27 +72,27 @@ opens Settings at launch with a one-line hint about the extension.
 
 ## S5. Claude link and clipboard
 
-**Question.** What does opening Claude from a link do, and does the composer accept a pasted
-image together with text?
+**Status: settled by the documentation, then replaced by pasting.** Claude's own help says a link
+can only open a chat: `claude://claude.ai/new?q=` fills a new chat with a short text, and
+`claude://claude.ai/chat/<id>` opens an existing one with nothing filled in. No link attaches a
+picture or a file. So a share to Claude no longer relies on links to carry anything. It opens the
+chat, waits until the Claude window (or a browser showing Claude) is really in front, pastes the
+screenshot and the ticked files as files, pastes the message, and presses Enter
+(`core/deliver`). See `docs/decisions.md`.
 
-**Steps (Windows 11 with the Claude desktop app, then a browser).**
-1. Open `claude://claude.ai/new?q=hello%20world`. Does it open a new chat with the text filled in?
-2. Put an image on the clipboard, then paste into the composer. Does it attach?
-3. Open `claude://claude.ai/chat/<id of an existing chat>`. Does it open that chat?
-4. Put image and text on the clipboard together; paste. Which one lands?
-5. Find the longest `q` value that still works.
-6. Linux: is there a `claude://` handler? Test `https://claude.ai/new?q=hello%20world` in the browser.
+**What is still worth checking on a new machine** (Windows 11 with the Claude desktop app, then a
+browser):
+1. Does the link open the chat and bring the window to the front within a few seconds? If not,
+   raise **Extra seconds to wait before pasting** in the Claude connection.
+2. Does pasting several files from the clipboard attach all of them? (Claude takes at most 20
+   files of 30 MB each in one message.)
+3. Does Enter send once the files have finished uploading? If it fires too early, raise the extra
+   seconds.
+4. Linux: there is no `claude://` handler, so the browser is used; pressing keys needs X11 and
+   `xdotool`, and files cannot be pasted yet (the message is, and a note says so).
 
-**Settings this decides:**
-- In the Claude connection (Settings, Connections): **Put the prompt on the clipboard with the
-  picture** (off by default; this is `composer_takes_image_and_text` in `core/handoff`). Off means
-  the result panel offers a second "Copy prompt" step after the picture is pasted.
-- **Open Claude with** (desktop app or browser; automatic means the app on Windows and the browser
-  on Linux), which is `Scheme::App` or `Scheme::Web` in `core/handoff`.
-- `MAX_QUERY_BYTES` in `core/handoff/src/link.rs` (default 6000).
-
-**Fallback.** If no link works at all, the share counts as failed and the zip goes to the safe
-settings.
+**Settings this decides:** in the Claude connection: **Open Claude with**, **Send the message for
+me (press Enter)** and **Extra seconds to wait before pasting**.
 
 ## S6. Performance budgets
 

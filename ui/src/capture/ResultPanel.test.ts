@@ -6,7 +6,6 @@ import type { ShareResult } from '../lib/types';
 function show(result: ShareResult) {
   const handlers = {
     onopenlink: vi.fn(),
-    oncopy: vi.fn(),
     onreconnect: vi.fn(),
     onclose: vi.fn(),
   };
@@ -17,18 +16,16 @@ function show(result: ShareResult) {
 describe('ResultPanel', () => {
   afterEach(cleanup);
 
-  it('offers the link and the second paste after a hand-off', async () => {
+  it('offers the link and any notes after a share', async () => {
     const h = show({
       status: 'sent', summary: 'Created PROJ-1', url: 'https://x.test/PROJ-1',
-      notes: ['1 file skipped'], copy_next: 'why?', close: false,
+      notes: ['1 file skipped'], close: false,
     });
     expect(screen.getByText('Created PROJ-1')).toBeTruthy();
     expect(screen.getByText('1 file skipped')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Open' }));
     expect(h.onopenlink).toHaveBeenCalledWith('https://x.test/PROJ-1');
-    await fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' }));
-    expect(h.oncopy).toHaveBeenCalledWith('why?');
-    expect(screen.getByRole('button', { name: 'Copied' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Close' }));
     expect(h.onclose).toHaveBeenCalled();
   });

@@ -51,7 +51,6 @@ fn main() {
             "fetch_options",
             "set_edited_image",
             "share",
-            "copy_text",
             "open_link",
         ]),
     ))

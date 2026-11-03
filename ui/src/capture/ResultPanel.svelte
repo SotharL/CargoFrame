@@ -5,13 +5,11 @@
   let {
     result,
     onopenlink,
-    oncopy,
     onreconnect,
     onclose,
   }: {
     result: ShareResult;
     onopenlink: (url: string) => void;
-    oncopy: (text: string) => void;
     onreconnect: () => void;
     onclose: () => void;
   } = $props();
@@ -22,7 +20,6 @@
     kept_locally: 'A copy was kept in CargoFrame’s own folder',
     not_saved: 'The copy could not be saved. It is still here',
   };
-  let copied = $state(false);
 </script>
 
 <div class="panel" role="status" aria-live="polite">
@@ -31,15 +28,6 @@
     {#each result.notes as n (n)}<Chip kind="warn" label={n} />{/each}
     {#if result.url}
       <button onclick={() => onopenlink(result.url!)}>Open</button>
-    {/if}
-    {#if result.copy_next}
-      <button
-        onclick={() => {
-          oncopy(result.copy_next!);
-          copied = true;
-        }}>{copied ? 'Copied' : 'Copy prompt'}</button
-      >
-      <span class="quiet">Paste the picture in Claude, then the prompt.</span>
     {/if}
     {#if !result.close}<button onclick={onclose}>Close</button>{/if}
   {:else if result.status === 'saved_locally'}

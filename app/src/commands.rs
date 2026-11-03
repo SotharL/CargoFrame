@@ -3,7 +3,7 @@
 
 use crate::chats::{self, ChatView};
 use crate::connections::{unix_now, ConnectionsView};
-use crate::desktop::{openable, TauriBrowser, TauriClipboard};
+use crate::desktop::{openable, TauriBrowser};
 use crate::items::{self, ItemKind, ItemList};
 use crate::registry::AppRegistry;
 use crate::session::{self, check_png};
@@ -22,7 +22,6 @@ use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_clipboard_manager::ClipboardExt as _;
 use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt as _;
 
@@ -512,7 +511,7 @@ pub async fn connect_connection(app: AppHandle, id: String) -> Result<String, St
             &state.store,
             &id,
             &TauriBrowser(app.clone()),
-            &TauriClipboard(app.clone()),
+            &cargoframe_deliver::System,
         )
     })
     .await?
@@ -769,12 +768,12 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
         };
         let cancelled = || state.share_cancelled();
         let browser = TauriBrowser(app.clone());
-        let clipboard = TauriClipboard(app.clone());
         let svc = share::Services {
             store: &state.store,
             connections: &state.connections,
             browser: &browser,
-            clipboard: &clipboard,
+            deliver: &cargoframe_deliver::System,
+            workspace: &state.workspace,
             cancelled: &cancelled,
             now: session::now(),
         };
@@ -816,15 +815,6 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
         }
     }
     Ok(result)
-}
-
-/// Copy text to the clipboard ("Copy prompt" after a hand-off).
-#[tauri::command]
-pub fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
-    if text.len() > 1_000_000 {
-        return Err("That text is too long to copy".into());
-    }
-    app.clipboard().write_text(text).map_err(|e| e.to_string())
 }
 
 /// Open a link from a result (the created issue, the post) in the browser.

@@ -90,7 +90,6 @@ export interface Api {
   /** The picture as edited, uploaded before a share. `null` goes back to the capture. */
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
   share(request: ShareRequest): Promise<ShareResult>;
-  copyText(text: string): Promise<void>;
   openLink(url: string): Promise<void>;
   /** Tell the app the window has painted its first usable content (for the timings). */
   reportPainted(flow: 'capture' | 'settings'): Promise<void>;
@@ -177,7 +176,6 @@ async function tauriApi(): Promise<Api> {
       await invoke('set_edited_image', bytes, { headers: { 'x-session-id': String(sessionId) } });
     },
     share: (request) => invoke<ShareResult>('share', { request }),
-    copyText: (text) => invoke('copy_text', { text }),
     openLink: (url) => invoke('open_link', { url }),
     reportPainted: (flow) => invoke('report_painted', { flow }),
     getTimings: () => invoke('get_timings'),
@@ -434,8 +432,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     share: async (request) =>
       opts.share
         ? opts.share(request)
-        : { status: 'sent', summary: 'Created DEMO-1', url: 'https://example.atlassian.net/browse/DEMO-1', notes: [], copy_next: null, close: true },
-    copyText: async () => {},
+        : { status: 'sent', summary: 'Created DEMO-1', url: 'https://example.atlassian.net/browse/DEMO-1', notes: [], close: true },
     openLink: async () => {},
     reportPainted: async () => {},
     getTimings: async () => [

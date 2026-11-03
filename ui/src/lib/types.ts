@@ -318,7 +318,7 @@ export type Connection = ConnectionCommon &
     | { kind: 'jira'; site_url: string; auth: 'api_token' | 'pat'; email: string }
     | { kind: 'google'; client_id: string; sheets: boolean; full_drive: boolean }
     | { kind: 'reddit'; client_id: string; redirect_port: number }
-    | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; image_and_text_together: boolean }
+    | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; send_automatically: boolean; extra_wait_seconds: number }
     | {
         kind: 'custom';
         base_url: string;
@@ -403,7 +403,6 @@ export type ShareResult =
       summary: string;
       url: string | null;
       notes: string[];
-      copy_next: string | null;
       close: boolean;
     }
   | { status: 'saved_locally'; path: string; notes: string[]; close: boolean }

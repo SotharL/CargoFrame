@@ -48,3 +48,23 @@ pub fn capture(mode: Mode) -> Result<Captured, CaptureError> {
         ))
     }
 }
+
+/// The window in focus right now, without taking a picture. `None` when nothing has the focus or
+/// the system does not say (Wayland).
+pub fn focused_app() -> Result<Option<FocusedApp>, CaptureError> {
+    #[cfg(windows)]
+    {
+        policy::Backend::focused(&win::Windows)
+    }
+    #[cfg(target_os = "linux")]
+    {
+        match session::detect_env() {
+            session::Session::X11 => policy::Backend::focused(&x11::X11::connect()?),
+            _ => Ok(None),
+        }
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    {
+        Ok(None)
+    }
+}

@@ -21,6 +21,9 @@ pub enum FailureKind {
     ConnectorUnavailable,
     /// The server's certificate is not trusted. Retrying cannot fix it.
     Certificate,
+    /// A hand-over into another program's window could not be done (it was not in front, the
+    /// person clicked away). Doing it again blindly could paste twice, so it is not retried.
+    NotDelivered,
 }
 
 impl FailureKind {
@@ -60,6 +63,7 @@ impl FailureKind {
             Self::Server(_) => "Service error",
             Self::ConnectorUnavailable => "Connection not set up",
             Self::Certificate => "Certificate not trusted",
+            Self::NotDelivered => "Not delivered",
         }
     }
 }

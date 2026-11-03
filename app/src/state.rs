@@ -3,10 +3,12 @@ use crate::session::Sessions;
 use crate::timing::Timings;
 use crate::transfer::Entry;
 use crate::warm::Warm;
+use cargoframe_bundle::{Sweep, Workspace};
 use cargoframe_config::Store;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
+use std::time::Duration;
 
 /// Shared by the tray, the commands and the windows.
 pub struct AppState {
@@ -19,6 +21,8 @@ pub struct AppState {
     pub tray_available: bool,
     /// The capture the CargoFrame window is showing.
     pub sessions: Sessions,
+    /// Where each capture keeps its temporary copies while its window is open.
+    pub workspace: Workspace,
     /// Which hidden windows are being kept warm (Memory mode).
     pub warm: Warm,
     /// The last timings, for Settings, General.
@@ -38,7 +42,9 @@ pub struct AppState {
 
 impl AppState {
     pub fn new(store: Store, tray_available: bool, connections: Connections) -> Self {
+        let workspace = Workspace::new(store.dirs().data().join("captures"));
         Self {
+            workspace,
             store,
             connections,
             paused: AtomicBool::new(false),
@@ -52,6 +58,18 @@ impl AppState {
             shortcut_errors: Mutex::new(BTreeMap::new()),
             pending_import: Mutex::new(None),
         }
+    }
+
+    /// Delete the capture folders that no open window owns and that are older than
+    /// `older_than` (a folder made a moment ago may belong to a window still opening).
+    pub fn sweep_captures(&self, older_than: Duration) -> Sweep {
+        let keep: Vec<_> = self
+            .sessions
+            .current()
+            .and_then(|s| s.dir_path())
+            .into_iter()
+            .collect();
+        self.workspace.sweep(&keep, older_than)
     }
 
     pub fn paused(&self) -> bool {

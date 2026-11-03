@@ -2,6 +2,7 @@
 
 use serde::Serialize;
 use std::collections::BTreeMap;
+use std::path::PathBuf;
 use std::sync::Mutex;
 
 #[derive(Debug, Clone)]
@@ -9,6 +10,15 @@ pub struct Attachment {
     pub name: String,
     pub mime: String,
     pub data: Vec<u8>,
+}
+
+/// Copies on disk of what a capture holds.
+#[derive(Debug, Clone, Default)]
+pub struct LocalCopies {
+    /// The screenshot as shown (edited, if the person edited it).
+    pub screenshot: Option<PathBuf>,
+    /// The ticked files, with the name each has in the project (`logs/app.log`).
+    pub files: Vec<(String, PathBuf)>,
 }
 
 /// How a service field is shaped, from the person's info type.
@@ -61,6 +71,9 @@ pub struct Payload {
     pub image: Option<Attachment>,
     /// The ticked project files, zipped. `None` when none were ticked.
     pub files_zip: Option<Attachment>,
+    /// Copies of the screenshot and the ticked files on disk, in the capture's own folder, for a
+    /// destination that takes real files (a chat they are pasted into). `None` for the others.
+    pub local: Option<LocalCopies>,
     /// The prompt, for destinations that use one.
     pub prompt: Option<String>,
     /// Mapped fields, in the order the layout lists them.
@@ -111,9 +124,6 @@ pub struct SendOutcome {
     pub url: Option<String>,
     /// Things that did not go as asked but did not stop the share ("files were skipped").
     pub notes: Vec<String>,
-    /// Text the window should offer to copy next ("Copy prompt"), for hand-offs that need a
-    /// second paste.
-    pub copy_next: Option<String>,
 }
 
 /// What an earlier attempt of the same share already did, so a retry continues instead of

@@ -436,7 +436,6 @@ impl Connector for GoogleConnector {
             summary,
             url,
             notes,
-            ..SendOutcome::default()
         })
     }
 }

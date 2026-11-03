@@ -2,6 +2,7 @@
 
 use crate::connections::Connections;
 use crate::registry::AppRegistry;
+use cargoframe_bundle::{CaptureDir, Workspace};
 use cargoframe_capture as cap;
 use cargoframe_config::{CaptureMode, Kind, Store, Trigger};
 use cargoframe_handoff::ChatList;
@@ -11,7 +12,7 @@ use cargoframe_window::files::{self, Limits, Scan};
 use cargoframe_window::vars::{self, Moment};
 use cargoframe_window::view::{self, AppView, ImageView, LayoutProblem, ProjectView, SessionView};
 use chrono::{Datelike, Local, Timelike};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
@@ -25,6 +26,9 @@ pub struct Session {
     /// The folder the project files are read from, as resolved at capture time. Kept here so a
     /// share never trusts a folder name sent back by the window.
     pub project_folder: Option<String>,
+    /// The folder this capture keeps copies in (the screenshot, the ticked files), made when a
+    /// destination first needs real files. It is deleted when the capture is closed.
+    dir: Mutex<Option<CaptureDir>>,
 }
 
 impl Session {
@@ -35,7 +39,30 @@ impl Session {
             view,
             edited: Mutex::new(None),
             project_folder,
+            dir: Mutex::new(None),
         }
+    }
+
+    /// Use this capture's folder (made now if it does not exist yet).
+    pub fn with_dir<R>(
+        &self,
+        workspace: &Workspace,
+        f: impl FnOnce(&CaptureDir) -> R,
+    ) -> std::io::Result<R> {
+        let mut guard = self.dir.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_none() {
+            *guard = Some(workspace.create(self.view.session_id)?);
+        }
+        Ok(f(guard.as_ref().expect("the folder was just made")))
+    }
+
+    /// Where this capture's folder is, if it has one.
+    pub fn dir_path(&self) -> Option<PathBuf> {
+        self.dir
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|d| d.path().to_path_buf())
     }
 
     pub fn set_edited(&self, png: Option<Vec<u8>>) {

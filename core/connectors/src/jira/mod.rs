@@ -567,7 +567,6 @@ impl Connector for JiraConnector {
             },
             url: Some(format!("{base}/browse/{key}")),
             notes,
-            ..SendOutcome::default()
         })
     }
 }

@@ -129,3 +129,31 @@ Requested by the owner after trying the app; each point and how it was read:
   choice per item: leave mine, replace mine, or import as a copy. Data rules cannot be imported as
   a copy because layouts refer to them by id. Every imported item passes the same checks as one
   typed into Settings.
+
+## Feedback round 1: sending into a Claude chat (3 Nov 2026)
+
+- **One click, everything at once.** The Share button of a Claude connection opens the chat (a new
+  one, or the pinned chat), waits until the Claude window is really in front, then pastes the
+  screenshot and the ticked files as files, pastes the message (title, prompt, the captured
+  window's name, the file names) and presses Enter. There is no "Copy prompt" step any more. A
+  link cannot carry any of this: Claude's own documentation only lets a link open a chat, with a
+  short text for a new one.
+- **It types into another program, so it checks first.** Nothing is pasted until the window in
+  front is the Claude app or a known browser showing a Claude page; a terminal titled "claude" is
+  never typed into. Before every paste and before Enter the window in front is looked at again and
+  has to be the same window. Click away and it stops, and Enter is never pressed into the wrong
+  place. It cannot see inside Claude, so it waits instead: for the chat to load, and for the
+  uploads to finish (more time for bigger files). Both waits can be lengthened per connection.
+- **Failures are not retried.** A hand-over that failed half way would paste twice if repeated, so
+  the failure kind is "Not delivered", never retried. The share is kept as a zip like any failed
+  share.
+- **Capture folder.** Files that must exist on disk (the screenshot as shown, edited or not, and
+  the ticked files, copied as they are when the button is pressed) live in a folder of their own
+  under CargoFrame's data folder. It is made the first time a destination needs it, deleted when
+  the capture window closes, and anything a crash leaves behind is swept at start-up and every
+  hour. Only folders carrying CargoFrame's marker file are ever deleted.
+- **Limits.** Claude takes at most 20 files (the screenshot is one) of 30 MB each in one message;
+  CargoFrame says so before sending instead of letting the chat refuse.
+- **Linux.** Needs X11 and `xdotool`; files cannot be pasted from CargoFrame there yet, so only
+  the message goes, with a note. Wayland offers no way to press keys in another program.
+- **Later (Phase 9).** Per-button rules for what goes to Claude, with a live "will send" line.

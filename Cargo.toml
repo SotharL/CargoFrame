@@ -12,6 +12,7 @@ members = [
     "core/bundle",
     "core/net",
     "core/connectors",
+    "core/deliver",
     "app",
 ]
 
