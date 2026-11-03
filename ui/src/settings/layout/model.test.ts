@@ -73,6 +73,11 @@ describe('new blocks', () => {
     expect(t1.id).toBe('text-1');
     expect(t1.rect).toEqual({ x: 8, y: 0, w: 4, h: 3 });
     expect(makeBlock([a, t1], 'text')!.id).toBe('text-2');
+    // a video block is named like the screenshot, the first one plainly
+    const clip = makeBlock([a, t1], 'video')!;
+    expect(clip.id).toBe('clip');
+    expect(clip.type).toBe('video');
+    expect(makeBlock([a, t1, clip], 'video')!.id).toBe('clip-1');
     expect(newBlockId([text('text-1', 0, 0)], 'text')).toBe('text-2');
   });
 

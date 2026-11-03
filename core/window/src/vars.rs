@@ -246,6 +246,7 @@ mod tests {
                             },
                         ],
                         on_success: OnSuccess::KeepOpen,
+                        send: Default::default(),
                     }),
                 },
             ],

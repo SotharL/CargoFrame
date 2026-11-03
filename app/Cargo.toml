@@ -31,6 +31,7 @@ cargoframe-config = { path = "../core/config" }
 cargoframe-capture = { path = "../core/capture" }
 cargoframe-context = { path = "../core/context" }
 cargoframe-handoff = { path = "../core/handoff" }
+cargoframe-deliver = { path = "../core/deliver" }
 cargoframe-layout = { path = "../core/layout" }
 cargoframe-window = { path = "../core/window" }
 cargoframe-rules = { path = "../core/rules" }
@@ -38,7 +39,8 @@ cargoframe-bundle = { path = "../core/bundle" }
 cargoframe-safe = { path = "../core/safe" }
 cargoframe-connectors = { path = "../core/connectors" }
 cargoframe-net = { path = "../core/net" }
-tauri-plugin-clipboard-manager = "2"
+cargoframe-update = { path = "../core/update" }
+cargoframe-video = { path = "../core/video" }
 tauri-plugin-global-shortcut = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
@@ -54,4 +56,5 @@ keyring = { version = "3", default-features = false, features = ["async-secret-s
 [dev-dependencies]
 tempfile.workspace = true
 cargoframe-net = { path = "../core/net", features = ["mock"] }
+sha2 = "0.11"
 zip = { version = "9", default-features = false, features = ["deflate"] }

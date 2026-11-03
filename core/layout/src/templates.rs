@@ -24,7 +24,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 8] = [
+pub const TEMPLATES: [TemplateInfo; 15] = [
     TemplateInfo {
         key: "local-capture",
         name: "Save a capture locally",
@@ -32,9 +32,21 @@ pub const TEMPLATES: [TemplateInfo; 8] = [
         service: None,
     },
     TemplateInfo {
+        key: "local-video",
+        name: "Save a recording locally",
+        description: "The recording, a note and the files you tick, saved as a zip in your folder for saved zips. For a trigger that makes a video. No account needed.",
+        service: None,
+    },
+    TemplateInfo {
         key: "jira-bug",
         name: "Jira bug report",
         description: "Project, issue type, summary and description, with the screenshot and any files attached to a new issue.",
+        service: Some(ConnectionKind::Jira),
+    },
+    TemplateInfo {
+        key: "jira-video",
+        name: "Jira bug report with a recording",
+        description: "Like the Jira bug report, with the recording of your screen attached to the new issue. For a trigger that makes a video.",
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
@@ -47,6 +59,12 @@ pub const TEMPLATES: [TemplateInfo; 8] = [
         key: "google-drive",
         name: "Google Drive upload",
         description: "Upload the screenshot and a zip of the ticked files to a Drive folder you pick.",
+        service: Some(ConnectionKind::Google),
+    },
+    TemplateInfo {
+        key: "google-drive-video",
+        name: "Google Drive upload of a recording",
+        description: "Upload the recording and a zip of the ticked files to a Drive folder you pick. For a trigger that makes a video.",
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
@@ -66,6 +84,30 @@ pub const TEMPLATES: [TemplateInfo; 8] = [
         name: "Ask Claude about a capture",
         description: "Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude.",
         service: Some(ConnectionKind::Claude),
+    },
+    TemplateInfo {
+        key: "slack-message",
+        name: "Slack message",
+        description: "Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.",
+        service: Some(ConnectionKind::Slack),
+    },
+    TemplateInfo {
+        key: "slack-video",
+        name: "Slack message with a recording",
+        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread. For a trigger that makes a video.",
+        service: Some(ConnectionKind::Slack),
+    },
+    TemplateInfo {
+        key: "discord-message",
+        name: "Discord message",
+        description: "Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.",
+        service: Some(ConnectionKind::Discord),
+    },
+    TemplateInfo {
+        key: "teams-message",
+        name: "Teams message",
+        description: "Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.",
+        service: Some(ConnectionKind::Teams),
     },
     TemplateInfo {
         key: "custom-post",
@@ -105,6 +147,7 @@ fn files(title: &str) -> BlockKind {
         title: title.to_string(),
         include: vec!["*.log".to_string(), "*.txt".to_string()],
         preselect: Vec::new(),
+        look_in: Default::default(),
     })
 }
 
@@ -141,6 +184,7 @@ fn button(
             prompt_block_id: prompt_block_id.map(String::from),
             mappings,
             on_success: OnSuccess::CloseWindow,
+            send: Default::default(),
         }),
     )
 }
@@ -155,6 +199,15 @@ const SEEN_IN: &str =
 /// layout has no id: the caller chooses it when the person saves a copy.
 pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
     let t = info(key)?;
+    // A template for a recording is the one for a picture with the picture block swapped for a
+    // video block, so the two cannot drift apart.
+    let (key, is_video) = match key {
+        "local-video" => ("local-capture", true),
+        "jira-video" => ("jira-bug", true),
+        "google-drive-video" => ("google-drive", true),
+        "slack-video" => ("slack-message", true),
+        other => (other, false),
+    };
     let c = match (
         t.service,
         connection_id.map(str::trim).filter(|c| !c.is_empty()),
@@ -345,6 +398,112 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 vec![from_block("chat", "chat")],
             ),
         ],
+        ("slack-message", Some(c)) => vec![
+            shot(10),
+            block(
+                "channel",
+                rect(7, 0, 5, 1),
+                web_list("Channel", c, "channels"),
+            ),
+            block(
+                "message",
+                rect(7, 1, 5, 4),
+                text("Message", TextRole::Plain, SEEN_IN),
+            ),
+            block(
+                "thread",
+                rect(7, 5, 5, 1),
+                text(
+                    "Reply in a thread (message link, optional)",
+                    TextRole::Plain,
+                    "",
+                ),
+            ),
+            block("files", rect(7, 6, 5, 3), files("Attach files")),
+            button(
+                rect(7, 9, 5, 1),
+                "Post to Slack",
+                Some(c),
+                Some("message"),
+                vec![
+                    from_block("channel", "channel"),
+                    from_block("thread", "thread"),
+                ],
+            ),
+        ],
+        ("discord-message", Some(c)) => vec![
+            shot(10),
+            block(
+                "channel",
+                rect(7, 0, 5, 1),
+                web_list("Channel or forum", c, "channels"),
+            ),
+            block(
+                "title",
+                rect(7, 1, 5, 1),
+                text("Title (a forum post's name)", TextRole::Plain, WHERE),
+            ),
+            block(
+                "message",
+                rect(7, 2, 5, 3),
+                text("Message", TextRole::Plain, SEEN_IN),
+            ),
+            block(
+                "thread",
+                rect(7, 5, 5, 1),
+                text("Reply in a thread (link, optional)", TextRole::Plain, ""),
+            ),
+            block("files", rect(7, 6, 5, 3), files("Attach files")),
+            button(
+                rect(7, 9, 5, 1),
+                "Post to Discord",
+                Some(c),
+                Some("message"),
+                vec![
+                    from_block("channel", "channel"),
+                    from_block("title", "title"),
+                    from_block("thread", "thread"),
+                ],
+            ),
+        ],
+        ("teams-message", Some(c)) => vec![
+            shot(8),
+            block(
+                "target",
+                rect(7, 0, 5, 1),
+                web_list("Chat or channel", c, "targets"),
+            ),
+            block(
+                "title",
+                rect(7, 1, 5, 1),
+                text("Headline (optional)", TextRole::Plain, ""),
+            ),
+            block(
+                "message",
+                rect(7, 2, 5, 4),
+                text("Message", TextRole::Plain, SEEN_IN),
+            ),
+            block(
+                "thread",
+                rect(7, 6, 5, 1),
+                text(
+                    "Reply in a channel thread (message link, optional)",
+                    TextRole::Plain,
+                    "",
+                ),
+            ),
+            button(
+                rect(7, 7, 5, 1),
+                "Post to Teams",
+                Some(c),
+                Some("message"),
+                vec![
+                    from_block("target", "target"),
+                    from_block("title", "title"),
+                    from_block("thread", "thread"),
+                ],
+            ),
+        ],
         ("custom-post", Some(c)) => vec![
             shot(8),
             block(
@@ -368,6 +527,20 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         _ => return None,
     };
+    let blocks = if is_video {
+        blocks
+            .into_iter()
+            .map(|mut b| {
+                if matches!(b.kind, BlockKind::Screenshot) {
+                    b.id = "clip".to_string();
+                    b.kind = BlockKind::Video;
+                }
+                b
+            })
+            .collect()
+    } else {
+        blocks
+    };
     Some(Layout {
         id: String::new(),
         name: t.name.to_string(),
@@ -388,8 +561,18 @@ mod tests {
     impl Registry for One {
         fn connection(&self, id: &str) -> Option<ConnectionInfo> {
             (id == "c").then_some(ConnectionInfo {
-                kind: self.0,
-                state: self.1,
+                // A Custom API carries what its request describes: this one describes everything.
+                capabilities: if self.0 == ConnectionKind::CustomApi {
+                    crate::capabilities::Capabilities::custom(crate::capabilities::CustomShape {
+                        has_body: true,
+                        screenshot_field: true,
+                        files_field: true,
+                        has_lists: true,
+                    })
+                } else {
+                    crate::capabilities::Capabilities::for_kind(self.0, true)
+                },
+                ..ConnectionInfo::new(self.0, self.1)
             })
         }
         fn rule_exists(&self, _: &str) -> bool {
@@ -418,6 +601,9 @@ mod tests {
             ConnectionKind::Google,
             ConnectionKind::Reddit,
             ConnectionKind::Claude,
+            ConnectionKind::Slack,
+            ConnectionKind::Discord,
+            ConnectionKind::Teams,
             ConnectionKind::CustomApi,
         ] {
             assert!(
@@ -450,13 +636,16 @@ mod tests {
                 "{}",
                 t.key
             );
-            // One screenshot, one sharing button, and the button is named for the connection.
+            // One capture (a picture or a recording), one sharing button, and the button is
+            // named for the connection.
             assert_eq!(
                 l.blocks
                     .iter()
-                    .filter(|b| matches!(b.kind, BlockKind::Screenshot))
+                    .filter(|b| matches!(b.kind, BlockKind::Screenshot | BlockKind::Video))
                     .count(),
-                1
+                1,
+                "{}",
+                t.key
             );
             let BlockKind::SharingButton(b) = &l.block("send").unwrap().kind else {
                 panic!("{}: no button", t.key);
@@ -473,6 +662,44 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn a_template_for_a_recording_has_a_video_block_where_the_picture_would_be() {
+        for (video, picture) in [
+            ("local-video", "local-capture"),
+            ("jira-video", "jira-bug"),
+            ("google-drive-video", "google-drive"),
+            ("slack-video", "slack-message"),
+        ] {
+            let v = build(video, Some("c")).unwrap();
+            let p = build(picture, Some("c")).unwrap();
+            assert_eq!(v.blocks.len(), p.blocks.len(), "{video}");
+            assert!(
+                !v.blocks
+                    .iter()
+                    .any(|b| matches!(b.kind, BlockKind::Screenshot)),
+                "{video} still has a picture"
+            );
+            let clip = v
+                .block("clip")
+                .unwrap_or_else(|| panic!("{video}: no video block"));
+            assert!(matches!(clip.kind, BlockKind::Video));
+            // same place, same size, as the picture had
+            assert_eq!(clip.rect, p.block("shot").unwrap().rect, "{video}");
+            // everything else is the same as the picture's template
+            for (a, b) in v.blocks.iter().zip(&p.blocks) {
+                if a.id != "clip" {
+                    assert_eq!(a, b, "{video}");
+                }
+            }
+            assert_eq!(v.name, info(video).unwrap().name);
+        }
+        // A picture template is not changed by this.
+        assert!(build("slack-message", Some("c"))
+            .unwrap()
+            .block("shot")
+            .is_some());
     }
 
     #[test]

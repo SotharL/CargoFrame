@@ -68,11 +68,12 @@ export type DropdownSource =
 
 export type BlockContent =
   | { type: 'screenshot' }
+  | { type: 'video' }
   | {
       type: 'text';
       title: string;
       placement: 'above' | 'inside';
-      role: 'plain' | 'prompt';
+      role: 'plain' | 'prompt' | 'zip_name';
       default_text: string;
     }
   | {
@@ -82,9 +83,53 @@ export type BlockContent =
       prompt_block_id: string | null;
       mappings: InfoMapping[];
       on_success: 'close_window' | 'keep_open';
+      /** What goes with the text. Absent while it is the default (picture, files attached). */
+      send?: SendRules;
     }
   | { type: 'dropdown'; title: string; source: DropdownSource }
-  | { type: 'files'; title: string; include: string[]; preselect: string[] };
+  | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
+
+/** What happens to the ticked files: sent as files, written into the message, or left out. */
+export type FilesHow = 'attach' | 'inline' | 'none';
+
+export interface SendRules {
+  screenshot: boolean;
+  files: FilesHow;
+  /** With `files` set to `inline`: the most text, in kilobytes, written into the message. */
+  inline_limit_kb: number;
+}
+
+export const DEFAULT_SEND_RULES: SendRules = { screenshot: true, files: 'attach', inline_limit_kb: 64 };
+export const MAX_INLINE_KB = 512;
+
+/** A folder a Files block can look in, found from the program that had focus. */
+export type LookFolder = 'project' | 'program' | 'above_1' | 'above_2' | 'above_3';
+
+export interface LookIn {
+  /** Empty means the project folder. */
+  folders: LookFolder[];
+  /** A folder inside each of the folders above, such as logs; empty for the folder itself. */
+  subfolder: string;
+}
+
+/** One folder a Files block looked in, and how many files it offered. */
+export interface PlaceFound {
+  label: string;
+  folder: string;
+  exists: boolean;
+  found: number;
+}
+
+/** What a Files block would find, for the builder's live count. */
+export interface FilesPreview {
+  program: string | null;
+  places: PlaceFound[];
+  missing: string[];
+  total: number;
+  ticked: number;
+  truncated: boolean;
+  problem: string | null;
+}
 
 export type Block = { id: string; rect: Rect } & BlockContent;
 
@@ -115,6 +160,8 @@ export interface FilesState {
   entries: FileEntry[];
   truncated: boolean;
   problem: string | null;
+  /** What each folder looked in held; the window says where files came from when there are several. */
+  places: PlaceFound[];
 }
 
 export interface DropdownOption {
@@ -130,6 +177,14 @@ export interface DropdownState {
   message: string | null;
 }
 
+/** What the window knows of the recording of a video capture. */
+export interface VideoClipInfo {
+  width: number;
+  height: number;
+  duration_ms: number;
+  bytes: number;
+}
+
 export interface SessionView {
   session_id: number;
   trigger_id: string;
@@ -141,6 +196,8 @@ export interface SessionView {
   app: { title: string; exe_path: string | null; exe_name: string | null } | null;
   project: { folder: string; name: string; how: string } | null;
   image: { width: number; height: number };
+  /** The recording, for a capture made by a video trigger; absent for a screenshot. */
+  video?: VideoClipInfo | null;
   variables: Record<string, string>;
   texts: Record<string, { value: string; unresolved: string[] }>;
   files: Record<string, FilesState>;
@@ -159,7 +216,7 @@ export interface LayoutTemplate {
   name: string;
   description: string;
   /** `null`: the one that saves locally and needs no connection. */
-  service: 'jira' | 'google' | 'reddit' | 'claude' | 'custom' | null;
+  service: 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | null;
 }
 
 // ----- export and import of settings -----
@@ -216,6 +273,9 @@ export interface ItemList<T> {
   problems: string[];
 }
 
+/** A screenshot, or a video (the first press starts recording, the next one stops). */
+export type Media = 'screenshot' | 'video';
+
 export type CaptureMode = 'active_window' | 'display' | 'all_displays';
 
 export interface Trigger {
@@ -224,11 +284,13 @@ export interface Trigger {
   /** Canonical, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only". */
   shortcut: string;
   capture: CaptureMode;
+  /** What the shortcut makes: a picture of the screen, or a recording of it. */
+  media: Media;
   layout_id: string | null;
 }
 
-export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text';
-export type RuleMultiple = 'first' | 'last' | 'join';
+export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text' | 'file';
+export type RuleMultiple = 'first' | 'last' | 'join' | 'nth';
 
 export interface Rule {
   name: string;
@@ -237,6 +299,10 @@ export interface Rule {
   query: string;
   multiple: RuleMultiple;
   separator: string;
+  /** Which one when `multiple` is `nth`: 1 is the first, -1 the last. */
+  nth: number;
+  /** Regex only: the value built from each match, such as `$1.$2`. Empty gives group 1 or the match. */
+  output: string;
   fallback: string | null;
   max_bytes: number;
 }
@@ -245,6 +311,9 @@ export interface RuleTest {
   folder: string | null;
   value: string | null;
   problem: string | null;
+  /** The file the rule's pattern means, relative to the folder, and the start of it. */
+  file: string | null;
+  excerpt: string | null;
 }
 
 export type InfoKind = 'text' | 'choice' | 'multi_choice' | 'number' | 'flag';
@@ -271,6 +340,65 @@ export interface Safe {
   max_retries: number;
 }
 
+// ----- video (mirror core/config Video and app/src/video.rs) -----
+
+export type VideoCapture = 'auto' | 'gdigrab' | 'ddagrab' | 'x11';
+export type VideoEncoder = 'auto' | 'software' | 'nvenc' | 'qsv' | 'amf' | 'media_foundation' | 'vaapi';
+
+export interface Video {
+  /** Folder that holds ffmpeg and ffprobe, or the ffmpeg program; null means "find it". */
+  ffmpeg: string | null;
+  capture: VideoCapture;
+  encoder: VideoEncoder;
+  fps: number;
+  /** Seconds before the stop shortcut the clip may start. */
+  window_secs: number;
+  /** Larger pictures are scaled down to this height; 0 keeps the screen's size. */
+  max_height: number;
+}
+
+export interface VideoTools {
+  found: boolean;
+  ffmpeg: string | null;
+  version: string | null;
+  /** Encoders this ffmpeg lists. Listed does not mean this PC can use it. */
+  encoders: VideoEncoder[];
+  captures: VideoCapture[];
+  auto_capture: VideoCapture | null;
+  auto_encoder: VideoEncoder | null;
+  os: 'windows' | 'linux' | 'other';
+  problem: string | null;
+}
+
+/** What "Export a copy" does with the test clip (mirrors app/src/video.rs `TestEdit`). */
+export interface VideoTestEdit {
+  start_ms: number;
+  end_ms: number | null;
+  crop: { x: number; y: number; w: number; h: number } | null;
+  /** A mark laid over the whole copy: none, a square ffmpeg draws, or a picture the page draws. */
+  mark: 'none' | 'square' | 'drawn';
+}
+
+/** A recording started with "Record until I stop". */
+export type VideoRecording =
+  | { state: 'idle' }
+  | { state: 'recording'; elapsed_ms: number; buffered_ms: number; squeezed: boolean; keep_secs: number }
+  | { state: 'finishing' }
+  | { state: 'failed'; message: string };
+
+export interface VideoTrial {
+  ok: boolean;
+  message: string;
+  capture: VideoCapture | null;
+  encoder: VideoEncoder | null;
+  width: number;
+  height: number;
+  clip_ms: number;
+  clip_bytes: number;
+  took_ms: number;
+  clip: string | null;
+}
+
 export interface VariableInfo {
   name: string;
   description: string;
@@ -278,7 +406,7 @@ export interface VariableInfo {
 
 // ----- connections and sharing (mirror core/connectors and app/src/share.rs) -----
 
-export type ServiceKind = 'jira' | 'google' | 'reddit' | 'claude' | 'custom';
+export type ServiceKind = 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom';
 export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled';
 
 export interface Pair {
@@ -318,7 +446,10 @@ export type Connection = ConnectionCommon &
     | { kind: 'jira'; site_url: string; auth: 'api_token' | 'pat'; email: string }
     | { kind: 'google'; client_id: string; sheets: boolean; full_drive: boolean }
     | { kind: 'reddit'; client_id: string; redirect_port: number }
-    | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; image_and_text_together: boolean }
+    | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; send_automatically: boolean; extra_wait_seconds: number }
+    | { kind: 'slack' }
+    | { kind: 'discord' }
+    | { kind: 'teams'; client_id: string; tenant: string }
     | {
         kind: 'custom';
         base_url: string;
@@ -350,6 +481,47 @@ export interface Describe {
   summary: string;
 }
 
+export type Support = 'yes' | 'limited' | 'no';
+
+export interface Capability {
+  support: Support;
+  /** One line: how it is used, or why it cannot be. */
+  note: string;
+}
+
+/** What a destination can take: the one table behind the builder, the window and the share. */
+export interface Capabilities {
+  text: Capability;
+  dropdown: Capability;
+  screenshot: Capability;
+  video: Capability;
+  files: Capability;
+  link: Capability;
+}
+
+/** How a block takes part in a share. */
+export type Role =
+  | { role: 'screenshot' }
+  | { role: 'video' }
+  | { role: 'files' }
+  | { role: 'prompt' }
+  | { role: 'zip_name' }
+  | { role: 'field'; field: string };
+
+export type Verdict =
+  | ({ state: 'sent' } & Role)
+  | { state: 'cannot_send'; why: string }
+  | { state: 'switched_off' }
+  | { state: 'not_used' };
+
+export type BlockReach = { block_id: string } & Verdict;
+
+/** What one sharing button does with every other block of the layout. */
+export interface Reach {
+  capabilities: Capabilities;
+  blocks: BlockReach[];
+}
+
 export interface ConnectionView {
   id: string;
   name: string;
@@ -360,6 +532,8 @@ export interface ConnectionView {
   /** Which of the secrets the person types are stored (never their values). */
   secrets: { name: string; stored: boolean }[];
   describe: Describe;
+  /** What a button to this connection can send. */
+  capabilities: Capabilities;
 }
 
 export interface ConnectionsView {
@@ -389,6 +563,10 @@ export interface SharingView {
   mode: 'send' | 'save_locally';
   /** What pressing it does, when that is not obvious. */
   note: string | null;
+  /** The kind of destination (`jira`, `claude`...), which gives the button its colour. Null when it saves a zip here. */
+  kind: ServiceKind | null;
+  /** What this button does with each other block, and what its destination can take. */
+  reach: Reach | null;
 }
 
 export interface SavedCopy {
@@ -403,7 +581,6 @@ export type ShareResult =
       summary: string;
       url: string | null;
       notes: string[];
-      copy_next: string | null;
       close: boolean;
     }
   | { status: 'saved_locally'; path: string; notes: string[]; close: boolean }
@@ -431,4 +608,62 @@ export interface ShareRequest {
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;
+  /** For a recording: what was cut or cropped. Left out (or `null`) sends it as it is. */
+  clip_edit?: ClipEdit | null;
+}
+
+/**
+ * What the person did to a recording: kept from `start_ms` to `end_ms` (`null` is the end of the
+ * recording), and perhaps cropped to an area, in the recording's own pixels.
+ */
+export interface ClipEdit {
+  start_ms: number;
+  end_ms: number | null;
+  crop?: { x: number; y: number; w: number; h: number } | null;
+  /** A mark was drawn: the window uploads it just before the share. */
+  mark?: boolean;
+}
+
+// ----- updates (Settings, General) -----
+
+/** Where an update is. */
+export type UpdatePhase =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'downloading'; done: number; total: number | null }
+  | { state: 'verifying' }
+  | { state: 'installing' }
+  | {
+      state: 'failed';
+      message: string;
+      /** The verified installer, kept so it can be run by hand. */
+      installer: string | null;
+      needs_token: boolean;
+    };
+
+/** The outcome of the last check. */
+export type UpdateLast =
+  | { state: 'up_to_date'; latest: string }
+  | {
+      state: 'available';
+      version: string;
+      notes: string;
+      page: string;
+      installer: string;
+      size: number;
+      published: string | null;
+    }
+  | { state: 'failed'; message: string; needs_token: boolean };
+
+export interface UpdateView {
+  current: string;
+  repository: string;
+  /** There is an installer for this kind of computer. */
+  supported: boolean;
+  /** A GitHub token is stored. The token itself is never sent to the window. */
+  token_set: boolean;
+  /** The password store could not be read, so a token cannot be kept or used. */
+  token_problem: string | null;
+  last: UpdateLast | null;
+  phase: UpdatePhase;
 }

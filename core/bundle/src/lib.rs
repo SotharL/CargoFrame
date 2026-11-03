@@ -4,14 +4,17 @@
 //! * [`entry`]: names inside the zip, made safe and unique.
 //! * [`build`]: write the zip (streaming, with a checksum for every file) and its manifest.
 //! * [`save`]: copy a finished zip into a folder atomically, for the fallback ladder.
+//! * [`workspace`]: the folder one capture lives in while its window is open.
 //!
 //! Only what the person chose goes in. Settings, connections and secrets are never read here.
 
 pub mod build;
 pub mod entry;
 pub mod save;
+pub mod workspace;
 
 pub use build::{
     build_zip, BundleError, Created, Item, Limits, Manifest, ManifestFile, ManifestInfo, Source,
 };
 pub use save::copy_atomic;
+pub use workspace::{CaptureDir, Sweep, Workspace};

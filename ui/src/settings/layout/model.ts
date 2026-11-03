@@ -12,9 +12,10 @@ export type BlockType = BlockContent['type'];
 
 export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: [number, number] }[] = [
   { type: 'screenshot', label: 'Screenshot', hint: 'The capture, with crop, draw, shapes and text', size: [8, 8] },
+  { type: 'video', label: 'Video', hint: 'The recording of a video trigger, to play, trim, crop and mark', size: [8, 8] },
   { type: 'text', label: 'Text', hint: 'A text box with a title, for notes or a prompt', size: [4, 3] },
   { type: 'dropdown', label: 'Dropdown', hint: 'Choices from a service or from your Claude chats', size: [4, 2] },
-  { type: 'files', label: 'Files', hint: 'Files from the project folder to tick and zip together', size: [6, 3] },
+  { type: 'files', label: 'Files', hint: 'Files from the project folder (or folders above the program) to tick and zip together', size: [6, 3] },
   { type: 'sharing_button', label: 'Sharing button', hint: 'Sends everything to a connection', size: [4, 2] },
 ];
 
@@ -51,6 +52,7 @@ export function firstFree(blocks: readonly Block[], w: number, h: number): Rect 
 
 const ID_PREFIX: Record<BlockType, string> = {
   screenshot: 'shot',
+  video: 'clip',
   text: 'text',
   dropdown: 'dropdown',
   files: 'files',
@@ -61,7 +63,7 @@ const ID_PREFIX: Record<BlockType, string> = {
 export function newBlockId(blocks: readonly Block[], type: BlockType): string {
   const used = new Set(blocks.map((b) => b.id));
   const prefix = ID_PREFIX[type];
-  if (type === 'screenshot' && !used.has(prefix)) return prefix;
+  if ((type === 'screenshot' || type === 'video') && !used.has(prefix)) return prefix;
   for (let n = 1; ; n++) {
     const id = `${prefix}-${n}`;
     if (!used.has(id)) return id;
@@ -71,13 +73,16 @@ export function newBlockId(blocks: readonly Block[], type: BlockType): string {
 function content(type: BlockType): BlockContent {
   switch (type) {
     case 'screenshot':
+    case 'video':
       return { type };
     case 'text':
       return { type, title: 'Notes', placement: 'above', role: 'plain', default_text: '' };
     case 'dropdown':
       return { type, title: 'Choose', source: { type: 'claude_chats' } };
     case 'files':
-      return { type, title: 'Files', include: ['**/*.log'], preselect: [] };
+      return {
+        type, title: 'Files', include: ['**/*.log'], preselect: [], look_in: { folders: ['project'], subfolder: '' },
+      };
     case 'sharing_button':
       return {
         type, label: 'Share', connection_id: null, prompt_block_id: null, mappings: [], on_success: 'close_window',

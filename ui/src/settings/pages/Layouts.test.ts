@@ -82,3 +82,28 @@ describe('Layouts: save as copy', () => {
     expect(await names()).toEqual(['Bug report', 'Bug report v2 (copy)']);
   });
 });
+
+describe('Layouts: what a button sends', () => {
+  it('shows what the chosen destination can take, what each block does, and greys out what cannot be sent', async () => {
+    await api.saveItem('connection', 'rd', { name: 'My Reddit', kind: 'reddit', enabled: true, client_id: 'x', redirect_port: 8080 });
+    await api.connectConnection('rd');
+    await api.saveItem('layout', 'post', {
+      id: 'post', name: 'Post',
+      blocks: [
+        { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 6, h: 4 } },
+        { id: 'logs', type: 'files', rect: { x: 6, y: 0, w: 6, h: 4 }, title: 'Logs', include: ['*.log'], preselect: [], look_in: { folders: ['project'], subfolder: '' } },
+        { id: 'send', type: 'sharing_button', rect: { x: 0, y: 4, w: 6, h: 1 }, label: 'Post it', connection_id: 'rd', prompt_block_id: null, mappings: [], on_success: 'keep_open' },
+      ],
+    });
+    render(Layouts);
+    // The layout opens from the picker; the shared canvas then tags what the button cannot send.
+    const logs = await screen.findByRole('button', { name: /Files block Logs/ });
+    await waitFor(() => expect(logs.classList.contains('greyed')).toBe(true));
+
+    // Focusing a block selects it, the way the keyboard does.
+    (await screen.findByRole('button', { name: /Sharing button block Post it/ })).focus();
+    expect(await screen.findByText('Reddit can take')).toBeTruthy();
+    expect(screen.getAllByText(/Reddit cannot take files on a post/).length).toBeGreaterThan(0);
+    expect(screen.getByLabelText('Ticked files')).toHaveProperty('disabled', true);
+  });
+});

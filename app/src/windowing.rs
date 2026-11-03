@@ -147,6 +147,10 @@ pub fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestApi) {
         .load_or_default::<General>()
         .map(|g| g.memory_mode)
         .unwrap_or_default();
+    if label == SETTINGS {
+        // A recording started from the Video page belongs to that window.
+        state.recording.cancel();
+    }
     tracing::debug!(window = %label, ?mode, "window closing");
     let OnClose::Hide { release_after } = warm::on_close(mode) else {
         return;

@@ -2,44 +2,190 @@
 
 use crate::connections::Connections;
 use crate::registry::AppRegistry;
+use cargoframe_bundle::{CaptureDir, Workspace};
 use cargoframe_capture as cap;
 use cargoframe_config::{CaptureMode, Kind, Store, Trigger};
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::Layout;
 use cargoframe_rules::{run_all, FsFiles, Rule};
 use cargoframe_window::files::{self, Limits, Scan};
+use cargoframe_window::places;
 use cargoframe_window::vars::{self, Moment};
-use cargoframe_window::view::{self, AppView, ImageView, LayoutProblem, ProjectView, SessionView};
+use cargoframe_window::view::{
+    self, AppView, ImageView, LayoutProblem, ProjectView, SessionView, VideoView,
+};
 use chrono::{Datelike, Local, Timelike};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
+/// The recording of a capture made by a video trigger, kept in the capture's own folder.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Clip {
+    pub path: PathBuf,
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub bytes: u64,
+}
+
 pub struct Session {
-    /// The screenshot, PNG-encoded for speed.
+    /// The screenshot, PNG-encoded for speed. For a video capture it is the picture taken when
+    /// the recording was stopped, used for the context (the program in focus) and as a poster.
     pub png: Vec<u8>,
     pub view: SessionView,
+    /// The recording, for a capture made by a video trigger.
+    pub clip: Option<Clip>,
     /// The picture as the person edited it (crop, drawings), sent by the window just before a
     /// share. Replaced each time; `None` while the picture is untouched.
     edited: Mutex<Option<Vec<u8>>>,
-    /// The folder the project files are read from, as resolved at capture time. Kept here so a
-    /// share never trusts a folder name sent back by the window.
-    pub project_folder: Option<String>,
+    /// For a recording: the mark the window drew on a see-through picture the size of the
+    /// recording (a PNG), sent just before a share. `None` while there is no mark.
+    clip_mark: Mutex<Option<Vec<u8>>>,
+    /// The folder the ticked files are read from, as worked out at capture time: the highest
+    /// folder any Files block looks in (the project folder unless a block looks higher). Every
+    /// file path the window shows is relative to it. Kept here so a share never trusts a folder
+    /// name sent back by the window.
+    pub files_root: Option<String>,
+    /// The folder this capture keeps copies in (the screenshot, the ticked files), made when a
+    /// destination first needs real files. It is deleted when the capture is closed.
+    dir: Mutex<Option<CaptureDir>>,
 }
 
 impl Session {
     pub fn new(png: Vec<u8>, view: SessionView) -> Self {
-        let project_folder = view.project.as_ref().map(|p| p.folder.clone());
+        let files_root = view.project.as_ref().map(|p| p.folder.clone());
         Self {
             png,
             view,
+            clip: None,
             edited: Mutex::new(None),
-            project_folder,
+            clip_mark: Mutex::new(None),
+            files_root,
+            dir: Mutex::new(None),
         }
+    }
+
+    /// This capture is a recording: tell the window about it.
+    pub fn with_clip(mut self, clip: Clip) -> Self {
+        self.view.video = Some(VideoView {
+            width: clip.width,
+            height: clip.height,
+            duration_ms: clip.duration_ms,
+            bytes: clip.bytes,
+        });
+        self.clip = Some(clip);
+        self
+    }
+
+    /// Read the files from another folder than the project folder (see `files_root`).
+    pub fn with_files_root(mut self, root: Option<String>) -> Self {
+        self.files_root = root;
+        self
+    }
+
+    /// Use this capture's folder (made now if it does not exist yet).
+    pub fn with_dir<R>(
+        &self,
+        workspace: &Workspace,
+        f: impl FnOnce(&CaptureDir) -> R,
+    ) -> std::io::Result<R> {
+        let mut guard = self.dir.lock().unwrap_or_else(|e| e.into_inner());
+        if guard.is_none() {
+            *guard = Some(workspace.create(self.view.session_id)?);
+        }
+        Ok(f(guard.as_ref().expect("the folder was just made")))
+    }
+
+    /// The files ticked by default, once each, in the order the window lists them.
+    pub fn preselected(&self) -> Vec<String> {
+        let mut seen = std::collections::BTreeSet::new();
+        let Some(layout) = self.view.layout.as_ref() else {
+            return Vec::new();
+        };
+        let mut out = Vec::new();
+        for block in &layout.blocks {
+            let Some(state) = self.view.files.get(&block.id) else {
+                continue;
+            };
+            for entry in state.entries.iter().filter(|e| e.selected) {
+                if seen.insert(entry.path.clone()) {
+                    out.push(entry.path.clone());
+                }
+            }
+        }
+        out
+    }
+
+    /// Copy the files that are ticked by default into this capture's folder, as they are right
+    /// now: a log that keeps growing is what it was at the moment of the capture, and a share
+    /// has less to do when the button is pressed. Meant for a background thread: it holds the
+    /// folder's lock while it works, so a share that starts meanwhile waits for it.
+    ///
+    /// Best effort: a file that cannot be copied is left for the share to try again (and report).
+    /// Nothing is copied beyond `max_file` bytes for one file or `max_total` for all of them, and
+    /// it stops as soon as `still_open` says the window moved on. Returns how many were copied.
+    pub fn stage_preselected(
+        &self,
+        workspace: &Workspace,
+        max_file: u64,
+        max_total: u64,
+        still_open: &dyn Fn() -> bool,
+    ) -> usize {
+        let wanted = self.preselected();
+        let (Some(root), false) = (self.files_root.as_deref(), wanted.is_empty()) else {
+            return 0;
+        };
+        let sizes: std::collections::BTreeMap<&str, u64> = self
+            .view
+            .files
+            .values()
+            .flat_map(|f| f.entries.iter().map(|e| (e.path.as_str(), e.size)))
+            .collect();
+        let copied = self.with_dir(workspace, |dir| {
+            let mut count = 0;
+            let mut total = 0u64;
+            for rel in &wanted {
+                if !still_open() {
+                    break;
+                }
+                let size = sizes.get(rel.as_str()).copied().unwrap_or(0);
+                if size > max_file || total + size > max_total {
+                    continue;
+                }
+                if dir.stage(Path::new(root), rel, max_file).is_ok() {
+                    count += 1;
+                    total += size;
+                }
+            }
+            count
+        });
+        copied.unwrap_or(0)
+    }
+
+    /// Where this capture's folder is, if it has one.
+    pub fn dir_path(&self) -> Option<PathBuf> {
+        self.dir
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|d| d.path().to_path_buf())
     }
 
     pub fn set_edited(&self, png: Option<Vec<u8>>) {
         *self.edited.lock().unwrap_or_else(|e| e.into_inner()) = png;
+    }
+
+    pub fn set_clip_mark(&self, png: Option<Vec<u8>>) {
+        *self.clip_mark.lock().unwrap_or_else(|e| e.into_inner()) = png;
+    }
+
+    /// The mark the window drew for the recording, if there is one.
+    pub fn clip_mark(&self) -> Option<Vec<u8>> {
+        self.clip_mark
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// The picture to send: the edited one if there is one, else the capture.
@@ -108,6 +254,8 @@ pub enum PrepareError {
     Config(String),
     #[error("{0}")]
     Capture(String),
+    #[error("{0}")]
+    Clip(String),
 }
 
 fn mode_of(mode: CaptureMode) -> cap::Mode {
@@ -116,6 +264,71 @@ fn mode_of(mode: CaptureMode) -> cap::Mode {
         CaptureMode::Display => cap::Mode::Display,
         CaptureMode::AllDisplays => cap::Mode::AllDisplays,
     }
+}
+
+/// The name of the recording inside a capture's own folder.
+pub const CLIP_NAME: &str = "recording.mp4";
+
+/// What a finished recording is, as far as the window needs to know.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ClipInfo {
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub bytes: u64,
+}
+
+/// A picture taken now, when a recording has just been stopped: what the program in focus is
+/// gives the capture its context, and the picture is the poster.
+pub fn capture_for_video(trigger: &Trigger) -> Result<cap::Captured, PrepareError> {
+    cap::capture(mode_of(trigger.capture)).map_err(|e| PrepareError::Capture(e.to_string()))
+}
+
+/// A capture made by a video trigger: everything `prepare_with` does, and the recording moved
+/// into the capture's own folder (so it goes when the capture is closed, and a recording started
+/// meanwhile cannot take it away).
+#[allow(clippy::too_many_arguments)]
+pub fn prepare_video(
+    store: &Store,
+    connections: &Connections,
+    workspace: &Workspace,
+    trigger_id: &str,
+    trigger: &Trigger,
+    captured: cap::Captured,
+    now: Moment,
+    id: u64,
+    clip: &Path,
+    info: ClipInfo,
+) -> Result<Session, PrepareError> {
+    let session = prepare_with(store, connections, trigger_id, trigger, captured, now, id)?;
+    let moved = session
+        .with_dir(workspace, |dir| {
+            let target = dir.path().join(CLIP_NAME);
+            move_file(clip, &target).map(|()| target)
+        })
+        .map_err(|e| {
+            PrepareError::Clip(format!(
+                "CargoFrame could not make a folder for the recording: {e}"
+            ))
+        })?
+        .map_err(|e| PrepareError::Clip(format!("CargoFrame could not keep the recording: {e}")))?;
+    Ok(session.with_clip(Clip {
+        path: moved,
+        width: info.width,
+        height: info.height,
+        duration_ms: info.duration_ms,
+        bytes: info.bytes,
+    }))
+}
+
+/// Move a file: a rename where it can be, a copy and a delete across drives.
+fn move_file(from: &Path, to: &Path) -> std::io::Result<()> {
+    if std::fs::rename(from, to).is_ok() {
+        return Ok(());
+    }
+    std::fs::copy(from, to)?;
+    let _ = std::fs::remove_file(from);
+    Ok(())
 }
 
 pub fn now() -> Moment {
@@ -251,19 +464,43 @@ pub fn prepare_with(
         }
     }
 
+    // Where the Files blocks look. File paths are relative to the highest folder any of them
+    // looks in; with the default that is the project folder.
+    let project_dir = project.as_ref().map(|p| p.folder.as_str());
+    let files_root = layout
+        .as_ref()
+        .ok()
+        .and_then(|l| places::files_root(l, project_dir, exe.as_deref()))
+        .or_else(|| project_dir.map(PathBuf::from));
     let scan = |f: &cargoframe_layout::FilesBlock| -> Scan {
-        match &project {
-            Some(p) => files::scan(
-                Path::new(&p.folder),
-                &f.include,
-                &f.preselect,
-                Limits::default(),
-            ),
-            None => Scan {
+        let Some(root) = &files_root else {
+            return Scan {
                 problem: Some("No project folder could be found for this capture".into()),
                 ..Scan::default()
-            },
+            };
+        };
+        let found = places::places_for(&f.look_in, project_dir, exe.as_deref());
+        if found.places.is_empty() {
+            let why = found
+                .missing
+                .iter()
+                .map(|(which, why)| format!("{}: {why}", places::label(*which)))
+                .collect::<Vec<_>>()
+                .join("; ");
+            return Scan {
+                problem: Some(format!("No folder to look in ({why})")),
+                ..Scan::default()
+            };
         }
+        let look: Vec<files::Where> = found
+            .places
+            .iter()
+            .map(|p| files::Where {
+                label: places::label(p.which).to_string(),
+                dir: PathBuf::from(&p.dir),
+            })
+            .collect();
+        files::scan_places(root, &look, &f.include, &f.preselect, Limits::default())
     };
     let subject = match captured.subject {
         cap::Subject::Window => "window",
@@ -298,7 +535,7 @@ pub fn prepare_with(
         .frame
         .to_png()
         .map_err(|e| PrepareError::Capture(e.to_string()))?;
-    Ok(Session::new(png, view))
+    Ok(Session::new(png, view).with_files_root(files_root.map(|r| r.display().to_string())))
 }
 
 #[cfg(test)]
@@ -337,6 +574,97 @@ pub(crate) mod tests {
         minute: 0,
         second: 1,
     };
+
+    #[test]
+    fn a_video_session_keeps_the_recording_in_its_own_folder_and_tells_the_window_about_it() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        let layout = Layout {
+            id: String::new(),
+            name: "Clip".into(),
+            blocks: vec![Block {
+                id: "clip".into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 8,
+                    h: 8,
+                },
+                kind: BlockKind::Video,
+            }],
+        };
+        store.save_item(Kind::Layouts, "clip", &layout).unwrap();
+        let trigger = Trigger {
+            name: "Clip".into(),
+            media: cargoframe_config::Media::Video,
+            layout_id: Some("clip".into()),
+            ..Trigger::default()
+        };
+        let work = dir.path().join("work");
+        std::fs::create_dir_all(&work).unwrap();
+        let source = work.join("test-clip.mp4");
+        std::fs::write(&source, b"not really a video").unwrap();
+        let workspace = Workspace::new(dir.path().join("captures"));
+
+        let s = prepare_video(
+            &store,
+            &no_connections(),
+            &workspace,
+            "cliptrig",
+            &trigger,
+            fake_capture(None),
+            NOW,
+            3,
+            &source,
+            ClipInfo {
+                width: 1280,
+                height: 720,
+                duration_ms: 9_500,
+                bytes: 18,
+            },
+        )
+        .unwrap();
+
+        let clip = s.clip.clone().expect("the session has the recording");
+        assert_eq!(clip.path.file_name().unwrap(), CLIP_NAME);
+        assert_eq!(std::fs::read(&clip.path).unwrap(), b"not really a video");
+        assert!(!source.exists(), "the recording moved, it was not copied");
+        // inside the capture's own folder, so it goes when the capture is closed
+        assert_eq!(clip.path.parent().map(Path::to_path_buf), s.dir_path());
+        let video = s.view.video.clone().expect("the window is told");
+        assert_eq!(
+            (video.width, video.height, video.duration_ms),
+            (1280, 720, 9_500)
+        );
+        let json = serde_json::to_value(&s.view).unwrap();
+        assert_eq!(json["video"]["duration_ms"], 9_500);
+        assert_eq!(json["layout"]["blocks"][0]["type"], "video");
+
+        let folder = s.dir_path().unwrap();
+        drop(s);
+        assert!(
+            !folder.exists(),
+            "closing the capture removes the recording"
+        );
+    }
+
+    #[test]
+    fn a_screenshot_session_has_no_video() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        let s = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &Trigger::default(),
+            fake_capture(None),
+            NOW,
+            1,
+        )
+        .unwrap();
+        assert!(s.clip.is_none() && s.view.video.is_none());
+        assert!(serde_json::to_value(&s.view).unwrap()["video"].is_null());
+    }
 
     #[test]
     fn a_session_combines_capture_layout_variables_and_files() {
@@ -379,6 +707,7 @@ pub(crate) mod tests {
                         title: "Logs".into(),
                         include: vec!["*.log".into()],
                         preselect: vec!["*.log".into()],
+                        look_in: Default::default(),
                     }),
                 },
             ],
@@ -408,6 +737,267 @@ pub(crate) mod tests {
         assert_eq!(s.view.layout.as_ref().unwrap().id, "bug");
         assert_eq!(s.view.image.width, 4);
         assert_eq!(&s.png[1..4], b"PNG");
+    }
+
+    /// A capture of a project "Foo" with `run.log` ("LOGLINE") and `other.log`, and a Files block
+    /// offering `*.log` with `preselect` ticked by default.
+    fn log_capture(dir: &tempfile::TempDir, preselect: &[&str]) -> (Session, PathBuf) {
+        let store = Store::new(Dirs::under(dir.path()));
+        let project = dir.path().join("Foo");
+        std::fs::create_dir_all(project.join("bin")).unwrap();
+        std::fs::write(project.join("run.log"), "LOGLINE").unwrap();
+        std::fs::write(project.join("other.log"), "OTHER").unwrap();
+        let layout = Layout {
+            id: String::new(),
+            name: "L".into(),
+            blocks: vec![Block {
+                id: "logs".into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 2,
+                },
+                kind: BlockKind::Files(FilesBlock {
+                    title: "Logs".into(),
+                    include: vec!["*.log".into()],
+                    preselect: preselect.iter().map(|p| p.to_string()).collect(),
+                    look_in: Default::default(),
+                }),
+            }],
+        };
+        store.save_item(Kind::Layouts, "l", &layout).unwrap();
+        let trigger = Trigger {
+            layout_id: Some("l".into()),
+            ..Trigger::default()
+        };
+        let exe = project.join("bin").join("Foo");
+        let session = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &trigger,
+            fake_capture(Some(&exe.display().to_string())),
+            NOW,
+            3,
+        )
+        .unwrap();
+        (session, project)
+    }
+
+    const BIG: u64 = 1024 * 1024;
+
+    /// Project `dev/foo` with its program at `dev/foo/bin/release/foo`, and logs in three places.
+    fn deep_capture(dir: &tempfile::TempDir, blocks: Vec<Block>) -> Session {
+        let store = Store::new(Dirs::under(dir.path()));
+        let w = |p: &str, body: &str| {
+            let path = dir.path().join(p);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, body).unwrap();
+        };
+        w("dev/foo/bin/release/foo", "");
+        w("dev/foo/bin/release/logs/run.log", "RUN");
+        w("dev/foo/logs/app.log", "APP");
+        w("dev/logs/shared.log", "SHARED");
+        w("dev/foo/readme.log", "README");
+        let layout = Layout {
+            id: String::new(),
+            name: "L".into(),
+            blocks,
+        };
+        store.save_item(Kind::Layouts, "l", &layout).unwrap();
+        let trigger = Trigger {
+            layout_id: Some("l".into()),
+            ..Trigger::default()
+        };
+        let exe = dir.path().join("dev/foo/bin/release/foo");
+        prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &trigger,
+            fake_capture(Some(&exe.display().to_string())),
+            NOW,
+            5,
+        )
+        .unwrap()
+    }
+
+    fn files_block(id: &str, y: u32, look_in: cargoframe_layout::LookIn) -> Block {
+        Block {
+            id: id.into(),
+            rect: Rect {
+                x: 0,
+                y,
+                w: 6,
+                h: 2,
+            },
+            kind: BlockKind::Files(FilesBlock {
+                title: id.into(),
+                include: vec!["*.log".into()],
+                preselect: vec!["*.log".into()],
+                look_in,
+            }),
+        }
+    }
+
+    fn paths(s: &Session, block: &str) -> Vec<String> {
+        s.view.files[block]
+            .entries
+            .iter()
+            .map(|e| e.path.clone())
+            .collect()
+    }
+
+    #[test]
+    fn files_are_found_in_folders_above_the_program_with_one_name_each() {
+        use cargoframe_layout::{LookFolder, LookIn};
+        let dir = tempfile::tempdir().unwrap();
+        let s = deep_capture(
+            &dir,
+            vec![
+                // The default: the project folder, as it always was.
+                files_block("project", 0, LookIn::default()),
+                files_block(
+                    "logs",
+                    2,
+                    LookIn {
+                        folders: vec![LookFolder::Program, LookFolder::Above2, LookFolder::Above3],
+                        subfolder: "logs".into(),
+                    },
+                ),
+            ],
+        );
+        // Paths are relative to the highest folder looked in: dev.
+        assert_eq!(
+            s.files_root.as_deref(),
+            Some(dir.path().join("dev").display().to_string().as_str())
+        );
+        assert_eq!(paths(&s, "project"), ["foo/readme.log"]);
+        assert_eq!(
+            paths(&s, "logs"),
+            [
+                "foo/bin/release/logs/run.log",
+                "foo/logs/app.log",
+                "logs/shared.log"
+            ]
+        );
+        let places = &s.view.files["logs"].places;
+        assert_eq!(places.len(), 3);
+        assert!(
+            places.iter().all(|p| p.exists && p.found == 1),
+            "{places:?}"
+        );
+        assert!(s.view.files["logs"].problem.is_none());
+    }
+
+    #[test]
+    fn with_only_the_default_the_paths_stay_relative_to_the_project_folder() {
+        use cargoframe_layout::LookIn;
+        let dir = tempfile::tempdir().unwrap();
+        let s = deep_capture(&dir, vec![files_block("project", 0, LookIn::default())]);
+        assert_eq!(
+            s.files_root.as_deref(),
+            Some(dir.path().join("dev/foo").display().to_string().as_str())
+        );
+        assert_eq!(paths(&s, "project"), ["readme.log"]);
+    }
+
+    #[test]
+    fn a_choice_that_cannot_be_found_says_why_and_the_rest_still_work() {
+        use cargoframe_layout::{LookFolder, LookIn};
+        let dir = tempfile::tempdir().unwrap();
+        // Above3 from dev/foo/bin/release is dev, which exists; a missing subfolder is skipped.
+        let s = deep_capture(
+            &dir,
+            vec![files_block(
+                "logs",
+                0,
+                LookIn {
+                    folders: vec![LookFolder::Project, LookFolder::Above3],
+                    subfolder: "nothing-here".into(),
+                },
+            )],
+        );
+        assert!(s.view.files["logs"].entries.is_empty());
+        assert_eq!(
+            s.view.files["logs"].problem.as_deref(),
+            Some("None of the folders to look in exist")
+        );
+        assert!(s.view.files["logs"].places.iter().all(|p| !p.exists));
+    }
+
+    #[test]
+    fn staging_copies_only_the_files_ticked_by_default() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["run.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        assert_eq!(s.preselected(), vec!["run.log".to_string()]);
+        assert_eq!(s.stage_preselected(&ws, BIG, BIG, &|| true), 1);
+        let folder = s.dir_path().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(folder.join("files").join("run.log")).unwrap(),
+            "LOGLINE"
+        );
+        assert!(!folder.join("files").join("other.log").exists());
+    }
+
+    #[test]
+    fn a_staged_copy_is_a_snapshot_of_the_moment_of_the_capture() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, project) = log_capture(&dir, &["run.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        s.stage_preselected(&ws, BIG, BIG, &|| true);
+        std::fs::write(project.join("run.log"), "LOGLINE and much more").unwrap();
+        // Staging again (a share does) keeps the first copy.
+        s.with_dir(&ws, |d| {
+            d.stage(&project, "run.log", BIG).unwrap();
+        })
+        .unwrap();
+        let folder = s.dir_path().unwrap();
+        assert_eq!(
+            std::fs::read_to_string(folder.join("files").join("run.log")).unwrap(),
+            "LOGLINE"
+        );
+    }
+
+    #[test]
+    fn nothing_ticked_means_no_folder_is_made() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &[]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        assert!(s.preselected().is_empty());
+        assert_eq!(s.stage_preselected(&ws, BIG, BIG, &|| true), 0);
+        assert!(s.dir_path().is_none());
+        assert!(!ws.root().exists());
+    }
+
+    #[test]
+    fn staging_leaves_out_what_is_too_big_and_stops_at_the_total() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["*.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        // run.log is 7 bytes and other.log is 5: one file may be at most 6, so only other.log.
+        assert_eq!(s.stage_preselected(&ws, 6, BIG, &|| true), 1);
+        let folder = s.dir_path().unwrap();
+        assert!(folder.join("files").join("other.log").is_file());
+        assert!(!folder.join("files").join("run.log").exists());
+
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["*.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        // Together they are 12 bytes: with room for 10, the first fits and the second does not.
+        assert_eq!(s.stage_preselected(&ws, BIG, 10, &|| true), 1);
+    }
+
+    #[test]
+    fn staging_stops_once_the_window_has_moved_on() {
+        let dir = tempfile::tempdir().unwrap();
+        let (s, _) = log_capture(&dir, &["*.log"]);
+        let ws = Workspace::new(dir.path().join("captures"));
+        assert_eq!(s.stage_preselected(&ws, BIG, BIG, &|| false), 0);
+        let folder = s.dir_path().unwrap();
+        assert!(!folder.join("files").exists());
     }
 
     #[test]
@@ -511,6 +1101,7 @@ pub(crate) mod tests {
                     title: "Logs".into(),
                     include: vec!["*".into()],
                     preselect: vec![],
+                    look_in: Default::default(),
                 }),
             }],
         };

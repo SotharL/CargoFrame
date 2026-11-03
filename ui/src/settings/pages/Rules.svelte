@@ -24,15 +24,16 @@
     { value: 'ini', label: 'INI', query: 'build.number', help: 'section.key, or just key for lines before the first section' },
     { value: 'csv', label: 'CSV', query: 'name', help: 'A column name from the header row, or a column number (1 is the first)' },
     { value: 'xml', label: 'XML', query: 'project/version', help: 'Element names separated by /, ending in @attribute if you want one. //name finds it at any depth' },
-    { value: 'text', label: 'Text or log file (.txt, .log)', query: 'tail: 20', help: 'One instruction: line: 3, line: -1 (the last line), lines: 5-9, head: 20, tail: 20, contains: timeout, after: Version:, or level: error, warn' },
-    { value: 'regex', label: 'Text pattern (regex)', query: 'version = "(.+?)"', help: 'A regular expression. The value is the first (group), or the whole match when there is none' },
+    { value: 'text', label: 'Text or log file (.txt, .log)', query: 'tail: 20', help: 'One instruction: line: 3, line: -1 (the last line), lines: 5-9, head: 20, tail: 20, contains: timeout, after: Version:, between: build= | ; (what sits between two texts), or level: error, warn' },
+    { value: 'regex', label: 'Text pattern (regex)', query: 'version = "(.+?)"', help: 'A regular expression. The value is the first (group), or the whole match when there is none. Use “Build the value from groups” for more' },
+    { value: 'file', label: 'Any file: size, date, lines, fingerprint', query: 'size', help: 'name, size, size: human, modified, modified: date, lines, or sha256 (sha256: short for 12 characters). Works on any file, not only text' },
   ];
   const format = (f: RuleFormat) => FORMATS.find((x) => x.value === f)!;
 
   onMount(() => Promise.all([rules.reload(), layouts.reload()]));
 
   const blank = (): Rule => ({
-    name: '', file: '', format: 'json', query: '', multiple: 'first', separator: ', ', fallback: null, max_bytes: 1048576,
+    name: '', file: '', format: 'json', query: '', multiple: 'first', separator: ', ', nth: 1, output: '', fallback: null, max_bytes: 1048576,
   });
 
   function add() {
@@ -60,18 +61,37 @@
     busy = false;
   }
 
-  async function runTest() {
+  // The preview: the rule is tried on a real file a moment after the last change, so the value,
+  // the file it came from and the start of that file are always the ones for what is on screen.
+  // An answer that arrives late for an older version of the rule is ignored.
+  let latest = 0;
+  $effect(() => {
     if (!draft) return;
-    testing = true;
-    test = null;
-    try {
-      const api = await getApi();
-      test = await api.testRule({ ...draft.value, fallback: draft.useFallback ? draft.value.fallback : null }, testFolder.trim() || null);
-    } catch (e) {
-      test = { folder: null, value: null, problem: String(e) };
+    const rule = $state.snapshot(draft.value) as Rule;
+    const useFallback = draft.useFallback;
+    const folder = testFolder.trim() || null;
+    const mine = ++latest;
+    if (!rule.file.trim()) {
+      test = null;
+      testing = false;
+      return;
     }
-    testing = false;
-  }
+    testing = true;
+    const timer = setTimeout(async () => {
+      let result: RuleTest;
+      try {
+        const api = await getApi();
+        result = await api.testRule({ ...rule, fallback: useFallback ? rule.fallback : null }, folder);
+      } catch (e) {
+        result = { folder, value: null, problem: String(e), file: null, excerpt: null };
+      }
+      if (mine === latest) {
+        test = result;
+        testing = false;
+      }
+    }, 400);
+    return () => clearTimeout(timer);
+  });
 
   async function choose() {
     const picked = await (await getApi()).pickFolder('Choose a project folder to test against');
@@ -148,17 +168,30 @@
       <Field label="Look for" hint={format(draft.value.format).help}>
         <input type="text" bind:value={draft.value.query} placeholder={format(draft.value.format).query} />
       </Field>
-      <Field label="If there are several values">
-        <select bind:value={draft.value.multiple}>
-          <option value="first">Use the first</option>
-          <option value="last">Use the last</option>
-          <option value="join">Join them all</option>
-        </select>
-      </Field>
-      {#if draft.value.multiple === 'join'}
-        <Field label="Separator" hint="Write \n for a new line and \t for a tab.">
-          <input type="text" bind:value={draft.value.separator} />
+      {#if draft.value.format === 'regex'}
+        <Field label="Build the value from groups" hint="Optional. $1 and $2 are the pattern's (groups), ${'{'}name{'}'} a named one, $0 the whole match: for example $1.$2. Empty gives the first group.">
+          <input type="text" bind:value={draft.value.output} placeholder="$1.$2" />
         </Field>
+      {/if}
+      {#if draft.value.format !== 'file'}
+        <Field label="If there are several values">
+          <select bind:value={draft.value.multiple}>
+            <option value="first">Use the first</option>
+            <option value="last">Use the last</option>
+            <option value="nth">Use the one at a number</option>
+            <option value="join">Join them all</option>
+          </select>
+        </Field>
+        {#if draft.value.multiple === 'nth'}
+          <Field label="Which one" hint="1 is the first, 2 the second; -1 is the last, -2 the one before it.">
+            <input type="number" step="1" bind:value={draft.value.nth} aria-label="Which one" />
+          </Field>
+        {/if}
+        {#if draft.value.multiple === 'join'}
+          <Field label="Separator" hint="Write \n for a new line and \t for a tab.">
+            <input type="text" bind:value={draft.value.separator} />
+          </Field>
+        {/if}
       {/if}
       {#if draft.value.format === 'text'}
         <p class="quiet small">
@@ -177,20 +210,31 @@
         </Field>
       {/if}
 
-      <div class="test">
-        <h3>Try it</h3>
+      <div class="test" aria-live="polite">
+        <h3>Preview{#if testing}<span class="quiet small"> updating…</span>{/if}</h3>
         <div class="row">
           <input type="text" bind:value={testFolder} placeholder="Project folder (empty: the last capture's)" aria-label="Project folder to test against" />
           <button type="button" onclick={choose}>Choose…</button>
-          <button type="button" onclick={runTest} disabled={testing}>Test</button>
         </div>
-        {#if test}
+        {#if !draft.value.file.trim()}
+          <p class="quiet small">Choose a file above to see what this reads from it.</p>
+        {:else if test}
           {#if test.problem}
             <Chip kind="warn" label={test.problem} />
           {:else}
             <div class="result"><Chip kind="ok" label="Found" /> <code class="selectable">{test.value}</code></div>
           {/if}
-          {#if test.folder}<p class="quiet small mono">in {test.folder}</p>{/if}
+          {#if test.file}
+            <p class="quiet small">Reading <span class="mono">{test.file}</span>{#if test.folder} in <span class="mono">{test.folder}</span>{/if}</p>
+            {#if test.excerpt}
+              <details>
+                <summary class="small">Start of the file</summary>
+                <pre class="excerpt selectable">{test.excerpt}</pre>
+              </details>
+            {/if}
+          {:else if test.folder}
+            <p class="quiet small mono">in {test.folder}</p>
+          {/if}
         {/if}
       </div>
 
@@ -222,6 +266,7 @@
   .row { display: flex; gap: 8px; }
   .row input { flex: 1; min-width: 0; }
   .result { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .excerpt { margin: 4px 0 0; padding: 8px; max-height: 180px; overflow: auto; font: 12px var(--mono); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); white-space: pre; }
   .small { font-size: 12px; }
   .buttons { display: flex; gap: 8px; }
   .error { color: var(--err); font-size: 13px; }

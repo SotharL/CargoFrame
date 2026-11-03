@@ -1,11 +1,11 @@
 //! The JSON the CargoFrame window receives when it opens.
 
-use crate::files::{FileEntry, Scan};
+use crate::files::{FileEntry, PlaceFound, Scan};
 use cargoframe_context::template;
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::{
-    sharing_mode, sharing_state, validate, Block, BlockKind, Code, DropdownSource, Layout,
-    Registry, Severity, SharingMode, SharingState,
+    reach, sharing_mode, sharing_state, validate, Block, BlockKind, Code, DropdownSource, Layout,
+    Reach, Registry, Severity, SharingMode, SharingState,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -40,6 +40,15 @@ pub struct ProjectView {
 pub struct ImageView {
     pub width: u32,
     pub height: u32,
+}
+
+/// The recording a video trigger made, as the window needs to know it.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct VideoView {
+    pub width: u32,
+    pub height: u32,
+    pub duration_ms: u64,
+    pub bytes: u64,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -79,6 +88,9 @@ pub struct FilesState {
     pub entries: Vec<FileEntry>,
     pub truncated: bool,
     pub problem: Option<String>,
+    /// What each folder looked in held. One entry (or none) for the default; the window says
+    /// where the files came from when there are several.
+    pub places: Vec<PlaceFound>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -100,6 +112,12 @@ pub struct SharingView {
     pub mode: &'static str,
     /// What pressing the button does, when it is not obvious.
     pub note: Option<String>,
+    /// The kind of destination (`jira`, `claude`...) the button sends to, which gives it its
+    /// colour. `None` when the button saves a zip on this computer.
+    pub kind: Option<&'static str>,
+    /// What this button does with each other block of the layout, and what its destination can
+    /// take at all.
+    pub reach: Option<Reach>,
 }
 
 /// Why "Save locally" is disabled. The same words are used when the share is refused.
@@ -120,6 +138,8 @@ pub struct SessionView {
     pub app: Option<AppView>,
     pub project: Option<ProjectView>,
     pub image: ImageView,
+    /// The recording, for a capture made by a video trigger; `None` for a screenshot.
+    pub video: Option<VideoView>,
     pub variables: BTreeMap<String, String>,
     pub texts: BTreeMap<String, TextState>,
     pub files: BTreeMap<String, FilesState>,
@@ -256,6 +276,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
         app: inputs.app.clone(),
         project: inputs.project.clone(),
         image: inputs.image.clone(),
+        video: None,
         variables: inputs.variables.clone(),
         texts: BTreeMap::new(),
         files: BTreeMap::new(),
@@ -297,6 +318,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                         entries: scan.entries,
                         truncated: scan.truncated,
                         problem: scan.problem,
+                        places: scan.places,
                     },
                 );
             }
@@ -305,7 +327,16 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                     view.dropdowns.insert(block.id.clone(), s);
                 }
             }
-            BlockKind::SharingButton(_) => {
+            BlockKind::SharingButton(button) => {
+                let kind = button
+                    .connection_id
+                    .as_deref()
+                    .and_then(|id| inputs.registry.connection(id))
+                    .filter(|_| {
+                        sharing_mode(layout, &block.id, inputs.registry) == SharingMode::Send
+                    })
+                    .map(|c| c.kind.key());
+                let reach = reach(layout, &block.id, inputs.registry);
                 let sv = match sharing_mode(layout, &block.id, inputs.registry) {
                     SharingMode::SaveLocally => {
                         match inputs.local_folder.map(str::trim).filter(|f| !f.is_empty()) {
@@ -316,12 +347,16 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                                 note: Some(format!(
                                     "No active connection: a zip is saved in {folder}"
                                 )),
+                                kind,
+                                reach,
                             },
                             None => SharingView {
                                 enabled: false,
                                 reasons: vec![NEEDS_SAVE_FOLDER.to_string()],
                                 mode: "save_locally",
                                 note: None,
+                                kind,
+                                reach,
                             },
                         }
                     }
@@ -331,6 +366,8 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                             reasons: Vec::new(),
                             mode: "send",
                             note: None,
+                            kind,
+                            reach,
                         },
                         SharingState::Disabled(codes) => SharingView {
                             enabled: false,
@@ -344,12 +381,14 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                                 .collect(),
                             mode: "send",
                             note: None,
+                            kind,
+                            reach,
                         },
                     },
                 };
                 view.sharing.insert(block.id.clone(), sv);
             }
-            BlockKind::Screenshot => {}
+            BlockKind::Screenshot | BlockKind::Video => {}
         }
     }
     view
@@ -411,6 +450,7 @@ mod tests {
                         title: "Logs".into(),
                         include: vec!["*.log".into()],
                         preselect: vec![],
+                        look_in: Default::default(),
                     }),
                 },
                 Block {
@@ -441,6 +481,7 @@ mod tests {
                         prompt_block_id: None,
                         mappings: vec![],
                         on_success: OnSuccess::CloseWindow,
+                        send: Default::default(),
                     }),
                 },
             ],
@@ -593,10 +634,7 @@ mod tests {
     struct Signed(ConnectionState);
     impl Registry for Signed {
         fn connection(&self, id: &str) -> Option<ConnectionInfo> {
-            (id == "jira").then_some(ConnectionInfo {
-                kind: ConnectionKind::Jira,
-                state: self.0,
-            })
+            (id == "jira").then_some(ConnectionInfo::new(ConnectionKind::Jira, self.0))
         }
         fn rule_exists(&self, _: &str) -> bool {
             false
@@ -619,6 +657,7 @@ mod tests {
                     prompt_block_id: None,
                     mappings: vec![],
                     on_success: OnSuccess::KeepOpen,
+                    send: Default::default(),
                 }),
             }],
         }
@@ -666,6 +705,52 @@ mod tests {
             assert_eq!(v.sharing["send"].mode, "send");
             assert!(v.sharing["send"].enabled && v.sharing["send"].note.is_none());
         }
+    }
+
+    #[test]
+    fn a_button_carries_its_destination_kind_and_what_it_sends() {
+        let vars = BTreeMap::new();
+        let chats = ChatList::new();
+        let scan = |_: &FilesBlock| Scan::default();
+        let mut l = one_button(Some("jira"));
+        l.blocks.push(Block {
+            id: "shot".into(),
+            rect: Rect::new(6, 0, 6, 1),
+            kind: BlockKind::Screenshot,
+        });
+        let reg = Signed(ConnectionState::Connected);
+        let v = build(&inputs(Ok(&l), &vars, &chats, &reg, &scan));
+        let s = &v.sharing["send"];
+        assert_eq!(s.kind, Some("jira"));
+        let reach = s.reach.as_ref().expect("a button always has a reach");
+        assert_eq!(
+            reach.of("shot"),
+            Some(&cargoframe_layout::Verdict::Sent {
+                role: cargoframe_layout::Role::Screenshot
+            })
+        );
+        let json = serde_json::to_value(&v).unwrap();
+        assert_eq!(json["sharing"]["send"]["kind"], "jira");
+        assert_eq!(
+            json["sharing"]["send"]["reach"]["blocks"][0]["state"],
+            "sent"
+        );
+        assert_eq!(
+            json["sharing"]["send"]["reach"]["blocks"][0]["role"],
+            "screenshot"
+        );
+    }
+
+    #[test]
+    fn a_button_that_saves_locally_has_no_destination_kind_but_still_a_reach() {
+        let vars = BTreeMap::new();
+        let chats = ChatList::new();
+        let scan = |_: &FilesBlock| Scan::default();
+        let l = one_button(None);
+        let reg = Signed(ConnectionState::Connected);
+        let v = build(&inputs(Ok(&l), &vars, &chats, &reg, &scan));
+        assert_eq!(v.sharing["send"].kind, None);
+        assert!(v.sharing["send"].reach.is_some());
     }
 
     #[test]

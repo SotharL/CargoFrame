@@ -1,8 +1,9 @@
 //! Shared helpers for the connector tests.
 
-use crate::ctx::{Browser, Clipboard, Ctx};
+use crate::ctx::{Browser, Ctx};
 use crate::payload::Progress;
 use crate::secrets::{MemorySecrets, SecretStore};
+use cargoframe_deliver::{Deliver, DeliverError, Delivered, Delivery};
 use cargoframe_net::UreqHttp;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -15,43 +16,34 @@ impl Browser for NoBrowser {
     }
 }
 
-/// A clipboard that remembers what was put on it.
+/// A desktop that remembers what it was asked to deliver.
 #[derive(Default)]
-pub struct FakeClipboard {
-    pub images: Mutex<Vec<Vec<u8>>>,
-    pub texts: Mutex<Vec<String>>,
-    pub both: Mutex<Vec<(Vec<u8>, String)>>,
-    /// Whether `copy_image_and_text` works.
-    pub can_hold_both: bool,
-    pub fail: bool,
+pub struct FakeDeliver {
+    pub deliveries: Mutex<Vec<Delivery>>,
+    /// Make the next delivery fail with this.
+    pub fail_with: Mutex<Option<DeliverError>>,
 }
 
-impl Clipboard for FakeClipboard {
-    fn copy_image(&self, png: &[u8]) -> Result<(), String> {
-        if self.fail {
-            return Err("clipboard unavailable".into());
+impl Deliver for FakeDeliver {
+    fn deliver(
+        &self,
+        d: &Delivery,
+        open: &dyn Fn(&str) -> Result<(), String>,
+        _cancelled: &dyn Fn() -> bool,
+    ) -> Result<Delivered, DeliverError> {
+        self.deliveries.lock().unwrap().push(d.clone());
+        // Like the real one, the link is opened first.
+        open(&d.open_url).map_err(DeliverError::Open)?;
+        if let Some(e) = self.fail_with.lock().unwrap().take() {
+            return Err(e);
         }
-        self.images.lock().unwrap().push(png.to_vec());
-        Ok(())
-    }
-
-    fn copy_text(&self, text: &str) -> Result<(), String> {
-        if self.fail {
-            return Err("clipboard unavailable".into());
-        }
-        self.texts.lock().unwrap().push(text.to_string());
-        Ok(())
-    }
-
-    fn copy_image_and_text(&self, png: &[u8], text: &str) -> Result<(), String> {
-        if !self.can_hold_both {
-            return Err("not supported".into());
-        }
-        self.both
-            .lock()
-            .unwrap()
-            .push((png.to_vec(), text.to_string()));
-        Ok(())
+        Ok(Delivered {
+            window: "Claude".into(),
+            files: d.files.len(),
+            skipped_files: 0,
+            text: !d.text.trim().is_empty(),
+            submitted: d.submit,
+        })
     }
 }
 
@@ -121,14 +113,14 @@ impl World {
         browser: &dyn Browser,
         f: impl FnOnce(&Ctx) -> R,
     ) -> R {
-        self.with_all(connection, browser, &FakeClipboard::default(), f)
+        self.with_all(connection, browser, &FakeDeliver::default(), f)
     }
 
     pub fn with_all<R>(
         &self,
         connection: &str,
         browser: &dyn Browser,
-        clipboard: &dyn Clipboard,
+        deliver: &dyn Deliver,
         f: impl FnOnce(&Ctx) -> R,
     ) -> R {
         let clock = self.clock.clone();
@@ -139,7 +131,7 @@ impl World {
             http: &self.http,
             secrets: &self.secrets,
             browser,
-            clipboard,
+            deliver,
             progress: &self.progress,
             timeout: self.timeout,
             now: &now,

@@ -2,8 +2,9 @@
 //! (needed on Wayland, where programs cannot register global shortcuts).
 
 use crate::state::AppState;
+use crate::video::{self, Step};
 use crate::{notify, session, tray, windowing};
-use cargoframe_config::{shortcut, Kind, Trigger};
+use cargoframe_config::{shortcut, Kind, Media, Trigger, Video};
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -79,6 +80,40 @@ pub fn reload(app: &AppHandle) {
     tray::refresh_menu(app);
 }
 
+/// Copy the files ticked by default into the capture's temporary folder, off the thread that
+/// opens the window. A share that starts while this runs waits for it (see `Session::with_dir`).
+fn stage_files_in_background(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let Some(session) = state.sessions.current() else {
+        return;
+    };
+    if session.preselected().is_empty() {
+        return;
+    }
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("stage-files".into())
+        .spawn(move || {
+            let state = app.state::<AppState>();
+            let open = || {
+                state
+                    .sessions
+                    .current()
+                    .is_some_and(|c| std::sync::Arc::ptr_eq(&c, &session))
+            };
+            let staged = session.stage_preselected(
+                &state.workspace,
+                crate::share::MAX_STAGED_FILE_BYTES,
+                crate::share::MAX_STAGED_TOTAL_BYTES,
+                &open,
+            );
+            tracing::debug!(staged, "files copied for this capture");
+        });
+    if let Err(e) = spawned {
+        tracing::warn!("could not start copying the files: {e}");
+    }
+}
+
 /// Take a capture for `trigger_id` and open the CargoFrame window. Safe to call from any
 /// thread; does nothing while paused or while another capture is running.
 pub fn run(app: &AppHandle, trigger_id: String) {
@@ -87,6 +122,17 @@ pub fn run(app: &AppHandle, trigger_id: String) {
     };
     if state.paused() {
         tracing::debug!("triggers are paused");
+        return;
+    }
+    // A video trigger starts a recording, and stops it the next time.
+    let makes_video = state
+        .store
+        .load_item::<Trigger>(Kind::Triggers, &trigger_id)
+        .ok()
+        .flatten()
+        .is_some_and(|t| t.media == Media::Video);
+    if makes_video {
+        press_video(app, trigger_id);
         return;
     }
     if !state.try_begin_capture() {
@@ -107,7 +153,9 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         let state = app.state::<AppState>();
         match result {
             Ok(Ok(s)) => {
+                state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
                 state.sessions.set(s);
+                stage_files_in_background(&app);
                 if let Some(ms) = state.timings.mark("capture", "ready") {
                     tracing::info!(ready_ms = ms, "timing: capture ready");
                 }
@@ -121,4 +169,132 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         }
         state.end_capture();
     });
+}
+
+/// A press of a video trigger: the first starts recording, the next stops it and opens the
+/// window with the clip. Runs off the thread that got the key, because stopping waits for ffmpeg.
+fn press_video(app: &AppHandle, trigger_id: String) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let worker = app.clone();
+        let done =
+            tauri::async_runtime::spawn_blocking(move || video_step(&worker, &trigger_id)).await;
+        if let Err(e) = done {
+            tracing::error!("video trigger task failed: {e}");
+        }
+    });
+}
+
+fn video_step(app: &AppHandle, trigger_id: &str) {
+    let state = app.state::<AppState>();
+    match video::step(
+        &state.recording.view(),
+        state.recording.started_by_trigger(),
+    ) {
+        Step::Refuse(why) => notify::problem(app, "CargoFrame", why),
+        Step::Report(why) => {
+            // hand the failure over (this also clears it), so the next press starts again
+            let _ = state.recording.stop();
+            tray::refresh_menu(app);
+            notify::problem(app, "The recording stopped by itself", &why);
+        }
+        Step::Start => start_recording(app, &state),
+        Step::Stop => stop_recording(app, &state, trigger_id),
+    }
+}
+
+fn start_recording(app: &AppHandle, state: &AppState) {
+    let settings = state
+        .store
+        .load_or_default::<Video>()
+        .map(video::normalized)
+        .unwrap_or_default();
+    let work = crate::video::work_dir(&state.store);
+    let started = state.recording.start_for_trigger(
+        &settings,
+        video::Os::current(),
+        &video::Session::current(),
+        &work,
+        settings.window_secs,
+    );
+    match started {
+        Ok(()) => {
+            tracing::info!("recording started by a trigger");
+            notify::info(
+                app,
+                "CargoFrame is recording your screen",
+                &format!(
+                    "Press the shortcut again to stop. Only the last {} seconds are kept.",
+                    settings.window_secs
+                ),
+            );
+            tray::refresh_menu(app);
+        }
+        Err(e) => {
+            tracing::error!("recording could not start: {e}");
+            notify::problem(app, "CargoFrame could not start recording", &e);
+        }
+    }
+}
+
+fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
+    if !state.try_begin_capture() {
+        tracing::debug!("a capture is already running");
+        return;
+    }
+    let trial = state.recording.stop();
+    tray::refresh_menu(app);
+    let made = session_from_recording(state, trigger_id, trial);
+    state.end_capture();
+    match made {
+        Ok(s) => {
+            state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
+            state.sessions.set(s);
+            stage_files_in_background(app);
+            windowing::open_capture(app);
+        }
+        Err(e) => {
+            tracing::error!(trigger = %trigger_id, "video capture failed: {e}");
+            notify::problem(app, "CargoFrame could not finish the recording", &e);
+        }
+    }
+}
+
+/// The capture the window shows, from a recording that has just been stopped.
+fn session_from_recording(
+    state: &AppState,
+    trigger_id: &str,
+    trial: video::Trial,
+) -> Result<session::Session, String> {
+    if !trial.ok {
+        return Err(trial.message);
+    }
+    let clip = trial
+        .clip
+        .map(std::path::PathBuf::from)
+        .ok_or("The recording left no clip")?;
+    let trigger = state
+        .store
+        .load_item::<Trigger>(Kind::Triggers, trigger_id)
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| format!("trigger \"{trigger_id}\" does not exist"))?;
+    let captured = session::capture_for_video(&trigger).map_err(|e| e.to_string())?;
+    session::prepare_video(
+        &state.store,
+        &state.connections,
+        &state.workspace,
+        trigger_id,
+        &trigger,
+        captured,
+        session::now(),
+        state.sessions.next_id(),
+        &clip,
+        session::ClipInfo {
+            width: trial.width,
+            height: trial.height,
+            duration_ms: trial.clip_ms,
+            bytes: trial.clip_bytes,
+        },
+    )
+    .map_err(|e| e.to_string())
 }

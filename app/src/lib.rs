@@ -22,6 +22,8 @@ mod transfer;
 mod tray;
 mod tray_host;
 mod triggers;
+mod updates;
+mod video;
 mod warm;
 mod windowing;
 
@@ -59,7 +61,6 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
-        .plugin(tauri_plugin_clipboard_manager::init())
         .manage(AppState::new(
             Store::new(dirs),
             tray_available,
@@ -77,11 +78,11 @@ pub fn run() {
             commands::open_config_folder,
             commands::get_session,
             commands::get_session_image,
+            commands::get_session_clip,
             commands::close_capture,
             commands::edit_layout,
             commands::open_settings,
             commands::get_shortcut_errors,
-            commands::reload_triggers,
             commands::list_items,
             commands::save_item,
             commands::delete_item,
@@ -95,6 +96,8 @@ pub fn run() {
             commands::discard_import,
             commands::list_variables,
             commands::test_rule,
+            commands::preview_files,
+            commands::button_reach,
             commands::get_safe,
             commands::set_safe,
             commands::test_safe_folder,
@@ -113,12 +116,27 @@ pub fn run() {
             commands::remove_chat,
             commands::fetch_options,
             commands::set_edited_image,
+            commands::set_clip_mark,
             commands::share,
-            commands::copy_text,
             commands::open_link,
             commands::report_painted,
             commands::get_timings,
             commands::get_memory_status,
+            commands::get_update_view,
+            commands::check_update,
+            commands::install_update,
+            commands::set_update_token,
+            commands::get_video,
+            commands::set_video,
+            commands::detect_video_tools,
+            commands::try_video_recording,
+            commands::start_video_recording,
+            commands::get_video_recording,
+            commands::stop_video_recording,
+            commands::get_video_test_clip,
+            commands::export_video_test,
+            commands::set_video_test_mark,
+            commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
             // Settings, General, Memory decides whether a closed window is destroyed or kept.
@@ -139,6 +157,15 @@ pub fn run() {
                 app.handle().exit(0);
                 return Ok(());
             }
+            // Nothing is open yet, so every capture folder found now was left by a crash.
+            if let Some(state) = app.handle().try_state::<AppState>() {
+                let swept = state.sweep_captures(std::time::Duration::ZERO);
+                if swept.removed > 0 {
+                    tracing::info!(removed = swept.removed, "removed old capture folders");
+                }
+            }
+            sweep_every_hour(app.handle().clone());
+            check_for_updates_daily(app.handle().clone());
             tray::build(app.handle())?;
             triggers::reload(app.handle());
             notify::launched(app.handle());
@@ -151,17 +178,81 @@ pub fn run() {
         .expect("error while building CargoFrame");
 
     app.run(|app, event| {
-        if let RunEvent::ExitRequested { api, code, .. } = event {
-            // Closing the last window must not quit: the tray keeps the app alive. Only an
-            // explicit exit (a code is set) ends it.
-            if code.is_none() {
-                api.prevent_exit();
-            } else {
-                tracing::info!("exiting");
-                let _ = app.try_state::<AppState>();
+        match event {
+            RunEvent::ExitRequested { api, code, .. } => {
+                // Closing the last window must not quit: the tray keeps the app alive. Only an
+                // explicit exit (a code is set) ends it.
+                if code.is_none() {
+                    api.prevent_exit();
+                } else {
+                    tracing::info!("exiting");
+                }
             }
+            // however the program ends, ffmpeg must not be left recording the screen
+            RunEvent::Exit => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.recording.cancel();
+                }
+            }
+            _ => {}
         }
     });
+}
+
+/// With "Check for updates" on in General, look for a newer version a minute after start and
+/// then once a day, and say so once per version. Nothing is downloaded or installed here: that
+/// is a button in Settings. Downloads left by an earlier run are removed first.
+fn check_for_updates_daily(app: tauri::AppHandle) {
+    let spawned = std::thread::Builder::new()
+        .name("update-check".into())
+        .spawn(move || {
+            if let Some(state) = app.try_state::<AppState>() {
+                updates::clear_downloads(&state.store.dirs().data().join("updates"));
+            }
+            std::thread::sleep(std::time::Duration::from_secs(60));
+            loop {
+                if let Some(state) = app.try_state::<AppState>() {
+                    let on = state
+                        .store
+                        .load_or_default::<cargoframe_config::General>()
+                        .map(|g| g.check_updates)
+                        .unwrap_or(false);
+                    if on {
+                        state.updates.check();
+                        let _ = tauri::Emitter::emit(&app, "update-changed", ());
+                        if let Some(version) = state.updates.news() {
+                            notify::update_available(&app, &version);
+                        }
+                    }
+                }
+                std::thread::sleep(std::time::Duration::from_secs(24 * 3600));
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::warn!("could not start the update check: {e}");
+    }
+}
+
+/// Capture folders belong to open windows; this removes any that got left behind.
+fn sweep_every_hour(app: tauri::AppHandle) {
+    let spawned = std::thread::Builder::new()
+        .name("capture-sweep".into())
+        .spawn(move || loop {
+            std::thread::sleep(std::time::Duration::from_secs(3600));
+            if let Some(state) = app.try_state::<AppState>() {
+                let swept = state.sweep_captures(std::time::Duration::from_secs(120));
+                if swept.removed > 0 || swept.failed > 0 {
+                    tracing::info!(
+                        removed = swept.removed,
+                        failed = swept.failed,
+                        "swept capture folders"
+                    );
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::warn!("could not start the capture folder sweep: {e}");
+    }
 }
 
 /// Guards on the shipped security configuration: what the web views may load and which backend
@@ -212,6 +303,8 @@ mod shipped_config_tests {
         assert!(directive(csp, "script-src")
             .map(|s| !s.contains("'unsafe-inline'"))
             .unwrap_or(true));
+        // A clip can be played from a blob the page made itself, and from nowhere else.
+        assert_eq!(directive(csp, "media-src"), Some("'self' blob:"));
         // The page talks to the backend and nothing else.
         assert_eq!(
             directive(csp, "connect-src"),
@@ -245,6 +338,105 @@ mod shipped_config_tests {
         }
     }
 
+    /// The names of the functions marked as commands in `commands.rs`.
+    fn defined_commands() -> std::collections::BTreeSet<String> {
+        include_str!("commands.rs")
+            .split("#[tauri::command]")
+            .skip(1)
+            .filter_map(|after| {
+                let at = after.find("fn ")?;
+                let rest = &after[at + 3..];
+                let end = rest.find(|c: char| !(c.is_alphanumeric() || c == '_'))?;
+                Some(rest[..end].to_string())
+            })
+            .collect()
+    }
+
+    /// A command that is written but not registered, not listed for the web view, or not given to
+    /// a window fails only when someone uses it. This keeps the four places in step.
+    #[test]
+    fn every_command_is_registered_listed_and_given_to_a_window() {
+        let defined = defined_commands();
+        assert!(
+            defined.len() > 50,
+            "the commands were not found: {defined:?}"
+        );
+        // registered: the lines `commands::name,` in the handler
+        let lib = include_str!("lib.rs");
+        let handler = &lib[lib.find("generate_handler![").expect("a handler")..];
+        let handler = &handler[..handler.find(']').expect("the end of the handler")];
+        let registered: std::collections::BTreeSet<String> = handler
+            .lines()
+            .filter_map(|l| l.trim().strip_prefix("commands::"))
+            .map(|l| l.trim_end_matches(',').to_string())
+            .collect();
+        // listed: the strings in build.rs
+        let build = include_str!("../build.rs");
+        let listed: std::collections::BTreeSet<String> = build
+            .split('"')
+            .enumerate()
+            .filter(|(i, _)| i % 2 == 1)
+            .map(|(_, s)| s.to_string())
+            .filter(|s| defined.contains(s))
+            .collect();
+        // given: `allow-some-name` in either window's capability
+        let given: std::collections::BTreeSet<String> = capabilities()
+            .iter()
+            .flat_map(|(_, cap)| cap["permissions"].as_array().unwrap().clone())
+            .filter_map(|p| {
+                p.as_str()
+                    .and_then(|p| p.strip_prefix("allow-"))
+                    .map(|p| p.replace('-', "_"))
+            })
+            .collect();
+        for name in &defined {
+            assert!(
+                registered.contains(name),
+                "{name} is not in the invoke handler"
+            );
+            assert!(listed.contains(name), "{name} is not listed in build.rs");
+            assert!(given.contains(name), "{name} is not given to any window");
+        }
+        for name in &registered {
+            assert!(
+                defined.contains(name),
+                "the handler names {name}, which is not a command"
+            );
+        }
+        for name in &given {
+            assert!(
+                defined.contains(name),
+                "a window is given {name}, which is not a command"
+            );
+        }
+    }
+
+    /// What belongs to one capture is for the CargoFrame window only: Settings has no part in it.
+    #[test]
+    fn the_settings_window_holds_nothing_that_belongs_to_a_capture() {
+        let caps = capabilities();
+        let (_, settings) = &caps[1];
+        let granted: Vec<&str> = settings["permissions"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .filter_map(Value::as_str)
+            .collect();
+        for forbidden in [
+            "allow-get-session",
+            "allow-get-session-image",
+            "allow-get-session-clip",
+            "allow-set-edited-image",
+            "allow-set-clip-mark",
+            "allow-share",
+        ] {
+            assert!(
+                !granted.contains(&forbidden),
+                "the Settings window must not hold {forbidden}"
+            );
+        }
+    }
+
     #[test]
     fn the_capture_window_cannot_change_settings_or_manage_connections() {
         let caps = capabilities();
@@ -263,6 +455,18 @@ mod shipped_config_tests {
             "allow-disconnect-connection",
             "allow-set-general",
             "allow-set-safe",
+            "allow-set-video",
+            "allow-try-video-recording",
+            "allow-start-video-recording",
+            "allow-get-video-recording",
+            "allow-stop-video-recording",
+            "allow-get-video-test-clip",
+            "allow-open-video-test",
+            "allow-start-video-recording",
+            "allow-stop-video-recording",
+            "allow-get-video-test-clip",
+            "allow-export-video-test",
+            "allow-set-video-test-mark",
             "allow-pick-folder",
             "allow-list-layout-templates",
             "allow-layout-from-template",

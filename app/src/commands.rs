@@ -3,26 +3,28 @@
 
 use crate::chats::{self, ChatView};
 use crate::connections::{unix_now, ConnectionsView};
-use crate::desktop::{openable, TauriBrowser, TauriClipboard};
+use crate::desktop::{openable, TauriBrowser};
 use crate::items::{self, ItemKind, ItemList};
 use crate::registry::AppRegistry;
 use crate::session::{self, check_png};
 use crate::share::{self, ShareResult};
 use crate::state::AppState;
-use crate::tools::{self, RuleTest, VariableInfo};
+use crate::tools::{self, FilesPreview, RuleTest, VariableInfo};
 use crate::transfer;
+use crate::video;
 use crate::windowing;
-use cargoframe_config::{General, Safe};
+use cargoframe_config::{General, Safe, Video};
 use cargoframe_connectors::{Describe, OptionItem};
-use cargoframe_layout::{templates, validate, BlockKind, ConnectionKind, DropdownSource, Layout};
+use cargoframe_layout::{
+    templates, validate, BlockKind, ConnectionKind, DropdownSource, FilesBlock, Layout,
+};
 use cargoframe_rules::Rule;
 use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
-use tauri::{AppHandle, Manager, State};
+use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_clipboard_manager::ClipboardExt as _;
 use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt as _;
 
@@ -117,6 +119,20 @@ pub fn get_session_image(state: State<'_, AppState>) -> Result<Response, String>
         .ok_or_else(|| "There is no capture to show".to_string())
 }
 
+/// The recording of a video capture, as MP4 bytes (sent raw), for the window to play.
+#[tauri::command]
+pub fn get_session_clip(state: State<'_, AppState>) -> Result<Response, String> {
+    let session = state
+        .sessions
+        .current()
+        .ok_or_else(|| "There is no capture to show".to_string())?;
+    let clip = session
+        .clip
+        .as_ref()
+        .ok_or_else(|| "This capture has no recording".to_string())?;
+    video::read_clip(&clip.path, video::PREVIEW_LIMIT).map(Response::new)
+}
+
 #[tauri::command]
 pub fn close_capture(app: AppHandle) {
     if let Some(win) = app.get_webview_window(windowing::CAPTURE) {
@@ -160,12 +176,6 @@ pub fn get_shortcut_errors(
     state: State<'_, AppState>,
 ) -> std::collections::BTreeMap<String, String> {
     state.shortcut_errors()
-}
-
-/// Call after triggers are saved or deleted: re-registers the shortcuts and the tray entries.
-#[tauri::command]
-pub fn reload_triggers(app: AppHandle) {
-    crate::triggers::reload(&app);
 }
 
 // ----- items: triggers, layouts, data rules, info types -----
@@ -229,6 +239,18 @@ pub fn validate_layout(state: State<'_, AppState>, layout: Layout) -> Vec<IssueV
     issue_views(&validate(&layout, &registry))
 }
 
+/// What each sharing button of a layout does with the other blocks, for the builder: which it
+/// sends, which its destination cannot take (and why), and what the destination can take at all.
+/// Asked of the same code the share uses, so the builder never keeps a table of its own.
+#[tauri::command]
+pub fn button_reach(
+    state: State<'_, AppState>,
+    layout: Layout,
+) -> std::collections::BTreeMap<String, cargoframe_layout::Reach> {
+    let registry = AppRegistry::from_store(&state.store, &state.connections);
+    tools::button_reach(&layout, &registry)
+}
+
 // ----- layout templates -----
 
 /// A starting point for a layout, as the list shows it.
@@ -237,7 +259,7 @@ pub struct TemplateView {
     key: &'static str,
     name: &'static str,
     description: &'static str,
-    /// `jira`, `google`, `reddit`, `claude` or `custom`; `None` for the one that saves locally.
+    /// `jira`, `google`, `reddit`, `claude`, `slack`, `discord`, `teams` or `custom`; `None` for the one that saves locally.
     service: Option<&'static str>,
 }
 
@@ -247,6 +269,9 @@ fn service_name(kind: ConnectionKind) -> &'static str {
         ConnectionKind::Google => "google",
         ConnectionKind::Reddit => "reddit",
         ConnectionKind::Claude => "claude",
+        ConnectionKind::Slack => "slack",
+        ConnectionKind::Discord => "discord",
+        ConnectionKind::Teams => "teams",
         ConnectionKind::CustomApi => "custom",
     }
 }
@@ -414,13 +439,37 @@ pub async fn test_rule(
     rule: Rule,
     folder: Option<String>,
 ) -> Result<RuleTest, String> {
-    let folder = folder.filter(|f| !f.trim().is_empty()).or_else(|| {
-        state
-            .sessions
-            .current()
-            .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
-    });
-    Ok(tools::test_rule(&rule, folder.as_deref()))
+    // The folder typed in, else the open capture's, else the one of the last capture's program.
+    let folder = folder
+        .filter(|f| !f.trim().is_empty())
+        .or_else(|| {
+            state
+                .sessions
+                .current()
+                .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
+        })
+        .or_else(|| {
+            state
+                .last_program()
+                .and_then(|p| cargoframe_context::climb::resolve_project_folder(&p))
+                .map(|r| r.folder)
+        });
+    // Reading a big file can take a moment: not on the thread that draws the window.
+    blocking(move || tools::test_rule(&rule, folder.as_deref())).await
+}
+
+/// What a Files block would find. Without a program, the one of the last capture is used.
+#[tauri::command]
+pub async fn preview_files(
+    state: State<'_, AppState>,
+    block: FilesBlock,
+    program: Option<String>,
+) -> Result<FilesPreview, String> {
+    let program = program
+        .filter(|p| !p.trim().is_empty())
+        .or_else(|| state.last_program());
+    // Folder listings can take a moment on a big tree.
+    blocking(move || tools::preview_files(&block, program.as_deref())).await
 }
 
 // ----- safe settings -----
@@ -451,6 +500,141 @@ pub fn set_safe(state: State<'_, AppState>, mut safe: Safe) -> Result<(), String
 #[tauri::command]
 pub fn test_safe_folder(path: String) -> Result<(), String> {
     tools::test_folder(&path)
+}
+
+// ----- video settings -----
+
+#[tauri::command]
+pub fn get_video(state: State<'_, AppState>) -> Result<Video, String> {
+    state
+        .store
+        .load_or_default::<Video>()
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub fn set_video(state: State<'_, AppState>, video: Video) -> Result<(), String> {
+    let video = video::normalized(video);
+    video::validate(&video)?;
+    state.store.save(&video).map_err(|e| e.to_string())
+}
+
+/// "Test ffmpeg": where it is, what it can do and what Auto would pick. Uses the settings as
+/// they are in the form, saved or not.
+#[tauri::command]
+pub async fn detect_video_tools(video: Video) -> Result<video::ToolsView, String> {
+    let video = video::normalized(video);
+    blocking(move || video::tools_view(&video, video::Os::current(), &video::Session::current()))
+        .await
+}
+
+/// Record the screen for a few seconds with the settings as they are in the form.
+#[tauri::command]
+pub async fn try_video_recording(app: AppHandle, video: Video) -> Result<video::Trial, String> {
+    let video = video::normalized(video);
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let work = state.store.dirs().data().join("video-test");
+        state.recording.trial(
+            &video,
+            video::Os::current(),
+            &video::Session::current(),
+            &work,
+            video::TRIAL_SECONDS,
+        )
+    })
+    .await
+}
+
+/// Start recording until told to stop, keeping only the last seconds, as a real recording will.
+#[tauri::command]
+pub async fn start_video_recording(app: AppHandle, video: Video) -> Result<(), String> {
+    let video = video::normalized(video);
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let work = state.store.dirs().data().join("video-test");
+        state.recording.start(
+            &video,
+            video::Os::current(),
+            &video::Session::current(),
+            &work,
+            video.window_secs,
+        )
+    })
+    .await?
+}
+
+/// How the recording started by hand is doing.
+#[tauri::command]
+pub fn get_video_recording(state: State<'_, AppState>) -> video::RecordingView {
+    state.recording.view()
+}
+
+/// Stop the recording, make the clip and report it like a test recording.
+#[tauri::command]
+pub async fn stop_video_recording(app: AppHandle) -> Result<video::Trial, String> {
+    blocking(move || app.state::<AppState>().recording.stop()).await
+}
+
+/// The last test clip's bytes (or its exported copy's), to play in the Video page (sent raw, not
+/// as JSON numbers).
+#[tauri::command]
+pub fn get_video_test_clip(
+    state: State<'_, AppState>,
+    exported: Option<bool>,
+) -> Result<Response, String> {
+    let clip = video_test_file(&state, exported);
+    video::read_clip(&clip, video::PREVIEW_LIMIT).map(Response::new)
+}
+
+fn video_test_file(state: &AppState, exported: Option<bool>) -> std::path::PathBuf {
+    let name = if exported == Some(true) {
+        video::EXPORTED_CLIP
+    } else {
+        video::TRIAL_CLIP
+    };
+    state.store.dirs().data().join("video-test").join(name)
+}
+
+/// The picture the page drew as the test mark (a PNG, sent raw); an empty body forgets it.
+#[tauri::command]
+pub fn set_video_test_mark(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected a picture".into());
+    };
+    let work = state.store.dirs().data().join("video-test");
+    video::store_mark(&work, (!bytes.is_empty()).then_some(bytes.as_slice()))
+}
+
+/// Cut, crop and mark the test clip into a copy.
+#[tauri::command]
+pub async fn export_video_test(
+    app: AppHandle,
+    video: Video,
+    edit: video::TestEdit,
+) -> Result<video::Trial, String> {
+    let video = video::normalized(video);
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let work = state.store.dirs().data().join("video-test");
+        video::export_test(&video, &edit, &state.recording, &work)
+    })
+    .await
+}
+
+#[tauri::command]
+pub fn open_video_test(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    exported: Option<bool>,
+) -> Result<(), String> {
+    let clip = video_test_file(&state, exported);
+    if !clip.is_file() {
+        return Err("There is no test clip yet: run a test recording first".into());
+    }
+    app.opener()
+        .open_path(clip.display().to_string(), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 /// The system folder picker. `None` when the person cancels.
@@ -512,7 +696,7 @@ pub async fn connect_connection(app: AppHandle, id: String) -> Result<String, St
             &state.store,
             &id,
             &TauriBrowser(app.clone()),
-            &TauriClipboard(app.clone()),
+            &cargoframe_deliver::System,
         )
     })
     .await?
@@ -639,6 +823,37 @@ pub async fn fetch_options(
         });
     };
     fetch(app, connection_id, options_id).await
+}
+
+/// The mark the window drew over a recording (a PNG the size of the recording, see-through
+/// except for the drawing), sent just before a share. An empty body clears it. Named by
+/// `x-session-id` like the edited picture.
+#[tauri::command]
+pub fn set_clip_mark(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected a picture".into());
+    };
+    let id: u64 = request
+        .headers()
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .ok_or("The capture is not named")?;
+    let session = state
+        .sessions
+        .current()
+        .filter(|s| s.view.session_id == id)
+        .ok_or("This capture is no longer open")?;
+    if session.clip.is_none() {
+        return Err("This capture has no recording".into());
+    }
+    if bytes.is_empty() {
+        session.set_clip_mark(None);
+        return Ok(());
+    }
+    check_png(bytes)?;
+    session.set_clip_mark(Some(bytes.clone()));
+    Ok(())
 }
 
 /// The picture as edited (crop, drawings), sent just before a share. An empty body clears it.
@@ -769,12 +984,12 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
         };
         let cancelled = || state.share_cancelled();
         let browser = TauriBrowser(app.clone());
-        let clipboard = TauriClipboard(app.clone());
         let svc = share::Services {
             store: &state.store,
             connections: &state.connections,
             browser: &browser,
-            clipboard: &clipboard,
+            deliver: &cargoframe_deliver::System,
+            workspace: &state.workspace,
             cancelled: &cancelled,
             now: session::now(),
         };
@@ -818,15 +1033,6 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     Ok(result)
 }
 
-/// Copy text to the clipboard ("Copy prompt" after a hand-off).
-#[tauri::command]
-pub fn copy_text(app: AppHandle, text: String) -> Result<(), String> {
-    if text.len() > 1_000_000 {
-        return Err("That text is too long to copy".into());
-    }
-    app.clipboard().write_text(text).map_err(|e| e.to_string())
-}
-
 /// Open a link from a result (the created issue, the post) in the browser.
 #[tauri::command]
 pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
@@ -851,6 +1057,9 @@ mod template_tests {
             ConnectionKind::Google => json!({"name": "g", "kind": "google"}),
             ConnectionKind::Reddit => json!({"name": "r", "kind": "reddit"}),
             ConnectionKind::Claude => json!({"name": "c", "kind": "claude"}),
+            ConnectionKind::Slack => json!({"name": "s", "kind": "slack"}),
+            ConnectionKind::Discord => json!({"name": "d", "kind": "discord"}),
+            ConnectionKind::Teams => json!({"name": "t", "kind": "teams"}),
             ConnectionKind::CustomApi => json!({"name": "x", "kind": "custom"}),
         })
         .unwrap();
@@ -899,4 +1108,45 @@ mod template_tests {
         };
         assert!(b.connection_id.is_none());
     }
+}
+
+// ----- updates (Settings, General) -----
+
+fn updates_dir(state: &AppState) -> std::path::PathBuf {
+    state.store.dirs().data().join("updates")
+}
+
+/// What the Updates section shows: the version, the last check, and any download in progress.
+#[tauri::command]
+pub async fn get_update_view(app: AppHandle) -> Result<crate::updates::UpdateView, String> {
+    blocking(move || app.state::<AppState>().updates.view()).await
+}
+
+/// Ask GitHub for the newest release.
+#[tauri::command]
+pub async fn check_update(app: AppHandle) -> Result<crate::updates::UpdateView, String> {
+    blocking(move || {
+        let view = app.state::<AppState>().updates.check();
+        let _ = app.emit("update-changed", ());
+        view
+    })
+    .await
+}
+
+/// Download the release the last check found, check its fingerprint, and hand it to the
+/// installer, which restarts CargoFrame. Returns at once; progress arrives as `update-changed`.
+#[tauri::command]
+pub async fn install_update(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let dir = updates_dir(&state);
+    let handle = app.clone();
+    state.updates.begin_install(dir, move || {
+        let _ = handle.emit("update-changed", ());
+    })
+}
+
+/// Keep (or, empty, remove) the read-only GitHub token. It is never read back to the window.
+#[tauri::command]
+pub async fn set_update_token(app: AppHandle, value: String) -> Result<(), String> {
+    blocking(move || app.state::<AppState>().updates.set_token(&value)).await?
 }

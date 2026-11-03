@@ -25,8 +25,11 @@ pub enum Format {
     /// A regular expression. The result is capture group 1 if there is one, else the match.
     Regex,
     /// A plain text or log file (`.txt`, `.log`). The query is `tail: 20`, `line: -1`,
-    /// `contains: text`, `after: Version:` or `level: error`; see `text`.
+    /// `contains: text`, `after: Version:`, `between: [ | ]` or `level: error`; see `text`.
     Text,
+    /// Any file, whatever it holds: the query asks for a detail of the file itself, such as
+    /// `size`, `modified`, `lines` or `sha256`; see `details`.
+    File,
 }
 
 /// Which part of a file a rule needs when the file is bigger than its size limit.
@@ -49,6 +52,8 @@ pub enum Multiple {
     Last,
     /// All of them, one after the other, separated by `separator`.
     Join,
+    /// The one at position `nth` (1 is the first, -1 the last, -2 the one before it).
+    Nth,
 }
 
 fn default_max_bytes() -> u64 {
@@ -71,6 +76,12 @@ pub struct Rule {
     pub query: String,
     pub multiple: Multiple,
     pub separator: String,
+    /// Which one to give when `multiple` is `Nth`: 1 is the first, -1 the last.
+    pub nth: i64,
+    /// For the Regex format: what to give for each match, with `$1`, `$2` or `${name}` standing
+    /// for the pattern's groups (`$0` is the whole match), for example `$1.$2`. Empty gives group 1,
+    /// or the whole match when the pattern has no groups.
+    pub output: String,
     /// Used when the file or the value is missing. Without one, `{{rule.<id>}}` shows as
     /// unresolved, which the window points out.
     pub fallback: Option<String>,
@@ -87,6 +98,8 @@ impl Default for Rule {
             query: String::new(),
             multiple: Multiple::default(),
             separator: default_separator(),
+            nth: 1,
+            output: String::new(),
             fallback: None,
             max_bytes: DEFAULT_MAX_BYTES,
         }
@@ -106,6 +119,8 @@ impl Rule {
             Format::Text => crate::text::parse(&self.query)
                 .map(|q| q.read_mode())
                 .unwrap_or(ReadMode::Whole),
+            // Details of the file itself never need its text.
+            Format::File => ReadMode::Whole,
             _ => ReadMode::Whole,
         }
     }

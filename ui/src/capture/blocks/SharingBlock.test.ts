@@ -53,4 +53,50 @@ describe('SharingBlock', () => {
     });
     expect(screen.getByRole('button', { name: 'Saving…' })).toBeTruthy();
   });
+
+  it('says what a click carries, and the Claude chat that opens', () => {
+    render(SharingBlock, {
+      block, enabled: true, reasons: [], kind: 'claude', opening: 'Release notes',
+      parts: ['Screenshot (edited)', '3 files (12 KB)', 'Prompt'], onshare: () => {},
+    });
+    expect(screen.getByText('Opening: Release notes')).toBeTruthy();
+    expect(screen.getByText('Will send: Screenshot (edited) · 3 files (12 KB) · Prompt')).toBeTruthy();
+  });
+
+  it('says "Will save" when it saves a zip here, and shows nothing when nothing would go', () => {
+    const { unmount } = render(SharingBlock, {
+      block, enabled: true, reasons: [], mode: 'save_locally', parts: ['Screenshot'], onshare: () => {},
+    });
+    expect(screen.getByText('Will save: Screenshot')).toBeTruthy();
+    unmount();
+    render(SharingBlock, { block, enabled: true, reasons: [], parts: [], onshare: () => {} });
+    expect(screen.queryByText(/Will send/)).toBeNull();
+  });
+
+  it('takes its destination colours and names the destination on hover', () => {
+    render(SharingBlock, { block, enabled: true, reasons: [], kind: 'reddit', onshare: () => {} });
+    const button = screen.getByRole('button', { name: 'Create ticket' });
+    expect(button.title).toBe('Sends to Reddit');
+    expect(button.parentElement!.getAttribute('style')).toContain('--kind: var(--kind-reddit)');
+  });
+
+  it('tells the window when the pointer or focus is on the button', async () => {
+    const onhover = vi.fn();
+    render(SharingBlock, { block, enabled: true, reasons: [], onshare: () => {}, onhover });
+    const button = screen.getByRole('button', { name: 'Create ticket' });
+    await fireEvent.mouseEnter(button);
+    await fireEvent.mouseLeave(button);
+    await fireEvent.focus(button);
+    await fireEvent.blur(button);
+    expect(onhover.mock.calls.map((c) => c[0])).toEqual([true, false, true, false]);
+  });
+
+  it('hides the lines while it is disabled or sending', () => {
+    render(SharingBlock, {
+      block, enabled: false, reasons: ['Pick a chat'], parts: ['Prompt'], opening: 'Bug triage', onshare: () => {},
+    });
+    expect(screen.queryByText(/Will send/)).toBeNull();
+    expect(screen.queryByText(/Opening/)).toBeNull();
+    expect(screen.getByText('Pick a chat')).toBeTruthy();
+  });
 });

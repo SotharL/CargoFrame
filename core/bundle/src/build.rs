@@ -131,7 +131,10 @@ fn unreadable(path: &str, e: impl std::fmt::Display) -> BundleError {
 }
 
 /// Check a project file and open it.
-fn open_project_file(root: &Path, relative: &str) -> Result<(fs::File, u64), BundleError> {
+pub(crate) fn open_project_file(
+    root: &Path,
+    relative: &str,
+) -> Result<(fs::File, u64), BundleError> {
     if safe_name(relative).is_none() {
         return Err(BundleError::UnsafeName(relative.to_string()));
     }

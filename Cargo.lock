@@ -501,21 +501,24 @@ dependencies = [
  "cargoframe-config",
  "cargoframe-connectors",
  "cargoframe-context",
+ "cargoframe-deliver",
  "cargoframe-handoff",
  "cargoframe-layout",
  "cargoframe-net",
  "cargoframe-rules",
  "cargoframe-safe",
+ "cargoframe-update",
+ "cargoframe-video",
  "cargoframe-window",
  "chrono",
  "keyring",
  "notify-rust",
  "serde",
  "serde_json",
+ "sha2 0.11.1",
  "tauri",
  "tauri-build",
  "tauri-plugin-autostart",
- "tauri-plugin-clipboard-manager",
  "tauri-plugin-dialog",
  "tauri-plugin-global-shortcut",
  "tauri-plugin-opener",
@@ -577,6 +580,7 @@ version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
  "cargoframe-context",
+ "cargoframe-deliver",
  "cargoframe-handoff",
  "cargoframe-net",
  "cargoframe-safe",
@@ -590,6 +594,19 @@ dependencies = [
 [[package]]
 name = "cargoframe-context"
 version = "0.1.0"
+
+[[package]]
+name = "cargoframe-deliver"
+version = "0.1.0"
+dependencies = [
+ "arboard",
+ "cargoframe-capture",
+ "cargoframe-handoff",
+ "png",
+ "tempfile",
+ "thiserror 2.0.21",
+ "windows",
+]
 
 [[package]]
 name = "cargoframe-handoff"
@@ -624,12 +641,14 @@ name = "cargoframe-rules"
 version = "0.1.0"
 dependencies = [
  "cargoframe-context",
+ "chrono",
  "csv",
  "regex",
  "roxmltree",
  "serde",
  "serde_json",
  "serde_yaml_ng",
+ "sha2 0.11.1",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
@@ -638,6 +657,29 @@ dependencies = [
 [[package]]
 name = "cargoframe-safe"
 version = "0.1.0"
+
+[[package]]
+name = "cargoframe-update"
+version = "0.1.0"
+dependencies = [
+ "cargoframe-net",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "tempfile",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "cargoframe-video"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "cargoframe-window"
@@ -4595,21 +4637,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "bce56ceb0a99b8ab5eebc977ba9ffc62391b862648cb9ab76fc8bc7231b8f7e2"
 dependencies = [
  "auto-launch",
- "serde",
- "serde_json",
- "tauri",
- "tauri-plugin",
- "thiserror 2.0.21",
-]
-
-[[package]]
-name = "tauri-plugin-clipboard-manager"
-version = "2.5.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9be5ed8d94c33afe8377e885119069f6508780659271d0a25cfc54d441f2bc81"
-dependencies = [
- "arboard",
- "log",
  "serde",
  "serde_json",
  "tauri",

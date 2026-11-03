@@ -5,6 +5,7 @@
 #   ./install.sh --no-startup         do not run on sign-in
 #   ./install.sh --startup            run on sign-in, even on an upgrade that had it off
 #   ./install.sh --appimage FILE      use this AppImage (default: the CargoFrame*.AppImage next to this script)
+#   ./install.sh --restart            start CargoFrame again when done (used by the in-app update)
 #
 # Program:   ${XDG_DATA_HOME:-~/.local/share}/CargoFrame/CargoFrame.AppImage
 # Settings:  ${XDG_CONFIG_HOME:-~/.config}/CargoFrame            (never touched here)
@@ -22,6 +23,7 @@ autostart_file="$config_home/autostart/CargoFrame.desktop"
 
 startup=default
 appimage=""
+restart=no
 
 die() { echo "install.sh: $*" >&2; exit 1; }
 
@@ -29,8 +31,9 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --no-startup) startup=off ;;
     --startup) startup=on ;;
+    --restart) restart=yes ;;
     --appimage) shift; [ $# -gt 0 ] || die "--appimage needs a file"; appimage="$1" ;;
-    -h|--help) sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help) sed -n '2,13p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; exit 0 ;;
     *) die "unknown option: $1" ;;
   esac
   shift
@@ -130,3 +133,13 @@ fi
 if [ "$upgrade" = yes ]; then echo "CargoFrame upgraded: $target"; else echo "CargoFrame installed: $target"; fi
 if [ "$want_startup" = yes ]; then echo "It will run when you sign in."; else echo "It will not run when you sign in."; fi
 echo "Start it from your applications menu, or run: $target"
+
+# 6. Started again by the in-app update: quit above, so it is safe to start the new copy now.
+if [ "$restart" = yes ]; then
+  if command -v setsid >/dev/null 2>&1; then
+    setsid -f "$target" >/dev/null 2>&1 </dev/null || true
+  else
+    nohup "$target" >/dev/null 2>&1 </dev/null &
+  fi
+  echo "CargoFrame was started again."
+fi

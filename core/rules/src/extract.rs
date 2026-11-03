@@ -23,6 +23,8 @@ pub enum RuleError {
     BadQuery(String),
     #[error("the query found no value")]
     NoValue,
+    #[error("the query found {found} value(s), so there is no number {wanted}")]
+    NoNth { wanted: i64, found: usize },
     #[error("there is no project folder to read from")]
     NoProject,
 }
@@ -47,10 +49,16 @@ pub fn all_values(rule: &Rule, text: &str) -> Result<Vec<String>, RuleError> {
         Format::Ini => ini(text, &rule.query)?,
         Format::Csv => csv_column(text, &rule.query)?,
         Format::Xml => xml(text, &rule.query)?,
-        Format::Regex => regex_values(text, &rule.query)?,
+        Format::Regex => regex_values(text, &rule.query, &rule.output)?,
         Format::Text => {
             let q = crate::text::parse(&rule.query).map_err(RuleError::BadQuery)?;
             crate::text::values(text, &q)
+        }
+        // The details of a file are read from the file, not from its text (see `run`).
+        Format::File => {
+            return Err(RuleError::BadQuery(
+                "file details are read from the file itself, not from its text".into(),
+            ))
         }
     };
     Ok(found.into_iter().take(MAX_VALUES).collect())
@@ -73,7 +81,22 @@ pub fn extract(rule: &Rule, text: &str) -> Result<String, RuleError> {
         Multiple::First => values.swap_remove(0),
         Multiple::Last => values.pop().unwrap_or_default(),
         Multiple::Join => values.join(&unescape(&rule.separator)),
+        Multiple::Nth => pick_nth(values, rule.nth)?,
     })
+}
+
+/// The `n`th of `values`: 1 is the first, -1 the last, -2 the one before it.
+fn pick_nth(mut values: Vec<String>, n: i64) -> Result<String, RuleError> {
+    let found = values.len();
+    let index = if n > 0 {
+        usize::try_from(n - 1).ok()
+    } else {
+        found.checked_sub(usize::try_from(n.unsigned_abs()).unwrap_or(usize::MAX))
+    };
+    match index.filter(|i| *i < found) {
+        Some(i) => Ok(values.swap_remove(i)),
+        None => Err(RuleError::NoNth { wanted: n, found }),
+    }
 }
 
 /// `\n`, `\t` and `\\` typed in the separator box mean a new line, a tab and a backslash. This is
@@ -248,7 +271,7 @@ fn matches_name(n: &roxmltree::Node, name: &str) -> bool {
     name == "*" || n.tag_name().name() == name
 }
 
-fn regex_values(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
+fn regex_values(text: &str, query: &str, output: &str) -> Result<Vec<String>, RuleError> {
     if query.trim().is_empty() {
         return Err(RuleError::BadQuery("write a regular expression".into()));
     }
@@ -266,12 +289,81 @@ fn regex_values(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
                     .to_string(),
             )
         })?;
+    let output = output.trim();
+    if !output.is_empty() {
+        check_output(&re, output)?;
+        return Ok(re
+            .captures_iter(text)
+            .map(|c| {
+                let mut value = String::new();
+                c.expand(output, &mut value);
+                value
+            })
+            .filter(|v| !v.trim().is_empty())
+            .take(MAX_VALUES)
+            .collect());
+    }
     let group = usize::from(re.captures_len() > 1);
     Ok(re
         .captures_iter(text)
         .filter_map(|c| c.get(group).map(|m| m.as_str().to_string()))
         .take(MAX_VALUES)
         .collect())
+}
+
+/// The group references (`$1`, `${name}`, `$name`) in an output template; `$$` is a dollar sign.
+fn output_refs(output: &str) -> Vec<String> {
+    let chars: Vec<char> = output.chars().collect();
+    let mut refs = Vec::new();
+    let mut i = 0;
+    while i < chars.len() {
+        if chars[i] != '$' {
+            i += 1;
+            continue;
+        }
+        match chars.get(i + 1) {
+            Some('$') => i += 2,
+            Some('{') => {
+                let end = chars[i + 2..].iter().position(|c| *c == '}');
+                if let Some(len) = end {
+                    refs.push(chars[i + 2..i + 2 + len].iter().collect());
+                    i += len + 3;
+                } else {
+                    i += 2;
+                }
+            }
+            Some(c) if c.is_alphanumeric() || *c == '_' => {
+                let mut j = i + 1;
+                while j < chars.len() && (chars[j].is_alphanumeric() || chars[j] == '_') {
+                    j += 1;
+                }
+                refs.push(chars[i + 1..j].iter().collect());
+                i = j;
+            }
+            _ => i += 1,
+        }
+    }
+    refs
+}
+
+/// Every group the output asks for must exist in the pattern; the regex library would quietly
+/// give nothing for a typo, which would look like a value that is just empty.
+fn check_output(re: &regex::Regex, output: &str) -> Result<(), RuleError> {
+    for name in output_refs(output) {
+        let exists = match name.parse::<usize>() {
+            Ok(n) => n < re.captures_len(),
+            Err(_) => re.capture_names().flatten().any(|g| g == name),
+        };
+        if !exists {
+            let have = re.captures_len() - 1;
+            return Err(RuleError::BadQuery(format!(
+                "the output uses ${name}, but the pattern has {} group{}",
+                have,
+                if have == 1 { "" } else { "s" }
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// Check a rule as it is saved, without reading any file: the file pattern is usable and the
@@ -290,20 +382,32 @@ pub fn check(rule: &Rule) -> Result<(), String> {
     if q.is_empty() && !matches!(rule.format, Format::Json | Format::Yaml | Format::Toml) {
         return Err("Write what to look for in the file".into());
     }
+    if rule.multiple == Multiple::Nth && rule.nth == 0 {
+        return Err("Numbering starts at 1; use -1 for the last one".into());
+    }
     match rule.format {
         Format::Json | Format::Yaml | Format::Toml => path::parse(&rule.query).map(|_| ()),
-        Format::Regex => regex::RegexBuilder::new(&rule.query)
-            .size_limit(1 << 20)
-            .build()
-            .map(|_| ())
-            .map_err(|e| {
-                e.to_string()
-                    .lines()
-                    .last()
-                    .unwrap_or("invalid pattern")
-                    .to_string()
-            }),
+        Format::Regex => {
+            let re = regex::RegexBuilder::new(&rule.query)
+                .size_limit(1 << 20)
+                .build()
+                .map_err(|e| {
+                    e.to_string()
+                        .lines()
+                        .last()
+                        .unwrap_or("invalid pattern")
+                        .to_string()
+                })?;
+            match rule.output.trim() {
+                "" => Ok(()),
+                output => check_output(&re, output).map_err(|e| match e {
+                    RuleError::BadQuery(m) => m,
+                    other => other.to_string(),
+                }),
+            }
+        }
         Format::Text => crate::text::parse(&rule.query).map(|_| ()),
+        Format::File => crate::details::parse(&rule.query).map(|_| ()),
         Format::Ini | Format::Csv | Format::Xml => Ok(()),
     }
 }
@@ -575,5 +679,181 @@ mod check_tests {
             .unwrap_err()
             .contains("tail:"));
         assert!(check(&rule("notes.txt", Format::Text, "")).is_err());
+    }
+}
+
+#[cfg(test)]
+mod option_tests {
+    use super::*;
+
+    fn rule(format: Format, query: &str) -> Rule {
+        Rule {
+            name: "R".into(),
+            file: "f.txt".into(),
+            format,
+            query: query.into(),
+            ..Rule::default()
+        }
+    }
+
+    #[test]
+    fn the_nth_value_counts_from_either_end() {
+        let json = r#"{"items": ["a", "b", "c", "d"]}"#;
+        let nth = |n: i64| {
+            let r = Rule {
+                multiple: Multiple::Nth,
+                nth: n,
+                ..rule(Format::Json, "items[*]")
+            };
+            extract(&r, json)
+        };
+        assert_eq!(nth(1).unwrap(), "a");
+        assert_eq!(nth(3).unwrap(), "c");
+        assert_eq!(nth(-1).unwrap(), "d");
+        assert_eq!(nth(-4).unwrap(), "a");
+        assert_eq!(
+            nth(5).unwrap_err(),
+            RuleError::NoNth {
+                wanted: 5,
+                found: 4
+            }
+        );
+        assert_eq!(
+            nth(-5).unwrap_err(),
+            RuleError::NoNth {
+                wanted: -5,
+                found: 4
+            }
+        );
+        assert!(nth(5).unwrap_err().to_string().contains("no number 5"));
+        // Zero is not a position: the save check refuses it, a run finds nothing.
+        assert!(nth(0).is_err());
+    }
+
+    #[test]
+    fn nth_works_for_text_searches_too() {
+        let r = Rule {
+            multiple: Multiple::Nth,
+            nth: 2,
+            ..rule(Format::Text, "contains: error")
+        };
+        assert_eq!(
+            extract(&r, "error one\nok\nerror two\nerror three").unwrap(),
+            "error two"
+        );
+    }
+
+    #[test]
+    fn regex_output_builds_a_value_from_the_groups() {
+        let text = "version 1.4.2 and version 2.0.1";
+        let r = |pattern: &str, output: &str| Rule {
+            output: output.into(),
+            multiple: Multiple::Join,
+            separator: " / ".into(),
+            ..rule(Format::Regex, pattern)
+        };
+        assert_eq!(
+            extract(&r(r"version (\d+)\.(\d+)\.(\d+)", "$1.$2"), text).unwrap(),
+            "1.4 / 2.0"
+        );
+        assert_eq!(
+            extract(
+                &r(
+                    r"version (?P<major>\d+)\.(?P<minor>\d+)",
+                    "v${major}-${minor}"
+                ),
+                text
+            )
+            .unwrap(),
+            "v1-4 / v2-0"
+        );
+        // $0 is the whole match; $$ is a dollar sign.
+        assert_eq!(
+            extract(&r(r"version \d+", "[$0]"), text).unwrap(),
+            "[version 1] / [version 2]"
+        );
+        assert_eq!(
+            extract(&r(r"version (\d)", "$$$1"), text).unwrap(),
+            "$1 / $2"
+        );
+    }
+
+    #[test]
+    fn without_an_output_regex_still_gives_group_one_or_the_match() {
+        let text = "a=1 b=2";
+        assert_eq!(extract(&rule(Format::Regex, r"b=(\d)"), text).unwrap(), "2");
+        assert_eq!(extract(&rule(Format::Regex, r"a=\d"), text).unwrap(), "a=1");
+    }
+
+    #[test]
+    fn an_output_naming_a_group_the_pattern_lacks_is_an_error_not_an_empty_value() {
+        let r = Rule {
+            output: "$1-$3".into(),
+            ..rule(Format::Regex, r"(\d+)\.(\d+)")
+        };
+        let err = extract(&r, "1.2").unwrap_err();
+        assert!(
+            err.to_string().contains("$3") && err.to_string().contains("2 groups"),
+            "{err}"
+        );
+        let named = Rule {
+            output: "${nope}".into(),
+            ..rule(Format::Regex, r"(?P<yes>\d)")
+        };
+        let err = extract(&named, "1").unwrap_err().to_string();
+        assert!(err.contains("nope"), "{err}");
+    }
+
+    #[test]
+    fn saving_checks_the_new_options() {
+        let named = |r: Rule| Rule {
+            name: "x".into(),
+            file: "f.txt".into(),
+            ..r
+        };
+        // nth
+        let zero = named(Rule {
+            multiple: Multiple::Nth,
+            nth: 0,
+            ..rule(Format::Text, "tail: 3")
+        });
+        assert!(check(&zero).unwrap_err().contains("starts at 1"));
+        let fine = named(Rule {
+            multiple: Multiple::Nth,
+            nth: -1,
+            ..rule(Format::Text, "tail: 3")
+        });
+        assert!(check(&fine).is_ok());
+        // regex output
+        let bad = named(Rule {
+            output: "$2".into(),
+            ..rule(Format::Regex, r"(\d)")
+        });
+        assert!(check(&bad).unwrap_err().contains("$2"));
+        let good = named(Rule {
+            output: "$1!".into(),
+            ..rule(Format::Regex, r"(\d)")
+        });
+        assert!(check(&good).is_ok());
+        // file details
+        assert!(check(&named(rule(Format::File, "sha256: short"))).is_ok());
+        assert!(check(&named(rule(Format::File, "colour"))).is_err());
+        assert!(check(&named(rule(Format::File, ""))).is_err());
+        // between
+        assert!(check(&named(rule(Format::Text, "between: a | b"))).is_ok());
+        assert!(check(&named(rule(Format::Text, "between: a"))).is_err());
+    }
+
+    #[test]
+    fn rules_saved_before_these_options_still_load() {
+        let old = r#"{"name":"V","file":"package.json","format":"json","query":"version","multiple":"first","separator":", ","fallback":null,"max_bytes":1048576}"#;
+        let r: Rule = serde_json::from_str(old).unwrap();
+        assert_eq!(r.nth, 1);
+        assert_eq!(r.output, "");
+        let minimal: Rule =
+            serde_json::from_str(r#"{"file":"a.txt","format":"file","query":"size"}"#).unwrap();
+        assert_eq!(minimal.format, Format::File);
+        let nth: Rule = serde_json::from_str(r#"{"multiple":"nth","nth":-2}"#).unwrap();
+        assert_eq!((nth.multiple, nth.nth), (Multiple::Nth, -2));
     }
 }

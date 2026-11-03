@@ -50,6 +50,8 @@ pub struct Block {
 pub enum BlockKind {
     Text(TextBlock),
     Screenshot,
+    /// The recording a video trigger made: played, trimmed, cropped and marked in the window.
+    Video,
     SharingButton(SharingButton),
     Dropdown(DropdownBlock),
     Files(FilesBlock),
@@ -70,6 +72,9 @@ pub enum TextRole {
     Plain,
     /// The text sent to an AI destination. A sharing button to an AI tool needs one.
     Prompt,
+    /// The name of the zip saved locally (a share with no connection, or one that kept a copy).
+    /// Only the first block with this role is used.
+    ZipName,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -111,7 +116,67 @@ pub enum OnSuccess {
     KeepOpen,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// What happens to the ticked files when a button is pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FilesHow {
+    /// Sent as files (attached, pasted, or zipped, as the destination does it).
+    #[default]
+    Attach,
+    /// Text files that fit the size cap are written into the message; the rest are attached.
+    /// Only a destination that takes a message (a Claude chat) can do this.
+    Inline,
+    /// The ticked files stay out of this button's share.
+    None,
+}
+
+/// The size cap for files written into a message, in kilobytes, and the most it may be set to.
+pub const DEFAULT_INLINE_KB: u32 = 64;
+pub const MAX_INLINE_KB: u32 = 512;
+
+fn yes() -> bool {
+    true
+}
+
+fn default_inline_kb() -> u32 {
+    DEFAULT_INLINE_KB
+}
+
+/// What one button sends beyond its text: the picture and the files. The prompt, the title and
+/// the values are chosen by the button's own prompt block and field list.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SendRules {
+    #[serde(default = "yes")]
+    pub screenshot: bool,
+    #[serde(default)]
+    pub files: FilesHow,
+    /// With `files` set to inline: the most text, in kilobytes, written into the message.
+    #[serde(default = "default_inline_kb")]
+    pub inline_limit_kb: u32,
+}
+
+impl Default for SendRules {
+    fn default() -> Self {
+        Self {
+            screenshot: true,
+            files: FilesHow::Attach,
+            inline_limit_kb: DEFAULT_INLINE_KB,
+        }
+    }
+}
+
+impl SendRules {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    /// The cap in bytes, kept inside what can be set.
+    pub fn inline_limit_bytes(&self) -> usize {
+        self.inline_limit_kb.clamp(1, MAX_INLINE_KB) as usize * 1024
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct SharingButton {
     #[serde(default)]
     pub label: String,
@@ -124,6 +189,9 @@ pub struct SharingButton {
     pub mappings: Vec<InfoMapping>,
     #[serde(default)]
     pub on_success: OnSuccess,
+    /// Whether the picture and the files go with it. Absent from the file when untouched.
+    #[serde(default, skip_serializing_if = "SendRules::is_default")]
+    pub send: SendRules,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -149,12 +217,119 @@ pub struct DropdownBlock {
 pub struct FilesBlock {
     #[serde(default)]
     pub title: String,
-    /// Globs, relative to the resolved project folder, listing the files to offer.
+    /// Globs, relative to each folder looked in, listing the files to offer.
     #[serde(default)]
     pub include: Vec<String>,
     /// Globs of the files ticked by default.
     #[serde(default)]
     pub preselect: Vec<String>,
+    /// Which folders to look in. The default is the project folder.
+    #[serde(default)]
+    pub look_in: LookIn,
+}
+
+/// A folder a Files block can look in, found from the program that had focus.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
+pub enum LookFolder {
+    /// The project folder worked out for the capture (see the brief): the default.
+    #[serde(rename = "project")]
+    Project,
+    /// The folder the program file sits in.
+    #[serde(rename = "program")]
+    Program,
+    /// One folder above the program's folder.
+    #[serde(rename = "above_1")]
+    Above1,
+    #[serde(rename = "above_2")]
+    Above2,
+    #[serde(rename = "above_3")]
+    Above3,
+}
+
+impl LookFolder {
+    /// How many folders above the program's own folder, for the choices that count that way.
+    pub fn levels_above_program(self) -> Option<usize> {
+        match self {
+            LookFolder::Project => None,
+            LookFolder::Program => Some(0),
+            LookFolder::Above1 => Some(1),
+            LookFolder::Above2 => Some(2),
+            LookFolder::Above3 => Some(3),
+        }
+    }
+}
+
+/// Where a Files block looks: some folders, and a named subfolder inside each (such as `logs`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LookIn {
+    /// Empty means the project folder, like the default.
+    #[serde(default = "default_folders")]
+    pub folders: Vec<LookFolder>,
+    /// A folder inside each of the folders above; empty means the folder itself.
+    #[serde(default)]
+    pub subfolder: String,
+}
+
+fn default_folders() -> Vec<LookFolder> {
+    vec![LookFolder::Project]
+}
+
+impl Default for LookIn {
+    fn default() -> Self {
+        Self {
+            folders: default_folders(),
+            subfolder: String::new(),
+        }
+    }
+}
+
+impl LookIn {
+    /// The folders to look in, in a fixed order and without repeats; the project folder when
+    /// none was chosen.
+    pub fn folders(&self) -> Vec<LookFolder> {
+        let mut out = self.folders.clone();
+        out.sort();
+        out.dedup();
+        if out.is_empty() {
+            out.push(LookFolder::Project);
+        }
+        out
+    }
+
+    /// The subfolder as a clean relative path with `/` separators: `None` when none is set,
+    /// `Err` when it is not a plain relative folder (absolute, drive letter, `..`).
+    pub fn clean_subfolder(&self) -> Result<Option<String>, NotASubfolder> {
+        clean_subfolder(&self.subfolder)
+    }
+}
+
+/// The text is not a plain relative folder: it could point outside the folder it is joined to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NotASubfolder;
+
+/// `logs`, `\build\logs\` or `./logs` become `logs`, `build/logs`, `logs`. Anything that could
+/// point outside the folder it is joined to is refused.
+pub fn clean_subfolder(raw: &str) -> Result<Option<String>, NotASubfolder> {
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return Ok(None);
+    }
+    if raw.contains('\0') || raw.contains(':') || raw.starts_with(['/', '\\']) {
+        return Err(NotASubfolder);
+    }
+    let mut parts = Vec::new();
+    for part in raw.split(['/', '\\']) {
+        match part.trim() {
+            "" | "." => {}
+            ".." => return Err(NotASubfolder),
+            p => parts.push(p.to_string()),
+        }
+    }
+    if parts.is_empty() {
+        Ok(None)
+    } else {
+        Ok(Some(parts.join("/")))
+    }
 }
 
 #[cfg(test)]
@@ -209,6 +384,7 @@ mod serde_tests {
                             source: ValueSource::Rule("version".into()),
                         }],
                         on_success: OnSuccess::KeepOpen,
+                        send: Default::default(),
                     }),
                 },
                 Block {
@@ -235,6 +411,91 @@ mod serde_tests {
         assert_eq!(json["blocks"][3]["source"]["type"], "claude_chats");
         let back: Layout = serde_json::from_value(json).unwrap();
         assert_eq!(back, layout);
+    }
+
+    #[test]
+    fn a_video_block_is_written_and_read_as_type_video() {
+        let block: Block = serde_json::from_str(
+            r#"{"id": "clip", "type": "video", "rect": {"x":0,"y":0,"w":8,"h":8}}"#,
+        )
+        .unwrap();
+        assert_eq!(block.kind, BlockKind::Video);
+        assert_eq!(serde_json::to_value(&block).unwrap()["type"], "video");
+    }
+
+    #[test]
+    fn a_files_block_without_look_in_looks_in_the_project_folder() {
+        let text = r#"{"id": "f", "type": "files", "rect": {"x":0,"y":0,"w":6,"h":2}, "include": ["*.log"]}"#;
+        let block: Block = serde_json::from_str(text).unwrap();
+        let BlockKind::Files(f) = &block.kind else {
+            panic!("not files");
+        };
+        assert_eq!(f.look_in, LookIn::default());
+        assert_eq!(f.look_in.folders(), vec![LookFolder::Project]);
+        assert_eq!(f.look_in.clean_subfolder(), Ok(None));
+    }
+
+    #[test]
+    fn look_in_is_written_with_plain_names() {
+        let look = LookIn {
+            folders: vec![LookFolder::Above2, LookFolder::Program, LookFolder::Above2],
+            subfolder: "logs".into(),
+        };
+        let json = serde_json::to_value(&look).unwrap();
+        assert_eq!(
+            json["folders"],
+            serde_json::json!(["above_2", "program", "above_2"])
+        );
+        let back: LookIn = serde_json::from_value(json).unwrap();
+        assert_eq!(back, look);
+        // Sorted, without repeats.
+        assert_eq!(
+            look.folders(),
+            vec![LookFolder::Program, LookFolder::Above2]
+        );
+        // Nothing chosen means the project folder.
+        let none = LookIn {
+            folders: vec![],
+            subfolder: String::new(),
+        };
+        assert_eq!(none.folders(), vec![LookFolder::Project]);
+        assert_eq!(LookFolder::Above3.levels_above_program(), Some(3));
+        assert_eq!(LookFolder::Project.levels_above_program(), None);
+    }
+
+    #[test]
+    fn subfolders_are_plain_relative_folders() {
+        let ok = |s: &str| clean_subfolder(s);
+        assert_eq!(ok(""), Ok(None));
+        assert_eq!(ok("  "), Ok(None));
+        assert_eq!(ok("logs"), Ok(Some("logs".into())));
+        assert_eq!(ok("./logs/"), Ok(Some("logs".into())));
+        assert_eq!(ok("build\\logs"), Ok(Some("build/logs".into())));
+        assert_eq!(ok("a//b"), Ok(Some("a/b".into())));
+        for bad in [
+            "..",
+            "../x",
+            "a/../b",
+            "/etc",
+            "\\\\server\\share",
+            "C:\\x",
+            "a:b",
+            "x\0y",
+        ] {
+            assert_eq!(ok(bad), Err(NotASubfolder), "{bad:?}");
+        }
+    }
+
+    #[test]
+    fn the_zip_name_role_is_written_in_snake_case() {
+        let text =
+            r#"{"id": "z", "type": "text", "rect": {"x":0,"y":0,"w":6,"h":1}, "role": "zip_name"}"#;
+        let block: Block = serde_json::from_str(text).unwrap();
+        match &block.kind {
+            BlockKind::Text(t) => assert_eq!(t.role, TextRole::ZipName),
+            other => panic!("unexpected {other:?}"),
+        }
+        assert_eq!(serde_json::to_value(&block).unwrap()["role"], "zip_name");
     }
 
     #[test]

@@ -1,9 +1,5 @@
 //! Chat ids, links and the handoff plan.
 
-/// Longest percent-encoded prompt put in a `?q=` link. Longer prompts travel on the clipboard
-/// instead. The real limit is a spike result; 6000 is a conservative starting point.
-pub const MAX_QUERY_BYTES: usize = 6000;
-
 /// A validated claude.ai chat id (lowercase UUID). A file with a bad id fails to load.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(try_from = "String", into = "String")]
@@ -86,85 +82,13 @@ impl Scheme {
     }
 }
 
-/// What the clipboard holds when the chat opens.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum ClipboardPlan {
-    /// Screenshot only. The prompt is already in the link.
-    Image,
-    /// Screenshot and prompt text together (the composer must accept both).
-    ImageWithText,
-    /// Screenshot first; after the person pastes it, CargoFrame offers "Copy prompt".
-    ImageThenPromptStep,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct HandoffPlan {
-    pub open_url: String,
-    pub clipboard: ClipboardPlan,
-}
-
-/// Percent-encode for a query value: unreserved characters stay, everything else becomes
-/// `%XX` over the UTF-8 bytes.
-pub fn percent_encode(s: &str) -> String {
-    let mut out = String::with_capacity(s.len());
-    for b in s.bytes() {
-        if b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.' | b'~') {
-            out.push(b as char);
-        } else {
-            out.push_str(&format!("%{b:02X}"));
-        }
-    }
-    out
-}
-
-/// Decide the link and the clipboard contents.
-///
-/// * New chat with a short prompt: the prompt travels in `?q=`; the clipboard has the image.
-/// * New chat with a long prompt, or any existing chat (documented links do not prefill
-///   existing chats): the prompt travels on the clipboard. `composer_takes_image_and_text`
-///   (a spike result) chooses between one combined paste and a second "Copy prompt" step.
-pub fn plan(
-    destination: &Destination,
-    prompt: &str,
-    scheme: Scheme,
-    composer_takes_image_and_text: bool,
-) -> HandoffPlan {
+/// The link that opens the chat. Nothing else can travel in a link: an existing chat takes no
+/// text, and a new one takes only a short prompt, so the text and files are pasted afterwards.
+pub fn open_url(destination: &Destination, scheme: Scheme) -> String {
     let base = scheme.base();
-    let prompt_on_clipboard = if composer_takes_image_and_text {
-        ClipboardPlan::ImageWithText
-    } else {
-        ClipboardPlan::ImageThenPromptStep
-    };
-    let has_prompt = !prompt.trim().is_empty();
-
     match destination {
-        Destination::ExistingChat(id) => HandoffPlan {
-            open_url: format!("{base}/chat/{}", id.as_str()),
-            clipboard: if has_prompt {
-                prompt_on_clipboard
-            } else {
-                ClipboardPlan::Image
-            },
-        },
-        Destination::NewChat => {
-            let encoded = percent_encode(prompt);
-            if !has_prompt {
-                HandoffPlan {
-                    open_url: format!("{base}/new"),
-                    clipboard: ClipboardPlan::Image,
-                }
-            } else if encoded.len() <= MAX_QUERY_BYTES {
-                HandoffPlan {
-                    open_url: format!("{base}/new?q={encoded}"),
-                    clipboard: ClipboardPlan::Image,
-                }
-            } else {
-                HandoffPlan {
-                    open_url: format!("{base}/new"),
-                    clipboard: prompt_on_clipboard,
-                }
-            }
-        }
+        Destination::NewChat => format!("{base}/new"),
+        Destination::ExistingChat(id) => format!("{base}/chat/{}", id.as_str()),
     }
 }
 
@@ -209,55 +133,24 @@ mod tests {
     }
 
     #[test]
-    fn percent_encoding() {
-        assert_eq!(percent_encode("a b&c=d"), "a%20b%26c%3Dd");
-        assert_eq!(percent_encode("é\n"), "%C3%A9%0A");
-        assert_eq!(percent_encode("A-z_0.9~"), "A-z_0.9~");
-    }
-
-    #[test]
-    fn new_chat_with_short_prompt_uses_the_link() {
-        let p = plan(&Destination::NewChat, "Look at this", Scheme::App, true);
-        assert_eq!(p.open_url, "claude://claude.ai/new?q=Look%20at%20this");
-        assert_eq!(p.clipboard, ClipboardPlan::Image);
-    }
-
-    #[test]
-    fn new_chat_without_prompt_opens_empty() {
-        let p = plan(&Destination::NewChat, "  ", Scheme::Web, true);
-        assert_eq!(p.open_url, "https://claude.ai/new");
-        assert_eq!(p.clipboard, ClipboardPlan::Image);
-    }
-
-    #[test]
-    fn long_prompt_moves_to_the_clipboard() {
-        let long = "x".repeat(MAX_QUERY_BYTES + 1);
-        let combined = plan(&Destination::NewChat, &long, Scheme::App, true);
-        assert_eq!(combined.open_url, "claude://claude.ai/new");
-        assert_eq!(combined.clipboard, ClipboardPlan::ImageWithText);
-        let stepped = plan(&Destination::NewChat, &long, Scheme::App, false);
-        assert_eq!(stepped.clipboard, ClipboardPlan::ImageThenPromptStep);
-    }
-
-    #[test]
-    fn encoded_length_decides_not_character_count() {
-        // Each "é" is 6 bytes once encoded ("%C3%A9"), so this exceeds the limit.
-        let text = "é".repeat(MAX_QUERY_BYTES / 6 + 1);
-        let p = plan(&Destination::NewChat, &text, Scheme::App, true);
-        assert_eq!(p.open_url, "claude://claude.ai/new");
-    }
-
-    #[test]
-    fn existing_chat_carries_the_prompt_on_the_clipboard() {
+    fn links_open_the_chat_and_nothing_else() {
         let id = ChatId::parse(ID).unwrap();
-        let dest = Destination::ExistingChat(id);
-        let p = plan(&dest, "Hello", Scheme::App, true);
-        assert_eq!(p.open_url, format!("claude://claude.ai/chat/{ID}"));
-        assert_eq!(p.clipboard, ClipboardPlan::ImageWithText);
-        let p = plan(&dest, "Hello", Scheme::Web, false);
-        assert_eq!(p.open_url, format!("https://claude.ai/chat/{ID}"));
-        assert_eq!(p.clipboard, ClipboardPlan::ImageThenPromptStep);
-        let p = plan(&dest, "", Scheme::Web, true);
-        assert_eq!(p.clipboard, ClipboardPlan::Image);
+        let existing = Destination::ExistingChat(id);
+        assert_eq!(
+            open_url(&existing, Scheme::App),
+            format!("claude://claude.ai/chat/{ID}")
+        );
+        assert_eq!(
+            open_url(&existing, Scheme::Web),
+            format!("https://claude.ai/chat/{ID}")
+        );
+        assert_eq!(
+            open_url(&Destination::NewChat, Scheme::App),
+            "claude://claude.ai/new"
+        );
+        assert_eq!(
+            open_url(&Destination::NewChat, Scheme::Web),
+            "https://claude.ai/new"
+        );
     }
 }

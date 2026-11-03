@@ -2,8 +2,9 @@
   import { onMount } from 'svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi, type Api } from '../lib/ipc';
-  import type { Block, SessionView, ShareResult } from '../lib/types';
+  import type { Block, ClipEdit, SessionView, ShareResult } from '../lib/types';
   import ScreenshotBlock from './blocks/ScreenshotBlock.svelte';
+  import VideoBlock from './blocks/VideoBlock.svelte';
   import TextBlock from './blocks/TextBlock.svelte';
   import DropdownBlock from './blocks/DropdownBlock.svelte';
   import FilesBlock from './blocks/FilesBlock.svelte';
@@ -12,6 +13,9 @@
   import { initialValues, type FormValues } from './values';
   import { loadDropdowns } from './options';
   import ResultPanel from './ResultPanel.svelte';
+  import Marks from './Marks.svelte';
+  import { chatToOpen, marksFor, willSend } from './willSend';
+  import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
 
   let api = $state<Api>();
@@ -19,12 +23,19 @@
   let image = $state<Blob | null>(null);
   let values = $state<FormValues>({ texts: {}, dropdowns: {}, files: {} });
   let imageEdited = $state(false);
+  /** The part of the recording to send; `null` sends all of it. */
+  let clipEdit = $state<ClipEdit | null>(null);
   let failure = $state<string | null>(null);
   let notice = $state<string | null>(null);
   /** The sharing button being sent, if any; every button waits while one is sending. */
   let sending = $state<string | null>(null);
   let result = $state<ShareResult | null>(null);
+  /** The sharing button under the pointer or keyboard focus: the blocks it sends light up. */
+  let hovered = $state<string | null>(null);
+  /** The Claude chat the last share opened, kept to say "Opened: …" once it is done. */
+  let opened = $state<string | null>(null);
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
+  let clip = $state<ReturnType<typeof VideoBlock>>();
 
   function reportPainted() {
     void api?.reportPainted('capture').catch(() => {});
@@ -38,9 +49,12 @@
       image = img;
       values = initialValues(v);
       imageEdited = false;
+      clipEdit = null;
       failure = null;
       notice = null;
       result = null;
+      opened = null;
+      hovered = null;
       const sessionId = v.session_id;
       // Without a screenshot block the window is usable as soon as it has drawn.
       if (!v.layout?.blocks.some((b) => b.type === 'screenshot')) afterPaint(reportPainted);
@@ -69,7 +83,8 @@
   const blocks = $derived(view?.layout?.blocks ?? []);
   const rows = $derived(blocks.reduce((m, b) => Math.max(m, b.rect.y + b.rect.h), 0));
   const empty = $derived(view !== null && blocks.length === 0);
-  const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug') ?? []);
+  // "This button does not send X" is shown on the block itself, so the header does not repeat it.
+  const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug' && i.code !== 'cannot_send') ?? []);
   const debugs = $derived(view?.issues.filter((i) => i.severity === 'debug') ?? []);
 
   function place(b: Block): string {
@@ -79,8 +94,9 @@
 
   async function share(button: Extract<Block, { type: 'sharing_button' }>) {
     if (!view || !api || sending) return;
-    const request = collectShare(view, button, values, imageEdited);
+    const request = collectShare(view, button, values, imageEdited, clipEdit);
     result = null;
+    opened = null;
     if (promptIsEmpty(request)) {
       notice = 'Write the prompt first.';
       return;
@@ -93,8 +109,12 @@
         view.session_id,
         imageEdited && screenshot ? await screenshot.exportImage() : null,
       );
+      // The mark on a recording is drawn here too; the backend lays it over the recording.
+      if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
+      const chat = chatToOpen(view, button, values);
       result = await api.share(request);
-      if (result.status === 'sent' && result.close && !result.url && !result.copy_next) {
+      if (result.status === 'sent' && chat) opened = chat;
+      if (result.status === 'sent' && result.close && !result.url) {
         // Nothing left to use from the result: let the confirmation be read, then go.
         setTimeout(() => void api?.closeCapture(), 1500);
       }
@@ -161,11 +181,18 @@
         <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>Edit layout</button>
       </main>
     {:else}
-      <main class="grid" style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`}>
+      <main class="grid" style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
         {#each blocks as b (b.id)}
-          <section style={place(b)} class="cell">
+          <section style={place(b)} class="cell" class:lit={hovered !== null && marksFor(view, b.id).marks.some((m) => m.buttonId === hovered && m.state === 'sent')}>
+            <div class="body">
             {#if b.type === 'screenshot' && image}
               <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
+            {:else if b.type === 'video'}
+              {#if view.video}
+                {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} />{/key}
+              {:else}
+                <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
+              {/if}
             {:else if b.type === 'text'}
               <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
             {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
@@ -180,9 +207,15 @@
                 reasons={view.sharing[b.id]?.reasons ?? []}
                 mode={view.sharing[b.id]?.mode ?? 'send'}
                 note={view.sharing[b.id]?.note ?? null}
+                kind={view.sharing[b.id]?.kind ?? null}
+                parts={willSend(view, b, values, imageEdited, clipEdit)}
+                opening={chatToOpen(view, b, values)}
                 onshare={() => share(b)}
+                onhover={(on) => (hovered = on ? b.id : hovered === b.id ? null : hovered)}
               />
             {/if}
+            </div>
+            {#if b.type !== 'sharing_button'}<Marks marks={marksFor(view, b.id)} active={hovered} />{/if}
           </section>
         {/each}
       </main>
@@ -194,9 +227,9 @@
           <ResultPanel
             {result}
             onopenlink={(url) => void api?.openLink(url)}
-            oncopy={(text) => void api?.copyText(text)}
             onreconnect={() => void api?.openSettings('connections')}
             onclose={() => void api?.closeCapture()}
+            {opened}
           />
         {/if}
       </footer>
@@ -205,6 +238,7 @@
 </div>
 
 <style>
+  .videonote { margin: 0; padding: 12px; font-size: 13px; }
   .frame { height: 100%; display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
   header {
     display: flex; flex-wrap: wrap; justify-content: space-between; gap: 8px 16px;
@@ -219,7 +253,10 @@
     padding: 12px 14px; overflow: auto; min-height: 0;
   }
   /* A block never paints over its neighbour; the padding keeps focus rings from being clipped. */
-  .cell { min-width: 0; min-height: 0; overflow: auto; padding: 3px; margin: -3px; }
+  .cell { min-width: 0; min-height: 0; overflow: auto; padding: 3px; margin: -3px; display: grid; grid-template-rows: minmax(0, 1fr) auto; border-radius: var(--radius); }
+  .body { min-width: 0; min-height: 0; }
+  /* The blocks the hovered button sends. A ring, so layout never shifts. */
+  .cell.lit { box-shadow: 0 0 0 2px var(--kind-line, var(--accent)); }
   .center {
     display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center;
     padding: 24px;

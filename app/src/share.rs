@@ -2,7 +2,7 @@
 //! connection with retries, and when that fails keep everything in a zip (the safe folder, a
 //! folder the person picks, or CargoFrame's own data folder) so nothing is lost.
 //!
-//! Nothing here knows about Tauri: the browser, clipboard, folder picker, clock and sleeping are
+//! Nothing here knows about Tauri: the browser, desktop, folder picker, clock and sleeping are
 //! all passed in, so the whole path is tested against a local mock server.
 //!
 //! What a share trusts, and what it does not. The window sends what the person typed, picked
@@ -14,19 +14,22 @@ use crate::connections::Connections;
 use crate::registry::AppRegistry;
 use crate::session::Session;
 use cargoframe_bundle::{
-    build_zip, copy_atomic, BundleError, Created, Item, Limits, ManifestInfo, Source,
+    build_zip, copy_atomic, BundleError, Created, Item, Limits, ManifestInfo, Source, Workspace,
 };
 use cargoframe_config::{InfoKind, InfoOptions, InfoType, Kind, Safe, Store};
 use cargoframe_connectors::{
-    Attachment, Browser, Clipboard, Connection, Field, FieldKind, Payload, Progress,
+    claude::{MAX_FILES, MAX_FILE_BYTES},
+    Attachment, Browser, Connection, Deliver, Field, FieldKind, InlineFile, LocalCopies, Payload,
+    Progress, Settings,
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
-    sharing_mode, sharing_state, validate, BlockKind, DropdownSource, Layout, OnSuccess,
-    SharingButton, SharingMode, SharingState, ValueSource,
+    effective_mappings, sharing_mode, sharing_state, validate, BlockKind, DropdownSource, FilesHow,
+    Layout, OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
+use cargoframe_safe::naming::custom_zip_file_name;
 use cargoframe_safe::retry::{run_with_retry, RetryPolicy, RetryResult};
 use cargoframe_safe::SendError;
 use cargoframe_window::vars::Moment;
@@ -52,6 +55,9 @@ pub struct Request {
     pub files: BTreeMap<String, Vec<String>>,
     /// The picture was edited: send the edited one the window uploaded.
     pub image_edited: bool,
+    /// For a video capture: what was done to the recording (cut, cropped). `None` sends it as it is.
+    #[serde(default)]
+    pub clip_edit: Option<crate::video::ClipEdit>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -70,8 +76,6 @@ pub enum ShareResult {
         summary: String,
         url: Option<String>,
         notes: Vec<String>,
-        /// Text the window offers to copy next (a second paste).
-        copy_next: Option<String>,
         /// The layout asks to close the window after a successful share.
         close: bool,
     },
@@ -106,12 +110,21 @@ pub struct Services<'a> {
     pub store: &'a Store,
     pub connections: &'a Connections,
     pub browser: &'a dyn Browser,
-    pub clipboard: &'a dyn Clipboard,
+    /// Pastes into another program's window (a Claude chat).
+    pub deliver: &'a dyn Deliver,
+    /// Where this capture's temporary copies go.
+    pub workspace: &'a Workspace,
     /// True once the person gave up (closed the window): no more retries.
     pub cancelled: &'a dyn Fn() -> bool,
     /// Local time, for file names.
     pub now: Moment,
 }
+
+/// A file larger than this is not copied ahead of time (it is also the most a Claude message
+/// takes for one file).
+pub const MAX_STAGED_FILE_BYTES: u64 = MAX_FILE_BYTES;
+/// Copies made ahead of time stop here: the same total a zip may hold.
+pub const MAX_STAGED_TOTAL_BYTES: u64 = 200 * 1024 * 1024;
 
 fn created(m: &Moment) -> Created {
     Created {
@@ -152,7 +165,16 @@ struct Prepared {
     payload: Payload,
     /// The ticked files, as offered by the capture.
     selected: Vec<String>,
-    project_folder: Option<String>,
+    /// The folder the ticked files are read from; their paths are relative to it.
+    files_root: Option<String>,
+    /// The name typed in the layout's Zip name block, as a file name. `None`: the default name.
+    zip_name: Option<String>,
+    /// This capture's own copies of ticked files: the folder holding them, and for each file
+    /// (by its path in the project) the path of its copy inside that folder.
+    staged_root: Option<PathBuf>,
+    staged: BTreeMap<String, String>,
+    /// What this button sends beyond its text: the picture, and the files (attached or as text).
+    send: SendRules,
     close: bool,
     notes: Vec<String>,
 }
@@ -260,11 +282,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         Some(Destination { id, connection })
     };
     let connection_id: Option<&str> = destination.as_ref().map(|d| d.id.as_str());
-    let is_ai = connection_id.is_some_and(|id| {
-        svc.connections
-            .info(svc.store, id)
-            .is_some_and(|i| i.kind.is_ai_destination())
-    });
+    let kind = connection_id
+        .and_then(|id| svc.connections.info(svc.store, id))
+        .map(|i| i.kind);
+    let is_ai = kind.is_some_and(|k| k.is_ai_destination());
 
     let mut reasons: Vec<String> = Vec::new();
 
@@ -291,7 +312,9 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             .find(|t| Some(t.connection_id.as_str()) == connection_id && t.field == field)
     };
     let mut fields: Vec<Field> = Vec::new();
-    for mapping in &button.mappings {
+    // A button to Claude with no chat field uses the layout's chat dropdown.
+    let mappings = effective_mappings(layout, &button, kind);
+    for mapping in &mappings {
         let (mut value, from_dropdown_list, is_dropdown) =
             source_value(layout, view, req, &mapping.source);
         let info = info_for(&mapping.field);
@@ -324,7 +347,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .iter()
         .filter(|t| Some(t.connection_id.as_str()) == connection_id && t.required)
     {
-        if !button.mappings.iter().any(|m| m.field == t.field) {
+        if !mappings.iter().any(|m| m.field == t.field) {
             reasons.push(format!(
                 "\u{201c}{}\u{201d} is required: map it to a block in the layout",
                 t.name
@@ -336,7 +359,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let mut selected: Vec<String> = Vec::new();
     let mut seen = BTreeSet::new();
     for block in &layout.blocks {
-        if !matches!(block.kind, BlockKind::Files(_)) {
+        if !matches!(block.kind, BlockKind::Files(_)) || button.send.files == FilesHow::None {
             continue;
         }
         let Some(wanted) = req.files.get(&block.id) else {
@@ -357,17 +380,36 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             }
         }
     }
-    if !selected.is_empty() && session.project_folder.is_none() {
-        reasons.push("There is no project folder to read the ticked files from".to_string());
+    if !selected.is_empty() && session.files_root.is_none() {
+        reasons.push("There is no folder to read the ticked files from".to_string());
     }
     if !reasons.is_empty() {
         return Err(reasons);
     }
 
-    let png = if req.image_edited {
-        session.image_to_send()
-    } else {
-        session.png.clone()
+    // A video capture sends its recording where a screenshot capture sends the picture.
+    let image = match &session.clip {
+        Some(clip) if button.send.screenshot => {
+            let edited = match edited_recording(svc, session, clip, req.clip_edit) {
+                Ok(c) => c,
+                Err(why) => return Err(vec![why]),
+            };
+            match video_attachment(edited.as_deref().unwrap_or(&clip.path), kind) {
+                Ok(a) => Some(a),
+                Err(why) => return Err(vec![why]),
+            }
+        }
+        Some(_) => None,
+        None if !button.send.screenshot => None,
+        None => Some(Attachment {
+            name: "screenshot.png".into(),
+            mime: "image/png".into(),
+            data: if req.image_edited {
+                session.image_to_send()
+            } else {
+                session.png.clone()
+            },
+        }),
     };
     let title = view
         .app
@@ -377,12 +419,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .unwrap_or_else(|| "Screen".to_string());
     let payload = Payload {
         title,
-        image: Some(Attachment {
-            name: "screenshot.png".into(),
-            mime: "image/png".into(),
-            data: png,
-        }),
+        image,
         files_zip: None,
+        local: None,
+        inline_files: Vec::new(),
         prompt,
         fields,
         vars: view.variables.clone(),
@@ -392,15 +432,98 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         Some(d) if d.connection.name.trim().is_empty() => d.id.clone(),
         Some(d) => d.connection.name.trim().to_string(),
     };
+    // Only the first block with the Zip name role counts.
+    let zip_name = layout
+        .blocks
+        .iter()
+        .find(|b| matches!(&b.kind, BlockKind::Text(t) if t.role == TextRole::ZipName))
+        .and_then(|b| custom_zip_file_name(&text_value(view, req, &b.id)));
     Ok(Prepared {
         service,
         destination,
         trigger_name: view.trigger_name.clone(),
         payload,
         selected,
-        project_folder: session.project_folder.clone(),
+        files_root: session.files_root.clone(),
+        zip_name,
+        staged_root: None,
+        staged: BTreeMap::new(),
+        send: button.send,
         close: button.on_success == OnSuccess::CloseWindow,
         notes: Vec::new(),
+    })
+}
+
+/// The largest recording CargoFrame reads into memory to send (the services have limits of
+/// their own, which they report when a file is too big).
+pub const MAX_VIDEO_BYTES: u64 = 100 * 1024 * 1024;
+
+/// The file to send for a video capture whose recording the person edited in the window: a new
+/// file in the capture's own folder, or `None` when nothing was changed (the whole recording is
+/// sent as it is).
+fn edited_recording(
+    svc: &Services,
+    session: &Session,
+    clip: &crate::session::Clip,
+    edit: Option<crate::video::ClipEdit>,
+) -> Result<Option<PathBuf>, String> {
+    let Some(edit) = edit.filter(|e| !e.changes_nothing(clip.duration_ms)) else {
+        return Ok(None);
+    };
+    let output = session
+        .with_dir(svc.workspace, |d| d.path().join("recording-edited.mp4"))
+        .map_err(|e| format!("CargoFrame could not make room for the edited recording: {e}"))?;
+    let settings = svc
+        .store
+        .load_or_default::<cargoframe_config::Video>()
+        .map(crate::video::normalized)
+        .unwrap_or_default();
+    let mark = if edit.mark {
+        let png = session
+            .clip_mark()
+            .ok_or("The mark was not drawn: try again")?;
+        let path = session
+            .with_dir(svc.workspace, |d| d.path().join("clip-mark.png"))
+            .map_err(|e| format!("CargoFrame could not keep the mark: {e}"))?;
+        fs::write(&path, png).map_err(|e| format!("CargoFrame could not keep the mark: {e}"))?;
+        Some(path)
+    } else {
+        None
+    };
+    crate::video::edit_clip(&settings, &clip.path, &output, edit, mark.as_deref())?;
+    Ok(Some(output))
+}
+
+/// The recording of a video capture as the attachment a connector sends, or why it cannot go to
+/// this destination.
+fn video_attachment(
+    path: &Path,
+    kind: Option<cargoframe_layout::ConnectionKind>,
+) -> Result<Attachment, String> {
+    if let Some(kind) = kind {
+        let caps = cargoframe_layout::Capabilities::for_kind(kind, cfg!(windows));
+        if !caps.video.works() {
+            return Err(format!(
+                "This destination cannot take a video: {}",
+                caps.video.note
+            ));
+        }
+    }
+    let size = fs::metadata(path)
+        .map(|m| m.len())
+        .map_err(|_| "The recording is no longer there: record it again".to_string())?;
+    if size > MAX_VIDEO_BYTES {
+        return Err(format!(
+            "The recording is {} MB and CargoFrame sends up to {} MB: record a shorter one, or lower the picture size in Settings, Video",
+            size / (1024 * 1024),
+            MAX_VIDEO_BYTES / (1024 * 1024),
+        ));
+    }
+    let data = fs::read(path).map_err(|e| format!("The recording could not be read: {e}"))?;
+    Ok(Attachment {
+        name: crate::session::CLIP_NAME.into(),
+        mime: "video/mp4".into(),
+        data,
     })
 }
 
@@ -414,18 +537,67 @@ fn manifest_info(svc: &Services, p: &Prepared, notes: Vec<String>) -> ManifestIn
     }
 }
 
+/// Find (or make) this capture's own copy of each ticked file. A zip then holds the files as
+/// they were at the moment of the capture, not as they are when the button is pressed. Waits
+/// for the copying that started with the capture (see `Session::stage_preselected`). A file
+/// that cannot be copied is read from the project as before, so it is skipped or reported
+/// the way it always was.
+fn adopt_staged(svc: &Services, session: &Session, p: &mut Prepared) {
+    let Some(root) = p.files_root.as_deref().map(PathBuf::from) else {
+        return;
+    };
+    if p.selected.is_empty() {
+        return;
+    }
+    let found = session.with_dir(svc.workspace, |dir| {
+        let files_dir = dir.files_dir();
+        let mut staged = BTreeMap::new();
+        let mut total = 0u64;
+        for rel in &p.selected {
+            let Ok(copy) = dir.stage(&root, rel, MAX_STAGED_FILE_BYTES) else {
+                continue;
+            };
+            total += fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
+            if total > MAX_STAGED_TOTAL_BYTES {
+                break;
+            }
+            if let Ok(inside) = copy.strip_prefix(&files_dir) {
+                staged.insert(rel.clone(), inside.to_string_lossy().replace('\\', "/"));
+            }
+        }
+        (files_dir, staged)
+    });
+    match found {
+        Ok((files_dir, staged)) => {
+            p.staged_root = Some(files_dir);
+            p.staged = staged;
+        }
+        Err(e) => tracing::warn!("the capture's folder could not be used for the files: {e}"),
+    }
+}
+
+/// Where a ticked file is read from when zipped: this capture's copy of it, else the project.
+fn file_source(p: &Prepared, rel: &str) -> Source {
+    if let (Some(root), Some(inside)) = (&p.staged_root, p.staged.get(rel)) {
+        return Source::ProjectFile {
+            root: root.clone(),
+            relative: inside.clone(),
+        };
+    }
+    Source::ProjectFile {
+        root: PathBuf::from(p.files_root.clone().unwrap_or_default()),
+        relative: rel.to_string(),
+    }
+}
+
 /// The ticked files as one zip, named by their path in the project.
 fn zip_selected(svc: &Services, p: &Prepared) -> Result<(Vec<u8>, Vec<String>), BundleError> {
-    let root = PathBuf::from(p.project_folder.clone().unwrap_or_default());
     let items = p
         .selected
         .iter()
         .map(|rel| Item {
             name: rel.clone(),
-            source: Source::ProjectFile {
-                root: root.clone(),
-                relative: rel.clone(),
-            },
+            source: file_source(p, rel),
             kind: "file",
         })
         .collect();
@@ -437,6 +609,101 @@ fn zip_selected(svc: &Services, p: &Prepared) -> Result<(Vec<u8>, Vec<String>), 
         Limits::default(),
     )?;
     Ok((out.into_inner(), manifest.notes))
+}
+
+/// A chat takes a limited number of files in one message, and the screenshot is one of them.
+fn check_file_count(ticked: usize, with_screenshot: bool) -> Result<(), String> {
+    let total = ticked + usize::from(with_screenshot);
+    if total > MAX_FILES {
+        return Err(format!(
+            "Claude takes at most {MAX_FILES} files in one message{}: untick {} of the files",
+            if with_screenshot {
+                ", including the screenshot"
+            } else {
+                ""
+            },
+            total - MAX_FILES
+        ));
+    }
+    Ok(())
+}
+
+/// A file's bytes as text, if they are text: valid UTF-8 with no NUL byte. A byte-order mark at
+/// the start is dropped.
+fn as_text(bytes: &[u8]) -> Option<String> {
+    if bytes.contains(&0) {
+        return None;
+    }
+    let text = std::str::from_utf8(bytes).ok()?;
+    Some(text.trim_start_matches('\u{feff}').to_string())
+}
+
+/// Take the text files that fit into `limit` bytes (all together) out of the files to attach,
+/// in the order they were ticked, to be written into the message. The rest stay as files.
+fn move_text_inline(local: &mut LocalCopies, limit: usize) -> Vec<InlineFile> {
+    let mut inline = Vec::new();
+    let mut used = 0usize;
+    let mut stay = Vec::new();
+    for (name, path) in std::mem::take(&mut local.files) {
+        let room = limit.saturating_sub(used);
+        let text = fs::metadata(&path)
+            .ok()
+            .filter(|m| m.len() as usize <= room)
+            .and_then(|_| fs::read(&path).ok())
+            .and_then(|bytes| as_text(&bytes))
+            .filter(|t| t.len() <= room);
+        match text {
+            Some(text) => {
+                used += text.len();
+                inline.push(InlineFile { name, text });
+            }
+            None => stay.push((name, path)),
+        }
+    }
+    local.files = stay;
+    inline
+}
+
+/// The screenshot as shown and the ticked files, as copies in this capture's folder, for a
+/// destination that takes real files. The folder goes when the capture window closes.
+fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalCopies, String> {
+    // Files written into the message are not files in the chat: they are counted once the text
+    // ones have moved out.
+    if p.send.files != FilesHow::Inline {
+        check_file_count(p.selected.len(), p.payload.image.is_some())?;
+    }
+    let screenshot_bytes = p.payload.image.as_ref().map(|a| a.data.as_slice());
+    let root = p.files_root.as_deref().map(PathBuf::from);
+    let total_limit = Limits::default().max_total_bytes;
+    session
+        .with_dir(svc.workspace, |dir| {
+            let screenshot = screenshot_bytes
+                .map(|bytes| {
+                    dir.write_screenshot(bytes)
+                        .map_err(|e| format!("The screenshot could not be saved for sending: {e}"))
+                })
+                .transpose()?;
+            let mut files = Vec::new();
+            let mut total = 0u64;
+            for rel in &p.selected {
+                let root = root
+                    .as_deref()
+                    .ok_or("There is no folder to read the ticked files from")?;
+                let copy = dir
+                    .stage(root, rel, MAX_FILE_BYTES)
+                    .map_err(|e| format!("\u{201c}{rel}\u{201d} cannot be sent: {e}"))?;
+                total += std::fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
+                if total > total_limit {
+                    return Err(format!(
+                        "The ticked files are larger than {} MB together: untick some",
+                        total_limit / (1024 * 1024)
+                    ));
+                }
+                files.push((rel.clone(), copy));
+            }
+            Ok(LocalCopies { screenshot, files })
+        })
+        .map_err(|e| format!("The temporary folder for this capture could not be made: {e}"))?
 }
 
 /// Walk the safe-settings ladder with a zip of everything the share held.
@@ -501,24 +768,24 @@ fn build_keep_zip(
             .collect::<Vec<_>>(),
         "variables": view.variables,
     });
-    let mut items = vec![
-        Item {
-            name: "screenshot.png".into(),
-            source: Source::Bytes(
-                p.payload
-                    .image
-                    .as_ref()
-                    .map(|a| a.data.clone())
-                    .unwrap_or_default(),
-            ),
-            kind: "screenshot",
-        },
-        Item {
-            name: "share.json".into(),
-            source: Source::Bytes(serde_json::to_vec_pretty(&share_json).unwrap_or_default()),
-            kind: "text",
-        },
-    ];
+    let mut items = Vec::new();
+    // The picture is left out when the button's rules leave it out.
+    if let Some(image) = &p.payload.image {
+        items.push(Item {
+            name: image.name.clone(),
+            source: Source::Bytes(image.data.clone()),
+            kind: if image.mime.starts_with("video/") {
+                "video"
+            } else {
+                "screenshot"
+            },
+        });
+    }
+    items.push(Item {
+        name: "share.json".into(),
+        source: Source::Bytes(serde_json::to_vec_pretty(&share_json).unwrap_or_default()),
+        kind: "text",
+    });
     if let Some((failure, attempts)) = failure {
         let error_json = serde_json::json!({
             "failure": failure.kind.label(),
@@ -532,14 +799,11 @@ fn build_keep_zip(
             kind: "text",
         });
     }
-    if let Some(root) = &p.project_folder {
+    if p.files_root.is_some() {
         for rel in &p.selected {
             items.push(Item {
                 name: format!("files/{rel}"),
-                source: Source::ProjectFile {
-                    root: PathBuf::from(root),
-                    relative: rel.clone(),
-                },
+                source: file_source(p, rel),
                 kind: "file",
             });
         }
@@ -564,13 +828,17 @@ fn build_keep_zip(
     Some(source)
 }
 
-/// The zip's file name for the moment the share happened.
-fn zip_name(svc: &Services, service: &str) -> String {
+/// The zip's file name: what the person typed in the Zip name block, else one made from the
+/// moment the share happened.
+fn zip_name(svc: &Services, p: &Prepared) -> String {
+    if let Some(name) = &p.zip_name {
+        return name.clone();
+    }
     let m = &svc.now;
     file_name_for(
         (m.year.clamp(0, 9999) as u16, m.month, m.day),
         (m.hour, m.minute, m.second),
-        service,
+        &p.service,
     )
 }
 
@@ -586,14 +854,14 @@ fn keep_a_copy(
     attempts: u32,
 ) -> Option<SavedCopy> {
     let source = build_keep_zip(svc, p, view, Some((failure, attempts)))?;
-    let file_name = zip_name(svc, &p.service);
+    let file_name = zip_name(svc, p);
     let cfg = LadderConfig {
         safe_folder: safe.folder.clone(),
         ..LadderConfig::default()
     };
     let mut io = ZipIo {
         source: source.clone(),
-        local: svc.store.dirs().data().join("kept"),
+        local: svc.store.dirs().kept_zips(),
         picker,
     };
     let report = run_ladder(&cfg, &mut io, &file_name);
@@ -658,7 +926,7 @@ fn save_locally(svc: &Services, p: &Prepared, view: &SessionView) -> ShareResult
     let Some(source) = build_keep_zip(svc, p, view, None) else {
         return blocked("The zip could not be built");
     };
-    let saved = copy_atomic(&source, Path::new(&folder), &zip_name(svc, &p.service));
+    let saved = copy_atomic(&source, Path::new(&folder), &zip_name(svc, p));
     let _ = fs::remove_file(&source);
     match saved {
         Ok(path) => {
@@ -695,10 +963,42 @@ pub fn run(
         connection,
     }) = prepared.destination.take()
     else {
+        adopt_staged(svc, session, &mut prepared);
         return save_locally(svc, &prepared, &session.view);
     };
 
-    if !prepared.selected.is_empty() {
+    // Claude takes real files pasted into the chat, not a zip: copy them into the capture's own
+    // folder, as they are now.
+    let takes_files = matches!(connection.settings, Settings::Claude(_));
+    if takes_files {
+        match stage_local(svc, session, &prepared) {
+            Ok(mut local) => {
+                if prepared.send.files == FilesHow::Inline {
+                    let limit = prepared.send.inline_limit_bytes();
+                    prepared.payload.inline_files = move_text_inline(&mut local, limit);
+                    let stayed = local.files.len();
+                    if stayed > 0 {
+                        prepared.notes.push(format!(
+                            "{stayed} file{} not plain text or past the {} KB limit, so {} attached instead of written into the message",
+                            if stayed == 1 { " was" } else { "s were" },
+                            limit / 1024,
+                            if stayed == 1 { "it was" } else { "they were" },
+                        ));
+                    }
+                    if let Err(reason) =
+                        check_file_count(local.files.len(), prepared.payload.image.is_some())
+                    {
+                        return blocked(reason);
+                    }
+                }
+                prepared.payload.local = Some(local);
+                // So a copy kept after a failed send holds the same files.
+                adopt_staged(svc, session, &mut prepared);
+            }
+            Err(reason) => return blocked(reason),
+        }
+    } else if !prepared.selected.is_empty() {
+        adopt_staged(svc, session, &mut prepared);
         match zip_selected(svc, &prepared) {
             Ok((bytes, notes)) => {
                 prepared.notes.extend(notes);
@@ -726,7 +1026,7 @@ pub fn run(
                 &connection_id,
                 &connection,
                 svc.browser,
-                svc.clipboard,
+                svc.deliver,
                 &progress,
                 timeout,
                 svc.cancelled,
@@ -753,7 +1053,6 @@ pub fn run(
                 summary: outcome.summary,
                 url: outcome.url,
                 notes,
-                copy_next: outcome.copy_next,
                 close: prepared.close,
             }
         }
@@ -791,31 +1090,73 @@ mod tests {
     use serde_json::json;
     use std::cell::RefCell;
     use std::io::Read;
+    use std::sync::Mutex;
 
     const PNG: &[u8] = &[0x89, b'P', b'N', b'G', 1, 2, 3];
     const SECRET: &str = "TOP-SECRET-TOKEN-123";
 
+    /// Opens links without doing anything.
     struct NoBrowser;
     impl Browser for NoBrowser {
         fn open(&self, _: &str) -> Result<(), String> {
-            Err("no browser".into())
+            Ok(())
         }
     }
-    struct NoClipboard;
-    impl Clipboard for NoClipboard {
-        fn copy_image(&self, _: &[u8]) -> Result<(), String> {
-            Err("none".into())
-        }
-        fn copy_text(&self, _: &str) -> Result<(), String> {
-            Err("none".into())
-        }
+    /// Reads what it is asked to paste while the files still exist, and says it was sent.
+    #[derive(Default)]
+    struct RecordingDeliver {
+        seen: Mutex<Vec<Seen>>,
     }
 
+    struct Seen {
+        url: String,
+        /// File name and content, in the order they would be pasted.
+        files: Vec<(String, Vec<u8>)>,
+        text: String,
+        submit: bool,
+    }
+
+    impl Deliver for RecordingDeliver {
+        fn deliver(
+            &self,
+            d: &cargoframe_connectors::Delivery,
+            open: &dyn Fn(&str) -> Result<(), String>,
+            _: &dyn Fn() -> bool,
+        ) -> Result<cargoframe_connectors::Delivered, cargoframe_connectors::DeliverError> {
+            open(&d.open_url).map_err(cargoframe_connectors::DeliverError::Open)?;
+            let files = d
+                .files
+                .iter()
+                .map(|p| {
+                    (
+                        p.file_name().unwrap().to_string_lossy().into_owned(),
+                        fs::read(p).unwrap(),
+                    )
+                })
+                .collect();
+            self.seen.lock().unwrap().push(Seen {
+                url: d.open_url.clone(),
+                files,
+                text: d.text.clone(),
+                submit: d.submit,
+            });
+            Ok(cargoframe_connectors::Delivered {
+                window: "Claude".into(),
+                files: d.files.len(),
+                skipped_files: 0,
+                text: true,
+                submitted: d.submit,
+            })
+        }
+    }
     struct World {
         f: Fixture,
         server: MockServer,
         session: Session,
         out: tempfile::TempDir,
+        /// Where captures keep their temporary copies.
+        ws: Workspace,
+        deliver: RecordingDeliver,
     }
 
     /// A project with a log file, a layout with a note, a files block and a sharing button that
@@ -887,11 +1228,14 @@ mod tests {
             .insert("rule.version".into(), "1.2.3".into());
         session.png = PNG.to_vec();
         let out = tempfile::tempdir().unwrap();
+        let ws = Workspace::new(out.path().join("captures"));
         World {
             f,
             server,
             session,
             out,
+            ws,
+            deliver: RecordingDeliver::default(),
         }
     }
 
@@ -907,6 +1251,7 @@ mod tests {
             dropdowns: BTreeMap::new(),
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
+            clip_edit: None,
         }
     }
 
@@ -915,7 +1260,8 @@ mod tests {
             store: &w.f.store,
             connections: &w.f.connections,
             browser: &NoBrowser,
-            clipboard: &NoClipboard,
+            deliver: &w.deliver,
+            workspace: &w.ws,
             cancelled,
             now: NOW,
         }
@@ -957,6 +1303,361 @@ mod tests {
         let mut s = String::new();
         z.by_name(name).unwrap().read_to_string(&mut s).unwrap();
         s
+    }
+
+    /// Point the test layout's button at a Claude connection.
+    fn use_claude(w: &mut World, settings: serde_json::Value) {
+        let mut conn = json!({"name": "Claude", "kind": "claude"});
+        for (k, v) in settings.as_object().unwrap() {
+            conn[k] = v.clone();
+        }
+        save(&w.f.store, "claude", conn);
+        let layout = w.session.view.layout.as_mut().unwrap();
+        for b in &mut layout.blocks {
+            if let BlockKind::SharingButton(btn) = &mut b.kind {
+                btn.connection_id = Some("claude".into());
+                btn.mappings.clear();
+            }
+        }
+    }
+
+    #[test]
+    fn a_share_to_claude_delivers_the_screenshot_the_files_and_the_message_in_one_go() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, close, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(summary, "Sent 2 files and the message to Claude");
+        assert!(close);
+        let seen = w.deliver.seen.lock().unwrap();
+        assert_eq!(seen.len(), 1, "one delivery, not a copy step per item");
+        let s = &seen[0];
+        assert_eq!(s.url, "https://claude.ai/new");
+        assert!(s.submit);
+        // The screenshot first, then the ticked file, each with the content it had.
+        assert_eq!(
+            s.files,
+            vec![
+                ("screenshot.png".to_string(), PNG.to_vec()),
+                ("run.log".to_string(), b"LOGLINE".to_vec()),
+            ]
+        );
+        assert!(s.text.starts_with("why?"), "{}", s.text);
+        assert!(s.text.contains("Captured window: Editor"), "{}", s.text);
+        assert!(s.text.contains("Attached files: run.log"), "{}", s.text);
+        // Nothing went to the mock service: Claude is not a web request.
+        assert!(w.server.requests_to("/hook").is_empty());
+    }
+
+    #[test]
+    fn the_edited_picture_is_what_claude_gets() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let edited = [0x89, b'P', b'N', b'G', 9, 9, 9, 9];
+        w.session.set_edited(Some(edited.to_vec()));
+        let mut req = request();
+        req.image_edited = true;
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        assert_eq!(
+            w.deliver.seen.lock().unwrap()[0].files[0].1,
+            edited.to_vec()
+        );
+    }
+
+    #[test]
+    fn the_capture_folder_goes_with_the_capture() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        assert!(
+            w.session.dir_path().is_none(),
+            "no folder until a destination needs files"
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let dir = w.session.dir_path().expect("the share made the folder");
+        assert!(dir.join("screenshot.png").is_file());
+        assert!(dir.join("files").join("run.log").is_file());
+        // The window closes: the capture is dropped, and so is its folder.
+        let World { session, ws, .. } = w;
+        drop(session);
+        assert!(!dir.exists(), "the folder outlived its capture");
+        assert_eq!(ws.sweep(&[], Duration::ZERO).removed, 0);
+    }
+
+    #[test]
+    fn claude_gets_the_files_as_they_were_when_it_was_shared_not_a_zip() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({"send_automatically": false}));
+        set_safe(&w, None, 0);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert!(summary.starts_with("Pasted"), "{summary}");
+        assert!(!w.deliver.seen.lock().unwrap()[0].submit);
+    }
+
+    #[test]
+    fn claude_has_a_limit_on_files_per_message() {
+        assert!(check_file_count(0, true).is_ok());
+        assert!(check_file_count(MAX_FILES - 1, true).is_ok());
+        let err = check_file_count(MAX_FILES + 2, true).unwrap_err();
+        assert!(
+            err.contains("at most 20") && err.contains("untick 3"),
+            "{err}"
+        );
+        // Without the screenshot there is room for one more file.
+        assert!(check_file_count(MAX_FILES, false).is_ok());
+        let err = check_file_count(MAX_FILES + 1, false).unwrap_err();
+        assert!(
+            !err.contains("screenshot") && err.contains("untick 1"),
+            "{err}"
+        );
+    }
+
+    /// Set the picture and file rules of the test layout's button.
+    fn set_rules(w: &mut World, rules: SendRules) {
+        let layout = w.session.view.layout.as_mut().unwrap();
+        for b in &mut layout.blocks {
+            if let BlockKind::SharingButton(btn) = &mut b.kind {
+                btn.send = rules;
+            }
+        }
+    }
+
+    fn project_file(w: &World, name: &str) -> PathBuf {
+        w.f._dir.path().join("Foo").join(name)
+    }
+
+    #[test]
+    fn a_button_can_leave_the_picture_out() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(summary, "Sent 1 file and the message to Claude");
+        let seen = w.deliver.seen.lock().unwrap();
+        assert_eq!(
+            seen[0].files,
+            vec![("run.log".to_string(), b"LOGLINE".to_vec())]
+        );
+        assert!(
+            seen[0].text.contains("Attached files: run.log"),
+            "{}",
+            seen[0].text
+        );
+        assert!(!notes.iter().any(|n| n.contains("screenshot")), "{notes:?}");
+    }
+
+    #[test]
+    fn a_button_can_leave_the_files_out_even_when_some_are_ticked() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::None,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png"]);
+        assert!(!seen[0].text.contains("Attached files"), "{}", seen[0].text);
+    }
+
+    #[test]
+    fn a_zip_kept_after_leaving_the_picture_out_has_no_picture() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        set_safe(&w, Some(&w.out.path().display().to_string()), 0);
+        // The test layout posts to the mock server (which refuses), so the share is kept.
+        set_rules(
+            &mut w,
+            SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Failed {
+            saved: Some(saved), ..
+        } = r
+        else {
+            panic!("{r:?}")
+        };
+        let names = zip_names(&saved.path);
+        assert!(!names.iter().any(|n| n == "screenshot.png"), "{names:?}");
+        assert!(names.iter().any(|n| n == "share.json"), "{names:?}");
+    }
+
+    #[test]
+    fn text_files_can_go_into_the_message_instead_of_being_attached() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::Inline,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { summary, notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(summary, "Sent 1 file and the message to Claude");
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png"], "the log is text now, not a file");
+        assert!(
+            seen[0].text.contains("File run.log:\n```\nLOGLINE\n```"),
+            "{}",
+            seen[0].text
+        );
+        assert!(!seen[0].text.contains("Attached files"), "{}", seen[0].text);
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("1 file was written into the message as text")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_that_is_too_big_or_not_text_is_attached_when_inline_was_asked() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::Inline,
+                inline_limit_kb: 1,
+                ..SendRules::default()
+            },
+        );
+        // Too big for 1 KB.
+        fs::write(project_file(&w, "run.log"), "x".repeat(2048)).unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        {
+            let seen = w.deliver.seen.lock().unwrap();
+            let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+            assert_eq!(names, ["screenshot.png", "run.log"]);
+            assert!(!seen[0].text.contains("File run.log"), "{}", seen[0].text);
+            assert!(seen[0].text.contains("Attached files: run.log"));
+        }
+        assert!(
+            notes
+                .iter()
+                .any(|n| n.contains("past the 1 KB limit") && n.contains("attached instead")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn a_file_that_is_not_text_stays_a_file_when_inline_was_asked() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        set_rules(
+            &mut w,
+            SendRules {
+                files: FilesHow::Inline,
+                ..SendRules::default()
+            },
+        );
+        fs::write(project_file(&w, "run.log"), [0u8, 1, 2, 255]).unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Sent { notes, .. } = r else {
+            panic!("{r:?}")
+        };
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png", "run.log"]);
+        assert!(
+            notes.iter().any(|n| n.contains("not plain text")),
+            "{notes:?}"
+        );
+    }
+
+    #[test]
+    fn the_inline_limit_is_shared_by_all_the_files_together() {
+        let mut files = LocalCopies::default();
+        let dir = tempfile::tempdir().unwrap();
+        for (name, body) in [
+            ("a.txt", "x".repeat(600)),
+            ("b.txt", "y".repeat(600)),
+            ("c.txt", "z".repeat(100)),
+        ] {
+            let p = dir.path().join(name);
+            fs::write(&p, body).unwrap();
+            files.files.push((name.to_string(), p));
+        }
+        let inline = move_text_inline(&mut files, 1024);
+        // The first fits, the second would pass the limit, the small third still fits after it.
+        let names: Vec<&str> = inline.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, ["a.txt", "c.txt"]);
+        assert_eq!(files.files.len(), 1);
+        assert_eq!(files.files[0].0, "b.txt");
+    }
+
+    #[test]
+    fn what_counts_as_text() {
+        assert_eq!(as_text(b"hello").as_deref(), Some("hello"));
+        assert_eq!(as_text("\u{feff}bom".as_bytes()).as_deref(), Some("bom"));
+        assert_eq!(as_text("héllo".as_bytes()).as_deref(), Some("héllo"));
+        assert!(as_text(&[104, 0, 105]).is_none(), "a NUL byte is binary");
+        assert!(as_text(&[0xff, 0xfe, 0x41]).is_none(), "not UTF-8");
+    }
+
+    #[test]
+    fn picking_a_chat_works_without_mapping_the_chat_field() {
+        const CHAT: &str = "0b1c2d3e-4f50-6172-8394-a5b6c7d8e9f0";
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let layout = w.session.view.layout.as_mut().unwrap();
+        layout.blocks.push(cargoframe_layout::Block {
+            id: "chat".into(),
+            rect: cargoframe_layout::Rect::new(0, 4, 6, 1),
+            kind: BlockKind::Dropdown(cargoframe_layout::DropdownBlock {
+                title: "Chat".into(),
+                source: DropdownSource::ClaudeChats,
+            }),
+        });
+        let mut req = request();
+        req.dropdowns.insert("chat".into(), Some(CHAT.into()));
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let seen = w.deliver.seen.lock().unwrap();
+        assert!(
+            seen[0].url.ends_with(&format!("/chat/{CHAT}")),
+            "{}",
+            seen[0].url
+        );
     }
 
     #[test]
@@ -1331,6 +2032,451 @@ mod tests {
         assert_eq!(files.len(), 1);
     }
 
+    /// Turn the capture of a test world into a video capture whose recording holds `bytes`.
+    fn make_video(w: &mut World, bytes: &[u8]) {
+        let path = w.out.path().join("recording.mp4");
+        fs::write(&path, bytes).unwrap();
+        let view = w.session.view.clone();
+        w.session = std::mem::replace(&mut w.session, Session::new(Vec::new(), view)).with_clip(
+            crate::session::Clip {
+                path,
+                width: 1280,
+                height: 720,
+                duration_ms: 9_000,
+                bytes: bytes.len() as u64,
+            },
+        );
+    }
+
+    #[test]
+    fn a_video_capture_saved_locally_keeps_the_recording_where_the_picture_would_be() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let names = zip_names(&path);
+        assert!(names.contains(&"recording.mp4".to_string()), "{names:?}");
+        assert!(!names.contains(&"screenshot.png".to_string()), "{names:?}");
+        assert!(zip_text(&path, "recording.mp4").starts_with("MP4 BYTES"));
+        assert!(zip_text(&path, "manifest.json").contains("\"video\""));
+    }
+
+    #[test]
+    fn a_video_capture_leaves_the_recording_out_when_the_button_leaves_the_picture_out() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        set_rules(
+            &mut w,
+            SendRules {
+                screenshot: false,
+                ..SendRules::default()
+            },
+        );
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let names = zip_names(&path);
+        assert!(!names.contains(&"recording.mp4".to_string()), "{names:?}");
+        assert!(!names.contains(&"screenshot.png".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn a_video_is_not_sent_to_a_destination_that_cannot_take_one_and_the_reason_is_given() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        set_safe(&w, None, 0);
+        // the test world's own destination is a Custom API connection
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(
+            reasons.iter().any(|m| m.contains("cannot take a video")),
+            "{reasons:?}"
+        );
+        assert!(w.server.requests().is_empty(), "nothing was sent");
+
+        use_claude(&mut w, json!({}));
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(
+            reasons
+                .iter()
+                .any(|m| m.contains("Claude cannot watch a video")),
+            "{reasons:?}"
+        );
+        assert!(w.deliver.seen.lock().unwrap().is_empty());
+    }
+
+    /// A real clip `secs` seconds long, or `None` when ffmpeg is not installed here.
+    fn real_clip(path: &Path, secs: u32) -> Option<()> {
+        let made = std::process::Command::new("ffmpeg")
+            .args(["-hide_banner", "-nostdin", "-y", "-loglevel", "error"])
+            .args(["-f", "lavfi", "-i"])
+            .arg(format!("testsrc=duration={secs}:size=320x240:rate=15"))
+            .args(["-pix_fmt", "yuv420p", "-g", "15"])
+            .arg(path)
+            .status()
+            .ok()?;
+        made.success().then_some(())
+    }
+
+    /// How long a clip is, in seconds, as ffprobe says (`None` when ffprobe is not installed).
+    fn seconds_of(path: &Path) -> Option<f64> {
+        let out = std::process::Command::new("ffprobe")
+            .args(["-v", "error", "-show_entries", "format=duration"])
+            .args(["-of", "default=nw=1:nk=1"])
+            .arg(path)
+            .output()
+            .ok()?;
+        String::from_utf8_lossy(&out.stdout).trim().parse().ok()
+    }
+
+    #[test]
+    fn a_video_capture_cut_in_the_window_sends_only_the_part_that_was_kept() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source.mp4");
+        if real_clip(&source, 6).is_none() || seconds_of(&source).is_none() {
+            eprintln!("skipped: ffmpeg or ffprobe is not installed");
+            return;
+        }
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"placeholder");
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = source;
+        clip.duration_ms = 6_000;
+        w.session.clip = Some(clip);
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 1_000,
+            end_ms: Some(3_000),
+            crop: None,
+            mark: false,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        z.by_name("recording.mp4")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        let sent = tmp.path().join("sent.mp4");
+        fs::write(&sent, &bytes).unwrap();
+        let length = seconds_of(&sent).expect("the zip holds a video");
+        assert!(
+            (1.5..2.8).contains(&length),
+            "2 seconds were kept of 6, the zip holds {length} s"
+        );
+        // the cut is made in the capture's own folder; the original is not touched
+        assert!(
+            seconds_of(&w.session.clip.as_ref().unwrap().path).unwrap() > 5.5,
+            "the recording is as it was"
+        );
+    }
+
+    #[test]
+    fn a_cut_that_keeps_everything_sends_the_recording_as_it_is() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        for trim in [
+            crate::video::ClipEdit {
+                start_ms: 0,
+                end_ms: None,
+                crop: None,
+                mark: false,
+            },
+            crate::video::ClipEdit {
+                start_ms: 0,
+                end_ms: Some(9_000),
+                crop: None,
+                mark: false,
+            },
+        ] {
+            let mut req = request();
+            req.clip_edit = Some(trim);
+            let (r, _) = go(&w, &req, vec![]);
+            let ShareResult::SavedLocally { path, .. } = r else {
+                panic!("{r:?}");
+            };
+            // no ffmpeg is needed, and nothing is changed
+            assert!(zip_text(&path, "recording.mp4").starts_with("MP4 BYTES"));
+        }
+    }
+
+    #[test]
+    fn a_cut_that_cannot_be_made_stops_the_share_and_says_why() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        // not a video: the cut cannot be made, with or without ffmpeg on this computer
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 1_000,
+            end_ms: Some(2_000),
+            crop: None,
+            mark: false,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(reasons.len(), 1, "{reasons:?}");
+        assert!(
+            reasons[0].contains("recording") || reasons[0].contains("ffmpeg"),
+            "{reasons:?}"
+        );
+        assert!(
+            fs::read_dir(&dir).unwrap().next().is_none(),
+            "no zip was made"
+        );
+    }
+
+    #[test]
+    fn changing_nothing_is_told_from_cutting_or_cropping_something() {
+        use crate::video::ClipEdit;
+        use cargoframe_video::Crop;
+        let t = |start_ms, end_ms| ClipEdit {
+            start_ms,
+            end_ms,
+            crop: None,
+            mark: false,
+        };
+        assert!(t(0, None).changes_nothing(5_000));
+        assert!(t(0, Some(5_000)).changes_nothing(5_000));
+        assert!(t(0, Some(6_000)).changes_nothing(5_000));
+        assert!(!t(100, None).changes_nothing(5_000));
+        assert!(!t(0, Some(4_900)).changes_nothing(5_000));
+        let cropped = ClipEdit {
+            crop: Some(Crop {
+                x: 0,
+                y: 0,
+                w: 64,
+                h: 64,
+            }),
+            ..t(0, None)
+        };
+        assert!(!cropped.changes_nothing(5_000));
+        let marked = ClipEdit {
+            mark: true,
+            ..t(0, None)
+        };
+        assert!(!marked.changes_nothing(5_000));
+    }
+
+    #[test]
+    fn a_video_capture_cropped_in_the_window_sends_the_cropped_picture_for_the_whole_time() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source.mp4");
+        if real_clip(&source, 4).is_none() || seconds_of(&source).is_none() {
+            eprintln!("skipped: ffmpeg or ffprobe is not installed");
+            return;
+        }
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"placeholder");
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = source;
+        clip.duration_ms = 4_000;
+        w.session.clip = Some(clip);
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        // odd numbers, as a mouse gives them: the picture still comes out even
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 0,
+            end_ms: None,
+            crop: Some(cargoframe_video::Crop {
+                x: 41,
+                y: 21,
+                w: 161,
+                h: 101,
+            }),
+            mark: false,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        z.by_name("recording.mp4")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        let sent = tmp.path().join("sent.mp4");
+        fs::write(&sent, &bytes).unwrap();
+        let probed = std::process::Command::new("ffprobe")
+            .args(["-v", "error", "-select_streams", "v:0"])
+            .args(["-show_entries", "stream=width,height"])
+            .args(["-of", "csv=s=x:p=0"])
+            .arg(&sent)
+            .output()
+            .unwrap();
+        let size = String::from_utf8_lossy(&probed.stdout).trim().to_string();
+        assert_eq!(size, "160x100", "the crop, made even");
+        let length = seconds_of(&sent).unwrap();
+        assert!(length > 3.0, "the whole time is kept: {length} s");
+    }
+
+    /// The first picture of a video as raw RGB, with its width, via ffmpeg.
+    fn first_frame(path: &Path, width: usize) -> Option<Vec<u8>> {
+        let out = std::process::Command::new("ffmpeg")
+            .args(["-v", "error", "-i"])
+            .arg(path)
+            .args(["-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
+            .output()
+            .ok()?;
+        (out.stdout.len() >= width * 3).then_some(out.stdout)
+    }
+
+    #[test]
+    fn a_video_capture_with_a_mark_sends_the_recording_with_the_mark_on_it() {
+        let tmp = tempfile::tempdir().unwrap();
+        let source = tmp.path().join("source.mp4");
+        if real_clip(&source, 3).is_none() || seconds_of(&source).is_none() {
+            eprintln!("skipped: ffmpeg or ffprobe is not installed");
+            return;
+        }
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"placeholder");
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = source;
+        clip.duration_ms = 3_000;
+        w.session.clip = Some(clip);
+        // the mark the window draws: see-through, with a red square in the top-left corner
+        let (mw, mh) = (320u32, 240u32);
+        let mut rgba = vec![0u8; (mw * mh * 4) as usize];
+        for y in 0..80u32 {
+            for x in 0..80u32 {
+                let i = ((y * mw + x) * 4) as usize;
+                rgba[i..i + 4].copy_from_slice(&[255, 0, 0, 255]);
+            }
+        }
+        let png = cargoframe_capture::Frame::new(mw, mh, rgba)
+            .unwrap()
+            .to_png()
+            .unwrap();
+        w.session.set_clip_mark(Some(png));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 0,
+            end_ms: None,
+            crop: None,
+            mark: true,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+        let mut bytes = Vec::new();
+        z.by_name("recording.mp4")
+            .unwrap()
+            .read_to_end(&mut bytes)
+            .unwrap();
+        let sent = tmp.path().join("sent.mp4");
+        fs::write(&sent, &bytes).unwrap();
+        let marked = first_frame(&sent, mw as usize).expect("a picture");
+        let at = |x: usize, y: usize| {
+            let i = (y * mw as usize + x) * 3;
+            (marked[i], marked[i + 1], marked[i + 2])
+        };
+        let (r, g, b) = at(20, 20);
+        assert!(
+            r > 180 && g < 90 && b < 90,
+            "the corner of the picture is red where the mark is: {:?}",
+            at(20, 20)
+        );
+        // the same clip without the mark is not red there
+        let plain = first_frame(&w.session.clip.as_ref().unwrap().path, mw as usize).unwrap();
+        let i = (20 * mw as usize + 20) * 3;
+        assert!(
+            !(plain[i] > 180 && plain[i + 1] < 90 && plain[i + 2] < 90),
+            "the recording itself is not red there"
+        );
+    }
+
+    #[test]
+    fn a_mark_that_was_not_uploaded_stops_the_share_and_says_so() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let mut req = request();
+        req.clip_edit = Some(crate::video::ClipEdit {
+            start_ms: 0,
+            end_ms: None,
+            crop: None,
+            mark: true,
+        });
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(reasons, ["The mark was not drawn: try again"]);
+        assert!(
+            fs::read_dir(&dir).unwrap().next().is_none(),
+            "no zip was made"
+        );
+    }
+
+    #[test]
+    fn a_recording_over_the_limit_is_refused_before_anything_is_read() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        make_video(&mut w, b"MP4 BYTES");
+        // a sparse file: the size is what counts, nothing is written
+        let big = w.out.path().join("big.mp4");
+        let f = fs::File::create(&big).unwrap();
+        f.set_len(MAX_VIDEO_BYTES + 1).unwrap();
+        drop(f);
+        let mut clip = w.session.clip.clone().unwrap();
+        clip.path = big;
+        w.session.clip = Some(clip);
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}");
+        };
+        assert!(reasons[0].contains("record a shorter one"), "{reasons:?}");
+    }
+
     #[test]
     fn a_button_with_no_connection_chosen_saves_a_zip_too() {
         let mut w = world(|_| MockResponse::json(200, json!({})));
@@ -1392,6 +2538,251 @@ mod tests {
         );
         assert!(!missing.exists());
         assert!(!w.f.store.dirs().data().join("kept").exists());
+    }
+
+    /// Adds a Zip name block to the capture, holding `typed` (its value in the window).
+    fn add_zip_name(w: &mut World, typed: &str) -> String {
+        let layout = w.session.view.layout.as_mut().unwrap();
+        layout.blocks.push(
+            serde_json::from_value(json!({
+                "id": "zipname", "rect": {"x":0,"y":4,"w":6,"h":1}, "type": "text",
+                "title": "Zip name", "role": "zip_name", "default_text": ""
+            }))
+            .unwrap(),
+        );
+        typed.to_string()
+    }
+
+    fn request_with_zip_name(typed: &str) -> Request {
+        let mut req = request();
+        req.texts.insert("zipname".into(), typed.into());
+        req
+    }
+
+    #[test]
+    fn the_zip_name_block_names_a_zip_saved_locally() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let typed = add_zip_name(&mut w, "Bug in login");
+        let (r, _) = go(&w, &request_with_zip_name(&typed), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path), dir.join("Bug in login.zip"));
+        // The same name twice keeps both.
+        let (r, _) = go(&w, &request_with_zip_name(&typed), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path), dir.join("Bug in login-2.zip"));
+    }
+
+    #[test]
+    fn an_empty_or_unusable_zip_name_keeps_the_default_name() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        add_zip_name(&mut w, "");
+        for typed in ["", "   ", "..."] {
+            let (r, _) = go(&w, &request_with_zip_name(typed), vec![]);
+            let ShareResult::SavedLocally { path, .. } = r else {
+                panic!("{r:?}");
+            };
+            assert!(
+                path.contains("CargoFrame_2026-10-23_080001_local"),
+                "{path}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_zip_name_cannot_write_outside_the_folder() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        add_zip_name(&mut w, "");
+        let (r, _) = go(&w, &request_with_zip_name("../../escape"), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path).parent(), Some(dir.as_path()), "{path}");
+        assert_eq!(Path::new(&path).file_name().unwrap(), "escape.zip");
+    }
+
+    #[test]
+    fn only_the_first_zip_name_block_counts() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        add_zip_name(&mut w, "");
+        w.session.view.layout.as_mut().unwrap().blocks.push(
+            serde_json::from_value(json!({
+                "id": "zipname2", "rect": {"x":6,"y":4,"w":6,"h":1}, "type": "text",
+                "title": "Other", "role": "zip_name", "default_text": ""
+            }))
+            .unwrap(),
+        );
+        let mut req = request_with_zip_name("first");
+        req.texts.insert("zipname2".into(), "second".into());
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(Path::new(&path).file_name().unwrap(), "first.zip");
+    }
+
+    #[test]
+    fn a_failed_share_keeps_its_copy_under_the_typed_zip_name() {
+        let mut w = world(|_| MockResponse::json(503, json!({"message": "down"})));
+        let safe_dir = w.out.path().join("safe");
+        fs::create_dir_all(&safe_dir).unwrap();
+        set_safe(&w, Some(&safe_dir.display().to_string()), 0);
+        add_zip_name(&mut w, "");
+        let (r, _) = go(&w, &request_with_zip_name("Crash on save"), vec![]);
+        let ShareResult::Failed { saved, .. } = r else {
+            panic!("{r:?}");
+        };
+        let saved = saved.unwrap();
+        assert_eq!(saved.place, "safe_folder");
+        assert_eq!(
+            Path::new(&saved.path).file_name().unwrap(),
+            "Crash on save.zip"
+        );
+    }
+
+    /// The project folder of the world's capture.
+    fn project_of(w: &World) -> PathBuf {
+        PathBuf::from(w.session.files_root.clone().unwrap())
+    }
+
+    #[test]
+    fn a_saved_zip_holds_the_files_as_they_were_at_the_capture() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        // The capture copies what is ticked by default, then the log keeps growing.
+        assert_eq!(
+            w.session.stage_preselected(
+                &w.ws,
+                MAX_STAGED_FILE_BYTES,
+                MAX_STAGED_TOTAL_BYTES,
+                &|| true
+            ),
+            1
+        );
+        fs::write(project_of(&w).join("run.log"), "LOGLINE and then some").unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
+    }
+
+    #[test]
+    fn a_file_ticked_later_is_copied_when_the_button_is_pressed() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        w.session.stage_preselected(
+            &w.ws,
+            MAX_STAGED_FILE_BYTES,
+            MAX_STAGED_TOTAL_BYTES,
+            &|| true,
+        );
+        let mut req = request();
+        req.files
+            .insert("logs".into(), vec!["run.log".into(), "other.log".into()]);
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
+        assert_eq!(zip_text(&path, "files/other.log"), "OTHER");
+    }
+
+    #[test]
+    fn nothing_copied_ahead_still_zips_the_current_file() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        fs::write(project_of(&w).join("run.log"), "NEWER").unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        // The share copies it when the button is pressed, so it is that moment's content.
+        assert_eq!(zip_text(&path, "files/run.log"), "NEWER");
+    }
+
+    #[test]
+    fn a_zip_kept_after_a_failed_send_holds_the_capture_time_files() {
+        let w = world(|_| MockResponse::json(503, json!({"message": "down"})));
+        let safe_dir = w.out.path().join("safe");
+        fs::create_dir_all(&safe_dir).unwrap();
+        set_safe(&w, Some(&safe_dir.display().to_string()), 0);
+        w.session.stage_preselected(
+            &w.ws,
+            MAX_STAGED_FILE_BYTES,
+            MAX_STAGED_TOTAL_BYTES,
+            &|| true,
+        );
+        fs::write(project_of(&w).join("run.log"), "LOGLINE and then some").unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::Failed { saved, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&saved.unwrap().path, "files/run.log"), "LOGLINE");
+    }
+
+    #[test]
+    fn a_share_waits_for_the_copying_that_started_with_the_capture() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let started = std::time::Instant::now();
+        let waited = std::thread::scope(|scope| {
+            let holder = scope.spawn(|| {
+                // Stands in for a slow copy: holds the capture's folder for a while.
+                w.session
+                    .with_dir(&w.ws, |_| std::thread::sleep(Duration::from_millis(400)))
+                    .unwrap();
+            });
+            std::thread::sleep(Duration::from_millis(100));
+            let (r, _) = go(&w, &request(), vec![]);
+            assert!(matches!(r, ShareResult::SavedLocally { .. }), "{r:?}");
+            let waited = started.elapsed();
+            holder.join().unwrap();
+            waited
+        });
+        assert!(
+            waited >= Duration::from_millis(350),
+            "the share did not wait: {waited:?}"
+        );
+    }
+
+    #[test]
+    fn what_is_copied_ahead_is_capped_like_a_zip() {
+        assert_eq!(
+            MAX_STAGED_TOTAL_BYTES,
+            cargoframe_bundle::Limits::default().max_total_bytes
+        );
     }
 
     #[test]

@@ -91,10 +91,6 @@ impl Frame {
         &self.rgba
     }
 
-    pub fn into_rgba(self) -> Vec<u8> {
-        self.rgba
-    }
-
     /// RGBA of one pixel; `None` outside the picture.
     pub fn pixel(&self, x: u32, y: u32) -> Option<[u8; 4]> {
         if x >= self.width || y >= self.height {
@@ -128,11 +124,6 @@ impl Frame {
     /// harder when it is sent.
     pub fn to_png(&self) -> Result<Vec<u8>, CaptureError> {
         self.encode_png(png::Compression::Fast)
-    }
-
-    /// Smaller PNG for sharing and zipping.
-    pub fn to_png_small(&self) -> Result<Vec<u8>, CaptureError> {
-        self.encode_png(png::Compression::High)
     }
 
     fn encode_png(&self, compression: png::Compression) -> Result<Vec<u8>, CaptureError> {
@@ -260,8 +251,6 @@ mod tests {
         let f = gradient(37, 23);
         let back = Frame::from_png(&f.to_png().unwrap()).unwrap();
         assert_eq!(back, f);
-        let small = Frame::from_png(&f.to_png_small().unwrap()).unwrap();
-        assert_eq!(small, f);
     }
 
     #[test]

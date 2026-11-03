@@ -12,10 +12,30 @@ use tauri::{
 const ID_OPEN: &str = "open_settings";
 const ID_PAUSE: &str = "pause";
 const ID_QUIT: &str = "quit";
+const ID_STOP_RECORDING: &str = "stop_recording";
 const ID_CAPTURE_PREFIX: &str = "capture:";
 const TRAY_ID: &str = "main";
 
 /// The menu: one "Capture" entry per enabled trigger, then the fixed entries.
+/// A video trigger is recording the screen right now.
+fn recording_by_trigger(app: &AppHandle) -> bool {
+    app.try_state::<AppState>().is_some_and(|s| {
+        s.recording.started_by_trigger()
+            && matches!(
+                s.recording.view(),
+                crate::video::RecordingView::Recording { .. }
+            )
+    })
+}
+
+fn tooltip(recording: bool) -> &'static str {
+    if recording {
+        "CargoFrame is recording your screen. Press the video shortcut again to stop."
+    } else {
+        "CargoFrame"
+    }
+}
+
 fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let open = MenuItem::with_id(app, ID_OPEN, "Open settings", true, None::<&str>)?;
     let paused = app
@@ -26,6 +46,16 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         CheckMenuItem::with_id(app, ID_PAUSE, "Pause triggers", true, paused, None::<&str>)?;
     let quit = MenuItem::with_id(app, ID_QUIT, "Quit CargoFrame", true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
+    // while a video trigger is recording, a way to throw the recording away
+    let recording_now = recording_by_trigger(app);
+    let stop_recording = MenuItem::with_id(
+        app,
+        ID_STOP_RECORDING,
+        "Recording: stop and discard it",
+        true,
+        None::<&str>,
+    )?;
+    let sep_recording = PredefinedMenuItem::separator(app)?;
 
     let mut captures = Vec::new();
     if let Some(state) = app.try_state::<AppState>() {
@@ -52,6 +82,10 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         }
     }
     let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = Vec::new();
+    if recording_now {
+        items.push(&stop_recording);
+        items.push(&sep_recording);
+    }
     for c in &captures {
         items.push(c);
     }
@@ -68,9 +102,10 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     Menu::with_items(app, &items)
 }
 
-/// Rebuild the menu after triggers change.
+/// Rebuild the menu after triggers change, and say in the tooltip when the screen is being recorded.
 pub fn refresh_menu(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
+        let _ = tray.set_tooltip(Some(tooltip(recording_by_trigger(app))));
         match menu(app) {
             Ok(m) => {
                 let _ = tray.set_menu(Some(m));
@@ -85,7 +120,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(Image::from_bytes(include_bytes!("../icons/32x32.png"))?)
-        .tooltip("CargoFrame")
+        .tooltip(tooltip(false))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {
@@ -98,6 +133,13 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
                 }
             }
             ID_QUIT => app.exit(0),
+            ID_STOP_RECORDING => {
+                if let Some(state) = app.try_state::<AppState>() {
+                    state.recording.cancel();
+                    tracing::info!("recording discarded from the tray");
+                }
+                refresh_menu(app);
+            }
             other => {
                 if let Some(trigger_id) = other.strip_prefix(ID_CAPTURE_PREFIX) {
                     triggers::run(app, trigger_id.to_string());
@@ -116,4 +158,17 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
             }
         })
         .build(app)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::tooltip;
+
+    #[test]
+    fn the_tray_says_when_the_screen_is_being_recorded() {
+        assert_eq!(tooltip(false), "CargoFrame");
+        let t = tooltip(true);
+        assert!(t.contains("recording your screen"), "{t}");
+        assert!(t.contains("again to stop"), "{t}");
+    }
 }

@@ -6,7 +6,7 @@ and never by an automated session.
 | Key | Purpose | Where the private part lives | Public part |
 |-----|---------|------------------------------|-------------|
 | Code-signing certificate (`.pfx`) | Signs the Windows installer and app | Repository secrets `WINDOWS_CERT_PFX_BASE64`, `WINDOWS_CERT_PASSWORD`, plus your offline backup | `.cer`, given to testers if they want to trust it |
-| Update-signing key pair (Tauri) | Signs update packages and the update manifest | Repository secrets `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus your offline backup | `.pub` file, copied into `tauri.conf.json` and committed |
+| Update-signing key pair (Tauri) | **Not used yet.** The updater checks the SHA-256 in the release's `SHA256SUMS.txt`. Reserved for a signed update manifest | Repository secrets `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`, plus your offline backup | `.pub` file, copied into `tauri.conf.json` and committed |
 
 ## What is signed
 
@@ -23,9 +23,10 @@ and never by an automated session.
 ## Private beta (now)
 
 - The certificate is self-signed. Testers see an "unknown publisher" warning. That is expected.
-- The in-app updater is **off** while the repository is private, because it would need release
-  assets that anyone can download. Updates are manual: run the newer installer, which upgrades in
-  place.
+- "Check for updates" (Settings, General) works while the repository is private, with a
+  read-only GitHub token you create (fine-grained, *Contents: read* on this repository only). It is
+  kept in the system credential store. The daily automatic check is **off** by default. You can
+  also update by hand: run the newer installer, which upgrades in place and keeps your settings.
 - Generate both with `scripts/windows/new-signing-material.ps1`, then run the `gh secret set`
   commands it prints.
 
@@ -41,4 +42,4 @@ offline, encrypted backup, and do not paste the key into chats, tickets or issue
 2. Scan the git history for secrets and personal paths; rotate anything found.
 3. Keep OAuth client secrets out of the repository (use PKCE public clients, or CI secrets).
 4. Choose a license; add a security policy (`SECURITY.md`).
-5. Turn the updater on and publish the signed manifest as a release asset.
+5. Make the repository public, then the token is no longer needed: remove it in Settings, General, Updates. Consider a signed update manifest on top of the checksum file.

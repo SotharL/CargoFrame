@@ -4,11 +4,12 @@ import FilesBlock from './FilesBlock.svelte';
 import type { Block, FilesState } from '../../lib/types';
 
 type Files = Extract<Block, { type: 'files' }>;
-const block: Files = { id: 'files', type: 'files', rect: { x: 0, y: 0, w: 6, h: 3 }, title: 'Files', include: ['**'], preselect: [] };
+const block: Files = { id: 'files', type: 'files', rect: { x: 0, y: 0, w: 6, h: 3 }, title: 'Files', include: ['**'], preselect: [], look_in: { folders: ['project'], subfolder: '' } };
 const info = (n: number): FilesState => ({
   entries: Array.from({ length: n }, (_, i) => ({ path: i % 2 ? `logs/run-${i}.log` : `src/file-${i}.ts`, size: 100 * i, selected: false })),
   truncated: false,
   problem: null,
+  places: [],
 });
 
 describe('FilesBlock', () => {
@@ -40,6 +41,21 @@ describe('FilesBlock', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'None' }));
     // Only the shown ones were cleared: the one hidden by the filter is still ticked.
     expect(screen.getByText(/1 of 20 selected/)).toBeTruthy();
+  });
+
+  it('says where the files came from only when several folders were looked in', () => {
+    const one = info(2);
+    one.places = [{ label: 'Project folder', folder: '/dev/foo', exists: true, found: 2 }];
+    const { unmount } = render(FilesBlock, { block, info: one, selected: [] });
+    expect(screen.queryByText(/Looked in/)).toBeNull();
+    unmount();
+    const many = info(3);
+    many.places = [
+      { label: 'Project folder', folder: '/dev/foo', exists: true, found: 3 },
+      { label: 'Program folder', folder: '/dev/foo/bin/logs', exists: false, found: 0 },
+    ];
+    render(FilesBlock, { block, info: many, selected: [] });
+    expect(screen.getByText('Looked in: Project folder (3), Program folder (not found)')).toBeTruthy();
   });
 
   it('says so when the filter matches nothing', async () => {

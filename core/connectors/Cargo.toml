@@ -1,6 +1,6 @@
 [package]
 name = "cargoframe-connectors"
-description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, custom APIs)"
+description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, Slack, Discord, custom APIs)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -14,6 +14,7 @@ cargoframe-net = { path = "../net" }
 cargoframe-safe = { path = "../safe" }
 cargoframe-context = { path = "../context" }
 cargoframe-handoff = { path = "../handoff" }
+cargoframe-deliver = { path = "../deliver" }
 serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true

@@ -1,0 +1,22 @@
+[package]
+name = "cargoframe-update"
+description = "CargoFrame core: look for a newer release, download it, check its fingerprint, run the installer"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+cargoframe-net = { path = "../net" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+semver = "1"
+sha2 = "0.11"
+
+[dev-dependencies]
+cargoframe-net = { path = "../net", features = ["mock"] }
+tempfile.workspace = true

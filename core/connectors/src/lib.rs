@@ -7,6 +7,7 @@
 pub mod claude;
 pub mod ctx;
 pub mod custom;
+pub mod discord;
 pub mod error;
 pub mod google;
 pub mod jira;
@@ -15,13 +16,19 @@ pub mod oauth;
 pub mod payload;
 pub mod reddit;
 pub mod secrets;
+pub mod slack;
+pub mod teams;
 
 #[cfg(test)]
 mod testkit;
 
-pub use ctx::{Browser, Clipboard, Ctx};
+pub use cargoframe_deliver::{Deliver, DeliverError, Delivered, Delivery, Target, Timing};
+pub use ctx::{Browser, Ctx};
 pub use model::{Connection, Kind, Settings};
-pub use payload::{Attachment, Field, FieldKind, OptionItem, Payload, Progress, SendOutcome};
+pub use payload::{
+    Attachment, Field, FieldKind, InlineFile, LocalCopies, OptionItem, Payload, Progress,
+    SendOutcome,
+};
 pub use secrets::{MemorySecrets, SecretError, SecretStore};
 
 use cargoframe_safe::SendError;
@@ -97,6 +104,9 @@ pub fn build(connection: &Connection) -> Option<Box<dyn Connector>> {
         Settings::Reddit(s) => Box::new(reddit::RedditConnector::new(s.clone())),
         Settings::Google(s) => Box::new(google::GoogleConnector::new(s.clone())),
         Settings::Claude(s) => Box::new(claude::ClaudeConnector::new(s.clone())),
+        Settings::Slack(s) => Box::new(slack::SlackConnector::new(s.clone())),
+        Settings::Discord(s) => Box::new(discord::DiscordConnector::new(s.clone())),
+        Settings::Teams(s) => Box::new(teams::TeamsConnector::new(s.clone())),
         Settings::Custom(s) => Box::new(custom::CustomConnector::new(s.clone())),
     })
 }

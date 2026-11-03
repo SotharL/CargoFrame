@@ -1,9 +1,11 @@
 import type {
-  AppInfo, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
-  ExportSelection, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
-  ItemKind, ItemList, Layout, LayoutTemplate, OptionsError, Rule, RuleTest, Safe, SessionView,
-  MemoryStatus, ShareRequest, ShareResult, TimingView, VariableInfo,
+  AppInfo, Block, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
+  ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
+  ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
+  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
+  VideoRecording, VideoTestEdit, VideoTools, VideoTrial,
 } from './types';
+import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
 /** Whatever a failed list request rejected with, as an `OptionsError`. */
 export function asOptionsError(e: unknown): OptionsError {
@@ -31,6 +33,8 @@ export interface Api {
   getSession(): Promise<SessionView>;
   /** The screenshot as a PNG file. */
   getSessionImage(): Promise<Blob>;
+  /** The recording of a video capture (MP4). */
+  getSessionClip(): Promise<Blob>;
   closeCapture(): Promise<void>;
   editLayout(layoutId: string | null): Promise<void>;
   /** Called when a new capture replaces the one shown. Returns a function that stops listening. */
@@ -48,12 +52,16 @@ export interface Api {
   deleteItem(kind: ItemKind, id: string): Promise<void>;
   newItemId(kind: ItemKind, name: string): Promise<string>;
   validateLayout(layout: Layout): Promise<IssueView[]>;
+  /** What each sharing button of the layout sends, by button id: asked of the code that does the sharing. */
+  buttonReach(layout: Layout): Promise<Record<string, Reach>>;
   /** The ready-made layouts to start from. */
   listLayoutTemplates(): Promise<LayoutTemplate[]>;
   /** A template as an unsaved layout for a connection. Nothing is written. */
   layoutFromTemplate(key: string, connectionId: string | null): Promise<Layout>;
   listVariables(): Promise<VariableInfo[]>;
   testRule(rule: Rule, folder: string | null): Promise<RuleTest>;
+  /** What a Files block would find. Without a program, the one of the last capture is used. */
+  previewFiles(block: Extract<Block, { type: 'files' }>, program: string | null): Promise<FilesPreview>;
 
   // ----- export and import of settings -----
   /** Ask where to save, then write the chosen items. The path, or null when cancelled. */
@@ -89,8 +97,9 @@ export interface Api {
   fetchOptions(sessionId: number, blockId: string): Promise<DropdownOption[]>;
   /** The picture as edited, uploaded before a share. `null` goes back to the capture. */
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
+  /** The mark drawn over a recording (a see-through PNG the size of the recording), or none. */
+  setClipMark(sessionId: number, png: Blob | null): Promise<void>;
   share(request: ShareRequest): Promise<ShareResult>;
-  copyText(text: string): Promise<void>;
   openLink(url: string): Promise<void>;
   /** Tell the app the window has painted its first usable content (for the timings). */
   reportPainted(flow: 'capture' | 'settings'): Promise<void>;
@@ -101,8 +110,38 @@ export interface Api {
   getSafe(): Promise<Safe>;
   setSafe(safe: Safe): Promise<void>;
   testSafeFolder(path: string): Promise<void>;
+  getVideo(): Promise<Video>;
+  setVideo(video: Video): Promise<void>;
+  /** Where ffmpeg is and what it can do, for the settings as they are in the form. */
+  detectVideoTools(video: Video): Promise<VideoTools>;
+  /** Record the screen for a few seconds with the settings as they are in the form. */
+  tryVideoRecording(video: Video): Promise<VideoTrial>;
+  /** Start recording until `stopVideoRecording`, keeping only the last seconds. */
+  startVideoRecording(video: Video): Promise<void>;
+  getVideoRecording(): Promise<VideoRecording>;
+  /** Stop, make the clip, and report it like a test recording. */
+  stopVideoRecording(): Promise<VideoTrial>;
+  /** The last test clip (or, with `exported`, its edited copy), to play in the window. */
+  getVideoTestClip(exported?: boolean): Promise<Blob>;
+  /** The picture the page drew as the test mark (a PNG the size of the clip); null forgets it. */
+  setVideoTestMark(png: Blob | null): Promise<void>;
+  /** Cut, crop and mark the test clip into a copy. */
+  exportVideoTest(video: Video, edit: VideoTestEdit): Promise<VideoTrial>;
+  /** Open the clip of the last test recording (or its edited copy) in the video player. */
+  openVideoTest(exported?: boolean): Promise<void>;
   /** The system folder picker; null when cancelled. */
   pickFolder(title?: string): Promise<string | null>;
+
+  // ----- updates -----
+  getUpdateView(): Promise<UpdateView>;
+  /** Ask GitHub for the newest release. Resolves with the view after the answer. */
+  checkUpdate(): Promise<UpdateView>;
+  /** Download, verify and install the release the last check found. Returns at once; progress arrives as `onUpdateChanged`. */
+  installUpdate(): Promise<void>;
+  /** Store the GitHub token. An empty value removes it. It is never read back. */
+  setUpdateToken(value: string): Promise<void>;
+  /** Called whenever the update view changed. Returns a function that stops listening. */
+  onUpdateChanged(callback: () => void): Promise<() => void>;
 }
 
 export const inTauri = (): boolean =>
@@ -122,6 +161,10 @@ async function tauriApi(): Promise<Api> {
       const bytes = await invoke<ArrayBuffer>('get_session_image');
       return new Blob([bytes], { type: 'image/png' });
     },
+    getSessionClip: async () => {
+      const bytes = await invoke<ArrayBuffer>('get_session_clip');
+      return new Blob([bytes], { type: 'video/mp4' });
+    },
     closeCapture: () => invoke('close_capture'),
     editLayout: (layoutId) => invoke('edit_layout', { layoutId }),
     onSessionChanged: async (callback) => {
@@ -138,6 +181,7 @@ async function tauriApi(): Promise<Api> {
     deleteItem: (kind, id) => invoke('delete_item', { kind, id }),
     newItemId: (kind, name) => invoke('new_item_id', { kind, name }),
     validateLayout: (layout) => invoke('validate_layout', { layout }),
+    buttonReach: (layout) => invoke('button_reach', { layout }),
     listLayoutTemplates: () => invoke('list_layout_templates'),
     layoutFromTemplate: (key, connectionId) => invoke('layout_from_template', { key, connectionId }),
     exportSettings: (selection) => invoke('export_settings', { selection }),
@@ -146,6 +190,7 @@ async function tauriApi(): Promise<Api> {
     discardImport: () => invoke('discard_import'),
     listVariables: () => invoke('list_variables'),
     testRule: (rule, folder) => invoke('test_rule', { rule, folder }),
+    previewFiles: (block, program) => invoke('preview_files', { block, program }),
     getShortcutErrors: () => invoke('get_shortcut_errors'),
     listConnections: () => invoke('list_connections'),
     setConnectionSecret: (id, name, value) => invoke('set_connection_secret', { id, name, value }),
@@ -176,8 +221,11 @@ async function tauriApi(): Promise<Api> {
       const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
       await invoke('set_edited_image', bytes, { headers: { 'x-session-id': String(sessionId) } });
     },
+    setClipMark: async (sessionId, png) => {
+      const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
+      await invoke('set_clip_mark', bytes, { headers: { 'x-session-id': String(sessionId) } });
+    },
     share: (request) => invoke<ShareResult>('share', { request }),
-    copyText: (text) => invoke('copy_text', { text }),
     openLink: (url) => invoke('open_link', { url }),
     reportPainted: (flow) => invoke('report_painted', { flow }),
     getTimings: () => invoke('get_timings'),
@@ -185,29 +233,74 @@ async function tauriApi(): Promise<Api> {
     getSafe: () => invoke('get_safe'),
     setSafe: (safe) => invoke('set_safe', { safe }),
     testSafeFolder: (path) => invoke('test_safe_folder', { path }),
+    getVideo: () => invoke('get_video'),
+    setVideo: (video) => invoke('set_video', { video }),
+    detectVideoTools: (video) => invoke('detect_video_tools', { video }),
+    tryVideoRecording: (video) => invoke('try_video_recording', { video }),
+    startVideoRecording: (video) => invoke('start_video_recording', { video }),
+    getVideoRecording: () => invoke('get_video_recording'),
+    stopVideoRecording: () => invoke('stop_video_recording'),
+    getVideoTestClip: async (exported) => {
+      const bytes = await invoke<ArrayBuffer>('get_video_test_clip', { exported });
+      return new Blob([bytes], { type: 'video/mp4' });
+    },
+    setVideoTestMark: async (png) => {
+      const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
+      await invoke('set_video_test_mark', bytes);
+    },
+    exportVideoTest: (video, edit) => invoke('export_video_test', { video, edit }),
+    openVideoTest: (exported) => invoke('open_video_test', { exported }),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
+    getUpdateView: () => invoke('get_update_view'),
+    checkUpdate: () => invoke('check_update'),
+    installUpdate: () => invoke('install_update'),
+    setUpdateToken: (value) => invoke('set_update_token', { value }),
+    onUpdateChanged: async (callback) => {
+      const { listen } = await import('@tauri-apps/api/event');
+      return listen('update-changed', callback);
+    },
   };
 }
 
 /** Options for the in-memory stand-in: what a share and a list request should do. */
 export interface MemoryOptions {
   general?: Partial<General>;
+  /** Starting video settings. */
+  video?: Partial<Video>;
+  /** The stand-in finds no ffmpeg. */
+  noFfmpeg?: boolean;
+  /** The stand-in's test recording fails. */
+  recordingFails?: boolean;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
   /** Called by `fetchOptions` and `previewOptions`. */
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
   /** What `openImport` finds in the "file" the person picks; the default is a cancelled dialog. */
   importFile?: ImportPreview;
+  /** What "Check for updates" finds in the stand-in. Default: nothing newer. */
+  update?: {
+    /** A newer release. */
+    newer?: { version: string; notes?: string; size?: number };
+    /** The check fails with this message. */
+    fails?: { message: string; needs_token?: boolean };
+  };
 }
 
 const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip. No account needed.', service: null },
+  { key: 'local-video', name: 'Save a recording locally', description: 'The recording, a note and the files you tick, saved as a zip. For a trigger that makes a video.', service: null },
   { key: 'jira-bug', name: 'Jira bug report', description: 'Project, issue type, summary and description, with the screenshot and files attached.', service: 'jira' },
+  { key: 'jira-video', name: 'Jira bug report with a recording', description: 'Like the Jira bug report, with the recording attached. For a trigger that makes a video.', service: 'jira' },
   { key: 'jira-comment', name: 'Jira comment on an issue', description: 'Pick a recent issue and add a comment with the screenshot.', service: 'jira' },
   { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and ticked files to a Drive folder.', service: 'google' },
+  { key: 'google-drive-video', name: 'Google Drive upload of a recording', description: 'Upload the recording and ticked files to a Drive folder. For a trigger that makes a video.', service: 'google' },
   { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet.', service: 'google' },
   { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit, with a title and text.', service: 'reddit' },
   { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt and hand the screenshot and prompt to Claude.', service: 'claude' },
+  { key: 'slack-video', name: 'Slack message with a recording', description: 'Post a message with the recording into a channel, or reply in a thread. For a trigger that makes a video.', service: 'slack' },
+  { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.', service: 'discord' },
+  { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
+  { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
   { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
 ];
 
@@ -217,7 +310,9 @@ function templateLayout(t: LayoutTemplate, connectionId: string | null): Layout 
     id: '',
     name: t.name,
     blocks: [
-      { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 7, h: 7 } },
+      t.key.endsWith('-video')
+        ? { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 7, h: 7 } }
+        : { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 7, h: 7 } },
       { id: 'note', type: 'text', rect: { x: 7, y: 0, w: 5, h: 3 }, title: 'Note', placement: 'above', role: 'plain', default_text: '{{app.title}}' },
       {
         id: 'send', type: 'sharing_button', rect: { x: 7, y: 6, w: 5, h: 1 },
@@ -238,6 +333,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   };
   let autostart = true;
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
+  let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
+  let trialRan = false;
+  let copyMade = false;
+  let markDrawn = false;
+  let recordingSince: number | null = null;
+  let recordingEnded: string | null = null;
   const store: Record<ItemKind, Map<string, unknown>> = {
     trigger: new Map(),
     layout: new Map(),
@@ -249,10 +350,23 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   const secretsSet = new Set<string>();
   const signedIn = new Set<string>();
   let chats: ChatView[] = [];
+  let updateLast: UpdateLast | null = null;
+  let updatePhase: UpdateView['phase'] = { state: 'idle' };
+  let updateToken = false;
+  const updateListeners = new Set<() => void>();
+  const updateView = (): UpdateView => ({
+    current: '0.1.0-dev',
+    repository: 'SotharL/CargoFrame',
+    supported: true,
+    token_set: updateToken,
+    token_problem: null,
+    last: updateLast,
+    phase: updatePhase,
+  });
   const TYPED: Record<string, string[]> = {
-    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], custom: ['secret'],
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], discord: ['token'], teams: [], custom: ['secret'],
   };
-  const OAUTH = new Set(['google', 'reddit']);
+  const OAUTH = new Set(['google', 'reddit', 'teams']);
   const describeFor = (c: Connection): Describe => {
     if (c.kind === 'jira') {
       return {
@@ -271,6 +385,45 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           { id: 'priorities', label: 'Priorities', param: null },
           { id: 'components', label: 'Components of a project', param: 'project key' },
         ],
+      };
+    }
+    if (c.kind === 'teams') {
+      return {
+        summary: 'Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The ticked files cannot be sent yet: Teams needs them in OneDrive.',
+        fields: [
+          { key: 'target', label: 'Chat or channel', hint: 'Where to post. You must be a member of it', list: 'targets' },
+          { key: 'thread', label: 'Reply in a channel thread', hint: 'A message link (Copy link in Teams) in a channel', list: null },
+          { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
+          { key: 'title', label: 'Headline', hint: 'The headline of a new channel post, or a bold first line', list: null },
+        ],
+        lists: [{ id: 'targets', label: 'Your chats and the channels of your teams', param: null }],
+      };
+    }
+    if (c.kind === 'discord') {
+      return {
+        summary: 'Posts a message into a channel or thread, or starts a forum post, with the screenshot and a zip of the ticked files attached. Nobody is pinged.',
+        fields: [
+          { key: 'channel', label: 'Channel', hint: 'A text channel, or a forum to start a post in', list: 'channels' },
+          { key: 'thread', label: 'Thread or forum post', hint: 'Overrides the channel', list: 'threads' },
+          { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
+          { key: 'title', label: 'Title', hint: 'The name of a forum post', list: null },
+        ],
+        lists: [
+          { id: 'channels', label: 'Channels and forums the bot can see', param: null },
+          { id: 'threads', label: 'Active threads and forum posts', param: null },
+        ],
+      };
+    }
+    if (c.kind === 'slack') {
+      return {
+        summary: 'Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached.',
+        fields: [
+          { key: 'channel', label: 'Channel', hint: 'The app must have been invited to it', list: 'channels' },
+          { key: 'thread', label: 'Reply in a thread', hint: 'A message link or its timestamp', list: null },
+          { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
+          { key: 'title', label: 'Bold first line', hint: '', list: null },
+        ],
+        lists: [{ id: 'channels', label: 'Channels the app can see', param: null }],
       };
     }
     if (c.kind === 'claude') {
@@ -317,6 +470,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     openConfigFolder: async () => {},
     getSession: async () => (await import('../capture/demo')).demoSession(),
     getSessionImage: async () => (await import('../capture/demo')).demoImage(),
+    getSessionClip: async () => new Blob([new Uint8Array(16)], { type: 'video/mp4' }),
     closeCapture: async () => {},
     editLayout: async () => {},
     onSessionChanged: async () => () => {},
@@ -344,6 +498,16 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       return id;
     },
     validateLayout: async () => [],
+    buttonReach: async (layout) => {
+      const out: Record<string, Reach> = {};
+      for (const b of layout.blocks) {
+        if (b.type !== 'sharing_button') continue;
+        const c = b.connection_id ? (store.connection.get(b.connection_id) as Connection | undefined) : undefined;
+        const active = c && stateOf(b.connection_id!, c) !== 'disconnected';
+        out[b.id] = demoReach(layout, b, active ? demoCapabilities(c.kind) : LOCAL_CAPABILITIES, active ? c.kind : null);
+      }
+      return out;
+    },
     listLayoutTemplates: async () => TEMPLATE_CATALOG.map((t) => ({ ...t })),
     layoutFromTemplate: async (key, connectionId) => {
       const t = TEMPLATE_CATALOG.find((x) => x.key === key);
@@ -371,11 +535,33 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         description: `Data rule: ${(r as Rule).name}`,
       })),
     ],
-    testRule: async (_rule, folder) => ({
+    testRule: async (rule, folder) => ({
       folder: folder ?? '/home/me/dev/Foo',
       value: '1.2.3',
       problem: null,
+      file: rule.file.trim() || null,
+      excerpt: '{\n  "version": "1.2.3"\n}',
     }),
+    previewFiles: async (block, program) => {
+      const folders = block.look_in.folders.length ? block.look_in.folders : (['project'] as LookFolder[]);
+      const names: Record<LookFolder, string> = {
+        project: 'Project folder',
+        program: 'Program folder',
+        above_1: 'One folder above the program',
+        above_2: 'Two folders above the program',
+        above_3: 'Three folders above the program',
+      };
+      const places = folders.map((f) => ({ label: names[f], folder: `/home/me/dev/Foo/${f}`, exists: true, found: 2 }));
+      return {
+        program: program ?? '/home/me/dev/Foo/bin/Foo',
+        places,
+        missing: [],
+        total: places.length * 2,
+        ticked: 0,
+        truncated: false,
+        problem: null,
+      };
+    },
     getShortcutErrors: async () => ({}),
     listConnections: async () => ({
       items: [...store.connection.entries()].map(([id, raw]) => {
@@ -384,11 +570,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           id,
           name: c.name,
           kind: c.kind,
-          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', custom: 'Custom API' }[c.kind],
+          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', discord: 'Discord', teams: 'Teams', custom: 'Custom API' }[c.kind],
           enabled: c.enabled,
           state: stateOf(id, c),
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),
           describe: describeFor(c),
+          capabilities: demoCapabilities(c.kind),
         } satisfies ConnectionView;
       }),
       problems: [],
@@ -431,11 +618,11 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     fetchOptions: async (_sessionId, blockId) =>
       opts.options ? opts.options('demo', blockId) : [{ value: 'P1', label: 'Demo project', group: null }],
     setEditedImage: async () => {},
+    setClipMark: async () => {},
     share: async (request) =>
       opts.share
         ? opts.share(request)
-        : { status: 'sent', summary: 'Created DEMO-1', url: 'https://example.atlassian.net/browse/DEMO-1', notes: [], copy_next: null, close: true },
-    copyText: async () => {},
+        : { status: 'sent', summary: 'Created DEMO-1', url: 'https://example.atlassian.net/browse/DEMO-1', notes: [], close: true },
     openLink: async () => {},
     reportPainted: async () => {},
     getTimings: async () => [
@@ -457,7 +644,154 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     testSafeFolder: async (path) => {
       if (!path.trim()) throw 'Choose a folder';
     },
+    getVideo: async () => ({ ...video }),
+    setVideo: async (v) => {
+      video = { ...v };
+    },
+    detectVideoTools: async (v) => {
+      if (opts.noFfmpeg) {
+        return {
+          found: false, ffmpeg: null, version: null, encoders: [], captures: [], auto_capture: null,
+          auto_encoder: null, os: 'windows', problem: v.ffmpeg
+            ? `ffmpeg was not found in ${v.ffmpeg}.`
+            : 'ffmpeg was not found. Install it (on Windows: winget install Gyan.FFmpeg) or choose the folder it is in.',
+        };
+      }
+      return {
+        found: true, ffmpeg: 'C:\\Tools\\ffmpeg\\bin\\ffmpeg.exe', version: '7.1-full_build',
+        encoders: ['software', 'nvenc', 'media_foundation'], captures: ['gdigrab', 'ddagrab'],
+        auto_capture: 'gdigrab', auto_encoder: 'software', os: 'windows', problem: null,
+      };
+    },
+    tryVideoRecording: async (v) => {
+      if (opts.recordingFails) {
+        return {
+          ok: false, message: 'The recorder stopped by itself: Cannot load nvcuda.dll. Hardware encoders need the matching graphics card and driver: choose Software to carry on.',
+          capture: 'gdigrab', encoder: 'nvenc', width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      trialRan = true;
+      return {
+        ok: true, message: 'Recorded 5.0 s at 1920×1080 with GDI and software (x264). Open the clip to check that it shows your screen.',
+        capture: v.capture === 'auto' ? 'gdigrab' : v.capture, encoder: v.encoder === 'auto' ? 'software' : v.encoder,
+        width: 1920, height: 1080, clip_ms: 5000, clip_bytes: 2_400_000, took_ms: 6100,
+        clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
+      };
+    },
+    startVideoRecording: async () => {
+      if (recordingSince !== null) throw 'A recording is already running.';
+      recordingSince = Date.now();
+      recordingEnded = opts.recordingFails
+        ? 'The recorder stopped by itself: Cannot load nvcuda.dll. Hardware encoders need the matching graphics card and driver: choose Software to carry on.'
+        : null;
+    },
+    getVideoRecording: async () => {
+      if (recordingEnded) return { state: 'failed', message: recordingEnded };
+      if (recordingSince === null) return { state: 'idle' };
+      const elapsed = Date.now() - recordingSince;
+      return {
+        state: 'recording', elapsed_ms: elapsed, buffered_ms: Math.min(elapsed, video.window_secs * 1000),
+        squeezed: false, keep_secs: video.window_secs,
+      };
+    },
+    stopVideoRecording: async () => {
+      const ended = recordingEnded;
+      const since = recordingSince;
+      recordingSince = null;
+      recordingEnded = null;
+      if (ended) {
+        return {
+          ok: false, message: ended, capture: null, encoder: null, width: 0, height: 0, clip_ms: 0,
+          clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      if (since === null) {
+        return {
+          ok: false, message: 'No recording is running.', capture: null, encoder: null, width: 0, height: 0,
+          clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      trialRan = true;
+      const ran = Date.now() - since;
+      const kept = Math.min(ran, video.window_secs * 1000);
+      return {
+        ok: true,
+        message: `Recorded ${(kept / 1000).toFixed(1)} s at 1920×1080 with GDI and software (x264). Open the clip to check that it shows your screen.`,
+        capture: 'gdigrab', encoder: 'software', width: 1920, height: 1080, clip_ms: kept, clip_bytes: kept * 480,
+        took_ms: ran, clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
+      };
+    },
+    getVideoTestClip: async (exported) => {
+      if (!trialRan || (exported && !copyMade)) throw 'There is no test clip yet: run a test recording first';
+      return new Blob([new Uint8Array(16)], { type: 'video/mp4' });
+    },
+    setVideoTestMark: async (png) => {
+      markDrawn = png !== null;
+    },
+    exportVideoTest: async (_v, edit) => {
+      if (!trialRan) {
+        return {
+          ok: false, message: 'There is no test clip yet: run a test recording first', capture: null, encoder: null,
+          width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      if (edit.mark === 'drawn' && !markDrawn) {
+        return {
+          ok: false, message: 'The mark was not drawn: try again', capture: null, encoder: null, width: 0,
+          height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      const length = (edit.end_ms ?? 5000) - edit.start_ms;
+      if (length < 500) {
+        return {
+          ok: false, message: `The clip would be ${(Math.max(length, 0) / 1000).toFixed(1)} s long; it must be at least 0.5 s`,
+          capture: null, encoder: null, width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+        };
+      }
+      copyMade = true;
+      const w = edit.crop ? edit.crop.w - (edit.crop.w % 2) : 1920;
+      const h = edit.crop ? edit.crop.h - (edit.crop.h % 2) : 1080;
+      return {
+        ok: true, message: `Made a copy of ${(length / 1000).toFixed(1)} s at ${w}×${h}. Open it to check the cut, the crop and the mark.`,
+        capture: null, encoder: null, width: w, height: h, clip_ms: length, clip_bytes: length * 300, took_ms: 900,
+        clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\exported.mp4',
+      };
+    },
+    openVideoTest: async (exported) => {
+      if (!trialRan || (exported && !copyMade)) throw 'There is no test clip yet: run a test recording first';
+    },
     pickFolder: async () => '/home/me/Documents/CargoFrame zips',
+    getUpdateView: async () => updateView(),
+    checkUpdate: async () => {
+      const { newer, fails } = opts.update ?? {};
+      updateLast = fails
+        ? { state: 'failed', message: fails.message, needs_token: fails.needs_token === true }
+        : newer
+          ? {
+              state: 'available',
+              version: newer.version,
+              notes: newer.notes ?? '',
+              page: `https://github.com/SotharL/CargoFrame/releases/tag/v${newer.version}`,
+              installer: `CargoFrame-${newer.version}-windows-x64-setup.exe`,
+              size: newer.size ?? 18 * 1024 * 1024,
+              published: '2026-11-01T10:00:00Z',
+            }
+          : { state: 'up_to_date', latest: '0.1.0-dev' };
+      return updateView();
+    },
+    installUpdate: async () => {
+      updatePhase = { state: 'installing' };
+      for (const f of updateListeners) f();
+    },
+    setUpdateToken: async (value) => {
+      updateToken = value.trim() !== '';
+    },
+    onUpdateChanged: async (callback) => {
+      updateListeners.add(callback);
+      return () => {
+        updateListeners.delete(callback);
+      };
+    },
   };
 }
 
@@ -469,8 +803,16 @@ const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 /** Outside the app: the in-memory backend, with the demo's answers to a share. */
 async function demoApi(): Promise<Api> {
   const { demoShare } = await import('../capture/demo');
-  const kind = new URLSearchParams(location.search).get('share');
-  return memoryApi({ share: () => demoShare(kind) });
+  const query = new URLSearchParams(location.search);
+  const kind = query.get('share');
+  // `?update=newer` or `?update=fails` shows what Settings, General looks like after a check.
+  const update =
+    query.get('update') === 'newer'
+      ? { newer: { version: '0.2.0', notes: '- Updates can be installed from Settings.\n- The capture window marks what each button sends.', size: 18 * 1024 * 1024 } }
+      : query.get('update') === 'fails'
+        ? { fails: { message: 'GitHub says the CargoFrame repository was not found. It may be private: add a token below.', needs_token: true } }
+        : undefined;
+  return memoryApi({ share: () => demoShare(kind), update });
 }
 
 /** The backend for this page: Tauri when running in the app, an in-memory one otherwise. */

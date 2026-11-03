@@ -7,7 +7,7 @@
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import { keycaps } from '../../lib/shortcut';
-  import type { CaptureMode, Layout, Trigger } from '../../lib/types';
+  import type { CaptureMode, Layout, Media, Trigger } from '../../lib/types';
   import { go } from '../route.svelte';
 
   const triggers = createItems<Trigger>('trigger');
@@ -31,7 +31,24 @@
   }
   onMount(refresh);
 
-  const blank = (): Trigger => ({ name: '', enabled: true, shortcut: '', capture: 'active_window', layout_id: null });
+  const blank = (): Trigger => ({ name: '', enabled: true, shortcut: '', capture: 'active_window', media: 'screenshot', layout_id: null });
+
+  const MEDIA: { value: Media; label: string; hint: string }[] = [
+    { value: 'screenshot', label: 'A screenshot', hint: 'One picture, taken when you press the shortcut.' },
+    { value: 'video', label: 'A video', hint: 'The first press starts recording the screen, the next one stops it and opens the window with the clip. Needs ffmpeg: see Settings, Video.' },
+  ];
+
+  /** What the layout of a trigger has to say about the capture it will get, if anything. */
+  function layoutHint(t: Trigger): string | null {
+    const layout = t.layout_id ? layouts.find(t.layout_id) : null;
+    if (!layout) return null;
+    const blocks = layout.blocks;
+    if (t.media === 'video' && !blocks.some((b) => b.type === 'video')) return 'This layout has no Video block, so the clip would not show';
+    if (t.media === 'screenshot' && blocks.some((b) => b.type === 'video') && !blocks.some((b) => b.type === 'screenshot')) {
+      return 'This layout has a Video block but this trigger takes a screenshot';
+    }
+    return null;
+  }
 
   function add() {
     formError = '';
@@ -98,7 +115,7 @@
           {/if}
         </div>
         <p class="quiet">
-          Captures {modeLabel(item.capture).toLowerCase()}
+          {#if item.media === 'video'}Records a video of the screen{:else}Captures {modeLabel(item.capture).toLowerCase()}{/if}
           · Layout:
           {#if item.layout_id}
             {layoutName(item.layout_id) ?? item.layout_id}
@@ -112,6 +129,7 @@
             <Chip kind="warn" label="This layout no longer exists" />
           {/if}
           {#if item.enabled && !item.layout_id}<Chip kind="dbg" label="No layout chosen" />{/if}
+          {#if layouts.loaded && layoutHint(item)}<Chip kind="warn" label={layoutHint(item)!} />{/if}
         </div>
       </div>
       <div class="actions">
@@ -140,11 +158,18 @@
         <ShortcutInput bind:value={draft.value.shortcut} label="Shortcut" />
         <p class="quiet hint">Click the box, then press the keys. Leave it empty to start this trigger from the tray menu only.</p>
       </div>
-      <Field label="Capture" hint={MODES.find((m) => m.value === draft!.value.capture)?.hint}>
-        <select bind:value={draft.value.capture}>
-          {#each MODES as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
+      <Field label="Makes" hint={MEDIA.find((m) => m.value === draft!.value.media)?.hint}>
+        <select bind:value={draft.value.media}>
+          {#each MEDIA as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
         </select>
       </Field>
+      {#if draft.value.media === 'screenshot'}
+        <Field label="Capture" hint={MODES.find((m) => m.value === draft!.value.capture)?.hint}>
+          <select bind:value={draft.value.capture}>
+            {#each MODES as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
+          </select>
+        </Field>
+      {/if}
       <Field label="Layout" hint="The window this trigger opens.">
         <select bind:value={draft.value.layout_id}>
           <option value={null}>None (empty window)</option>

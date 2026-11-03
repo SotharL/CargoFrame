@@ -3,7 +3,7 @@
   import Chip from '../../lib/components/Chip.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
-  import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Rule, Trigger, VariableInfo } from '../../lib/types';
+  import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Reach, Rule, Trigger, VariableInfo } from '../../lib/types';
   import Canvas from '../layout/Canvas.svelte';
   import Properties from '../layout/Properties.svelte';
   import { canPlace, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
@@ -22,6 +22,8 @@
   let saved = $state('');
   let selected = $state<string | null>(null);
   let issues = $state<IssueView[]>([]);
+  /** What each sharing button of the layout sends, worked out by the code that does the sharing. */
+  let reach = $state<Record<string, Reach>>({});
   let message = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
   let confirmingDelete = $state(false);
   let busy = $state(false);
@@ -148,6 +150,7 @@
     draft = null;
     saved = '';
     issues = [];
+    reach = {};
   }
 
   async function remove() {
@@ -183,9 +186,13 @@
     clearTimeout(timer);
     timer = setTimeout(async () => {
       try {
-        issues = await (await getApi()).validateLayout(snapshot);
+        const api = await getApi();
+        const [found, worked] = await Promise.all([api.validateLayout(snapshot), api.buttonReach(snapshot)]);
+        issues = found;
+        reach = worked;
       } catch {
         issues = [];
+        reach = {};
       }
     }, 150);
     return () => clearTimeout(timer);
@@ -254,7 +261,7 @@
       {/each}
       {#if !connections.length}
         <p class="quiet small">
-          Add a connection to see layouts for Jira, Google, Reddit, Claude or your own API.
+          Add a connection to see layouts for Jira, Google, Reddit, Claude, Slack, Discord, Teams or your own API.
           <button class="link" onclick={() => go('connections')}>Go to Connections</button>
         </p>
       {/if}
@@ -312,7 +319,7 @@
     {#if message}<Chip kind={message.kind} label={message.text} />{/if}
 
     <div class="workspace">
-      <Canvas bind:blocks={draft.blocks} bind:selected {issues} />
+      <Canvas bind:blocks={draft.blocks} bind:selected {issues} {reach} {connections} />
       <aside class="side" aria-label="Block settings">
         {#if block}
           {#key block.id}
@@ -324,6 +331,7 @@
               {connections}
               {variables}
               {issues}
+              {reach}
               onrect={setRect}
               onremove={removeSelected}
             />

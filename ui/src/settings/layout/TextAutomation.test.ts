@@ -10,7 +10,7 @@ const variables: VariableInfo[] = [
   { name: 'app.title', description: 'The title of its window' },
 ];
 const rules: ItemEntry<Rule>[] = [
-  { id: 'build', item: { name: 'Build number', file: 'package.json', format: 'json', query: 'version', multiple: 'first', separator: ', ', fallback: null, max_bytes: 1048576 } },
+  { id: 'build', item: { name: 'Build number', file: 'package.json', format: 'json', query: 'version', multiple: 'first', separator: ', ', nth: 1, output: '', fallback: null, max_bytes: 1048576 } },
 ];
 
 const area = () => screen.getByRole('textbox', { name: 'Text automation' }) as HTMLTextAreaElement;

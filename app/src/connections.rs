@@ -5,10 +5,12 @@
 
 use cargoframe_config::{Kind as ConfigKind, Store};
 use cargoframe_connectors::{
-    self as conn, Browser, Clipboard, Connection, Connector, Ctx, Describe, Kind, OptionItem,
-    Progress, SecretStore, Status,
+    self as conn, Browser, Connection, Connector, Ctx, Deliver, DeliverError, Delivered, Delivery,
+    Describe, Kind, OptionItem, Progress, SecretStore, Status,
 };
-use cargoframe_layout::{ConnectionInfo, ConnectionKind, ConnectionState};
+use cargoframe_layout::{
+    Capabilities, ConnectionInfo, ConnectionKind, ConnectionState, CustomShape,
+};
 use cargoframe_net::Http;
 use cargoframe_safe::SendError;
 use serde::Serialize;
@@ -46,13 +48,17 @@ impl Browser for NoBrowser {
     }
 }
 
-struct NoClipboard;
-impl Clipboard for NoClipboard {
-    fn copy_image(&self, _png: &[u8]) -> Result<(), String> {
-        Err("the clipboard is not available here".into())
-    }
-    fn copy_text(&self, _text: &str) -> Result<(), String> {
-        Err("the clipboard is not available here".into())
+struct NoDeliver;
+impl Deliver for NoDeliver {
+    fn deliver(
+        &self,
+        _: &Delivery,
+        _: &dyn Fn(&str) -> Result<(), String>,
+        _: &dyn Fn() -> bool,
+    ) -> Result<Delivered, DeliverError> {
+        Err(DeliverError::Desk(
+            "pasting into another program is not available here".into(),
+        ))
     }
 }
 
@@ -62,7 +68,31 @@ pub fn layout_kind(kind: Kind) -> ConnectionKind {
         Kind::Google => ConnectionKind::Google,
         Kind::Reddit => ConnectionKind::Reddit,
         Kind::Claude => ConnectionKind::Claude,
+        Kind::Slack => ConnectionKind::Slack,
+        Kind::Discord => ConnectionKind::Discord,
+        Kind::Teams => ConnectionKind::Teams,
         Kind::Custom => ConnectionKind::CustomApi,
+    }
+}
+
+/// What a connection can take. A kind has one table; a Custom API carries only what its request
+/// describes, and Claude pastes pictures and files on Windows only.
+pub fn capabilities_of(connection: &Connection) -> Capabilities {
+    use conn::model::{CustomBody, Settings};
+    match &connection.settings {
+        Settings::Custom(c) => Capabilities::custom(CustomShape {
+            has_body: !matches!(c.send.body, CustomBody::None),
+            screenshot_field: matches!(
+                &c.send.body,
+                CustomBody::Multipart { image_field, .. } if !image_field.trim().is_empty()
+            ),
+            files_field: matches!(
+                &c.send.body,
+                CustomBody::Multipart { files_field, .. } if !files_field.trim().is_empty()
+            ),
+            has_lists: !c.lists.is_empty(),
+        }),
+        other => Capabilities::for_kind(layout_kind(other.kind()), cfg!(windows)),
     }
 }
 
@@ -86,6 +116,8 @@ pub struct ConnectionView {
     /// Which of the secrets the person types are stored (never their values).
     pub secrets: Vec<SecretFlag>,
     pub describe: Describe,
+    /// What a button to this connection can send.
+    pub capabilities: Capabilities,
 }
 
 #[derive(Debug, Serialize)]
@@ -146,7 +178,7 @@ impl Connections {
         id: &str,
         connection: &Connection,
         browser: &dyn Browser,
-        clipboard: &dyn Clipboard,
+        deliver: &dyn Deliver,
         progress: &Progress,
         timeout: Duration,
         cancelled: &dyn Fn() -> bool,
@@ -164,7 +196,7 @@ impl Connections {
             http: self.http.as_ref(),
             secrets: self.secrets.as_ref(),
             browser,
-            clipboard,
+            deliver,
             progress,
             timeout,
             now: &now,
@@ -173,7 +205,7 @@ impl Connections {
         f(connector.as_ref(), &ctx)
     }
 
-    /// Run `f` for something that needs neither browser nor clipboard.
+    /// Run `f` for something that needs neither browser nor desktop.
     fn quietly<R>(
         &self,
         id: &str,
@@ -185,7 +217,7 @@ impl Connections {
             id,
             connection,
             &NoBrowser,
-            &NoClipboard,
+            &NoDeliver,
             &progress,
             Duration::from_secs(30),
             &|| false,
@@ -217,6 +249,7 @@ impl Connections {
         Some(ConnectionInfo {
             kind: layout_kind(connection.settings.kind()),
             state: self.status_of(id, &connection),
+            capabilities: capabilities_of(&connection),
         })
     }
 
@@ -284,6 +317,7 @@ impl Connections {
                     state: state_name(self.status_of(id, c), c.enabled),
                     secrets,
                     describe,
+                    capabilities: capabilities_of(c),
                 }
             })
             .collect();
@@ -338,7 +372,7 @@ impl Connections {
         store: &Store,
         id: &str,
         browser: &dyn Browser,
-        clipboard: &dyn Clipboard,
+        deliver: &dyn Deliver,
     ) -> Result<String, String> {
         let connection = self.load(store, id)?;
         self.begin_sign_in();
@@ -348,7 +382,7 @@ impl Connections {
             id,
             &connection,
             browser,
-            clipboard,
+            deliver,
             &progress,
             Duration::from_secs(30),
             &cancelled,

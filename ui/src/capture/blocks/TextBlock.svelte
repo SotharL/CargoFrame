@@ -1,5 +1,6 @@
 <script lang="ts">
   import Chip from '../../lib/components/Chip.svelte';
+  import { roleTag } from '../../lib/roles';
   import type { Block } from '../../lib/types';
 
   type TextBlock = Extract<Block, { type: 'text' }>;
@@ -10,20 +11,21 @@
   }: { block: TextBlock; value: string; unresolved?: string[] } = $props();
   const id = $derived(`text-${block.id}`);
   const inside = $derived(block.placement === 'inside');
+  const tag = $derived(roleTag(block.role));
 </script>
 
 <div class="text">
   {#if !inside}
-    <label for={id}>{block.title}{#if block.role === 'prompt'}<span class="role">Prompt</span>{/if}</label>
+    <label for={id}>{block.title}{#if tag}<span class="role">{tag}</span>{/if}</label>
   {/if}
   <!-- Title "inside the box" saves a row: it sits in the empty box like a hint, goes away as soon as
        there is text, and comes back as a small tab on the box's edge while the pointer is over it. -->
   <div class="field" class:inside title={inside ? block.title : undefined}>
     {#if inside}
       {#if value === ''}
-        <div class="inner" aria-hidden="true">{block.title}{#if block.role === 'prompt'}<span class="role">Prompt</span>{/if}</div>
+        <div class="inner" aria-hidden="true">{block.title}{#if tag}<span class="role">{tag}</span>{/if}</div>
       {:else}
-        <div class="tab" aria-hidden="true">{block.title}{#if block.role === 'prompt'}<span class="role">Prompt</span>{/if}</div>
+        <div class="tab" aria-hidden="true">{block.title}{#if tag}<span class="role">{tag}</span>{/if}</div>
       {/if}
     {/if}
     <textarea {id} bind:value spellcheck="true" aria-label={inside ? block.title : undefined}></textarea>

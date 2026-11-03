@@ -13,6 +13,7 @@ the assumption. Targets here are proposals until a spike confirms them.
 | S5 | How does Claude open from a link, and what does its composer do with a pasted image? | Windows 11 with the Claude app; a Linux desktop | _not run_ |
 | S6 | Are the performance budgets reachable? | One reference machine | _not run_ |
 | S7 | Is "CargoFrame" free to use as a product name? | Web | _not run_ |
+| S9 | What does a screen recording cost, and which capture and encoder should video use? | Windows 11 and a Linux desktop (X11 and Wayland), ffmpeg | _not run_ |
 
 ## S1. Per-user installer (Windows)
 
@@ -72,27 +73,27 @@ opens Settings at launch with a one-line hint about the extension.
 
 ## S5. Claude link and clipboard
 
-**Question.** What does opening Claude from a link do, and does the composer accept a pasted
-image together with text?
+**Status: settled by the documentation, then replaced by pasting.** Claude's own help says a link
+can only open a chat: `claude://claude.ai/new?q=` fills a new chat with a short text, and
+`claude://claude.ai/chat/<id>` opens an existing one with nothing filled in. No link attaches a
+picture or a file. So a share to Claude no longer relies on links to carry anything. It opens the
+chat, waits until the Claude window (or a browser showing Claude) is really in front, pastes the
+screenshot and the ticked files as files, pastes the message, and presses Enter
+(`core/deliver`). See `docs/decisions.md`.
 
-**Steps (Windows 11 with the Claude desktop app, then a browser).**
-1. Open `claude://claude.ai/new?q=hello%20world`. Does it open a new chat with the text filled in?
-2. Put an image on the clipboard, then paste into the composer. Does it attach?
-3. Open `claude://claude.ai/chat/<id of an existing chat>`. Does it open that chat?
-4. Put image and text on the clipboard together; paste. Which one lands?
-5. Find the longest `q` value that still works.
-6. Linux: is there a `claude://` handler? Test `https://claude.ai/new?q=hello%20world` in the browser.
+**What is still worth checking on a new machine** (Windows 11 with the Claude desktop app, then a
+browser):
+1. Does the link open the chat and bring the window to the front within a few seconds? If not,
+   raise **Extra seconds to wait before pasting** in the Claude connection.
+2. Does pasting several files from the clipboard attach all of them? (Claude takes at most 20
+   files of 30 MB each in one message.)
+3. Does Enter send once the files have finished uploading? If it fires too early, raise the extra
+   seconds.
+4. Linux: there is no `claude://` handler, so the browser is used; pressing keys needs X11 and
+   `xdotool`, and files cannot be pasted yet (the message is, and a note says so).
 
-**Settings this decides:**
-- In the Claude connection (Settings, Connections): **Put the prompt on the clipboard with the
-  picture** (off by default; this is `composer_takes_image_and_text` in `core/handoff`). Off means
-  the result panel offers a second "Copy prompt" step after the picture is pasted.
-- **Open Claude with** (desktop app or browser; automatic means the app on Windows and the browser
-  on Linux), which is `Scheme::App` or `Scheme::Web` in `core/handoff`.
-- `MAX_QUERY_BYTES` in `core/handoff/src/link.rs` (default 6000).
-
-**Fallback.** If no link works at all, the share counts as failed and the zip goes to the safe
-settings.
+**Settings this decides:** in the Claude connection: **Open Claude with**, **Send the message for
+me (press Enter)** and **Extra seconds to wait before pasting**.
 
 ## S6. Performance budgets
 
@@ -116,3 +117,72 @@ CI fails a build that misses a target by more than 20%.
 
 Search for "CargoFrame" as a product, company, trademark (USPTO, EUIPO) and domain before icons,
 installer names and the app ID are fixed. Record the date and what was found.
+
+## S9. Video: capture and encoding
+
+**Question.** How should CargoFrame record the screen, and what does a 10 s clip cost in CPU and
+memory on Windows 11 and on Linux? (Plan, Phase 12.)
+
+**Proposed answer to check.** Recording starts on the shortcut. ffmpeg runs as a child process
+that captures the screen and encodes as it goes, writing one-second segments into a temporary
+folder and listing each finished one; CargoFrame keeps only the newest ones (10 s by default, 30 s
+at most) and deletes the rest, so the buffer is a ring of *encoded* files on disk, not frames in
+memory. When recording stops the last segments are joined into the clip, which goes to the editor.
+Why: raw frames cannot be buffered (10 s of 1080p is about 2.5 GB, of 4K about 10 GB), the
+encoder has to run while recording, and a child process keeps every frame out of CargoFrame's own
+memory and keeps `unsafe_code = "forbid"` (no capture API calls in the app). The pieces that do
+not depend on this answer are already built and tested: the rolling buffer, the edit model and
+the ffmpeg export (`core/video`).
+
+**Quickest check (Windows or Linux):** open Settings, Video, press "Test ffmpeg" and then "Try a
+5-second recording". It uses the same recorder the product will, reports whether it worked, and
+keeps the clip so you can watch it ("Watch it here" also tells whether the Settings window itself
+can play H.264, which decides how the editor shows the clip). Change Capture and Compression and
+try again to compare;
+the scripts below measure CPU and memory as well.
+
+**What to run.**
+- Windows: `powershell -ExecutionPolicy Bypass -File scripts\windows\s9-video.ps1` (needs ffmpeg:
+  `winget install Gyan.FFmpeg`). It records 10 s with each of `gdigrab` and `ddagrab` and each
+  encoder it finds (software x264, NVIDIA, Intel, AMD, Windows built-in) and writes `s9-video.log`.
+  Move windows around while it runs, and watch Task Manager, Performance, GPU ("Video Encode",
+  "3D") during each run; GPU load is not measured by the script.
+- Linux, X11 session: `scripts/e2e/s9-video-linux.sh` (needs ffmpeg and python3). It writes
+  `s9-video-linux.log`. Without a display it records a virtual one, which only proves the script.
+- Linux, Wayland session: x11grab cannot see Wayland windows, so the script is no help. Record
+  with the desktop's own recorder (GNOME: Ctrl+Alt+Shift+R) or OBS for 10 s at the same size and
+  read CPU and memory from `top`/System Monitor, and note whether ffmpeg in your distribution can
+  read the portal's PipeWire stream (`ffmpeg -devices | grep -i pipewire`; ffmpeg 7.1 and later
+  can). If it cannot, the Wayland path needs GStreamer (`pipewiresrc`) instead, which changes the
+  plan for Linux and should be written down here.
+
+**Measure** (one reference machine; write down CPU, RAM, GPU, display size and scaling):
+
+| Measure | Target (proposal) | Windows | Linux X11 | Linux Wayland |
+|---------|-------------------|---------|-----------|---------------|
+| CPU while recording 1080p30, best encoder | under 10% of the machine | | | |
+| CPU while recording 1080p30, software x264 | under 25% of the machine | | | |
+| Same on the largest display, downscaled to 1080p | no worse than above | | | |
+| Peak memory of the recorder process | under 300 MB | | | |
+| Clip size for 10 s of a busy screen | under 25 MB (Discord's limit is 10 to 25 MB) | | | |
+| Dropped or duplicated frames | under 2% | | | |
+| Start of recording to first frame | under 500 ms | | | |
+| Stop to editor open (join the segments) | under 1 s | | | |
+| Idle CargoFrame while *not* recording | unchanged (about 0%) | | | |
+
+**Also answer.**
+1. Does the hardware encoder of each vendor work through ffmpeg on your machine, and does it cost
+   clearly less than software x264? (Decides the default of the *Encoder* setting: automatic,
+   hardware first.)
+2. Does `ddagrab` beat `gdigrab` enough to be the default on Windows? Does it work on a laptop
+   with two GPUs, and on a second display?
+3. Is the picture sharp enough at the CRF used (23 for veryfast, 28 for ultrafast) for small text?
+4. Licence and size: ship ffmpeg with CargoFrame (an LGPL build is about 80 MB on disk, 30 MB
+   compressed) or ask the person to install it? Recommendation until measured: ask the person to
+   install it, with the location settable, because a bundled copy doubles the installer; revisit
+   once the clip works end to end.
+
+**Settings this decides:** *Encoder* (automatic, software, or one named), *Frame rate* (30),
+*Largest picture* (downscale above 1080p or not), the capture method per platform, and whether
+Linux Wayland has video in version 1.
+

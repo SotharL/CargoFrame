@@ -1,4 +1,4 @@
-import type { Block, SessionView, ShareRequest } from '../lib/types';
+import type { Block, ClipEdit, SessionView, ShareRequest } from '../lib/types';
 import type { FormValues } from './values';
 
 export type { ShareRequest };
@@ -14,6 +14,7 @@ export function collectShare(
   button: SharingBlock,
   values: FormValues,
   imageEdited: boolean,
+  clipEdit: ClipEdit | null = null,
 ): ShareRequest {
   const ids = new Set(view.layout?.blocks.map((b) => b.id) ?? []);
   const keep = <T>(m: Record<string, T>): Record<string, T> =>
@@ -29,6 +30,7 @@ export function collectShare(
     dropdowns: keep(values.dropdowns),
     files: keep(values.files),
     image_edited: imageEdited,
+    clip_edit: view.video ? clipEdit : null,
   };
 }
 

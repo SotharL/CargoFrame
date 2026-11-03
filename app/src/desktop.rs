@@ -1,9 +1,7 @@
-//! The connectors' view of the desktop: opening a link in the browser and the clipboard.
+//! The connectors' view of the desktop: opening a link.
 
-use cargoframe_connectors::{Browser, Clipboard};
-use tauri::image::Image;
+use cargoframe_connectors::Browser;
 use tauri::AppHandle;
-use tauri_plugin_clipboard_manager::ClipboardExt as _;
 use tauri_plugin_opener::OpenerExt as _;
 
 /// Only web links, a local sign-in page and the Claude app's own link ever leave through here,
@@ -25,25 +23,6 @@ impl Browser for TauriBrowser {
         self.0
             .opener()
             .open_url(url, None::<&str>)
-            .map_err(|e| e.to_string())
-    }
-}
-
-pub struct TauriClipboard(pub AppHandle);
-
-impl Clipboard for TauriClipboard {
-    fn copy_image(&self, png: &[u8]) -> Result<(), String> {
-        let image = Image::from_bytes(png).map_err(|e| format!("not a picture: {e}"))?;
-        self.0
-            .clipboard()
-            .write_image(&image)
-            .map_err(|e| e.to_string())
-    }
-
-    fn copy_text(&self, text: &str) -> Result<(), String> {
-        self.0
-            .clipboard()
-            .write_text(text.to_string())
             .map_err(|e| e.to_string())
     }
 }

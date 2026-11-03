@@ -2,10 +2,24 @@
 //! settings, and the list of variables the builder offers.
 
 use cargoframe_config::{Kind, Store};
+use cargoframe_context::climb;
+use cargoframe_layout::{reach, BlockKind, FilesBlock, Layout, Reach, Registry};
 use cargoframe_rules::{run_all, FsFiles, Rule};
-use cargoframe_window::vars;
+use cargoframe_window::files::{self, PlaceFound};
+use cargoframe_window::{places, vars};
 use serde::Serialize;
-use std::path::Path;
+use std::collections::BTreeMap;
+use std::path::{Path, PathBuf};
+
+/// For every sharing button of `layout`, what it does with the other blocks.
+pub fn button_reach(layout: &Layout, registry: &dyn Registry) -> BTreeMap<String, Reach> {
+    layout
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.kind, BlockKind::SharingButton(_)))
+        .filter_map(|b| reach(layout, &b.id, registry).map(|r| (b.id.clone(), r)))
+        .collect()
+}
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
 pub struct RuleTest {
@@ -13,23 +27,121 @@ pub struct RuleTest {
     pub folder: Option<String>,
     pub value: Option<String>,
     pub problem: Option<String>,
+    /// The file the rule's pattern means in that folder, and the start of it, so the person sees
+    /// what the rule is looking at.
+    pub file: Option<String>,
+    pub excerpt: Option<String>,
 }
 
-/// Run one rule against `folder` (or say there is none). Never writes anything.
+/// Run one rule against `folder` (or say there is none). Never writes anything. A rule that is
+/// not finished yet (no name, a query being typed) still shows the file it points at.
 pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
-    if let Err(e) = cargoframe_rules::check(rule) {
+    let seen = folder
+        .map(Path::new)
+        .filter(|f| f.is_dir())
+        .map(|f| cargoframe_rules::peek(rule, f, &FsFiles))
+        .unwrap_or_default();
+    let mut named = rule.clone();
+    if named.name.trim().is_empty() {
+        named.name = "preview".into();
+    }
+    if let Err(e) = cargoframe_rules::check(&named) {
         return RuleTest {
             folder: folder.map(str::to_string),
             value: None,
             problem: Some(e),
+            file: seen.file,
+            excerpt: seen.excerpt,
         };
     }
-    let outcomes = run_all([("test", rule)], folder.map(Path::new), &FsFiles);
+    let outcomes = run_all([("test", &named)], folder.map(Path::new), &FsFiles);
     let o = &outcomes["test"];
     RuleTest {
         folder: folder.map(str::to_string),
         value: o.value.clone(),
         problem: o.problem.clone(),
+        file: seen.file,
+        excerpt: seen.excerpt,
+    }
+}
+
+/// What a Files block would find, for the layout builder's live count.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct FilesPreview {
+    /// The program file the folders were worked out from.
+    pub program: Option<String>,
+    pub places: Vec<PlaceFound>,
+    /// Choices that could not be turned into a folder, with the reason.
+    pub missing: Vec<String>,
+    pub total: usize,
+    pub ticked: usize,
+    pub truncated: bool,
+    pub problem: Option<String>,
+}
+
+/// Run a Files block's settings against `program` (the program file of a capture) without
+/// capturing anything. Reads folder listings only.
+pub fn preview_files(block: &FilesBlock, program: Option<&str>) -> FilesPreview {
+    let Some(program) = program.map(str::trim).filter(|p| !p.is_empty()) else {
+        return FilesPreview {
+            program: None,
+            places: Vec::new(),
+            missing: Vec::new(),
+            total: 0,
+            ticked: 0,
+            truncated: false,
+            problem: Some(
+                "Make a capture first, or type the path of a program file, to see what is found"
+                    .into(),
+            ),
+        };
+    };
+    let project = climb::resolve_project_folder(program).map(|r| r.folder);
+    let found = places::places_for(&block.look_in, project.as_deref(), Some(program));
+    let missing: Vec<String> = found
+        .missing
+        .iter()
+        .map(|(which, why)| format!("{}: {why}", places::label(*which)))
+        .collect();
+    let Some(root) = found
+        .places
+        .iter()
+        .map(|p| PathBuf::from(&p.base))
+        .min_by_key(|p| p.components().count())
+    else {
+        return FilesPreview {
+            program: Some(program.to_string()),
+            places: Vec::new(),
+            missing,
+            total: 0,
+            ticked: 0,
+            truncated: false,
+            problem: Some("There is no folder to look in".into()),
+        };
+    };
+    let look: Vec<files::Where> = found
+        .places
+        .iter()
+        .map(|p| files::Where {
+            label: places::label(p.which).to_string(),
+            dir: PathBuf::from(&p.dir),
+        })
+        .collect();
+    let scan = files::scan_places(
+        &root,
+        &look,
+        &block.include,
+        &block.preselect,
+        files::Limits::default(),
+    );
+    FilesPreview {
+        program: Some(program.to_string()),
+        places: scan.places,
+        missing,
+        total: scan.entries.len(),
+        ticked: scan.entries.iter().filter(|e| e.selected).count(),
+        truncated: scan.truncated,
+        problem: scan.problem,
     }
 }
 
@@ -90,6 +202,175 @@ mod tests {
     use super::*;
     use cargoframe_config::Dirs;
     use cargoframe_rules::Format;
+
+    #[test]
+    fn every_button_of_a_layout_gets_its_own_reach() {
+        use crate::registry::AppRegistry;
+        use cargoframe_layout::{
+            Block, ConnectionInfo, ConnectionKind, ConnectionState, Rect, SharingButton, Verdict,
+        };
+        let reg = AppRegistry::with(Default::default(), |id| match id {
+            "jira" => Some(ConnectionInfo::new(
+                ConnectionKind::Jira,
+                ConnectionState::Connected,
+            )),
+            "reddit" => Some(ConnectionInfo::new(
+                ConnectionKind::Reddit,
+                ConnectionState::Connected,
+            )),
+            _ => None,
+        });
+        let button = |id: &str, connection: &str| Block {
+            id: id.into(),
+            rect: Rect::new(0, 1, 6, 1),
+            kind: BlockKind::SharingButton(SharingButton {
+                connection_id: Some(connection.into()),
+                ..SharingButton::default()
+            }),
+        };
+        let layout = Layout {
+            id: "l".into(),
+            name: "L".into(),
+            blocks: vec![
+                Block {
+                    id: "files".into(),
+                    rect: Rect::new(0, 0, 6, 1),
+                    kind: BlockKind::Files(files_block(&[], "")),
+                },
+                button("to-jira", "jira"),
+                button("to-reddit", "reddit"),
+            ],
+        };
+        let all = button_reach(&layout, &reg);
+        assert_eq!(all.keys().collect::<Vec<_>>(), ["to-jira", "to-reddit"]);
+        assert!(matches!(
+            all["to-jira"].of("files"),
+            Some(Verdict::Sent { .. })
+        ));
+        assert!(matches!(
+            all["to-reddit"].of("files"),
+            Some(Verdict::CannotSend { .. })
+        ));
+    }
+
+    fn files_block(folders: &[cargoframe_layout::LookFolder], sub: &str) -> FilesBlock {
+        FilesBlock {
+            title: "Logs".into(),
+            include: vec!["*.log".into()],
+            preselect: vec!["run.log".into()],
+            look_in: cargoframe_layout::LookIn {
+                folders: folders.to_vec(),
+                subfolder: sub.into(),
+            },
+        }
+    }
+
+    fn deep_project() -> (tempfile::TempDir, String) {
+        let dir = tempfile::tempdir().unwrap();
+        let w = |p: &str| {
+            let path = dir.path().join(p);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "x").unwrap();
+        };
+        w("dev/foo/bin/release/foo");
+        w("dev/foo/bin/release/logs/run.log");
+        w("dev/foo/logs/app.log");
+        w("dev/logs/shared.log");
+        let program = dir
+            .path()
+            .join("dev/foo/bin/release/foo")
+            .display()
+            .to_string();
+        (dir, program)
+    }
+
+    #[test]
+    fn the_files_preview_counts_what_each_folder_holds() {
+        use cargoframe_layout::LookFolder::*;
+        let (_dir, program) = deep_project();
+        let p = preview_files(
+            &files_block(&[Program, Above2, Above3], "logs"),
+            Some(&program),
+        );
+        assert_eq!(p.problem, None);
+        assert_eq!(p.total, 3);
+        assert_eq!(p.ticked, 1, "run.log is ticked by default");
+        assert_eq!(p.places.len(), 3);
+        assert!(p.places.iter().all(|f| f.exists && f.found == 1));
+        assert_eq!(p.program.as_deref(), Some(program.as_str()));
+        assert!(p.missing.is_empty());
+
+        // The default is the project folder: dev/foo, where only a subfolder holds logs.
+        let none = preview_files(&files_block(&[Project], ""), Some(&program));
+        assert_eq!(none.total, 0);
+    }
+
+    #[test]
+    fn a_rule_test_shows_the_file_it_reads_even_before_the_rule_is_finished() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(dir.path().join("run.log"), "first\nsecond\n").unwrap();
+        let folder = dir.path().to_str().unwrap();
+        // No name and a half-typed query: not saved yet, but the person sees what it points at.
+        let draft = Rule {
+            file: "*.log".into(),
+            format: cargoframe_rules::Format::Text,
+            query: "between: a".into(),
+            ..Rule::default()
+        };
+        let t = test_rule(&draft, Some(folder));
+        assert!(t.problem.unwrap().contains("two texts"));
+        assert_eq!(t.file.as_deref(), Some("run.log"));
+        assert_eq!(t.excerpt.as_deref(), Some("first\nsecond"));
+        // A finished one gives its value as well.
+        let done = Rule {
+            query: "line: -1".into(),
+            ..draft.clone()
+        };
+        let t = test_rule(&done, Some(folder));
+        assert_eq!(t.value.as_deref(), Some("second"));
+        assert_eq!(t.problem, None);
+        assert_eq!(t.file.as_deref(), Some("run.log"));
+        // File details of the same file.
+        let size = Rule {
+            format: cargoframe_rules::Format::File,
+            query: "size".into(),
+            ..draft
+        };
+        assert_eq!(test_rule(&size, Some(folder)).value.as_deref(), Some("13"));
+        // No folder, or no such file: nothing to show, and no crash.
+        let none = test_rule(&done, None);
+        assert_eq!((none.file, none.excerpt), (None, None));
+        let gone = Rule {
+            file: "nothing.log".into(),
+            ..done
+        };
+        assert_eq!(test_rule(&gone, Some(folder)).file, None);
+    }
+
+    #[test]
+    fn the_files_preview_says_what_it_needs_or_what_is_missing() {
+        use cargoframe_layout::LookFolder::*;
+        let none = preview_files(&files_block(&[Project], ""), None);
+        assert!(none.problem.unwrap().contains("Make a capture"));
+        let blank = preview_files(&files_block(&[Project], ""), Some("  "));
+        assert!(blank.problem.is_some());
+        // A program that is not nested three deep cannot have three folders above it.
+        let shallow = preview_files(&files_block(&[Above3], ""), Some("/a/b/prog"));
+        assert_eq!(
+            shallow.problem.as_deref(),
+            Some("There is no folder to look in")
+        );
+        assert!(shallow.missing[0].contains("Three folders above"));
+        // Some found, some not: the count is for what exists and the rest is named.
+        let (_dir, program) = deep_project();
+        let mixed = preview_files(&files_block(&[Above2, Above3], "nothing"), Some(&program));
+        assert_eq!(mixed.total, 0);
+        assert!(mixed.places.iter().all(|f| !f.exists));
+        assert_eq!(
+            mixed.problem.as_deref(),
+            Some("None of the folders to look in exist")
+        );
+    }
 
     #[test]
     fn a_rule_test_reads_a_value_or_says_why_not() {

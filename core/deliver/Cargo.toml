@@ -1,0 +1,27 @@
+[package]
+name = "cargoframe-deliver"
+description = "CargoFrame core: hand a capture to a chat window by pasting it, after checking it is the right window"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# Pressing keys in another program calls into the operating system. The rest of the workspace
+# forbids unsafe code; here it is denied everywhere except the Windows module that needs it.
+[lints.rust]
+unsafe_code = "deny"
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dependencies]
+cargoframe-capture = { path = "../capture" }
+thiserror.workspace = true
+arboard = { version = "3.7", features = ["wayland-data-control"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+
+[dev-dependencies]
+tempfile.workspace = true
+cargoframe-handoff = { path = "../handoff" }
+png = "0.18"
