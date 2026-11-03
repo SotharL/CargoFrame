@@ -4,6 +4,7 @@ rem
 rem   scripts\windows\try-claude.cmd                 uses the chat link in scripts\windows\try-claude.link.txt
 rem   scripts\windows\try-claude.cmd <link> [--browser] [--no-enter] [--extra N] [--no-file]
 rem
+rem (The variable is not called LINK: the linker reads that one and treats it as a file to link.)
 rem The log is try-claude.log in the repository folder. Neither the log nor the link file is
 rem committed. It posts a clearly marked test message, so point it at a chat made for testing.
 setlocal
@@ -15,13 +16,13 @@ if "%~1"=="" (
     pause
     exit /b 2
   )
-  set /p LINK=<"%~dp0try-claude.link.txt"
-  set "ARGS=%LINK%"
+  set /p CHATLINK=<"%~dp0try-claude.link.txt"
+  set "TRYARGS=%CHATLINK%"
 ) else (
-  set "ARGS=%*"
+  set "TRYARGS=%*"
 )
 echo Delivery test started %DATE% %TIME% > "%LOG%"
-cargo run -q -p cargoframe-deliver --example try_claude -- %ARGS% >> "%LOG%" 2>&1
+cargo run -q -p cargoframe-deliver --example try_claude -- %TRYARGS% >> "%LOG%" 2>&1
 echo Exit code %ERRORLEVEL% >> "%LOG%"
 type "%LOG%"
 echo.
