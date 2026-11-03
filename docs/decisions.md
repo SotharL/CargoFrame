@@ -696,15 +696,15 @@ A **Crop** tick next to the cut buttons puts a box over the recording (80% of th
 A pass over what is in the repository and what is no longer used, done when the video work reached the window.
 Nothing here changes what the program does.
 
-- **Branches:** the four branches whose pull requests were merged (`chore/windows-build-script`, `docs/v1-on-main`,
-  `feat/phase7-polish`, `feature/settings-update`) and the old local ones (`chore/local-gate`, `dev/v1`, and the
-  local copies of those four) were checked to be inside `main` and removed. The local label `feat/claude-one-click`
-  pointed at a commit that is already part of `feat/phase8-capture-files` and the branches after it, so it was removed
-  too (no work is lost). The remote copies could not be deleted from the cloud
-  session (GitHub refused the delete). The owner can delete these six on GitHub, they hold nothing that is not in
-  `main`: `chore/windows-build-script`, `docs/v1-on-main`, `feat/phase7-polish`, `feature/settings-update`,
-  `chore/local-gate` and `dev/v1`. The remote `feat/claude-one-click` is not merged yet but its four commits are part
-  of the stack, so it can go once the stack is merged.
+- **Branches:** everything on the stacked branches was merged to `main` in pull request #19 (3 Nov 2026), and the
+  local copies were deleted. Deleting remote branches is refused from the cloud session (GitHub answers 403). The
+  older merged branches have since been removed on GitHub; the fifteen below were still there when this was written.
+  All of them are inside `main`, so they can be deleted on GitHub (Branches page) or from the owner's own computer
+  with this one command. Only `main` should remain.
+
+  ```
+  git push origin --delete chore/remove-unused-code feat/phase12-video-editor-controls feat/phase12-video-export feat/phase12-video-layout feat/phase12-video-mark-place feat/phase12-video-marks feat/phase12-video-preview feat/phase12-video-recording feat/phase12-video-settings feat/phase12-video-templates feat/phase12-video-timeline feat/phase12-video-trigger feat/phase12-video-window-crop feat/phase12-video-window-mark feat/phase12-video-window-trim
+  ```
 - **Code that nothing used:** `Frame::into_rgba`, `Frame::to_png_small`, `Layout::first_free_position` (the builder page
   places new blocks itself, in `model.ts`), the Tauri command `reload_triggers` and its permission (saving or deleting
   a trigger already reloads the shortcuts in the program), and the unused dependencies `tracing` in `cargoframe-deliver`
