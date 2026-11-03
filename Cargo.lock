@@ -639,12 +639,14 @@ name = "cargoframe-rules"
 version = "0.1.0"
 dependencies = [
  "cargoframe-context",
+ "chrono",
  "csv",
  "regex",
  "roxmltree",
  "serde",
  "serde_json",
  "serde_yaml_ng",
+ "sha2 0.11.1",
  "tempfile",
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",

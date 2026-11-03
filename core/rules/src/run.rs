@@ -1,7 +1,8 @@
 //! Find a rule's file safely and run every rule.
 
+use crate::details::{self, FileDetails, What};
 use crate::extract::{extract, RuleError};
-use crate::model::{ReadMode, Rule};
+use crate::model::{Format, ReadMode, Rule};
 use cargoframe_context::glob;
 use std::collections::BTreeMap;
 use std::fs;
@@ -21,6 +22,19 @@ pub trait ProjectFiles {
         limit: u64,
         mode: ReadMode,
     ) -> Result<String, RuleError>;
+
+    /// The path (relative to `root`) of the file `pattern` means: the first match in
+    /// alphabetical order.
+    fn locate(&self, _root: &Path, pattern: &str) -> Result<String, RuleError> {
+        Err(RuleError::FileNotFound(pattern.to_string()))
+    }
+
+    /// Facts about the file `pattern` means. The file's content is only read when `what` needs it.
+    fn details(&self, _root: &Path, _pattern: &str, _what: What) -> Result<FileDetails, RuleError> {
+        Err(RuleError::Unreadable(
+            "this source cannot report file details".into(),
+        ))
+    }
 }
 
 /// The real file system.
@@ -83,6 +97,27 @@ fn walk(
     }
 }
 
+/// The file a pattern means, relative to `root`.
+fn find(root: &Path, pattern: &str) -> Result<String, RuleError> {
+    let pattern = pattern.trim();
+    if !pattern_ok(pattern) {
+        return Err(RuleError::BadQuery(
+            "the file must be a path inside the project folder (no .., no drive letter)".into(),
+        ));
+    }
+    let rel = if has_wildcard(pattern) {
+        let mut found = Vec::new();
+        let mut visited = 0;
+        walk(root, root, 0, pattern, &mut visited, &mut found);
+        found.sort();
+        found.into_iter().next()
+    } else {
+        let direct = root.join(pattern);
+        direct.exists().then(|| pattern.to_string())
+    };
+    rel.ok_or_else(|| RuleError::FileNotFound(pattern.to_string()))
+}
+
 impl ProjectFiles for FsFiles {
     fn read(
         &self,
@@ -91,31 +126,40 @@ impl ProjectFiles for FsFiles {
         limit: u64,
         mode: ReadMode,
     ) -> Result<String, RuleError> {
-        let pattern = pattern.trim();
-        if !pattern_ok(pattern) {
-            return Err(RuleError::BadQuery(
-                "the file must be a path inside the project folder (no .., no drive letter)".into(),
-            ));
-        }
-        let rel = if has_wildcard(pattern) {
-            let mut found = Vec::new();
-            let mut visited = 0;
-            walk(root, root, 0, pattern, &mut visited, &mut found);
-            found.sort();
-            found.into_iter().next()
-        } else {
-            let direct = root.join(pattern);
-            direct.exists().then(|| pattern.to_string())
-        };
-        let Some(rel) = rel else {
-            return Err(RuleError::FileNotFound(pattern.to_string()));
-        };
+        let rel = find(root, pattern)?;
         read_inside(root, &root.join(&rel), limit, mode)
+    }
+
+    fn locate(&self, root: &Path, pattern: &str) -> Result<String, RuleError> {
+        find(root, pattern)
+    }
+
+    fn details(&self, root: &Path, pattern: &str, what: What) -> Result<FileDetails, RuleError> {
+        let rel = find(root, pattern)?;
+        let (real, meta) = resolve_inside(root, &root.join(&rel))?;
+        let mut found = FileDetails {
+            name: Path::new(&rel)
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default(),
+            size: meta.len(),
+            modified: meta.modified().ok(),
+            ..FileDetails::default()
+        };
+        if what.needs_content() {
+            let mut file =
+                fs::File::open(&real).map_err(|e| RuleError::Unreadable(e.to_string()))?;
+            let (lines, sha256) = details::read_content(&mut file, meta.len(), what)?;
+            found.lines = lines;
+            found.sha256 = sha256;
+        }
+        Ok(found)
     }
 }
 
-/// Read `file` only if, once links are followed, it is a regular file inside `root`.
-fn read_inside(root: &Path, file: &Path, limit: u64, mode: ReadMode) -> Result<String, RuleError> {
+/// `file`, once links are followed, if it is a regular file inside `root`; and what the file
+/// system says about it.
+fn resolve_inside(root: &Path, file: &Path) -> Result<(PathBuf, fs::Metadata), RuleError> {
     let unreadable = |e: std::io::Error| RuleError::Unreadable(e.to_string());
     let root: PathBuf = root.canonicalize().map_err(unreadable)?;
     let real = file.canonicalize().map_err(unreadable)?;
@@ -128,6 +172,13 @@ fn read_inside(root: &Path, file: &Path, limit: u64, mode: ReadMode) -> Result<S
     if !meta.is_file() {
         return Err(RuleError::Unreadable("not a regular file".into()));
     }
+    Ok((real, meta))
+}
+
+/// Read `file` only if, once links are followed, it is a regular file inside `root`.
+fn read_inside(root: &Path, file: &Path, limit: u64, mode: ReadMode) -> Result<String, RuleError> {
+    let unreadable = |e: std::io::Error| RuleError::Unreadable(e.to_string());
+    let (real, meta) = resolve_inside(root, file)?;
     let too_big = meta.len() > limit;
     if too_big && mode == ReadMode::Whole {
         return Err(RuleError::TooLarge(limit));
@@ -189,10 +240,30 @@ pub fn run_all<'a>(
     // Rules share a read only when they need the same part of the same file.
     type Key = (String, u64, u8);
     let mut cache: BTreeMap<Key, Result<String, RuleError>> = BTreeMap::new();
+    // Rules that ask for details of the same file share one look at it (and one fingerprint).
+    let mut seen: BTreeMap<(String, u8), Result<FileDetails, RuleError>> = BTreeMap::new();
     let mut out = BTreeMap::new();
     for (id, rule) in rules {
         let result = match project {
             None => Err(RuleError::NoProject),
+            Some(root) if rule.format == Format::File => match details::parse(&rule.query) {
+                Err(e) => Err(RuleError::BadQuery(e)),
+                Ok(what) => {
+                    let kind = match what {
+                        What::Lines => 1,
+                        What::Sha256(_) => 2,
+                        _ => 0,
+                    };
+                    let key = (rule.file.trim().to_string(), kind);
+                    match seen
+                        .entry(key)
+                        .or_insert_with(|| files.details(root, &rule.file, what))
+                    {
+                        Ok(d) => details::value(d, what),
+                        Err(e) => Err(e.clone()),
+                    }
+                }
+            },
             Some(root) => {
                 let mode = rule.read_mode();
                 let key = (rule.file.trim().to_string(), rule.byte_limit(), mode as u8);
@@ -220,6 +291,41 @@ pub fn run_all<'a>(
         out.insert(id.to_string(), outcome);
     }
     out
+}
+
+/// Which file a rule reads and the start of it, so the settings window can show the person what
+/// the rule is looking at while they write it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct Peek {
+    /// The file the rule's pattern means, relative to the project folder.
+    pub file: Option<String>,
+    /// The first lines of it, if it is text.
+    pub excerpt: Option<String>,
+}
+
+const PEEK_BYTES: u64 = 4096;
+const PEEK_LINES: usize = 12;
+const PEEK_LINE_CHARS: usize = 200;
+
+pub fn peek(rule: &Rule, root: &Path, files: &dyn ProjectFiles) -> Peek {
+    let Ok(file) = files.locate(root, &rule.file) else {
+        return Peek::default();
+    };
+    let excerpt = files
+        .read(root, &file, PEEK_BYTES, ReadMode::Head)
+        .ok()
+        .map(|text| {
+            text.lines()
+                .take(PEEK_LINES)
+                .map(|l| l.chars().take(PEEK_LINE_CHARS).collect::<String>())
+                .collect::<Vec<_>>()
+                .join("\n")
+        })
+        .filter(|t| !t.trim().is_empty());
+    Peek {
+        file: Some(file),
+        excerpt,
+    }
 }
 
 #[cfg(test)]
@@ -488,5 +594,176 @@ mod tests {
         assert_eq!(files.0.get(), 1);
         assert_eq!(out["a"].value.as_deref(), Some("1"));
         assert_eq!(out["b"].value.as_deref(), Some("2"));
+    }
+
+    fn details_project() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        fs::create_dir_all(p.join("bin")).unwrap();
+        fs::write(p.join("app.log"), "one\ntwo\nthree\n").unwrap();
+        fs::write(p.join("bin/tool.exe"), [0u8, 159, 146, 150, 10, 0]).unwrap();
+        fs::write(p.join("empty.txt"), "").unwrap();
+        dir
+    }
+
+    fn ask(d: &tempfile::TempDir, file: &str, query: &str) -> Outcome {
+        let r = rule(file, Format::File, query);
+        run_all([("r", &r)], Some(d.path()), &FsFiles)
+            .remove("r")
+            .unwrap()
+    }
+
+    #[test]
+    fn file_details_read_the_file_itself() {
+        let d = details_project();
+        assert_eq!(ask(&d, "app.log", "name").value.as_deref(), Some("app.log"));
+        assert_eq!(ask(&d, "app.log", "size").value.as_deref(), Some("14"));
+        assert_eq!(
+            ask(&d, "app.log", "size: human").value.as_deref(),
+            Some("14 bytes")
+        );
+        assert_eq!(ask(&d, "app.log", "lines").value.as_deref(), Some("3"));
+        assert_eq!(ask(&d, "empty.txt", "lines").value.as_deref(), Some("0"));
+        let sha = ask(&d, "app.log", "sha256").value.unwrap();
+        assert_eq!(sha.len(), 64);
+        assert!(sha.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(
+            ask(&d, "app.log", "sha256: short").value.unwrap(),
+            sha[..12]
+        );
+        let modified = ask(&d, "app.log", "modified: utc").value.unwrap();
+        assert!(
+            modified.ends_with(" UTC") && modified.starts_with("20"),
+            "{modified}"
+        );
+    }
+
+    #[test]
+    fn file_details_work_on_any_kind_of_file_and_find_it_by_pattern() {
+        let d = details_project();
+        // A program file: no lines, but a size and a fingerprint.
+        assert_eq!(ask(&d, "bin/*.exe", "size").value.as_deref(), Some("6"));
+        assert!(ask(&d, "**/tool.exe", "sha256: short").value.is_some());
+        let lines = ask(&d, "bin/tool.exe", "lines");
+        assert_eq!(lines.value, None);
+        assert!(lines.problem.unwrap().contains("binary"));
+    }
+
+    #[test]
+    fn file_details_say_what_went_wrong_and_use_the_fallback() {
+        let d = details_project();
+        assert!(ask(&d, "nope.log", "size")
+            .problem
+            .unwrap()
+            .contains("no file matches"));
+        assert!(ask(&d, "app.log", "colour")
+            .problem
+            .unwrap()
+            .contains("name, size"));
+        let r = Rule {
+            fallback: Some("unknown".into()),
+            ..rule("nope.log", Format::File, "sha256")
+        };
+        let out = run_all([("r", &r)], Some(d.path()), &FsFiles)
+            .remove("r")
+            .unwrap();
+        assert_eq!(out.value.as_deref(), Some("unknown"));
+        assert!(out.used_fallback);
+        let none = run_all([("r", &r)], None, &FsFiles).remove("r").unwrap();
+        assert!(none.problem.unwrap().contains("no project folder"));
+    }
+
+    #[test]
+    fn file_details_cannot_leave_the_project_folder() {
+        let d = details_project();
+        assert!(ask(&d, "../secret", "size")
+            .problem
+            .unwrap()
+            .contains("inside the project folder"));
+        assert!(ask(&d, "/etc/passwd", "size").problem.is_some());
+        #[cfg(unix)]
+        {
+            let outside = tempfile::tempdir().unwrap();
+            fs::write(outside.path().join("o.txt"), "outside").unwrap();
+            std::os::unix::fs::symlink(outside.path().join("o.txt"), d.path().join("link.txt"))
+                .unwrap();
+            assert!(ask(&d, "link.txt", "size")
+                .problem
+                .unwrap()
+                .contains("outside"));
+        }
+    }
+
+    #[test]
+    fn rules_asking_the_same_file_the_same_thing_share_one_look() {
+        struct Counting(Cell<u32>);
+        impl ProjectFiles for Counting {
+            fn read(&self, _: &Path, _: &str, _: u64, _: ReadMode) -> Result<String, RuleError> {
+                Err(RuleError::NoValue)
+            }
+            fn details(&self, _: &Path, _: &str, _: What) -> Result<FileDetails, RuleError> {
+                self.0.set(self.0.get() + 1);
+                Ok(FileDetails {
+                    size: 5,
+                    sha256: Some("ab".repeat(32)),
+                    ..FileDetails::default()
+                })
+            }
+        }
+        let files = Counting(Cell::new(0));
+        let (a, b, c) = (
+            rule("f", Format::File, "size"),
+            rule("f", Format::File, "size: human"),
+            rule("f", Format::File, "sha256: short"),
+        );
+        let out = run_all(
+            [("a", &a), ("b", &b), ("c", &c)],
+            Some(Path::new("/p")),
+            &files,
+        );
+        assert_eq!(out["a"].value.as_deref(), Some("5"));
+        assert_eq!(out["b"].value.as_deref(), Some("5 bytes"));
+        assert_eq!(out["c"].value.as_deref(), Some("abababababab"));
+        // One look for the two that need no content, one for the fingerprint.
+        assert_eq!(files.0.get(), 2);
+    }
+
+    #[test]
+    fn a_source_without_file_details_says_so() {
+        struct Plain;
+        impl ProjectFiles for Plain {
+            fn read(&self, _: &Path, _: &str, _: u64, _: ReadMode) -> Result<String, RuleError> {
+                Ok(String::new())
+            }
+        }
+        let r = rule("f", Format::File, "size");
+        let out = run_all([("r", &r)], Some(Path::new("/p")), &Plain);
+        assert!(out["r"]
+            .problem
+            .as_deref()
+            .unwrap()
+            .contains("cannot report file details"));
+    }
+
+    #[test]
+    fn a_peek_names_the_file_and_shows_its_first_lines() {
+        let d = tempfile::tempdir().unwrap();
+        let body: String = (1..=30).map(|n| format!("line {n}\n")).collect();
+        fs::write(d.path().join("run.log"), &body).unwrap();
+        fs::write(d.path().join("blob.bin"), [0u8, 1, 2]).unwrap();
+        let p = peek(&rule("*.log", Format::Text, "tail: 1"), d.path(), &FsFiles);
+        assert_eq!(p.file.as_deref(), Some("run.log"));
+        let excerpt = p.excerpt.unwrap();
+        assert_eq!(excerpt.lines().count(), 12);
+        assert!(excerpt.starts_with("line 1\nline 2"));
+        // A file that is not text still names itself, with nothing to show.
+        let bin = peek(&rule("blob.bin", Format::File, "size"), d.path(), &FsFiles);
+        assert_eq!(bin.file.as_deref(), Some("blob.bin"));
+        assert_eq!(bin.excerpt, None);
+        // No such file: nothing.
+        assert_eq!(
+            peek(&rule("nope", Format::Text, "tail: 1"), d.path(), &FsFiles),
+            Peek::default()
+        );
     }
 }

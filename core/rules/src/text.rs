@@ -10,6 +10,7 @@
 //! | `head: 20` / `tail: 20` | the first or the last 20 lines |
 //! | `contains: timeout` | every line containing the text (any case) |
 //! | `after: Version:` | what follows the text, on every line that has it |
+//! | `between: build= \| ;` | what sits between two texts (here `build=` and `;`), even across lines |
 //! | `level: error, warn` | every line that has one of these words (any case, whole word) |
 //!
 //! Colour codes that programs write into logs are removed from what comes back. `multiple`
@@ -32,10 +33,13 @@ pub enum Query {
     Tail(usize),
     Contains(String),
     After(String),
+    /// What is between the first text and the next occurrence of the second, every time.
+    Between(String, String),
     Level(Vec<String>),
 }
 
-const HELP: &str = "start with line:, lines:, head:, tail:, contains:, after: or level:, \
+const HELP: &str =
+    "start with line:, lines:, head:, tail:, contains:, after:, between: or level:, \
                     for example tail: 20 or after: Version:";
 
 pub fn parse(query: &str) -> Result<Query, String> {
@@ -71,6 +75,17 @@ pub fn parse(query: &str) -> Result<Query, String> {
         "tail" => Ok(Query::Tail(limited(arg, "tail:")?)),
         "contains" => Ok(Query::Contains(needle(arg, "contains:")?)),
         "after" => Ok(Query::After(needle(arg, "after:")?)),
+        "between" => {
+            // The two texts are told apart by a bar: between: build= | ;
+            let (start, end) = arg.split_once('|').ok_or_else(|| {
+                "between: needs two texts separated by a bar, such as between: build= | ;"
+                    .to_string()
+            })?;
+            Ok(Query::Between(
+                needle(start.trim(), "between: the first text")?,
+                needle(end.trim(), "between: the second text")?,
+            ))
+        }
         "level" => {
             let words: Vec<String> = arg
                 .split(',')
@@ -200,6 +215,22 @@ pub fn values(text: &str, query: &Query) -> Vec<String> {
                     keep(rest.trim())
                 })
                 .map(|v| v.trim().to_string())
+                .collect()
+        }
+        Query::Between(start, end) => {
+            // Across line ends too, so a block like BEGIN ... END can be read whole.
+            let re = RegexBuilder::new(&format!(
+                "(?s){}(.*?){}",
+                regex::escape(start),
+                regex::escape(end)
+            ))
+            .case_insensitive(true)
+            .size_limit(1 << 20)
+            .build()
+            .expect("an escaped pattern is always valid");
+            let whole = lines.join("\n");
+            re.captures_iter(&whole)
+                .filter_map(|c| keep(c.get(1)?.as_str().trim()))
                 .collect()
         }
         Query::Level(words) => {
@@ -349,5 +380,47 @@ Version: 1.4.2
     fn a_huge_answer_is_cut_to_the_limit() {
         let text = "x\n".repeat(5000);
         assert_eq!(run("contains: x", &text).len(), MAX_LINES);
+    }
+
+    #[test]
+    fn between_gives_what_sits_between_two_texts() {
+        let text = "build=1.2.3; date=today; build=1.2.4;";
+        assert_eq!(run("between: build= | ;", text), ["1.2.3", "1.2.4"]);
+        assert_eq!(run("between: [ | ]", "x [one] y [two] z"), ["one", "two"]);
+    }
+
+    #[test]
+    fn between_ignores_case_and_can_span_lines() {
+        let block = "noise\nBEGIN\nline a\nline b\nEND\nmore\nbegin\nsecond\nend\n";
+        assert_eq!(
+            run("between: begin | end", block),
+            ["line a\nline b", "second"]
+        );
+    }
+
+    #[test]
+    fn between_skips_empty_gaps_and_unclosed_starts() {
+        assert_eq!(run("between: [ | ]", "[] [ ] [ok] [open"), ["ok"]);
+        assert!(run("between: [ | ]", "no brackets here").is_empty());
+    }
+
+    #[test]
+    fn between_keeps_the_texts_literal() {
+        // Regular-expression characters in the markers mean themselves.
+        assert_eq!(run("between: (( | ))", "a ((b.c)) d"), ["b.c"]);
+        assert_eq!(run("between: $ | .", "cost $5.00"), ["5"]);
+    }
+
+    #[test]
+    fn between_needs_two_texts_separated_by_a_bar() {
+        for bad in [
+            "between: only one",
+            "between: | end",
+            "between: start |",
+            "between:",
+        ] {
+            assert!(parse(bad).is_err(), "{bad}");
+        }
+        assert!(parse("between: a | b").is_ok());
     }
 }
