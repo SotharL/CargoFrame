@@ -37,6 +37,40 @@ pub struct General {
     pub memory_mode: MemoryMode,
     /// Off while the repository is private (no public release assets to check).
     pub check_updates: bool,
+    /// The accent colour as `#rrggbb`: buttons, focus rings, links and the arrow of the logo.
+    /// A value that is not a colour counts as the default wherever it is used.
+    pub accent: String,
+}
+
+/// The accent colour a new install starts with (the plan's design system).
+pub const DEFAULT_ACCENT: &str = "#4f8ee0";
+
+/// `#rrggbb` in lower case, from `#rrggbb` or `#rgb` in any case; `None` when it is not a colour.
+pub fn normalize_accent(value: &str) -> Option<String> {
+    let hex = value.trim().strip_prefix('#')?;
+    if !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    match hex.len() {
+        6 => Some(format!("#{}", hex.to_ascii_lowercase())),
+        3 => Some(format!(
+            "#{}",
+            hex.chars()
+                .flat_map(|c| [c, c])
+                .collect::<String>()
+                .to_ascii_lowercase()
+        )),
+        _ => None,
+    }
+}
+
+impl General {
+    /// The accent as red, green and blue; the default when the stored text is not a colour.
+    pub fn accent_rgb(&self) -> [u8; 3] {
+        let hex = normalize_accent(&self.accent).unwrap_or_else(|| DEFAULT_ACCENT.to_string());
+        let n = u32::from_str_radix(&hex[1..], 16).unwrap_or(0x4f8ee0);
+        [(n >> 16) as u8, (n >> 8) as u8, n as u8]
+    }
 }
 
 impl Default for General {
@@ -46,6 +80,7 @@ impl Default for General {
             theme: Theme::default(),
             memory_mode: MemoryMode::default(),
             check_updates: false,
+            accent: DEFAULT_ACCENT.to_string(),
         }
     }
 }
@@ -246,4 +281,39 @@ impl Document for ChatList {
 impl Document for cargoframe_connectors::Connection {
     const SCHEMA: u32 = 1;
     const NAME: &'static str = "connection";
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_accent_is_a_hash_and_three_or_six_hex_digits() {
+        assert_eq!(normalize_accent("#4F8EE0").as_deref(), Some("#4f8ee0"));
+        assert_eq!(normalize_accent("  #abc ").as_deref(), Some("#aabbcc"));
+        for bad in ["", "4f8ee0", "#4f8ee", "#4f8ee0ff", "#gggggg", "blue", "#"] {
+            assert_eq!(normalize_accent(bad), None, "{bad}");
+        }
+    }
+
+    #[test]
+    fn the_accent_starts_as_the_plans_blue_and_a_bad_value_counts_as_that() {
+        let mut g = General::default();
+        assert_eq!(g.accent, "#4f8ee0");
+        assert_eq!(g.accent_rgb(), [0x4f, 0x8e, 0xe0]);
+        g.accent = "#102030".into();
+        assert_eq!(g.accent_rgb(), [0x10, 0x20, 0x30]);
+        g.accent = "not a colour".into();
+        assert_eq!(g.accent_rgb(), [0x4f, 0x8e, 0xe0]);
+    }
+
+    #[test]
+    fn an_older_general_file_without_an_accent_gets_the_default() {
+        let g: General = serde_json::from_str(
+            r#"{"schema_version":1,"theme":"dark","memory_mode":"balanced","check_updates":false}"#,
+        )
+        .unwrap();
+        assert_eq!(g.accent, DEFAULT_ACCENT);
+        assert_eq!(g.theme, Theme::Dark);
+    }
 }

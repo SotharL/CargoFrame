@@ -88,6 +88,9 @@ those is true for each piece.
    discard it". In the window, drag the two handles under the clip (or use the arrow keys),
    press "Start here" / "End here" while it plays, tick "Crop" and drag the box and its corner, tick "Mark", click where the ring goes and type a text, send, and check that
    what arrives is only the kept part and the kept area, with the ring and its text where you put them.
+   Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
+   buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons
+   (program, installer, tray) on a light and a dark taskbar.
 7. Before making the repository public: the list at the end of `docs/signing.md` and in
    `docs/security.md`.
 

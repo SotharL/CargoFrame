@@ -1,4 +1,9 @@
-# CargoFrame
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/convoy-logo-dark.svg">
+    <img alt="CargoFrame" src="assets/brand/convoy-logo-light.svg" height="64">
+  </picture>
+</p>
 
 CargoFrame is a small tray app for Windows 11 and Linux that shares what is on your screen, together
 with the context around it.
@@ -83,6 +88,10 @@ Only the last seconds are kept (10 by default, set in *Settings, Video*).
 **Pulling values from files (optional):** under *Data from files* you describe a value to read from a file in the
 program's project folder (JSON, YAML, TOML, INI, CSV, XML, a regular expression, or a line of a text or log file),
 and use it in your text boxes and dropdowns. CargoFrame only reads files these rules allow.
+
+**Make it yours:** *Settings, General, Appearance* sets the theme (system, light or dark) and the **accent
+colour**, which colours the buttons, focus rings, links, the selected block, the arrow of the logo and the arrow
+of the tray icon. Pick one of the suggestions, use the colour picker, or type a code like `#4f8ee0`.
 
 **Pause or stop:** *Pause triggers* in the tray menu turns all shortcuts off without deleting anything.
 

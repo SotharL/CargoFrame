@@ -751,3 +751,27 @@ to a recording matches what it can do to a screenshot: cut, crop and mark.
   (in the page) checks that every command the page calls exists and that none is defined but never called. The page
   test reads the Rust source as text; it declares the single Node function it needs instead of pulling the Node
   types into the whole page project.
+
+### The logo, and an accent colour you can change (3 Nov 2026)
+
+- **The logo is the "Convoy" mark** from the owner's files: three frames moving right, the lead frame carrying an
+  arrow, with the two-frame small drawing below 48 px. The eight files are in `assets/brand/` as they were drawn,
+  with one change the owner asked for: the colours are the development plan's design system, not the orange and navy
+  of the first files. The frames are the text colour (`#1f1e1d` on light, `#f5f4ee` on dark) and the arrow is the
+  accent (`#4f8ee0`). Nothing sits behind the mark.
+- **The arrow is the accent colour, and the accent is a setting** (Settings, General, Appearance): suggested colours,
+  a colour picker and a typed code, with a warning when a colour is hard to see (below 3:1) on the light or the dark
+  theme, and a "Reset to blue". It is saved in `general.json` as `accent` (an older file without it gets the blue, a
+  value that is not a colour counts as the blue). The text on an accent button turns white when the dark text would
+  read worse. It colours both windows (a capture window kept ready between captures reads it again for each capture)
+  and the arrow of the tray icon.
+- **The logo in the app** is one component (`Logo.svelte`) that draws the mark with the theme's text colour and the
+  accent as colours, so it follows both the theme and the accent. It is in the Settings sidebar. The capture window
+  has no header, because its layout is the owner's own design.
+- **Icon files** (`app/icons`) are drawn from the same artwork by `scripts/dev/render-icons.mjs`, transparent, with
+  the frames in a mid-grey (`#8b8a84`, between the plan's two quiet-text colours) so they show on a light and on a
+  dark taskbar, and the blue arrow. This answers the open question in the brand notes about surfaces that cannot
+  switch theme. The tray icon is two layers (frames, arrow) joined in the program so that the arrow takes the
+  accent; the executable, installer and window icons keep the default blue.
+- **Not checked on a real Windows desktop:** how the icons look in the taskbar, the tray and the installer, at 100,
+  125 and 150 percent scaling, and the colour picker in WebView2.

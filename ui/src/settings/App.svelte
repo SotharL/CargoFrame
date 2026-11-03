@@ -11,6 +11,7 @@
   import VideoPage from './pages/Video.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import Chip from '../lib/components/Chip.svelte';
+  import Logo from '../lib/components/Logo.svelte';
   import { getApi } from '../lib/ipc';
 
   let trayAvailable = $state(true);
@@ -44,7 +45,7 @@
 
 <div class="shell">
   <nav aria-label="Settings sections">
-    <div class="brand">CargoFrame</div>
+    <div class="brand"><Logo variant="wordmark" size={26} /></div>
     {#each PAGES as p (p.id)}
       <button
         id="nav-{p.id}"
@@ -100,7 +101,7 @@
     padding: 16px 12px;
     display: flex; flex-direction: column; gap: 2px;
   }
-  .brand { font-weight: 700; padding: 4px 10px 14px; }
+  .brand { padding: 4px 10px 16px; }
   .item {
     text-align: left; border: 0; background: transparent;
     padding: 8px 10px; border-radius: var(--radius-sm);

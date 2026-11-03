@@ -5,14 +5,15 @@
   import Toggle from '../../lib/components/Toggle.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import SafetySection from './SafetySection.svelte';
+  import AccentControl from './AccentControl.svelte';
   import TransferSection from './TransferSection.svelte';
   import UpdatesSection from './UpdatesSection.svelte';
   import { getApi } from '../../lib/ipc';
-  import { applyTheme } from '../../lib/theme';
+  import { applyAccent, applyTheme } from '../../lib/theme';
   import type { AppInfo, General, MemoryMode, MemoryStatus, ThemeChoice, TimingView } from '../../lib/types';
 
   let loaded = $state(false);
-  let general = $state<General>({ theme: 'system', memory_mode: 'balanced', check_updates: false });
+  let general = $state<General>({ theme: 'system', memory_mode: 'balanced', check_updates: false, accent: '#4f8ee0' });
   let autostart = $state(false);
   let info = $state<AppInfo | null>(null);
   let timings = $state<TimingView[]>([]);
@@ -86,6 +87,11 @@
     applyTheme(t);
     return save(async () => (await getApi()).setGeneral({ ...general, theme: t }));
   };
+  const onAccentSave = (hex: string) => {
+    general.accent = hex;
+    applyAccent(hex);
+    return save(async () => (await getApi()).setGeneral({ ...general }));
+  };
   const onMemory = () => save(async () => (await getApi()).setGeneral({ ...general }));
   const onAutoCheck = () => save(async () => (await getApi()).setGeneral({ ...general }));
   const onAutostart = (v: boolean) => save(async () => (await getApi()).setAutostart(v));
@@ -100,6 +106,7 @@
         bind:value={general.theme}
         onchange={onTheme}
       />
+      <AccentControl value={general.accent} onpreview={applyAccent} onsave={onAccentSave} />
     </Section>
 
     <Section title="Startup" hint="CargoFrame stays in the tray and waits for your shortcut.">

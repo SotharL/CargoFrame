@@ -329,6 +329,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     theme: 'system',
     memory_mode: 'balanced',
     check_updates: false,
+    accent: '#4f8ee0',
     ...initial,
   };
   let autostart = true;
