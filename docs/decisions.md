@@ -700,8 +700,11 @@ Nothing here changes what the program does.
   `feat/phase7-polish`, `feature/settings-update`) and the old local ones (`chore/local-gate`, `dev/v1`, and the
   local copies of those four) were checked to be inside `main` and removed. The local label `feat/claude-one-click`
   pointed at a commit that is already part of `feat/phase8-capture-files` and the branches after it, so it was removed
-  too (no work is lost). The remote copies of the four merged branches could not be deleted from the cloud
-  session (GitHub refused the delete); the owner can delete them on GitHub, they hold nothing that is not in `main`.
+  too (no work is lost). The remote copies could not be deleted from the cloud
+  session (GitHub refused the delete). The owner can delete these six on GitHub, they hold nothing that is not in
+  `main`: `chore/windows-build-script`, `docs/v1-on-main`, `feat/phase7-polish`, `feature/settings-update`,
+  `chore/local-gate` and `dev/v1`. The remote `feat/claude-one-click` is not merged yet but its four commits are part
+  of the stack, so it can go once the stack is merged.
 - **Code that nothing used:** `Frame::into_rgba`, `Frame::to_png_small`, `Layout::first_free_position` (the builder page
   places new blocks itself, in `model.ts`), the Tauri command `reload_triggers` and its permission (saving or deleting
   a trigger already reloads the shortcuts in the program), and the unused dependencies `tracing` in `cargoframe-deliver`
