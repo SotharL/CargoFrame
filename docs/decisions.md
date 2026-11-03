@@ -640,3 +640,16 @@ there was one.
   limits are not guessed: the service answers and its answer is shown.
 - **Not in this part:** editing in the capture window (trim, crop, mark are in Settings only so far), a ready-made
   layout for video, per-connection size hints. They are the next parts.
+
+### Phase 12, part 12: ready-made layouts for a recording (3 Nov 2026)
+
+Four starting points in the layout builder for a trigger that makes a video: **Save a recording locally**,
+**Jira bug report with a recording**, **Google Drive upload of a recording** and **Slack message with a recording**.
+
+- **Each is built from the template for a picture,** with the picture block swapped for a Video block in the
+  same place and size. The two cannot drift apart: a change to the Jira bug template shows in both.
+- **Discord, Reddit, Teams, Claude and Custom API have none:** Reddit, Teams, Claude and Custom API cannot take
+  a video, and Discord's upload limit (often 10 MB) makes a 30-second recording a poor default. Anyone can still
+  put a Video block in a Discord layout; the window says what the server answers.
+- **No new validation noise:** the four are clean for a signed-in connection and ready to send, like the others.
+
