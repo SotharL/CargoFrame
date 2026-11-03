@@ -96,7 +96,8 @@ find_window() {
   return 1
 }
 win=""
-for _ in $(seq 100); do
+# Up to 30 seconds: a shared CI machine can need more than 10 to take the capture and paint the window.
+for _ in $(seq 300); do
   win="$(find_window CargoFrame || true)"
   [ -n "$win" ] && break
   sleep 0.1

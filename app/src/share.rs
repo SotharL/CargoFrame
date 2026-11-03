@@ -1324,7 +1324,8 @@ mod tests {
     #[test]
     fn a_share_to_claude_delivers_the_screenshot_the_files_and_the_message_in_one_go() {
         let mut w = world(|_| MockResponse::json(500, json!({})));
-        use_claude(&mut w, json!({}));
+        // the browser link on every system (the default opens the desktop app on Windows)
+        use_claude(&mut w, json!({"open_with": "browser"}));
         set_safe(&w, None, 0);
         let (r, _) = go(&w, &request(), vec![]);
         let ShareResult::Sent { summary, close, .. } = r else {

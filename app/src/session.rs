@@ -898,7 +898,14 @@ pub(crate) mod tests {
         let s = deep_capture(&dir, vec![files_block("project", 0, LookIn::default())]);
         assert_eq!(
             s.files_root.as_deref(),
-            Some(dir.path().join("dev/foo").display().to_string().as_str())
+            Some(
+                dir.path()
+                    .join("dev")
+                    .join("foo")
+                    .display()
+                    .to_string()
+                    .as_str()
+            )
         );
         assert_eq!(paths(&s, "project"), ["readme.log"]);
     }
