@@ -167,8 +167,10 @@ Items 8, 14, 15 and 17 of the owner's feedback of 2 Nov 2026.
   copied into the capture folder in the background as soon as the window opens, so the share
   button has nothing left to do but send. A share that is pressed while the copying runs waits
   for it. What is sent is the files **as they were at capture time**; a zip kept after a failed
-  send holds the same copies. Limits: 30 MB per file and 200 MB in total; a file above them is
-  skipped with a notice, never half copied. The capture folder is still deleted when the window
+  send holds the same copies. Limits: 30 MB per file and 200 MB in total for the advance copies; a
+  file above them is not copied ahead and is read from the project when the button is pressed,
+  as before (so it is the one kind of file that can differ from capture time), and the usual
+  zip limits then apply to it. The capture folder is still deleted when the window
   closes, and a start-up sweep (no age limit, since no window can exist yet) removes whatever a
   crash left; the hourly sweep keeps the two-minute grace for windows that are opening.
 - **"Look in" for the Files block (item 17).** A Files block looks in any mix of: the project
