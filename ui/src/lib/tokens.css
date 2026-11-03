@@ -7,6 +7,8 @@
   --warn: #e0934f;
   --err: #e04f4f;
   --dbg: #b04fe0;
+  /* The logo's arrow. Not a status colour and not used for UI state. */
+  --brand-accent: #e8590c;
 
   /* Each destination has a fill (white text on it stays above 4.5:1) and a darker outline that
      reads on the page background. Colour is never the only signal: the label always says where. */
@@ -48,6 +50,7 @@
     --border-strong: #55554f;
     --text: #f5f4ee;
     --quiet: #a3a29b;
+    --brand-accent: #ff7a33;
     --kind-jira-line: #7fb2ea;
     --kind-google-line: #6fc79a;
     --kind-reddit-line: #f08a5a;
@@ -69,6 +72,7 @@
   --border-strong: #55554f;
   --text: #f5f4ee;
   --quiet: #a3a29b;
+  --brand-accent: #ff7a33;
   --kind-jira-line: #7fb2ea;
   --kind-google-line: #6fc79a;
   --kind-reddit-line: #f08a5a;
