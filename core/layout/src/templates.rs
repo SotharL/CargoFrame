@@ -24,7 +24,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 9] = [
+pub const TEMPLATES: [TemplateInfo; 10] = [
     TemplateInfo {
         key: "local-capture",
         name: "Save a capture locally",
@@ -72,6 +72,12 @@ pub const TEMPLATES: [TemplateInfo; 9] = [
         name: "Slack message",
         description: "Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.",
         service: Some(ConnectionKind::Slack),
+    },
+    TemplateInfo {
+        key: "discord-message",
+        name: "Discord message",
+        description: "Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.",
+        service: Some(ConnectionKind::Discord),
     },
     TemplateInfo {
         key: "custom-post",
@@ -386,6 +392,41 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 ],
             ),
         ],
+        ("discord-message", Some(c)) => vec![
+            shot(10),
+            block(
+                "channel",
+                rect(7, 0, 5, 1),
+                web_list("Channel or forum", c, "channels"),
+            ),
+            block(
+                "title",
+                rect(7, 1, 5, 1),
+                text("Title (a forum post's name)", TextRole::Plain, WHERE),
+            ),
+            block(
+                "message",
+                rect(7, 2, 5, 3),
+                text("Message", TextRole::Plain, SEEN_IN),
+            ),
+            block(
+                "thread",
+                rect(7, 5, 5, 1),
+                text("Reply in a thread (link, optional)", TextRole::Plain, ""),
+            ),
+            block("files", rect(7, 6, 5, 3), files("Attach files")),
+            button(
+                rect(7, 9, 5, 1),
+                "Post to Discord",
+                Some(c),
+                Some("message"),
+                vec![
+                    from_block("channel", "channel"),
+                    from_block("title", "title"),
+                    from_block("thread", "thread"),
+                ],
+            ),
+        ],
         ("custom-post", Some(c)) => vec![
             shot(8),
             block(
@@ -470,6 +511,7 @@ mod tests {
             ConnectionKind::Reddit,
             ConnectionKind::Claude,
             ConnectionKind::Slack,
+            ConnectionKind::Discord,
             ConnectionKind::CustomApi,
         ] {
             assert!(

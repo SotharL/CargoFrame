@@ -82,6 +82,25 @@
       <li>In each channel you post to, type <span class="mono">/invite @</span> and the app's name. Files and private channels need this.</li>
     </ol>
   </details>
+{:else if value.kind === 'discord'}
+  <p class="quiet">
+    CargoFrame posts as a Discord bot you create. Nothing here to fill in: the token you paste
+    below, and the servers you add the bot to, decide where it can post.
+  </p>
+  <details class="steps">
+    <summary>How to get the token</summary>
+    <ol>
+      <li>Open <span class="mono">discord.com/developers/applications</span> and choose New Application.</li>
+      <li>Under Bot, choose Reset Token and copy it. You do not need any of the privileged intents.</li>
+      <li>
+        Under OAuth2, URL Generator: tick <span class="mono">bot</span>, then the permissions
+        View Channels, Send Messages, Send Messages in Threads, Attach Files and Create Public
+        Threads (for forum posts).
+      </li>
+      <li>Open the address it makes and add the bot to your server.</li>
+      <li>Save this connection, then paste the token below. Test connection says how many servers the bot is in.</li>
+    </ol>
+  </details>
 {:else if value.kind === 'custom'}
   <CustomForm bind:value />
 {/if}

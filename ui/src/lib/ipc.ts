@@ -239,6 +239,7 @@ const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet.', service: 'google' },
   { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit, with a title and text.', service: 'reddit' },
   { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt and hand the screenshot and prompt to Claude.', service: 'claude' },
+  { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.', service: 'discord' },
   { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
   { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
 ];
@@ -295,7 +296,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     phase: updatePhase,
   });
   const TYPED: Record<string, string[]> = {
-    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], custom: ['secret'],
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], discord: ['token'], custom: ['secret'],
   };
   const OAUTH = new Set(['google', 'reddit']);
   const describeFor = (c: Connection): Describe => {
@@ -315,6 +316,21 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           { id: 'issue_types', label: 'Issue types', param: null },
           { id: 'priorities', label: 'Priorities', param: null },
           { id: 'components', label: 'Components of a project', param: 'project key' },
+        ],
+      };
+    }
+    if (c.kind === 'discord') {
+      return {
+        summary: 'Posts a message into a channel or thread, or starts a forum post, with the screenshot and a zip of the ticked files attached. Nobody is pinged.',
+        fields: [
+          { key: 'channel', label: 'Channel', hint: 'A text channel, or a forum to start a post in', list: 'channels' },
+          { key: 'thread', label: 'Thread or forum post', hint: 'Overrides the channel', list: 'threads' },
+          { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
+          { key: 'title', label: 'Title', hint: 'The name of a forum post', list: null },
+        ],
+        lists: [
+          { id: 'channels', label: 'Channels and forums the bot can see', param: null },
+          { id: 'threads', label: 'Active threads and forum posts', param: null },
         ],
       };
     }
@@ -473,7 +489,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           id,
           name: c.name,
           kind: c.kind,
-          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', custom: 'Custom API' }[c.kind],
+          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', discord: 'Discord', custom: 'Custom API' }[c.kind],
           enabled: c.enabled,
           state: stateOf(id, c),
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),

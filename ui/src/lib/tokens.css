@@ -15,6 +15,7 @@
   --kind-reddit: #c2410c;  --kind-reddit-line: #8f2f06;
   --kind-claude: #8a5a3b;  --kind-claude-line: #5f3d27;
   --kind-slack: #9b2c6e;   --kind-slack-line: #6e1d4d;
+  --kind-discord: #7a3db8; --kind-discord-line: #55288a;
   --kind-custom: #5b5fc7;  --kind-custom-line: #3f43a0;
   --kind-local: #4b5563;   --kind-local-line: #2f3844;
   --on-kind: #ffffff;
@@ -51,6 +52,7 @@
     --kind-reddit-line: #f08a5a;
     --kind-claude-line: #d2a283;
     --kind-slack-line: #e58bc0;
+    --kind-discord-line: #c4a0f0;
     --kind-custom-line: #9fa2ee;
     --kind-local-line: #aab2bf;
     color-scheme: dark;
@@ -70,6 +72,7 @@
   --kind-reddit-line: #f08a5a;
   --kind-claude-line: #d2a283;
   --kind-slack-line: #e58bc0;
+  --kind-discord-line: #c4a0f0;
   --kind-custom-line: #9fa2ee;
   --kind-local-line: #aab2bf;
   color-scheme: dark;

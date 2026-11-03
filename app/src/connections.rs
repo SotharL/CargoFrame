@@ -69,6 +69,7 @@ pub fn layout_kind(kind: Kind) -> ConnectionKind {
         Kind::Reddit => ConnectionKind::Reddit,
         Kind::Claude => ConnectionKind::Claude,
         Kind::Slack => ConnectionKind::Slack,
+        Kind::Discord => ConnectionKind::Discord,
         Kind::Custom => ConnectionKind::CustomApi,
     }
 }

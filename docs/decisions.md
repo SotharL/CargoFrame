@@ -331,7 +331,27 @@ follow the same shape (a connector, a row in the capability table, a template, a
 - **Colour and template.** Berry (`--kind-slack`), apart from Jira blue, Google green, Reddit
   orange, Claude brown and Custom violet. "Slack message" is a ready-made layout: screenshot,
   channel, message, optional thread link, files, a Post to Slack button.
-- **Still to do for this phase.** Discord (bot token; channel, forum post or thread) and Teams
-  (a Microsoft sign-in through an app registration the owner creates), then "each posts to a test
-  workspace" on the owner's side. Slack has only run against a mock server so far.
-
+- **Discord (same shape, a bot token).** The person creates a bot in the Developer Portal, adds it
+  to their server with an invite link made from View Channels, Send Messages, Send Messages in
+  Threads, Attach Files and Create Public Threads, and pastes the token (`Authorization: Bot …`).
+  No privileged intents are needed: only the REST API is used, so nothing keeps a connection open.
+  Fields: `channel` (text channels and forums, listed by server; `#name` is looked up, and refused
+  if two servers share the name), `thread` (an active thread or forum post from a list, or a link
+  from Copy Link; it overrides the channel), `message` and `title`. In a text channel the title is
+  a bold first line; in a forum it is the post's name (the window title when empty).
+- **Nobody is pinged.** Every Discord message says `allowed_mentions: {parse: []}`, so
+  `@everyone` in a window title or a data rule stays text. The message is cut to Discord's 2000
+  characters, and the result says so.
+- **Retries cannot post twice.** A channel message carries a `nonce` with `enforce_nonce`: if the
+  answer was lost and the share is tried again, Discord returns the first message. A forum post
+  has no such protection, so, like a Reddit post, it is not retried when its outcome is unknown
+  (a lost answer or a Discord server error): the result says to look in the forum.
+- **Failures in words.** 401 asks for a new token; 403 is *not* treated as an expired token (on
+  Discord it means a missing permission) and says which permissions to give; "too large" says the
+  server's upload limit; 429 waits for the time in the header or in the answer.
+- **Test connection** says who the bot is and how many servers it is in, or that it is in none
+  yet, which is the usual first mistake.
+- **Colour.** Discord purple `--kind-discord`, next to Slack's berry and Custom's periwinkle.
+- **Still to do for this phase.** Teams (a Microsoft sign-in through an app registration the
+  owner creates; chat, channel or meeting chat), then "each posts to a test workspace" on the
+  owner's side. Slack and Discord have only run against mock servers so far.

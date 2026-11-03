@@ -4,7 +4,7 @@
 
 A tray app for Windows 11 and Linux. A shortcut captures the program in focus, finds its project
 folder, reads the data you asked for, and opens a window where you review it and share it to Jira,
-Google, Reddit, Claude, Slack or any API you describe. Nothing leaves your computer until you click.
+Google, Reddit, Claude, Slack, Discord or any API you describe. Nothing leaves your computer until you click.
 
 > **Status: V1 feature-complete and merged to `main`, in private beta.** Every feature in the
 > plan is built and tested. What has **not** been done is running it on real desktops, with real
@@ -24,7 +24,7 @@ Google, Reddit, Claude, Slack or any API you describe. Nothing leaves your compu
    active connection says **Save locally** and saves that zip straight into the folder you set in
    Settings, General, Safety.
 5. Layouts can start from a **ready-made template** for each connection (Jira bug, Jira comment,
-   Drive upload, Sheet row, Reddit post, Claude prompt, Slack message, Custom API, or a local save). A template is
+   Drive upload, Sheet row, Reddit post, Claude prompt, Slack message, Discord message, Custom API, or a local save). A template is
    never changed; saving one makes your own copy. Layouts, data rules and info types can be
    **exported and imported** as one file (Settings, General, Export and import).
 
@@ -52,7 +52,7 @@ Destinations in V1: **Jira** (the reference), **Google** (Drive, Sheets), **Redd
 | `core/rules` | Data rules: read allowed files and pull out values |
 | `core/bundle` | Zip files for the fallback and the Files block |
 | `core/net` | The one HTTP client: https checks, checked redirects, multipart, mock server |
-| `core/connectors` | Jira, Google, Reddit, Claude, Slack, Custom API, OAuth, the secret store |
+| `core/connectors` | Jira, Google, Reddit, Claude, Slack, Discord, Custom API, OAuth, the secret store |
 | `docs/` | Decisions, status, security review, performance, signing, spike runbook |
 | `scripts/` | CI helpers, end-to-end and timing checks, signing helpers |
 | `installers/` | Windows (NSIS) and Linux (AppImage + install script) |

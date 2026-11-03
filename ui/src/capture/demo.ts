@@ -9,9 +9,9 @@ export async function demoSession(): Promise<SessionView> {
   // `?mode=local` shows the window as it is when the button has no active connection.
   const params = new URLSearchParams(location.search);
   const local = params.get('mode') === 'local';
-  // `?kind=claude`, `?kind=slack` or `?kind=reddit` points the button somewhere else, to look at its colours and marks.
+  // `?kind=claude`, `?kind=slack`, `?kind=discord` or `?kind=reddit` points the button somewhere else, to look at its colours and marks.
   const asked = params.get('kind');
-  const kind: ServiceKind = asked === 'claude' || asked === 'reddit' || asked === 'google' || asked === 'slack' || asked === 'custom' ? asked : 'jira';
+  const kind: ServiceKind = asked === 'claude' || asked === 'reddit' || asked === 'google' || asked === 'slack' || asked === 'discord' || asked === 'custom' ? asked : 'jira';
   const layout: Layout = {
     id: 'bug',
     name: 'Bug report',

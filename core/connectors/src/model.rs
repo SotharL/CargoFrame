@@ -26,6 +26,7 @@ pub enum Settings {
     Reddit(Reddit),
     Claude(Claude),
     Slack(Slack),
+    Discord(Discord),
     Custom(Custom),
 }
 
@@ -37,6 +38,7 @@ pub enum Kind {
     Reddit,
     Claude,
     Slack,
+    Discord,
     Custom,
 }
 
@@ -48,6 +50,7 @@ impl Settings {
             Settings::Reddit(_) => Kind::Reddit,
             Settings::Claude(_) => Kind::Claude,
             Settings::Slack(_) => Kind::Slack,
+            Settings::Discord(_) => Kind::Discord,
             Settings::Custom(_) => Kind::Custom,
         }
     }
@@ -61,6 +64,7 @@ impl Kind {
             Kind::Reddit => "Reddit",
             Kind::Claude => "Claude",
             Kind::Slack => "Slack",
+            Kind::Discord => "Discord",
             Kind::Custom => "Custom API",
         }
     }
@@ -72,7 +76,7 @@ impl Kind {
             Kind::Google => &["client_secret", "oauth"],
             Kind::Reddit => &["oauth"],
             Kind::Claude => &[],
-            Kind::Slack => &["token"],
+            Kind::Slack | Kind::Discord => &["token"],
             Kind::Custom => &["secret"],
         }
     }
@@ -82,7 +86,7 @@ impl Kind {
         match self {
             Kind::Jira => &["token"],
             Kind::Google => &["client_secret"],
-            Kind::Slack => &["token"],
+            Kind::Slack | Kind::Discord => &["token"],
             Kind::Reddit | Kind::Claude => &[],
             Kind::Custom => &["secret"],
         }
@@ -184,6 +188,13 @@ impl Default for Claude {
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Slack {}
+
+// ----- Discord -----
+
+/// Like Slack: only a bot token, which says which servers the bot is in.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Discord {}
 
 // ----- Custom API -----
 
@@ -303,7 +314,7 @@ pub fn check(c: &Connection) -> Result<(), String> {
                 return Err("Write the client id of your Google OAuth client".into());
             }
         }
-        Settings::Claude(_) | Settings::Slack(_) => {}
+        Settings::Claude(_) | Settings::Slack(_) | Settings::Discord(_) => {}
         Settings::Custom(cu) => check_custom(cu)?,
     }
     Ok(())

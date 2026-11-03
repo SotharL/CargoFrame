@@ -60,6 +60,26 @@ describe('Connections page', () => {
     await waitFor(() => expect(screen.getByText('Claude chats')).toBeTruthy());
   });
 
+  it('adds a Discord connection: the steps, a bot token, then it is ready', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Discord/ }));
+    const steps = screen.getByText('How to get the token').closest('details')!;
+    for (const word of ['Reset Token', 'Attach Files', 'Create Public', 'URL Generator']) {
+      expect(steps.textContent).toContain(word);
+    }
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Saved. Now add the token below.')).toBeTruthy();
+    const box = await screen.findByLabelText('Bot token');
+    await fireEvent.input(box, { target: { value: 'discord-secret' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Bot token' }));
+    expect(await screen.findByText("Stored in your system's password store")).toBeTruthy();
+    expect(document.body.textContent).not.toContain('discord-secret');
+    await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByText('Connected')).toBeTruthy();
+    const saved = await api.listItems('connection');
+    expect(saved.items[0]!.item).toMatchObject({ kind: 'discord', name: 'Discord', enabled: true });
+  });
+
   it('adds a Slack connection: setup steps, then a bot token, then it is ready', async () => {
     render(Connections);
     await fireEvent.click(await screen.findByRole('button', { name: /^Slack/ }));

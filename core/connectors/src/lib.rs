@@ -7,6 +7,7 @@
 pub mod claude;
 pub mod ctx;
 pub mod custom;
+pub mod discord;
 pub mod error;
 pub mod google;
 pub mod jira;
@@ -103,6 +104,7 @@ pub fn build(connection: &Connection) -> Option<Box<dyn Connector>> {
         Settings::Google(s) => Box::new(google::GoogleConnector::new(s.clone())),
         Settings::Claude(s) => Box::new(claude::ClaudeConnector::new(s.clone())),
         Settings::Slack(s) => Box::new(slack::SlackConnector::new(s.clone())),
+        Settings::Discord(s) => Box::new(discord::DiscordConnector::new(s.clone())),
         Settings::Custom(s) => Box::new(custom::CustomConnector::new(s.clone())),
     })
 }

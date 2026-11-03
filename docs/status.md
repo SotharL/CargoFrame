@@ -56,7 +56,7 @@ those is true for each piece.
 | 1 Shell and installer | Tray, single instance, launch notice, Settings window, installers | Done and built in CI |
 | 2 Capture and window | Triggers, capture, CargoFrame window, themes | Done; Windows, X11 and the Wayland portal are implemented, Wayland is untested |
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
-| 4 Connectors | Jira, Google, Reddit, Claude, Slack, Custom API, Connections page, share flow | Done against mock servers |
+| 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Custom API, Connections page, share flow | Done against mock servers |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
 
 ## What the owner needs to do before calling V1 solid

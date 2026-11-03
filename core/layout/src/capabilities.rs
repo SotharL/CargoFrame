@@ -122,6 +122,13 @@ impl Capabilities {
                 files: Capability::yes("Uploaded to the channel as one zip"),
                 link: Capability::yes("Addresses turn into links by themselves; <, > and & are shown as typed"),
             },
+            ConnectionKind::Discord => Self {
+                text: Capability::yes("Posted as the message, up to 2000 characters (a forum post's title is the name)"),
+                dropdown: Capability::limited("The channel (or forum) and an existing thread can be picked"),
+                screenshot: Capability::yes("Attached to the message"),
+                files: Capability::limited("Attached as one zip, within the server's upload limit"),
+                link: Capability::yes("Addresses and [word](https://…) links are shown as links"),
+            },
             ConnectionKind::CustomApi => Self::custom(CustomShape::default()),
         }
     }
@@ -169,12 +176,13 @@ impl Capabilities {
 mod tests {
     use super::*;
 
-    const KINDS: [ConnectionKind; 6] = [
+    const KINDS: [ConnectionKind; 7] = [
         ConnectionKind::Jira,
         ConnectionKind::Google,
         ConnectionKind::Reddit,
         ConnectionKind::Claude,
         ConnectionKind::Slack,
+        ConnectionKind::Discord,
         ConnectionKind::CustomApi,
     ];
 

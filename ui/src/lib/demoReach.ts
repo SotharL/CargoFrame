@@ -50,6 +50,14 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         files: yes('Uploaded to the channel as one zip'),
         link: yes('Addresses turn into links by themselves; <, > and & are shown as typed'),
       };
+    case 'discord':
+      return {
+        text: yes("Posted as the message, up to 2000 characters (a forum post's title is the name)"),
+        dropdown: limited('The channel (or forum) and an existing thread can be picked'),
+        screenshot: yes('Attached to the message'),
+        files: limited("Attached as one zip, within the server's upload limit"),
+        link: yes('Addresses and [word](https://…) links are shown as links'),
+      };
     default:
       return {
         text: yes('Placed in the request where you write {{prompt}} or {{field}}'),

@@ -250,7 +250,7 @@ pub struct TemplateView {
     key: &'static str,
     name: &'static str,
     description: &'static str,
-    /// `jira`, `google`, `reddit`, `claude`, `slack` or `custom`; `None` for the one that saves locally.
+    /// `jira`, `google`, `reddit`, `claude`, `slack`, `discord` or `custom`; `None` for the one that saves locally.
     service: Option<&'static str>,
 }
 
@@ -261,6 +261,7 @@ fn service_name(kind: ConnectionKind) -> &'static str {
         ConnectionKind::Reddit => "reddit",
         ConnectionKind::Claude => "claude",
         ConnectionKind::Slack => "slack",
+        ConnectionKind::Discord => "discord",
         ConnectionKind::CustomApi => "custom",
     }
 }
@@ -881,6 +882,7 @@ mod template_tests {
             ConnectionKind::Reddit => json!({"name": "r", "kind": "reddit"}),
             ConnectionKind::Claude => json!({"name": "c", "kind": "claude"}),
             ConnectionKind::Slack => json!({"name": "s", "kind": "slack"}),
+            ConnectionKind::Discord => json!({"name": "d", "kind": "discord"}),
             ConnectionKind::CustomApi => json!({"name": "x", "kind": "custom"}),
         })
         .unwrap();
