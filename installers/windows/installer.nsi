@@ -230,7 +230,7 @@ FunctionEnd
 
 ; 4. Installation page: a progress bar that closes by itself when it is done.
 ShowInstDetails nevershow
-SetAutoClose true
+AutoCloseWindow true
 !insertmacro MUI_PAGE_INSTFILES
 
 Function RunMainBinary
