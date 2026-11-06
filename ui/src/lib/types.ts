@@ -68,6 +68,36 @@ export type DropdownSource =
   | { type: 'web_api'; connection_id: string; options_id: string }
   | { type: 'claude_chats' };
 
+/** One app CargoFrame can use, and whether it is on this computer (mirrors app/src/setup.rs). */
+export interface SetupItem {
+  id: string;
+  name: string;
+  /** What does not work without it. */
+  what_for: string;
+  status: 'ok' | 'missing' | 'unknown';
+  /** Where it was found, or what is wrong. */
+  detail: string;
+  /** A button on this line: open the Windows sound settings. */
+  action: 'sound_settings' | null;
+}
+
+/** What the one button on the Setup page does. */
+export type SetupInstall =
+  | { type: 'none' }
+  | { type: 'run'; label: string }
+  | { type: 'copy'; command: string }
+  | { type: 'manual'; text: string }
+  | { type: 'running' }
+  | { type: 'failed'; message: string };
+
+export interface SetupReport {
+  os: 'windows' | 'linux' | 'other';
+  items: SetupItem[];
+  /** How many are missing: the number on the Setup tab. */
+  missing: number;
+  install: SetupInstall;
+}
+
 /** What a video block records: the whole screen, or the window that has the focus when it starts. */
 export type VideoSubject = 'screen' | 'focused_window';
 

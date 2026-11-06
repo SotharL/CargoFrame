@@ -24,7 +24,15 @@ those is true for each piece.
   follow each service's documented API; they are not the services.
 - **Installers:** GitHub's Windows runner builds the NSIS installer and runs a silent install,
   upgrade and uninstall; GitHub's Ubuntu runner builds the AppImage, installs it, runs it and
-  quits it. See `.github/workflows/bundle.yml`.
+  quits it. See `.github/workflows/bundle.yml`. The Windows runner also opens the real installer
+  window, checks that its one button says *Install*, presses it, and checks that the window closes
+  by itself, the program is installed and CargoFrame opens its Settings window
+  (`installers/windows/click-test.ps1`; screenshots of each step are kept as an artifact).
+- **The Setup page** (the programs CargoFrame uses and the one install button): every sentence it
+  can show, the winget command's fixed arguments, one install at a time, and the first-run marker
+  are unit tests; the page's states (nothing missing, Windows with ffmpeg missing, install running,
+  install failed, no winget, no loopback device, Linux command to copy) are tested against the
+  in-memory stand-in.
 - **Security review** with fixes and regression tests: `docs/security.md`.
 - **Performance budgets** as CI gates with measured numbers: `docs/performance.md`.
 
@@ -42,6 +50,12 @@ those is true for each piece.
   not by GNOME Keyring or KWallet.
 - **Performance on a reference machine** (spike S6), including the 40 MB tray-only budget and the
   cold-open times, which were slightly over budget on a virtual display.
+- **The Setup page on a real PC.** The winget install of ffmpeg has never been run (the Windows
+  runner does not install it), nor has the Stereo Mix check or the button that opens the Windows
+  sound settings. Whether winget is present, and whether it is allowed to install per user on a
+  managed PC, is not known.
+- **How the one-button installer looks.** Its structure is tested; how the window looks on a real
+  screen has not been seen by a person.
 - **Signing and releases.** `release.yml` and `scripts/windows/sign.ps1` have never run with a
   certificate; the program inside the installer is not signed. `new-signing-material.ps1` has
   not been run.
@@ -104,6 +118,13 @@ those is true for each piece.
    Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
    buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons
    (program, installer, tray) on a light and a dark taskbar.
+   Installer and Setup: download `CargoFrame-Setup.exe` from the release, double-click it and press
+   Install (check that nothing else is asked, that CargoFrame opens on the Setup page, and that
+   Windows' "unknown publisher" notice can be passed with More info, Run anyway). On the Setup page
+   press *Install ffmpeg* and check that it finds ffmpeg by itself afterwards (no sign-out), then
+   Settings, Video, *Test ffmpeg*. Turn off every sound device but the microphone and check the
+   Stereo Mix line and the button that opens the sound settings. Run the installer again over the
+   installed copy: the button says Update and your settings are kept.
 7. Before making the repository public: the list at the end of `docs/signing.md` and in
    `docs/security.md`.
 

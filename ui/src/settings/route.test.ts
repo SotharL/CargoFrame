@@ -26,8 +26,8 @@ describe('settings route', () => {
     expect(route.page).toBe('general');
   });
 
-  it('puts General first, then Connections, then Triggers', () => {
-    expect(PAGES.map((p) => p.id).slice(0, 3)).toEqual(['general', 'connections', 'triggers']);
+  it('puts General first, then Setup, Connections and Triggers', () => {
+    expect(PAGES.map((p) => p.id).slice(0, 4)).toEqual(['general', 'setup', 'connections', 'triggers']);
     expect(PAGES.some((p) => (p.id as string) === 'safe')).toBe(false);
   });
 });

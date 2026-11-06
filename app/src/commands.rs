@@ -548,6 +548,77 @@ pub async fn detect_video_tools(video: Video) -> Result<video::ToolsView, String
         .await
 }
 
+/// What the Setup page shows: the apps CargoFrame leans on, and what the one button does.
+fn current_setup(app: &AppHandle) -> crate::setup::Report {
+    let state = app.state::<AppState>();
+    let installer = app.state::<crate::setup::Installer>();
+    let video = state
+        .store
+        .load_or_default::<Video>()
+        .map(video::normalized)
+        .unwrap_or_default();
+    let os = video::Os::current();
+    let probes = crate::setup::probe(os, &video);
+    if probes.ffmpeg.is_ok() {
+        installer.clear_failure();
+    }
+    crate::setup::report(
+        os,
+        &probes,
+        installer.running(),
+        installer.failure().as_deref(),
+    )
+}
+
+/// Look at this computer for the apps CargoFrame leans on.
+#[tauri::command]
+pub async fn get_setup(app: AppHandle) -> Result<crate::setup::Report, String> {
+    blocking(move || current_setup(&app)).await
+}
+
+/// The one button: install what is missing (ffmpeg, with winget, on Windows). It runs in the
+/// background; the page asks `get_setup` how it is going.
+#[tauri::command]
+pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, String> {
+    blocking(move || {
+        if video::Os::current() != video::Os::Windows {
+            return Err("CargoFrame installs apps itself on Windows only. Run the command shown instead.".to_string());
+        }
+        let report = current_setup(&app);
+        if !matches!(report.install, crate::setup::Install::Run { .. }) {
+            return Ok(report);
+        }
+        let state = app.state::<AppState>();
+        let video = state
+            .store
+            .load_or_default::<Video>()
+            .map(video::normalized)
+            .unwrap_or_default();
+        let installer = app.state::<crate::setup::Installer>();
+        installer.start(move || {
+            let ran = crate::setup::install_ffmpeg_with_winget();
+            // whether it worked is decided by looking for ffmpeg, not by winget's exit code
+            match video::find(&video, video::program_beside_app().as_deref()) {
+                Ok(_) => Ok(()),
+                Err(why) => Err(match ran {
+                    Err(said) => said,
+                    Ok(()) => format!(
+                        "winget finished, but ffmpeg was not found afterwards. {why} Sign out and in again, or choose its folder under Video."
+                    ),
+                }),
+            }
+        })?;
+        Ok(current_setup(&app))
+    })
+    .await?
+}
+
+/// Open the Windows sound settings, where Stereo Mix is switched on.
+#[tauri::command]
+pub fn open_sound_settings() -> Result<(), String> {
+    crate::setup::open_sound_settings()
+}
+
 /// The sound devices of this computer, for the sound choices of a layout's video block. It asks
 /// the ffmpeg of the saved video settings.
 #[tauri::command]

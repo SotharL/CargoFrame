@@ -15,6 +15,7 @@ mod notify;
 mod registry;
 mod secrets;
 mod session;
+mod setup;
 mod share;
 mod state;
 mod timing;
@@ -62,6 +63,7 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .manage(setup::Installer::default())
         .manage(AppState::new(
             Store::new(dirs),
             tray_available,
@@ -131,6 +133,9 @@ pub fn run() {
             commands::set_video,
             commands::detect_video_tools,
             commands::list_audio_devices,
+            commands::get_setup,
+            commands::install_missing,
+            commands::open_sound_settings,
             commands::try_video_recording,
             commands::start_video_recording,
             commands::get_video_recording,
@@ -171,7 +176,17 @@ pub fn run() {
             triggers::reload(app.handle());
             notify::launched(app.handle());
             if startup == Startup::OpenSettings {
-                windowing::open_settings(app.handle());
+                // The first run lands on Setup, which says whether anything is missing; after
+                // that, Settings opens where it was left.
+                let first = app
+                    .handle()
+                    .try_state::<AppState>()
+                    .is_some_and(|s| setup::first_run(s.store.dirs().config()));
+                if first {
+                    windowing::open_settings_at(app.handle(), "setup");
+                } else {
+                    windowing::open_settings(app.handle());
+                }
             }
             Ok(())
         })

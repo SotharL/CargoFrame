@@ -1,7 +1,10 @@
 ; CargoFrame installer. Based on the Tauri 2 (tauri-bundler 2.10.4) NSIS template.
 ; Changes: no WiX handling, no uninstall wizard when a version is already installed
-; (files are replaced in place), one "Options" page for run-on-sign-in, graceful
-; --quit of the running app (see hooks.nsh). Keep the Handlebars placeholders intact.
+; (files are replaced in place), graceful --quit of the running app (see hooks.nsh), and ONE
+; page with ONE button: no welcome, folder, shortcut or options questions, and no finish page.
+; It installs for the current user only (no administrator rights), switches on "run when I
+; sign in" (the app is a tray program; Settings turns it off), and opens CargoFrame when done.
+; Keep the Handlebars placeholders intact.
 Unicode true
 ManifestDPIAware true
 ; Add in `dpiAwareness` `PerMonitorV2` to manifest for Windows 10 1607+ (note this should not affect lower versions since they should be able to ignore this and pick up `dpiAware` `true` set by `ManifestDPIAware true`)
@@ -82,7 +85,6 @@ Var WixMode
 Var OldMainBinaryName
 Var IsUpgrade
 Var StartupChoice
-Var OptStartup
 
 Name "${PRODUCTNAME}"
 BrandingText "${COPYRIGHT}"
@@ -172,24 +174,8 @@ VIAddVersionKey "ProductVersion" "${VERSION}"
 !define MUI_LANGDLL_REGISTRY_KEY "${MANUPRODUCTKEY}"
 !define MUI_LANGDLL_REGISTRY_VALUENAME "Installer Language"
 
-; Installer pages, must be ordered as they appear
-; 1. Welcome Page
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
-!insertmacro MUI_PAGE_WELCOME
-
-; 2. License Page (if defined)
-!if "${LICENSE}" != ""
-  !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
-  !insertmacro MUI_PAGE_LICENSE "${LICENSE}"
-!endif
-
-; 3. Install mode (if it is set to `both`)
-!if "${INSTALLMODE}" == "both"
-  !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
-  !insertmacro MULTIUSER_PAGE_INSTALLMODE
-!endif
-
-; 4. Existing installation: upgrade in place, no wizard. Only a downgrade asks.
+; Installer pages, must be ordered as they appear.
+; 1. Existing installation: upgrade in place, no wizard. Only a downgrade asks.
 Page custom PageReinstall
 
 Function PageReinstall
@@ -208,11 +194,8 @@ Function PageReinstall
   Abort                                      ; never show a page
 FunctionEnd
 
-; 5. Choose install directory page
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
-!insertmacro MUI_PAGE_DIRECTORY
-
-; 6. Start menu shortcut page
+; 2. Start menu shortcut page: never shown (the shortcut is made without asking), but the macro
+; also declares the variable the install section uses.
 Var AppStartMenuFolder
 !if "${STARTMENUFOLDER}" != ""
   !define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
@@ -222,45 +205,33 @@ Var AppStartMenuFolder
 !endif
 !insertmacro MUI_PAGE_STARTMENU Application $AppStartMenuFolder
 
-; 6b. Options page: run when I sign in
-Page custom PageOptions PageOptionsLeave
+; 3. The one page: what will happen, and one button.
+Page custom PageInstall
 
-Function PageOptions
-  ${IfThen} $PassiveMode = 1 ${|} Abort ${|}
-  !insertmacro MUI_HEADER_TEXT "Options" "Choose how ${PRODUCTNAME} starts."
+Function PageInstall
+  ${IfThen} $PassiveMode = 1 ${|} Abort ${|}   ; silent installs never show custom pages
+  !insertmacro MUI_HEADER_TEXT "${PRODUCTNAME}" "One button, then it is ready to use."
   nsDialogs::Create 1018
   Pop $0
   ${IfThen} $(^RTL) = 1 ${|} nsDialogs::SetRTL $(^RTL) ${|}
-  ${NSD_CreateCheckbox} 0 8u 100% 12u "Run ${PRODUCTNAME} when I sign in"
-  Pop $OptStartup
-  ${NSD_CreateLabel} 12u 24u 94% 36u "${PRODUCTNAME} waits in the notification area and uses almost no resources. You can change this later in Settings."
+  ${NSD_CreateLabel} 0 0 100% 20u "${PRODUCTNAME} will be installed for your account only. No administrator password is needed."
   Pop $0
-  ${If} $StartupChoice = 1
-    ${NSD_Check} $OptStartup
+  ${NSD_CreateLabel} 0 26u 100% 52u "It waits in the notification area, uses almost no resources, and starts when you sign in (you can turn that off in Settings). Video needs the free program ffmpeg: ${PRODUCTNAME} checks for it and installs it with one button on its Setup page."
+  Pop $0
+  ; the one button
+  GetDlgItem $0 $HWNDPARENT 1
+  ${If} $IsUpgrade = 1
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:Update"
+  ${Else}
+    SendMessage $0 ${WM_SETTEXT} 0 "STR:Install"
   ${EndIf}
   nsDialogs::Show
 FunctionEnd
-Function PageOptionsLeave
-  ${NSD_GetState} $OptStartup $StartupChoice
-FunctionEnd
 
-; 7. Installation page
+; 4. Installation page: a progress bar that closes by itself when it is done.
+ShowInstDetails nevershow
+AutoCloseWindow true
 !insertmacro MUI_PAGE_INSTFILES
-
-; 8. Finish page
-;
-; Don't auto jump to finish page after installation page,
-; because the installation page has useful info that can be used debug any issues with the installer.
-!define MUI_FINISHPAGE_NOAUTOCLOSE
-; Use show readme button in the finish page as a button create a desktop shortcut
-!define MUI_FINISHPAGE_SHOWREADME
-!define MUI_FINISHPAGE_SHOWREADME_TEXT "$(createDesktop)"
-!define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateOrUpdateDesktopShortcut
-; Show run app after installation.
-!define MUI_FINISHPAGE_RUN
-!define MUI_FINISHPAGE_RUN_FUNCTION RunMainBinary
-!define MUI_PAGE_CUSTOMFUNCTION_PRE SkipIfPassive
-!insertmacro MUI_PAGE_FINISH
 
 Function RunMainBinary
   nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" ""
@@ -620,15 +591,18 @@ Section Install
 SectionEnd
 
 Function .onInstSuccess
-  ; Check for `/R` flag only in silent and passive installers because
-  ; GUI installer has a toggle for the user to (re)start the app
   ${If} $PassiveMode = 1
   ${OrIf} ${Silent}
+    ; Silent and passive installs (the in-app updater, scripts, tests) start the app only when
+    ; asked to with `/R`.
     ${GetOptions} $CMDLINE "/R" $R0
     ${IfNot} ${Errors}
       ${GetOptions} $CMDLINE "/ARGS" $R0
       nsis_tauri_utils::RunAsUser "$INSTDIR\${MAINBINARYNAME}.exe" "$R0"
     ${EndIf}
+  ${Else}
+    ; The window installer opens CargoFrame: the first run lands on its Setup page.
+    Call RunMainBinary
   ${EndIf}
 FunctionEnd
 
