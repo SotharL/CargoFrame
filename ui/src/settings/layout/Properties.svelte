@@ -198,6 +198,7 @@
       kind={buttonKind(block.connection_id, connections)}
       reach={reach[block.id]}
       fallback={target?.capabilities ?? null}
+      fields={fieldsFor(block.connection_id).map(({ key, label }) => ({ key, label }))}
     />
     <div class="maps">
       <h3>Fill the service's fields</h3>

@@ -80,6 +80,14 @@ want, and press the sharing button at the bottom. If sending fails it retries, t
 so nothing is lost. A button with no connection says **Save locally** and saves that zip into the folder you
 chose in *General, Safety*.
 
+**Which button sends what:** a window can have up to five sharing buttons. Each block shows a small row of tick
+boxes on its top edge, one per button, in that button's colour and with a ✓ when ticked. Clear a box to leave the
+block out of that button's share this time, or tick one the button had switched off. A dashed box can't be ticked
+(hover it to see why: the destination can't take it, or the button has no field for it), and a box with a ring
+is needed by the button, so it stays. Pointing at a button or one of its boxes outlines everything that button
+sends. In the layout builder, choose for each text or dropdown block whether a button sends it, as the prompt, or
+in one of the destination's fields.
+
 **Video:** a trigger whose *Makes* is *A video* starts recording the first time you press its shortcut and stops
 the second time. The window then plays the clip (move the mouse over the picture for the play, stop, speed, volume
 and full screen buttons) and you can trim it by dragging the two handles of the thin timeline under it, crop it

@@ -516,7 +516,11 @@ export type Verdict =
   | { state: 'switched_off' }
   | { state: 'not_used' };
 
-export type BlockReach = { block_id: string } & Verdict;
+export type BlockReach = {
+  block_id: string;
+  /** The button cannot do its job without this block: its box stays ticked. */
+  required?: boolean;
+} & Verdict;
 
 /** What one sharing button does with every other block of the layout. */
 export interface Reach {
@@ -612,6 +616,11 @@ export interface ShareRequest {
   image_edited: boolean;
   /** For a recording: what was cut or cropped. Left out (or `null`) sends it as it is. */
   clip_edit?: ClipEdit | null;
+  /**
+   * The blocks whose boxes are ticked for this button. Left out (or `null`) sends what the layout
+   * says; a list sends exactly those blocks.
+   */
+  send_blocks?: string[] | null;
 }
 
 /**

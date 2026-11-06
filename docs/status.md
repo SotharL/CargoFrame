@@ -90,6 +90,9 @@ those is true for each piece.
    untested in WebView2 and WebKitGTK), press "Crop", drag the box and its corner and press "Apply crop" (the window
    must then show the cropped picture), "Mark", click where the ring goes and type a text, then "Reset to full capture", send, and check that
    what arrives is only the kept part and the kept area, with the ring and its text where you put them.
+   Tick boxes: with two or three sharing buttons in a layout (Jira, Claude, Slack), look at the boxes on the top
+   edge of each block, clear one and send, and check that button left that block out and the others did not; hover a
+   button and check its blocks light up; in the layout builder, choose where a text block goes from a button's list.
    Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
    buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons
    (program, installer, tray) on a light and a dark taskbar.

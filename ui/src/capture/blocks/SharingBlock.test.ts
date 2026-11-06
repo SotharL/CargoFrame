@@ -59,18 +59,20 @@ describe('SharingBlock', () => {
       block, enabled: true, reasons: [], kind: 'claude', opening: 'Release notes',
       parts: ['Screenshot (edited)', '3 files (12 KB)', 'Prompt'], onshare: () => {},
     });
-    expect(screen.getByText('Opening: Release notes')).toBeTruthy();
-    expect(screen.getByText('Will send: Screenshot (edited) · 3 files (12 KB) · Prompt')).toBeTruthy();
+    // one short line: what goes, then the chat that opens
+    const line = screen.getByText('Sends: Screenshot (edited) · 3 files (12 KB) · Prompt → Release notes');
+    expect(line.tagName).toBe('P');
+    expect(line.getAttribute('title')).toBe('Sends: Screenshot (edited) · 3 files (12 KB) · Prompt → Release notes');
   });
 
-  it('says "Will save" when it saves a zip here, and shows nothing when nothing would go', () => {
+  it('says "Saves" when it saves a zip here, and shows nothing when nothing would go', () => {
     const { unmount } = render(SharingBlock, {
       block, enabled: true, reasons: [], mode: 'save_locally', parts: ['Screenshot'], onshare: () => {},
     });
-    expect(screen.getByText('Will save: Screenshot')).toBeTruthy();
+    expect(screen.getByText('Saves: Screenshot')).toBeTruthy();
     unmount();
     render(SharingBlock, { block, enabled: true, reasons: [], parts: [], onshare: () => {} });
-    expect(screen.queryByText(/Will send/)).toBeNull();
+    expect(screen.queryByText(/Sends:/)).toBeNull();
   });
 
   it('takes its destination colours and names the destination on hover', () => {
@@ -95,8 +97,20 @@ describe('SharingBlock', () => {
     render(SharingBlock, {
       block, enabled: false, reasons: ['Pick a chat'], parts: ['Prompt'], opening: 'Bug triage', onshare: () => {},
     });
-    expect(screen.queryByText(/Will send/)).toBeNull();
-    expect(screen.queryByText(/Opening/)).toBeNull();
+    expect(screen.queryByText(/Sends:/)).toBeNull();
     expect(screen.getByText('Pick a chat')).toBeTruthy();
+  });
+
+  it('keeps the line to one row and puts the full text, and the note, in the tooltip', () => {
+    render(SharingBlock, {
+      block, enabled: true, reasons: [], parts: ['Screenshot'], note: 'Needs a folder', onshare: () => {},
+    });
+    expect(screen.getByText('Sends: Screenshot').getAttribute('title')).toBe('Sends: Screenshot\nNeeds a folder');
+  });
+
+  it('shows the note when nothing is listed, and rings the button when one of its boxes is lit', () => {
+    render(SharingBlock, { block, enabled: true, reasons: [], note: 'No active connection', lit: true, onshare: () => {} });
+    expect(screen.getByText('No active connection')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Create ticket' }).classList.contains('lit')).toBe(true);
   });
 });

@@ -8,6 +8,9 @@ export const COLUMNS = 12;
 /** The canvas always shows at least this many rows, plus a spare row to drop into. */
 export const MIN_ROWS = 10;
 
+/** A window has room for this many sharing buttons (the same limit as core/layout/validate.rs). */
+export const MAX_SHARING_BUTTONS = 5;
+
 export type BlockType = BlockContent['type'];
 
 export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: [number, number] }[] = [
@@ -92,6 +95,7 @@ function content(type: BlockType): BlockContent {
 
 /** A new block of `type` placed at `at` (or the first free spot), with a fresh id. */
 export function makeBlock(blocks: readonly Block[], type: BlockType, at?: { x: number; y: number }): Block | null {
+  if (type === 'sharing_button' && blocks.filter((b) => b.type === 'sharing_button').length >= MAX_SHARING_BUTTONS) return null;
   const [w, h] = BLOCK_TYPES.find((b) => b.type === type)!.size;
   let rect: Rect;
   if (at) {

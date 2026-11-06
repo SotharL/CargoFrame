@@ -10,6 +10,7 @@
     kind,
     reach,
     fallback = null,
+    fields = [],
     onchange,
   }: {
     initial: Button;
@@ -17,6 +18,7 @@
     kind: ServiceKind | null;
     reach: Reach | undefined;
     fallback?: Capabilities | null;
+    fields?: { key: string; label: string }[];
     onchange?: (b: Button) => void;
   } = $props();
   let block = $state<Button>(untrackedCopy());
@@ -26,4 +28,4 @@
   $effect(() => onchange?.($state.snapshot(block) as Button));
 </script>
 
-<SharingPanel {block} {blocks} {kind} {reach} {fallback} />
+<SharingPanel {block} {blocks} {kind} {reach} {fallback} {fields} />

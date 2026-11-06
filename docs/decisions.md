@@ -799,3 +799,39 @@ The owner tried the window and listed what was awkward. Each item and what was d
   other and keeps its result. *Reset edits* undoes the cut, the crop and the mark together.
 - **Not checked on a real desktop:** full screen from a page inside WebView2 and WebKitGTK, and hover on a touch screen
   (there is none: the buttons are also reachable with the keyboard).
+
+### Which button sends what: tick boxes (6 Nov 2026)
+
+The owner found the line of pills under every block took too much room and wanted the choice to be something to
+tick, colour-coded to the button, up to five side by side, safe, and easy to find. Decisions:
+
+- **A small row of boxes on the top edge of every block, one per sharing button.** Each box has the button's
+  destination colour and a ✓ when ticked, so colour is never the only sign; two buttons to the same kind of service
+  get a small 1, 2. The row sits on the edge of the block, not under it, so no layout space is used; the Logs block's
+  All/None moved next to its title to make room. The old pills ("✓ Jira", "✕ reason", "Not sent") are gone.
+- **The boxes start as the layout says and are the choice for this capture.** A box is ticked at the start when the
+  button's rules send the block. Clearing one leaves the block out of that button's share only; ticking a block the
+  button had switched off (the picture, the files) sends it this once. Nothing is saved back to the layout.
+- **A box that cannot be ticked is shown dashed and says why on hover**: the destination cannot take it (the reason
+  from the capability table) or the button has no field for it. **A box the button cannot work without stays ticked
+  and ringed**: the prompt of an AI chat and any field that the *Destination fields* page marks as required (the app
+  tells the layout checks which fields those are).
+- **The sharing code decides, not the window.** The window sends the ticked block ids with the share. The Rust side
+  (`cargoframe_layout::select`) refuses a box for a block the destination cannot take, a block the button has no field
+  for, a block that is not in the layout, and clearing a required one, with a sentence for each; it then drops the
+  cleared blocks' fields, prompt, files and picture. A Custom API whose request uses a field that was cleared is
+  refused by name ("The request uses {{summary}} but nothing fills it") and the share is kept, as before.
+- **Hovering or focusing a button, or one of its boxes, outlines every block that button sends.** The outline is in
+  the button's colour; the layout does not move.
+- **The line under a sharing button is one short line** ("Sends: Screenshot · 3 files (12 KB) · Prompt → Release
+  notes") with the whole text and the note in its tooltip. A button block only one row high hides the line and says
+  the same in the button's tooltip.
+- **At most five sharing buttons per window.** The builder disables "Add a sharing button" at five, says why, and the
+  layout check marks a sixth button as unable to send, so a hand-edited file cannot get round it.
+- **In the layout builder the lines for text and dropdown blocks are now choices** (not sent, the prompt, or one of
+  the destination's fields), taken from the destination's own field list so a typo cannot happen. A field another block
+  already fills is shown and cannot be taken twice; a field typed by hand in "Fill the service's fields" is kept in the
+  list; Claude's chat dropdown shows that it is always used. The picture and the files keep their switches under "Send
+  rules". A button that only saves a zip keeps plain lines.
+- **Not done:** per-block choices for several Files blocks on one button (the switch covers them all), and changing the
+  choice from the block's own "Sent by" list (it stays a plain list; change it on the button).

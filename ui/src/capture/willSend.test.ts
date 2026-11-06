@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { demoSession } from './demo';
 import { demoCapabilities, demoReach } from '../lib/demoReach';
 import { initialValues } from './values';
-import { chatToOpen, marksFor, willSend } from './willSend';
+import { chatToOpen, willSend } from './willSend';
+import { initialTicks, setTick } from './ticks';
 import type { Block, ServiceKind, SessionView } from '../lib/types';
 
 type Button = Extract<Block, { type: 'sharing_button' }>;
@@ -98,6 +99,31 @@ describe('willSend', () => {
   });
 });
 
+describe('willSend with the boxes of the window', () => {
+  it('leaves out what the person cleared and lists what they switched on', async () => {
+    const { view, button } = await viewFor('jira', (b) => {
+      b.prompt_block_id = 'prompt';
+      b.send = { screenshot: false, files: 'attach', inline_limit_kb: 64 };
+    });
+    const values = initialValues(view);
+    let ticks = initialTicks(view);
+    // as the layout says: the picture is switched off, the files and the prompt go
+    expect(willSend(view, button, values, false, null, ticks)).toEqual(['1 file (18 KB)', 'Prompt']);
+    // the box of the picture switches it on for this click only
+    ticks = setTick(ticks, button.id, 'shot', true);
+    expect(willSend(view, button, values, false, null, ticks)).toEqual(['Screenshot', '1 file (18 KB)', 'Prompt']);
+    // clearing the files and the prompt leaves just the picture
+    ticks = setTick(setTick(ticks, button.id, 'logs', false), button.id, 'prompt', false);
+    expect(willSend(view, button, values, false, null, ticks)).toEqual(['Screenshot']);
+  });
+
+  it('does not list a ticked block the destination cannot take', async () => {
+    const { view, button } = await viewFor('reddit', (b) => { b.prompt_block_id = 'prompt'; });
+    const ticks = setTick(initialTicks(view), button.id, 'logs', true);
+    expect(willSend(view, button, initialValues(view), false, null, ticks)).toEqual(['Screenshot', 'Prompt']);
+  });
+});
+
 describe('chatToOpen', () => {
   it('is null for any destination but Claude', async () => {
     const { view, button } = await viewFor('jira');
@@ -112,53 +138,5 @@ describe('chatToOpen', () => {
     expect(chatToOpen(view, button, values)).toBe('a new chat');
     values.dropdowns.chat = null;
     expect(chatToOpen(view, button, values)).toBe('a new chat');
-  });
-});
-
-describe('marksFor', () => {
-  it('marks a block as sent by the button that sends it', async () => {
-    const { view } = await viewFor('jira', (b) => { b.prompt_block_id = 'prompt'; });
-    const m = marksFor(view, 'shot');
-    expect(m.marks.map((x) => [x.label, x.state, x.kind])).toEqual([['Share', 'sent', 'jira']]);
-    expect(m.notSent).toBe(false);
-  });
-
-  it('marks a block the destination cannot take, with the reason, and says it is not sent', async () => {
-    const { view } = await viewFor('reddit', (b) => { b.prompt_block_id = 'prompt'; });
-    const m = marksFor(view, 'logs');
-    expect(m.marks).toHaveLength(1);
-    expect(m.marks[0]).toMatchObject({ state: 'cannot_send', why: 'Reddit cannot take files on a post' });
-    expect(m.notSent).toBe(true);
-    expect(m.notSentWhy).toContain('cannot send it');
-  });
-
-  it('gives one plain "not sent" for a block no button uses', async () => {
-    const { view } = await viewFor('jira', (b) => { b.prompt_block_id = 'prompt'; });
-    const m = marksFor(view, 'note');
-    expect(m.marks).toEqual([]);
-    expect(m.notSent).toBe(true);
-    expect(m.notSentWhy).toContain('no field for it');
-  });
-
-  it('says a switched-off block is left out by the button', async () => {
-    const { view } = await viewFor('jira', (b) => {
-      b.prompt_block_id = 'prompt';
-      b.send = { screenshot: false, files: 'attach', inline_limit_kb: 64 };
-    });
-    const m = marksFor(view, 'shot');
-    expect(m.notSent).toBe(true);
-    expect(m.notSentWhy).toBe('Share is set to leave it out');
-  });
-
-  it('names a button that saves a zip here "Save locally", with no destination colour', async () => {
-    const { view } = await viewFor(null, (b) => { b.prompt_block_id = 'prompt'; });
-    const m = marksFor(view, 'shot');
-    expect(m.marks[0]).toMatchObject({ label: 'Save locally', kind: null, state: 'sent' });
-  });
-
-  it('marks nothing when the layout has no sharing button, or no reach was worked out', async () => {
-    const { view } = await viewFor('jira');
-    view.sharing = {};
-    expect(marksFor(view, 'shot')).toEqual({ marks: [], notSent: false, notSentWhy: null });
   });
 });

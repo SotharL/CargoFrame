@@ -13,8 +13,9 @@
   import { initialValues, type FormValues } from './values';
   import { loadDropdowns } from './options';
   import ResultPanel from './ResultPanel.svelte';
-  import Marks from './Marks.svelte';
-  import { chatToOpen, marksFor, willSend } from './willSend';
+  import TickBoxes from './TickBoxes.svelte';
+  import { boxesFor, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
+  import { chatToOpen, willSend } from './willSend';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
   import { applyAccent, applyTheme } from '../lib/theme';
@@ -31,6 +32,8 @@
   /** The sharing button being sent, if any; every button waits while one is sending. */
   let sending = $state<string | null>(null);
   let result = $state<ShareResult | null>(null);
+  /** The blocks each sharing button sends this time: the boxes under the blocks. */
+  let ticks = $state<TickState>({});
   /** The sharing button under the pointer or keyboard focus: the blocks it sends light up. */
   let hovered = $state<string | null>(null);
   /** The Claude chat the last share opened, kept to say "Opened: …" once it is done. */
@@ -64,6 +67,7 @@
       result = null;
       opened = null;
       hovered = null;
+      ticks = initialTicks(v);
       const sessionId = v.session_id;
       // Without a screenshot block the window is usable as soon as it has drawn.
       if (!v.layout?.blocks.some((b) => b.type === 'screenshot')) afterPaint(reportPainted);
@@ -103,7 +107,7 @@
 
   async function share(button: Extract<Block, { type: 'sharing_button' }>) {
     if (!view || !api || sending) return;
-    const request = collectShare(view, button, values, imageEdited, clipEdit);
+    const request = collectShare(view, button, values, imageEdited, clipEdit, ticks);
     result = null;
     opened = null;
     if (promptIsEmpty(request)) {
@@ -192,40 +196,50 @@
     {:else}
       <main class="grid" style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
         {#each blocks as b (b.id)}
-          <section style={place(b)} class="cell" class:lit={hovered !== null && marksFor(view, b.id).marks.some((m) => m.buttonId === hovered && m.state === 'sent')}>
-            <div class="body">
-            {#if b.type === 'screenshot' && image}
-              <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
-            {:else if b.type === 'video'}
-              {#if view.video}
-                {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} />{/key}
-              {:else}
-                <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
+          <div class="slot" style={place(b)}>
+            <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
+              <div class="body">
+              {#if b.type === 'screenshot' && image}
+                <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
+              {:else if b.type === 'video'}
+                {#if view.video}
+                  {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} />{/key}
+                {:else}
+                  <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
+                {/if}
+              {:else if b.type === 'text'}
+                <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
+              {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
+                <DropdownBlock block={b} info={view.dropdowns[b.id]!} bind:value={values.dropdowns[b.id]!} />
+              {:else if b.type === 'files' && view.files[b.id]}
+                <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} />
+              {:else if b.type === 'sharing_button'}
+                <SharingBlock
+                  block={b}
+                  enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
+                  sending={sending === b.id}
+                  reasons={view.sharing[b.id]?.reasons ?? []}
+                  mode={view.sharing[b.id]?.mode ?? 'send'}
+                  note={view.sharing[b.id]?.note ?? null}
+                  kind={view.sharing[b.id]?.kind ?? null}
+                  parts={willSend(view, b, values, imageEdited, clipEdit, ticks)}
+                  opening={chatToOpen(view, b, values)}
+                  lit={hovered === b.id}
+                  onshare={() => share(b)}
+                  onhover={(on) => (hovered = on ? b.id : hovered === b.id ? null : hovered)}
+                />
               {/if}
-            {:else if b.type === 'text'}
-              <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
-            {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
-              <DropdownBlock block={b} info={view.dropdowns[b.id]!} bind:value={values.dropdowns[b.id]!} />
-            {:else if b.type === 'files' && view.files[b.id]}
-              <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} />
-            {:else if b.type === 'sharing_button'}
-              <SharingBlock
-                block={b}
-                enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
-                sending={sending === b.id}
-                reasons={view.sharing[b.id]?.reasons ?? []}
-                mode={view.sharing[b.id]?.mode ?? 'send'}
-                note={view.sharing[b.id]?.note ?? null}
-                kind={view.sharing[b.id]?.kind ?? null}
-                parts={willSend(view, b, values, imageEdited, clipEdit)}
-                opening={chatToOpen(view, b, values)}
-                onshare={() => share(b)}
-                onhover={(on) => (hovered = on ? b.id : hovered === b.id ? null : hovered)}
+              </div>
+            </section>
+            {#if b.type !== 'sharing_button'}
+              <TickBoxes
+                boxes={boxesFor(view, b.id, ticks)}
+                active={hovered}
+                onchange={(buttonId, on) => (ticks = setTick(ticks, buttonId, b.id, on))}
+                onhover={(buttonId) => (hovered = buttonId)}
               />
             {/if}
-            </div>
-            {#if b.type !== 'sharing_button'}<Marks marks={marksFor(view, b.id)} active={hovered} />{/if}
-          </section>
+          </div>
         {/each}
       </main>
     {/if}
@@ -261,8 +275,11 @@
     display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px;
     padding: 12px 14px; overflow: auto; min-height: 0;
   }
+  /* The slot holds the block and its boxes: the boxes sit on the block's edge, so they must not
+     be clipped by the block's own scrolling. */
+  .slot { position: relative; min-width: 0; min-height: 0; display: grid; container-type: size; }
   /* A block never paints over its neighbour; the padding keeps focus rings from being clipped. */
-  .cell { min-width: 0; min-height: 0; overflow: auto; padding: 3px; margin: -3px; display: grid; grid-template-rows: minmax(0, 1fr) auto; border-radius: var(--radius); }
+  .cell { min-width: 0; min-height: 0; overflow: auto; padding: 3px; margin: -3px; display: grid; grid-template-rows: minmax(0, 1fr); border-radius: var(--radius); }
   .body { min-width: 0; min-height: 0; }
   /* The blocks the hovered button sends. A ring, so layout never shifts. */
   .cell.lit { box-shadow: 0 0 0 2px var(--kind-line, var(--accent)); }

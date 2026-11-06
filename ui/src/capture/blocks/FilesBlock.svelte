@@ -24,7 +24,7 @@
   <div class="head">
     <span class="title">{block.title}</span>
     <span class="quiet count">{selected.length} of {info.entries.length} selected{filter.trim() ? ` · ${visible.length} shown` : ''}</span>
-    <span class="spacer"></span>
+    <!-- Next to the title, so the right corner is left to the boxes of the sharing buttons. -->
     <button class="small" onclick={selectAll} disabled={!visible.length}>All</button>
     <button class="small" onclick={selectNone} disabled={!selected.length}>None</button>
   </div>
@@ -71,7 +71,6 @@
   .head { display: flex; gap: 8px; align-items: center; flex: none; }
   .title { font-weight: 600; font-size: 13px; }
   .count { font-size: 12px; }
-  .spacer { flex: 1; }
   .small { padding: 1px 8px; font-size: 12px; }
   ul {
     list-style: none; margin: 0; padding: 4px; overflow-y: auto; overflow-x: hidden;

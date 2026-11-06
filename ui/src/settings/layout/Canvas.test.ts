@@ -91,3 +91,22 @@ describe('Layout canvas: what the button sends', () => {
     expect(document.querySelector('.block.sharing')!.getAttribute('style')).toContain('var(--kind-local)');
   });
 });
+
+describe('Layout canvas: the limit of sharing buttons', () => {
+  afterEach(cleanup);
+
+  const button = (i: number): Block => ({
+    id: `send${i}`, type: 'sharing_button', rect: { x: (i % 3) * 4, y: Math.floor(i / 3), w: 4, h: 1 },
+    label: `Go ${i}`, connection_id: null, prompt_block_id: null, mappings: [], on_success: 'keep_open',
+  });
+
+  it('offers the button until the window has five, and then says why it does not', () => {
+    const { unmount } = render(Canvas, { blocks: [0, 1, 2, 3].map(button), selected: null });
+    const add = () => document.querySelector('.palette button[title^="Sends everything"], .palette button[title^="A window has room"]') as HTMLButtonElement;
+    expect(add().disabled).toBe(false);
+    unmount();
+    render(Canvas, { blocks: [0, 1, 2, 3, 4].map(button), selected: null });
+    expect(add().disabled).toBe(true);
+    expect(add().title).toBe('A window has room for 5 sharing buttons. Remove one to add another.');
+  });
+});

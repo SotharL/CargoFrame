@@ -24,8 +24,8 @@ use cargoframe_connectors::{
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
-    effective_mappings, sharing_mode, sharing_state, validate, BlockKind, DropdownSource, FilesHow,
-    Layout, OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole, ValueSource,
+    select, sharing_mode, sharing_state, validate, BlockKind, DropdownSource, FilesHow, Layout,
+    OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
@@ -58,6 +58,10 @@ pub struct Request {
     /// For a video capture: what was done to the recording (cut, cropped). `None` sends it as it is.
     #[serde(default)]
     pub clip_edit: Option<crate::video::ClipEdit>,
+    /// The blocks whose boxes were ticked for this button when it was pressed. `None` sends what
+    /// the layout says; a list sends exactly those blocks (see `cargoframe_layout::select`).
+    #[serde(default)]
+    pub send_blocks: Option<Vec<String>>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -260,16 +264,27 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let Some(layout) = view.layout.as_ref() else {
         return Err(vec!["This capture has no layout".to_string()]);
     };
-    let button: SharingButton = match layout.block(&req.button_id).map(|b| &b.kind) {
-        Some(BlockKind::SharingButton(b)) => b.clone(),
-        _ => return Err(vec!["That sharing button is not in this layout".to_string()]),
-    };
+    if !matches!(
+        layout.block(&req.button_id).map(|b| &b.kind),
+        Some(BlockKind::SharingButton(_))
+    ) {
+        return Err(vec!["That sharing button is not in this layout".to_string()]);
+    }
 
     let registry = AppRegistry::from_store(svc.store, svc.connections);
     let reasons = blocking_reasons(layout, &req.button_id, &registry);
     if !reasons.is_empty() {
         return Err(reasons);
     }
+    // The button as this click has it: the boxes the person ticked or cleared are applied to a
+    // copy, so the layout itself never changes. Boxes are checked again here, not trusted.
+    let selection = select(
+        layout,
+        &req.button_id,
+        &registry,
+        req.send_blocks.as_deref(),
+    )?;
+    let button: SharingButton = selection.button;
     // With no active connection the button saves a zip in the folder for saved zips.
     let local = sharing_mode(layout, &req.button_id, &registry) == SharingMode::SaveLocally;
     let destination = if local {
@@ -312,8 +327,9 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             .find(|t| Some(t.connection_id.as_str()) == connection_id && t.field == field)
     };
     let mut fields: Vec<Field> = Vec::new();
-    // A button to Claude with no chat field uses the layout's chat dropdown.
-    let mappings = effective_mappings(layout, &button, kind);
+    // The mappings this click uses: the button's own, the chat of a Claude button, and none for a
+    // block whose box was cleared.
+    let mappings = selection.mappings;
     for mapping in &mappings {
         let (mut value, from_dropdown_list, is_dropdown) =
             source_value(layout, view, req, &mapping.source);
@@ -359,7 +375,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let mut selected: Vec<String> = Vec::new();
     let mut seen = BTreeSet::new();
     for block in &layout.blocks {
-        if !matches!(block.kind, BlockKind::Files(_)) || button.send.files == FilesHow::None {
+        if !matches!(block.kind, BlockKind::Files(_))
+            || button.send.files == FilesHow::None
+            || !selection.files_blocks.contains(&block.id)
+        {
             continue;
         }
         let Some(wanted) = req.files.get(&block.id) else {
@@ -437,6 +456,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .blocks
         .iter()
         .find(|b| matches!(&b.kind, BlockKind::Text(t) if t.role == TextRole::ZipName))
+        .filter(|b| !selection.left_out.contains(&b.id))
         .and_then(|b| custom_zip_file_name(&text_value(view, req, &b.id)));
     Ok(Prepared {
         service,
@@ -1252,6 +1272,7 @@ mod tests {
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
             clip_edit: None,
+            send_blocks: None,
         }
     }
 
@@ -1484,6 +1505,107 @@ mod tests {
         let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
         assert_eq!(names, ["screenshot.png"]);
         assert!(!seen[0].text.contains("Attached files"), "{}", seen[0].text);
+    }
+
+    /// The boxes the window had ticked, as the request carries them.
+    fn ticked(ids: &[&str]) -> Option<Vec<String>> {
+        Some(ids.iter().map(|s| s.to_string()).collect())
+    }
+
+    #[test]
+    fn clearing_the_files_box_leaves_the_ticked_files_out() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let req = Request {
+            send_blocks: ticked(&["prompt"]),
+            ..request()
+        };
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Sent { summary, .. } = r else {
+            panic!("{r:?}")
+        };
+        // the layout has no screenshot block, so the capture still goes where the picture would
+        assert_eq!(summary, "Sent 1 file and the message to Claude");
+        let seen = w.deliver.seen.lock().unwrap();
+        let names: Vec<&str> = seen[0].files.iter().map(|(n, _)| n.as_str()).collect();
+        assert_eq!(names, ["screenshot.png"], "the files box was cleared");
+        assert!(!seen[0].text.contains("Attached files"), "{}", seen[0].text);
+    }
+
+    #[test]
+    fn a_cleared_prompt_box_is_refused_for_claude_and_nothing_is_sent() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        let req = Request {
+            send_blocks: ticked(&["logs"]),
+            ..request()
+        };
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(
+            reasons,
+            vec!["\u{201c}Prompt\u{201d} is needed by this button".to_string()]
+        );
+        assert!(w.deliver.seen.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn a_box_for_something_the_button_cannot_send_is_refused() {
+        let mut w = world(|_| MockResponse::json(500, json!({})));
+        use_claude(&mut w, json!({}));
+        set_safe(&w, None, 0);
+        // the note is mapped to nothing on a Claude button
+        let req = Request {
+            send_blocks: ticked(&["prompt", "note"]),
+            ..request()
+        };
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Blocked { reasons } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(
+            reasons,
+            vec!["This button has no field for \u{201c}Note\u{201d}".to_string()]
+        );
+        // and a box for a block that is not in the layout
+        let req = Request {
+            send_blocks: ticked(&["prompt", "ghost"]),
+            ..request()
+        };
+        assert!(matches!(
+            go(&w, &req, vec![]).0,
+            ShareResult::Blocked { .. }
+        ));
+    }
+
+    #[test]
+    fn clearing_the_box_of_a_mapped_block_leaves_its_field_unfilled_and_the_service_says_so() {
+        let w = world(|_| MockResponse::json(200, json!({"url": "https://x/1"})));
+        set_safe(&w, None, 0);
+        // The test layout maps the note to `summary`, and the Custom API's request uses
+        // `{{summary}}`: with the note's box cleared nothing fills it, and the request is
+        // refused by name instead of being sent with a hole. The share is kept.
+        let req = Request {
+            send_blocks: ticked(&["prompt"]),
+            ..request()
+        };
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::Failed { message, saved, .. } = r else {
+            panic!("{r:?}")
+        };
+        assert_eq!(message, "The request uses {{summary}} but nothing fills it");
+        assert!(saved.is_some(), "the share is kept when it could not go");
+        assert!(w.server.requests().is_empty(), "nothing was sent");
+        // the same click with the box ticked sends the note, JSON-escaped
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let bodies = w.server.requests();
+        let body = String::from_utf8_lossy(&bodies.last().unwrap().body).to_string();
+        assert!(body.contains("it \\\"broke\\\""), "{body}");
     }
 
     #[test]
