@@ -11,13 +11,25 @@ built, checked and drafted as a release by `.github/workflows/release.yml` for a
 - Tauri's NSIS bundler in **current-user mode**; `installer.nsi` and `hooks.nsh` hold our
   changes. Registry entries are under `HKCU`; the default folder is `%LocalAppData%\CargoFrame`.
 - Start Menu shortcut with the app's AppUserModelID (needed for notification clicks).
-- One installer question: "Run CargoFrame when I sign in" (default **on**), stored as a value
-  under `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`.
+- **One page, one button.** The window says what will happen and has a single button (**Install**,
+  or **Update** over an existing copy). No welcome, folder, shortcut or options pages and no finish
+  page: the progress bar closes by itself and the installer opens CargoFrame, which lands on its
+  Setup page the first time. "Run CargoFrame when I sign in" is **on** (stored as a value under
+  `HKCU\Software\Microsoft\Windows\CurrentVersion\Run`; an upgrade keeps a person's earlier choice;
+  Settings, General changes it; `/NOSTARTUP` leaves it off for a silent install).
+- Nothing else is needed on the PC to install: the web view (WebView2) ships with Windows 11 and is
+  fetched from Microsoft by the installer only if it is missing. ffmpeg is separate and optional;
+  the app's Setup page installs it (see `docs/decisions.md`).
 - Running a newer installer over an existing install quits the running app through its
   single-instance channel (not a kill), swaps the files, keeps settings and the startup choice.
 - Uninstall asks whether to delete settings (default: keep).
 - `smoke-test.ps1` installs silently, starts the app with `--autostart`, measures its idle cost,
-  upgrades over it, uninstalls, and checks what stayed behind. CI runs it on a Windows runner.
+  upgrades over it, uninstalls, and checks what stayed behind. `click-test.ps1` then does what a
+  person does: opens the installer window, checks the button says Install, presses it, waits for the
+  window to close by itself and checks the app was installed and opened a window (screenshots of
+  each step are kept as the `installer-screenshots` artifact). CI runs both on a Windows runner.
+- The release (`release.yml`, for a version tag) names the Windows file `CargoFrame-Setup.exe`, so
+  `.../releases/latest/download/CargoFrame-Setup.exe` is always the one download.
 - **Signing:** the release workflow signs the installer when the certificate secrets exist
   (`scripts/windows/sign.ps1`). The program inside the installer is **not** signed yet. See
   `docs/signing.md`.

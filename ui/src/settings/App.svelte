@@ -9,6 +9,8 @@
   import Layouts from './pages/Layouts.svelte';
   import Connections from './pages/Connections.svelte';
   import VideoPage from './pages/Video.svelte';
+  import Setup from './pages/Setup.svelte';
+  import { setupState } from './setupState.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import Chip from '../lib/components/Chip.svelte';
   import Logo from '../lib/components/Logo.svelte';
@@ -22,6 +24,8 @@
     let stop: (() => void) | undefined;
     getApi().then(async (api) => {
       trayAvailable = (await api.appInfo()).tray_available;
+      // the number on the Setup tab, before that page is ever opened
+      api.getSetup().then((r) => (setupState.missing = r.missing)).catch(() => {});
       // "Edit layout" in the CargoFrame window asks an open Settings window to move.
       stop = await api.onNavigate((target) => {
         const t = parseTarget(target);
@@ -54,7 +58,8 @@
         aria-current={page === p.id ? 'page' : undefined}
         tabindex={page === p.id ? 0 : -1}
         onkeydown={onNavKey}
-        onclick={() => go(p.id)}>{p.title}</button
+        onclick={() => go(p.id)}
+        >{p.title}{#if p.id === 'setup' && setupState.missing > 0}<span class="count" aria-label="{setupState.missing} missing">{setupState.missing}</span>{/if}</button
       >
     {/each}
   </nav>
@@ -85,6 +90,8 @@
       <InfoTypes />
     {:else if page === 'layouts'}
       <Layouts />
+    {:else if page === 'setup'}
+      <Setup />
     {:else if page === 'video'}
       <VideoPage />
     {:else}
@@ -105,6 +112,10 @@
   .item {
     text-align: left; border: 0; background: transparent;
     padding: 8px 10px; border-radius: var(--radius-sm);
+  }
+  .count {
+    margin-left: 8px; padding: 0 7px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: var(--warn); color: var(--on-warn, #1b1b1b);
   }
   .item:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
   .item.on { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }

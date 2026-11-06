@@ -44,6 +44,16 @@ jobs:
       - name: Silent install, upgrade, uninstall
         shell: bash
         run: scripts/ci/run.sh "Windows installer smoke test" pwsh -NoProfile -File installers/windows/smoke-test.ps1 -Installer '${{ steps.find.outputs.path }}'
+      - name: Open the installer window and press its one button
+        shell: bash
+        run: scripts/ci/run.sh "Windows installer click test" pwsh -NoProfile -File installers/windows/click-test.ps1 -Installer '${{ steps.find.outputs.path }}' -Shots '${{ runner.temp }}\\installer-shots'
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: installer-screenshots
+          path: ${{ runner.temp }}\installer-shots
+          retention-days: 3
+          if-no-files-found: ignore
       - uses: actions/upload-artifact@v7
         with:
           name: windows-installer

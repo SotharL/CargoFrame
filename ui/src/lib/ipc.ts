@@ -3,7 +3,7 @@ import type {
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
-  VideoRecording, VideoTestEdit, VideoTools, VideoTrial, AudioDevices,
+  VideoRecording, VideoTestEdit, VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
@@ -116,6 +116,12 @@ export interface Api {
   detectVideoTools(video: Video): Promise<VideoTools>;
   /** The sound devices of this computer, for a video block's sound choices. */
   listAudioDevices(): Promise<AudioDevices>;
+  /** The apps CargoFrame uses, and whether they are on this computer. */
+  getSetup(): Promise<SetupReport>;
+  /** The one button: install what is missing (Windows). It runs in the background; ask `getSetup`. */
+  installMissing(): Promise<SetupReport>;
+  /** Open the Windows sound settings, where Stereo Mix is switched on. */
+  openSoundSettings(): Promise<void>;
   /** Record the screen for a few seconds with the settings as they are in the form. */
   tryVideoRecording(video: Video): Promise<VideoTrial>;
   /** Start recording until `stopVideoRecording`, keeping only the last seconds. */
@@ -241,6 +247,9 @@ async function tauriApi(): Promise<Api> {
     setVideo: (video) => invoke('set_video', { video }),
     detectVideoTools: (video) => invoke('detect_video_tools', { video }),
     listAudioDevices: () => invoke('list_audio_devices'),
+    getSetup: () => invoke('get_setup'),
+    installMissing: () => invoke('install_missing'),
+    openSoundSettings: () => invoke('open_sound_settings'),
     tryVideoRecording: (video) => invoke('try_video_recording', { video }),
     startVideoRecording: (video) => invoke('start_video_recording', { video }),
     getVideoRecording: () => invoke('get_video_recording'),
@@ -280,6 +289,12 @@ export interface MemoryOptions {
   noLoopback?: boolean;
   /** The stand-in finds no sound devices at all. */
   noAudio?: boolean;
+  /** What the Setup page finds: everything there (the default), or one of the ways it is not. */
+  setup?: 'ready' | 'windows_missing' | 'windows_no_winget' | 'windows_no_loopback' | 'linux_missing';
+  /** The stand-in's install does not work. */
+  installFails?: boolean;
+  /** How many times the stand-in's install is asked about before it is done. */
+  installPolls?: number;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
   /** Called by `fetchOptions` and `previewOptions`. */
@@ -345,6 +360,42 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
   let trialRan = false;
+  // the Setup page's stand-in: what is installed changes only when the install button is pressed
+  const scenario = opts.setup ?? 'ready';
+  let installed = scenario === 'ready' || scenario === 'windows_no_loopback';
+  let installLeft = 0;
+  let installFailed = false;
+  let soundSettingsOpened = 0;
+  const setupReport = (): SetupReport => {
+    const windows = scenario.startsWith('windows');
+    const ffmpeg: SetupItem = installed
+      ? { id: 'ffmpeg', name: 'ffmpeg', what_for: 'Recording video, and the sound in it. Screenshots and sharing do not need it.', status: 'ok', detail: windows ? 'Version 7.1, C:\\Tools\\ffmpeg\\bin\\ffmpeg.exe' : 'Version 6.1, /usr/bin/ffmpeg', action: null }
+      : { id: 'ffmpeg', name: 'ffmpeg', what_for: 'Recording video, and the sound in it. Screenshots and sharing do not need it.', status: 'missing', detail: 'ffmpeg was not found.', action: null };
+    const items: SetupItem[] = [ffmpeg];
+    let install: SetupInstall = { type: 'none' };
+    if (windows) {
+      const loop = scenario === 'windows_no_loopback' ? 'missing' : installed ? 'ok' : 'unknown';
+      items.push({
+        id: 'computer_sound', name: 'Sound of the computer',
+        what_for: 'Lets a video include what this PC plays. Needs a loopback device such as Stereo Mix.',
+        status: loop,
+        detail: loop === 'ok' ? 'A loopback device is available.' : loop === 'unknown' ? 'Install ffmpeg first; then this can be checked.' : 'No loopback device found. Turn on "Stereo Mix" in the Windows sound settings (Recording tab, right-click, Show disabled devices). Without it, videos have no computer sound.',
+        action: loop === 'missing' ? 'sound_settings' : null,
+      });
+      if (!installed) {
+        install = scenario === 'windows_no_winget'
+          ? { type: 'manual', text: 'Windows\' package manager (winget) was not found. Install "App Installer" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Video.' }
+          : { type: 'run', label: 'Install ffmpeg' };
+      }
+    } else {
+      items.push({ id: 'sound_system', name: 'Sound system (PulseAudio or PipeWire)', what_for: "Records the computer's sound and the microphone in videos.", status: 'ok', detail: 'Running.', action: null });
+      items.push({ id: 'xdotool', name: 'xdotool', what_for: 'Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).', status: installed ? 'ok' : 'missing', detail: installed ? 'Installed.' : 'Not installed.', action: null });
+      if (!installed) install = { type: 'copy', command: 'sudo apt install ffmpeg xdotool' };
+    }
+    if (installLeft > 0) install = { type: 'running' };
+    else if (installFailed && !installed) install = { type: 'failed', message: 'winget said: No network connection.' };
+    return { os: windows ? 'windows' : 'linux', items, missing: items.filter((i) => i.status === 'missing').length, install };
+  };
   let copyMade = false;
   let markDrawn = false;
   let recordingSince: number | null = null;
@@ -672,6 +723,23 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         encoders: ['software', 'nvenc', 'media_foundation'], captures: ['gdigrab', 'ddagrab'],
         auto_capture: 'gdigrab', auto_encoder: 'software', os: 'windows', problem: null,
       };
+    },
+    getSetup: async () => {
+      if (installLeft > 0) {
+        installLeft -= 1;
+        if (installLeft === 0 && !opts.installFails) installed = true;
+        else if (installLeft === 0) installFailed = true;
+      }
+      return setupReport();
+    },
+    installMissing: async () => {
+      installFailed = false;
+      installLeft = opts.installPolls ?? 2;
+      return setupReport();
+    },
+    openSoundSettings: async () => {
+      soundSettingsOpened += 1;
+      void soundSettingsOpened;
     },
     listAudioDevices: async () => {
       if (opts.noAudio) {

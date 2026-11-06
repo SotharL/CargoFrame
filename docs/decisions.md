@@ -876,3 +876,42 @@ and for the video to have sound (the computer's by default, no microphone), chos
 - **Not checked here (no audio hardware, no real desktop):** the sound devices themselves (Pulse monitor and
   microphone, Windows loopback), a window recording of a real GPU window, DPI scaling with GDI on Windows (ffmpeg's
   GDI capture may take a scaled screen at the scaled size), and ten windows on a real desktop.
+
+### A one-button installer, and a check for the programs CargoFrame uses (6 Nov 2026)
+
+The owner could not build the app, does not want build tools (Rust, Node, Visual Studio) on the PC for security
+reasons, and asked for the tool to check that the programs it needs are installed, and for an installer that is a
+single button. Decisions (taken for them, the safest option each time, while they were away):
+
+- **Nobody has to build anything.** CI builds the Windows installer; a version tag makes a draft release with one
+  Windows file, `CargoFrame-Setup.exe`, and the Linux package. The README's Windows steps start from that download.
+  Building from source stays documented, for developers only.
+- **The installer is one page with one button.** It says what will happen, and its button reads **Install** (or
+  **Update** over an existing copy). There is no welcome, folder, shortcut or options page and no finish page; the
+  progress bar closes by itself and the installer opens CargoFrame. It is still per user (no administrator password,
+  everything under `%LocalAppData%` and `HKCU`). "Run CargoFrame when I sign in" is on, because CargoFrame is a tray
+  program that only works while it runs; an upgrade keeps an earlier "off", Settings, General changes it, and
+  `/NOSTARTUP` leaves it off for a silent install. The window installer makes no desktop shortcut (the Start menu has one; silent installs keep making one).
+  `installers/windows/click-test.ps1` opens the real window on a Windows runner, presses the button and checks the
+  result, with screenshots.
+- **What CargoFrame itself needs is nothing but Windows 11** (the web view, WebView2, is part of it; the installer
+  fetches it from Microsoft only if it is missing). **ffmpeg is the one optional program** (video); on Linux also
+  `xdotool` (pasting into a Claude chat, X11) and a sound system (PulseAudio or PipeWire).
+- **Settings, Setup** checks them and shows what each is for. The number of missing programs is on the tab. The
+  first time CargoFrame is started by hand it opens on this page (a marker file `setup-seen` in the settings folder
+  makes it once only). On Windows, one button, **Install ffmpeg**, runs
+  `winget install --id Gyan.FFmpeg --exact --silent --accept-package-agreements --accept-source-agreements
+  --disable-interactivity`: the arguments are fixed in the program (no text from the screen or a file reaches a
+  command), the package is Windows' own catalogue entry installed per user, nothing runs as administrator, it has a 15
+  minute limit, only one install runs at a time, and a failure shows winget's own message with a "Try again" button.
+  When winget is missing, the page says to get "App Installer" from the Microsoft Store or to choose an ffmpeg folder
+  under Video. On Linux the program never installs anything: it shows the command for the distribution (`apt`, `dnf`
+  or a generic line) with a copy button, because installing needs the user's password.
+- **Why winget and not a download of our own.** A download we do ourselves would mean choosing a build of ffmpeg,
+  checking it ourselves and keeping the link alive; winget does that with Microsoft's catalogue, its hash check and
+  its own record of what is installed, and removes it with the usual "Uninstall".
+- **Computer sound on Windows** needs a loopback device (Stereo Mix); the Setup page says whether there is one and
+  has a button that opens the Windows sound settings. CargoFrame does not turn it on by itself (it changes a system
+  setting).
+- **ffmpeg is found without a new PATH.** After winget installs it, the app looks in winget's links folder as well,
+  so no sign-out is needed; if it still cannot find it, the message says what to do.

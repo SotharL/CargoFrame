@@ -129,7 +129,12 @@ pub fn program_beside_app() -> Option<PathBuf> {
 
 /// Find ffmpeg and ffprobe and ask ffmpeg what it can do.
 pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String> {
-    let (dirs, chosen) = search_dirs(setting.ffmpeg.as_deref(), beside_app);
+    let (mut dirs, chosen) = search_dirs(setting.ffmpeg.as_deref(), beside_app);
+    if !chosen {
+        // where winget leaves ffmpeg: a program that was already running does not have it on its
+        // search path yet
+        dirs.extend(crate::setup::winget_links());
+    }
     let locate = |name: &str| -> Option<PathBuf> {
         if chosen {
             locate_in(name, &dirs)

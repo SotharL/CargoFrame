@@ -26,14 +26,25 @@ CargoFrame installs for your own user only: no administrator password, nothing o
 
 ### Windows 11
 
-1. On GitHub, open the repository, then **Actions**, then the workflow **Bundle**, then the latest run on
-   `main`. Under **Artifacts**, download **windows-installer** (kept for 7 days; it downloads as a zip).
-2. Unzip it and run `CargoFrame_..._x64-setup.exe`. Because the installer is not signed yet, Windows may say
-   it is from an unknown publisher: choose **More info**, then **Run anyway**.
-3. The installer asks one question, "Run CargoFrame when I sign in" (on by default). Finish, and look for the
-   CargoFrame icon in the notification area at the bottom right (click the small arrow if it is hidden).
+You do not need Rust, Node, Visual Studio or any other build tool: the installer is already built.
 
-*Or build it yourself:* install [Rust](https://rustup.rs) and Node 22, then double-click
+1. On GitHub, open the repository, then **Releases**, and download **CargoFrame-Setup.exe**. (Until the
+   release is published it shows as a *Draft*, visible only to you; press **Publish release** when you
+   are happy with it.)
+2. Double-click it. A small window with **one button** opens: press **Install** (it says **Update** if
+   CargoFrame is already there). That is all: no folder, shortcut or option questions, no administrator
+   password. It installs for your account only, and opens CargoFrame when it is done.
+3. Because the installer is not signed yet, Windows may say it is from an unknown publisher: choose
+   **More info**, then **Run anyway**.
+4. CargoFrame opens its **Setup** page. It lists the programs it can use (ffmpeg for video, and the sound
+   pieces), whether they are on this computer, and one button, **Install ffmpeg**, for what is missing.
+   Screenshots and sharing work without any of them.
+
+CargoFrame waits in the notification area at the bottom right (click the small arrow if it is hidden) and
+starts when you sign in; you can turn that off in **Settings, General**. For a silent install (scripts),
+run the installer with `/S`, and add `/NOSTARTUP` to leave "start when I sign in" off.
+
+*Only if you want to build it yourself:* install [Rust](https://rustup.rs) and Node 22, then double-click
 `scripts\windows\build.cmd`. The installer is written to `target\release\bundle\nsis\`.
 
 Uninstall from Windows **Settings, Apps**. It asks whether to delete your settings too (the default is to keep them).
@@ -47,11 +58,14 @@ Uninstall from Windows **Settings, Apps**. It asks whether to delete your settin
 
 Uninstall with `./uninstall.sh` (it keeps your settings unless you add `--delete-data`).
 
-### Optional: recording video
+### Video needs ffmpeg
 
-To record the screen, install ffmpeg once: on Windows `winget install Gyan.FFmpeg`, on Linux
-`sudo apt install ffmpeg` (or your distribution's equivalent). Then open **Settings, Video** and press
-**Test ffmpeg**. Screenshots do not need it.
+Screenshots do not need it; recording video does. Open **Settings, Setup**: on Windows the button
+**Install ffmpeg** installs it for you through Windows' own package manager (winget, per user, no
+administrator password). On Linux the page shows the one command to run, for example
+`sudo apt install ffmpeg xdotool`, because Linux asks for your password to install programs.
+CargoFrame offers this once the first time it opens, and the **Setup** tab shows the number of missing
+programs until they are in place.
 
 ---
 
