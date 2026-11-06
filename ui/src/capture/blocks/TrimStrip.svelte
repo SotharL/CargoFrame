@@ -91,9 +91,12 @@
 </div>
 
 <style>
-  .strip { position: relative; box-sizing: border-box; width: calc(100% - 10px); height: 22px; margin: 6px 5px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
-  .kept { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 30%, transparent); pointer-events: none; }
-  .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); pointer-events: none; }
-  .edge { position: absolute; top: -4px; bottom: -4px; width: 10px; margin-left: -5px; background: var(--accent); border: 2px solid #fff; border-radius: 3px; box-sizing: border-box; cursor: ew-resize; }
+  /* A slim track the full width of the picture. The box is taller than the track so it is easy to
+     hit; the handles are small and only a little taller than the track. */
+  .strip { position: relative; box-sizing: border-box; width: calc(100% - 12px); height: 16px; margin: 0 6px; cursor: pointer; }
+  .strip::before { content: ''; position: absolute; left: 0; right: 0; top: 5px; height: 6px; background: var(--surface-2); border: 1px solid var(--border); border-radius: 3px; box-sizing: border-box; }
+  .kept { position: absolute; top: 5px; height: 6px; background: color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 3px; pointer-events: none; }
+  .playhead { position: absolute; top: 2px; bottom: 2px; width: 2px; margin-left: -1px; background: var(--text); border-radius: 1px; pointer-events: none; }
+  .edge { position: absolute; top: 2px; bottom: 2px; width: 8px; margin-left: -4px; background: var(--accent); border: 1.5px solid #fff; border-radius: 3px; box-sizing: border-box; cursor: ew-resize; box-shadow: 0 0 0 1px rgb(0 0 0 / 0.25); }
   .edge:focus-visible, .edge.active { outline: 2px solid var(--text); outline-offset: 1px; }
 </style>

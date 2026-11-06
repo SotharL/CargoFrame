@@ -13,7 +13,7 @@ pub mod validate;
 
 pub use capabilities::{Capabilities, Capability, CustomShape, Support};
 pub use model::*;
-pub use reach::{effective_mappings, reach, BlockReach, Reach, Role, Verdict};
+pub use reach::{effective_mappings, reach, select, BlockReach, Reach, Role, Selection, Verdict};
 pub use validate::{
     sharing_mode, sharing_state, validate, worst, Code, ConnectionInfo, ConnectionKind,
     ConnectionState, Issue, Registry, Severity, SharingMode, SharingState,
@@ -21,6 +21,9 @@ pub use validate::{
 
 /// Version written into every layout file so later releases can migrate old ones.
 pub const SCHEMA_VERSION: u32 = 1;
+
+/// Sharing buttons a window shows. Each block carries one box per button, and five fit.
+pub const MAX_SHARING_BUTTONS: usize = 5;
 
 /// Columns in the builder grid.
 pub const GRID_COLUMNS: u32 = 12;

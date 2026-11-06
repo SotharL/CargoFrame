@@ -111,30 +111,39 @@ pub fn open_config_folder(app: AppHandle, state: State<'_, AppState>) -> Result<
 
 /// What the window shows for the current capture.
 #[tauri::command]
-pub fn get_session(state: State<'_, AppState>) -> Result<SessionView, String> {
+pub fn get_session(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<SessionView, String> {
     state
         .sessions
-        .current()
+        .for_label(window.label())
         .map(|s| s.view.clone())
         .ok_or_else(|| "There is no capture to show".to_string())
 }
 
 /// The screenshot as PNG bytes (sent raw, not as JSON numbers).
 #[tauri::command]
-pub fn get_session_image(state: State<'_, AppState>) -> Result<Response, String> {
+pub fn get_session_image(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Response, String> {
     state
         .sessions
-        .current()
+        .for_label(window.label())
         .map(|s| Response::new(s.png.clone()))
         .ok_or_else(|| "There is no capture to show".to_string())
 }
 
 /// The recording of a video capture, as MP4 bytes (sent raw), for the window to play.
 #[tauri::command]
-pub fn get_session_clip(state: State<'_, AppState>) -> Result<Response, String> {
+pub fn get_session_clip(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+) -> Result<Response, String> {
     let session = state
         .sessions
-        .current()
+        .for_label(window.label())
         .ok_or_else(|| "There is no capture to show".to_string())?;
     let clip = session
         .clip
@@ -144,9 +153,10 @@ pub fn get_session_clip(state: State<'_, AppState>) -> Result<Response, String> 
 }
 
 #[tauri::command]
-pub fn close_capture(app: AppHandle) {
-    if let Some(win) = app.get_webview_window(windowing::CAPTURE) {
-        let _ = win.close();
+pub fn close_capture(window: tauri::WebviewWindow) {
+    // only the window that asked: the other CargoFrame windows stay open
+    if windowing::is_capture_label(window.label()) {
+        let _ = window.close();
     }
 }
 
@@ -455,7 +465,7 @@ pub async fn test_rule(
         .or_else(|| {
             state
                 .sessions
-                .current()
+                .latest()
                 .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
         })
         .or_else(|| {
@@ -536,6 +546,30 @@ pub async fn detect_video_tools(video: Video) -> Result<video::ToolsView, String
     let video = video::normalized(video);
     blocking(move || video::tools_view(&video, video::Os::current(), &video::Session::current()))
         .await
+}
+
+/// The sound devices of this computer, for the sound choices of a layout's video block. It asks
+/// the ffmpeg of the saved video settings.
+#[tauri::command]
+pub async fn list_audio_devices(app: AppHandle) -> Result<crate::audio::Devices, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let video = state
+            .store
+            .load_or_default::<Video>()
+            .map(video::normalized)
+            .unwrap_or_default();
+        let os = video::Os::current();
+        match video::find(&video, video::program_beside_app().as_deref()) {
+            Ok(found) => crate::audio::list(&found.ffmpeg, os),
+            Err(problem) => crate::audio::Devices {
+                os: os.name().into(),
+                note: Some(problem),
+                ..Default::default()
+            },
+        }
+    })
+    .await
 }
 
 /// Record the screen for a few seconds with the settings as they are in the form.
@@ -808,23 +842,19 @@ pub async fn fetch_options(
 ) -> Result<Vec<OptionItem>, OptionsError> {
     let asked = {
         let state = app.state::<AppState>();
-        state
-            .sessions
-            .current()
-            .filter(|s| s.view.session_id == session_id)
-            .and_then(|s| {
-                let layout = s.view.layout.as_ref()?;
-                match &layout.block(&block_id)?.kind {
-                    BlockKind::Dropdown(d) => match &d.source {
-                        DropdownSource::WebApi {
-                            connection_id,
-                            options_id,
-                        } => Some((connection_id.clone(), options_id.clone())),
-                        DropdownSource::ClaudeChats => None,
-                    },
-                    _ => None,
-                }
-            })
+        state.sessions.by_id(session_id).and_then(|s| {
+            let layout = s.view.layout.as_ref()?;
+            match &layout.block(&block_id)?.kind {
+                BlockKind::Dropdown(d) => match &d.source {
+                    DropdownSource::WebApi {
+                        connection_id,
+                        options_id,
+                    } => Some((connection_id.clone(), options_id.clone())),
+                    DropdownSource::ClaudeChats => None,
+                },
+                _ => None,
+            }
+        })
     };
     let Some((connection_id, options_id)) = asked else {
         return Err(OptionsError {
@@ -851,8 +881,7 @@ pub fn set_clip_mark(state: State<'_, AppState>, request: Request<'_>) -> Result
         .ok_or("The capture is not named")?;
     let session = state
         .sessions
-        .current()
-        .filter(|s| s.view.session_id == id)
+        .by_id(id)
         .ok_or("This capture is no longer open")?;
     if session.clip.is_none() {
         return Err("This capture has no recording".into());
@@ -881,8 +910,7 @@ pub fn set_edited_image(state: State<'_, AppState>, request: Request<'_>) -> Res
         .ok_or("The capture is not named")?;
     let session = state
         .sessions
-        .current()
-        .filter(|s| s.view.session_id == id)
+        .by_id(id)
         .ok_or("This capture is no longer open")?;
     if bytes.is_empty() {
         session.set_edited(None);
@@ -950,24 +978,32 @@ pub fn get_memory_status(
         .load_or_default::<General>()
         .map_err(|e| e.to_string())?
         .memory_mode;
-    let windows = [
-        (windowing::SETTINGS, "Settings"),
-        (windowing::CAPTURE, "Capture window"),
-    ]
-    .into_iter()
-    .map(|(label, name)| {
-        let win = app.get_webview_window(label);
-        let visible = win
-            .as_ref()
-            .and_then(|w| w.is_visible().ok())
-            .unwrap_or(false);
-        crate::warm::WindowStatus {
-            label,
-            name,
-            state: crate::warm::window_state(win.is_some(), visible),
+    // Settings, the first CargoFrame window, and any further CargoFrame window that exists
+    let mut labels = vec![
+        (windowing::SETTINGS.to_string(), "Settings".to_string()),
+        (windowing::CAPTURE.to_string(), "Capture window".to_string()),
+    ];
+    for n in 2..=session::MAX_WINDOWS {
+        let label = session::window_label(n);
+        if app.get_webview_window(&label).is_some() {
+            labels.push((label, format!("Capture window {n}")));
         }
-    })
-    .collect();
+    }
+    let windows = labels
+        .into_iter()
+        .map(|(label, name)| {
+            let win = app.get_webview_window(&label);
+            let visible = win
+                .as_ref()
+                .and_then(|w| w.is_visible().ok())
+                .unwrap_or(false);
+            crate::warm::WindowStatus {
+                state: crate::warm::window_state(win.is_some(), visible),
+                label,
+                name,
+            }
+        })
+        .collect();
     Ok(crate::warm::MemoryStatus { mode, windows })
 }
 
@@ -976,7 +1012,7 @@ pub fn get_memory_status(
 pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResult, String> {
     {
         let state = app.state::<AppState>();
-        if !state.try_begin_share() {
+        if !state.try_begin_share(request.session_id) {
             return Ok(ShareResult::Blocked {
                 reasons: vec!["A share is already being sent".into()],
             });
@@ -984,15 +1020,16 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     }
     let worker = app.clone();
     let started = std::time::Instant::now();
+    let session_id = request.session_id;
     let result = blocking(move || {
         let app = worker;
         let state = app.state::<AppState>();
-        let Some(session) = state.sessions.current() else {
+        let Some(session) = state.sessions.by_id(session_id) else {
             return ShareResult::Blocked {
                 reasons: vec!["This capture is no longer open".into()],
             };
         };
-        let cancelled = || state.share_cancelled();
+        let cancelled = || state.share_cancelled(session_id);
         let browser = TauriBrowser(app.clone());
         let svc = share::Services {
             store: &state.store,
@@ -1009,7 +1046,8 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     })
     .await;
     let state = app.state::<AppState>();
-    state.end_share();
+    let cancelled_while_sending = state.share_cancelled(session_id);
+    state.end_share(session_id);
     let result = result?;
     if matches!(
         result,
@@ -1020,7 +1058,7 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
             .record("share", started.elapsed().as_millis() as u64);
     }
     // The window was closed while sending: nobody is watching, so say how it ended.
-    if state.share_cancelled() {
+    if cancelled_while_sending {
         match &result {
             ShareResult::Sent { summary, .. } => crate::notify::problem(&app, "Shared", summary),
             ShareResult::SavedLocally { path, .. } => {

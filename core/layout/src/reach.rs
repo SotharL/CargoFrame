@@ -12,6 +12,7 @@ use crate::model::{
 };
 use crate::validate::{sharing_mode, ConnectionKind, Registry, SharingMode};
 use serde::Serialize;
+use std::collections::BTreeSet;
 
 /// How a block takes part in a share.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -53,6 +54,9 @@ pub struct BlockReach {
     pub block_id: String,
     #[serde(flatten)]
     pub verdict: Verdict,
+    /// The button cannot do its job without this block (the prompt of an AI chat, a field the
+    /// service requires): the window keeps its box ticked.
+    pub required: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -122,26 +126,198 @@ pub fn reach(layout: &Layout, button_id: &str, reg: &dyn Registry) -> Option<Rea
         .find(|b| matches!(&b.kind, BlockKind::Text(t) if t.role == TextRole::ZipName))
         .map(|b| b.id.as_str());
 
+    let ai = info.is_some_and(|i| i.kind == ConnectionKind::Claude);
+    let connection = info.and(button.connection_id.as_deref());
     let blocks = layout
         .blocks
         .iter()
         .filter(|b| !matches!(b.kind, BlockKind::SharingButton(_)))
-        .map(|b| BlockReach {
-            block_id: b.id.clone(),
-            verdict: verdict(
+        .map(|b| {
+            let verdict = verdict(
                 b,
                 button,
                 &mappings,
                 &capabilities,
                 mode == SharingMode::SaveLocally,
                 zip_name,
-            ),
+            );
+            let required = match &verdict {
+                Verdict::Sent { role: Role::Prompt } => ai,
+                Verdict::Sent {
+                    role: Role::Field { field },
+                } => connection.is_some_and(|c| reg.field_required(c, field)),
+                _ => false,
+            };
+            BlockReach {
+                block_id: b.id.clone(),
+                verdict,
+                required,
+            }
         })
         .collect();
     Some(Reach {
         capabilities,
         blocks,
     })
+}
+
+/// What one click of a sharing button sends, once the person has ticked or cleared boxes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Selection {
+    /// The button with its picture, files and prompt as this click has them.
+    pub button: SharingButton,
+    /// The mappings this click uses (the chat included): those whose block was cleared are gone.
+    pub mappings: Vec<InfoMapping>,
+    /// The files blocks whose ticked files go.
+    pub files_blocks: BTreeSet<String>,
+    /// The blocks this click leaves out, so the share can skip what only it knows how to find
+    /// (the name of the saved zip).
+    pub left_out: BTreeSet<String>,
+}
+
+/// Apply the boxes ticked in the window to the button, for this one click.
+///
+/// `ticked` is every block the person wants this button to send. `None` means "as the layout
+/// says", which is what a window without boxes sends. Nothing is trusted: a box for a block the
+/// destination cannot take, or that the button has no field for, is refused; so is clearing a
+/// block the button cannot work without. A box may switch on the picture or the files the layout
+/// switched off, because the destination can take them.
+pub fn select(
+    layout: &Layout,
+    button_id: &str,
+    reg: &dyn Registry,
+    ticked: Option<&[String]>,
+) -> Result<Selection, Vec<String>> {
+    let Some(BlockKind::SharingButton(own)) = layout.block(button_id).map(|b| &b.kind) else {
+        return Err(vec!["That sharing button is not in this layout".to_string()]);
+    };
+    let reach = reach(layout, button_id, reg)
+        .ok_or_else(|| vec!["That sharing button is not in this layout".to_string()])?;
+    let mode = sharing_mode(layout, button_id, reg);
+    let kind = match mode {
+        SharingMode::Send => own
+            .connection_id
+            .as_deref()
+            .and_then(|id| reg.connection(id))
+            .map(|i| i.kind),
+        SharingMode::SaveLocally => None,
+    };
+    let mut button = own.clone();
+    let mut mappings = effective_mappings(layout, own, kind);
+    let files_of = |blocks: &BTreeSet<String>| -> BTreeSet<String> {
+        layout
+            .blocks
+            .iter()
+            .filter(|b| matches!(b.kind, BlockKind::Files(_)) && blocks.contains(&b.id))
+            .map(|b| b.id.clone())
+            .collect()
+    };
+    let all: BTreeSet<String> = layout.blocks.iter().map(|b| b.id.clone()).collect();
+    let Some(ticked) = ticked else {
+        return Ok(Selection {
+            button,
+            mappings,
+            files_blocks: files_of(&all),
+            left_out: BTreeSet::new(),
+        });
+    };
+    let ticked: BTreeSet<&str> = ticked.iter().map(String::as_str).collect();
+    if let Some(unknown) = ticked.iter().find(|id| layout.block(id).is_none()) {
+        return Err(vec![format!(
+            "\u{201c}{unknown}\u{201d} is not a block of this layout"
+        )]);
+    }
+
+    let mut reasons = Vec::new();
+    let mut files_on = BTreeSet::new();
+    let mut left_out = BTreeSet::new();
+    let mut has_picture = false;
+    let mut picture_on = false;
+    for r in &reach.blocks {
+        let Some(block) = layout.block(&r.block_id) else {
+            continue;
+        };
+        let name = block_name(block);
+        let on = ticked.contains(r.block_id.as_str());
+        match (&r.verdict, on) {
+            (Verdict::CannotSend { why }, true) => {
+                reasons.push(format!("{name} cannot be sent: {why}"));
+            }
+            (Verdict::NotUsed, true) => {
+                reasons.push(format!("This button has no field for {name}"));
+            }
+            (Verdict::Sent { .. }, false) if r.required => {
+                reasons.push(format!("{name} is needed by this button"));
+            }
+            _ => {}
+        }
+        // Whether the block goes with this click: what the layout says, changed by the box.
+        let goes = match &r.verdict {
+            Verdict::Sent { .. } | Verdict::SwitchedOff => on,
+            Verdict::CannotSend { .. } | Verdict::NotUsed => false,
+        };
+        if !goes {
+            left_out.insert(r.block_id.clone());
+        }
+        match &block.kind {
+            BlockKind::Screenshot | BlockKind::Video(_) => {
+                has_picture = true;
+                picture_on |= goes;
+            }
+            BlockKind::Files(_) => {
+                if goes {
+                    files_on.insert(r.block_id.clone());
+                }
+            }
+            BlockKind::Text(_) | BlockKind::Dropdown(_) => {
+                if !goes {
+                    if button.prompt_block_id.as_deref() == Some(r.block_id.as_str()) {
+                        button.prompt_block_id = None;
+                    }
+                    mappings.retain(
+                        |m| !matches!(&m.source, ValueSource::Block(id) if *id == r.block_id),
+                    );
+                }
+            }
+            BlockKind::SharingButton(_) => {}
+        }
+    }
+    if !reasons.is_empty() {
+        return Err(reasons);
+    }
+    if has_picture {
+        button.send.screenshot = picture_on;
+    }
+    if files_on.is_empty() {
+        button.send.files = FilesHow::None;
+    } else if button.send.files == FilesHow::None {
+        button.send.files = FilesHow::Attach;
+    }
+    Ok(Selection {
+        button,
+        mappings,
+        files_blocks: files_on,
+        left_out,
+    })
+}
+
+/// A block as a person would call it: its title, or what it is.
+fn block_name(b: &Block) -> String {
+    let titled = |t: &str| {
+        if t.trim().is_empty() {
+            b.id.clone()
+        } else {
+            t.trim().to_string()
+        }
+    };
+    match &b.kind {
+        BlockKind::Screenshot => "The screenshot".into(),
+        BlockKind::Video(_) => "The video".into(),
+        BlockKind::Text(t) => format!("\u{201c}{}\u{201d}", titled(&t.title)),
+        BlockKind::Dropdown(d) => format!("\u{201c}{}\u{201d}", titled(&d.title)),
+        BlockKind::Files(f) => format!("\u{201c}{}\u{201d}", titled(&f.title)),
+        BlockKind::SharingButton(_) => b.id.clone(),
+    }
 }
 
 fn verdict(
@@ -170,7 +346,7 @@ fn verdict(
                 }
             }
         }
-        BlockKind::Video => {
+        BlockKind::Video(_) => {
             // the button's "send the picture" switch covers the recording too
             if !button.send.screenshot {
                 Verdict::SwitchedOff
@@ -231,9 +407,14 @@ mod tests {
     use std::collections::HashMap;
 
     #[derive(Default)]
-    struct Reg(HashMap<String, ConnectionInfo>);
+    struct Reg(HashMap<String, ConnectionInfo>, Vec<(String, String)>);
 
     impl Reg {
+        /// The service of connection `id` requires `field`.
+        fn requiring(mut self, id: &str, field: &str) -> Self {
+            self.1.push((id.into(), field.into()));
+            self
+        }
         fn with(mut self, id: &str, kind: ConnectionKind, state: ConnectionState) -> Self {
             self.0.insert(id.into(), ConnectionInfo::new(kind, state));
             self
@@ -259,6 +440,9 @@ mod tests {
         }
         fn is_known_variable(&self, _: &str) -> bool {
             true
+        }
+        fn field_required(&self, connection_id: &str, field: &str) -> bool {
+            self.1.iter().any(|(c, f)| c == connection_id && f == field)
         }
     }
 
@@ -387,12 +571,18 @@ mod tests {
             .with("s", ConnectionKind::Slack, ConnectionState::Connected)
             .with("r", ConnectionKind::Reddit, ConnectionState::Connected)
             .with("c", ConnectionKind::Claude, ConnectionState::Connected);
-        let l = layout(vec![block("clip", BlockKind::Video)], to("s"));
+        let l = layout(
+            vec![block("clip", BlockKind::Video(Default::default()))],
+            to("s"),
+        );
         let r = reach(&l, "go", &reg).unwrap();
         assert_eq!(r.of("clip"), Some(&sent(Role::Video)));
 
         for (conn, word) in [("r", "Reddit"), ("c", "Claude")] {
-            let l = layout(vec![block("clip", BlockKind::Video)], to(conn));
+            let l = layout(
+                vec![block("clip", BlockKind::Video(Default::default()))],
+                to(conn),
+            );
             match reach(&l, "go", &reg).unwrap().of("clip") {
                 Some(Verdict::CannotSend { why }) => assert!(why.contains(word), "{why}"),
                 other => panic!("{other:?}"),
@@ -407,7 +597,10 @@ mod tests {
             },
             ..to("s")
         };
-        let l = layout(vec![block("clip", BlockKind::Video)], off);
+        let l = layout(
+            vec![block("clip", BlockKind::Video(Default::default()))],
+            off,
+        );
         assert_eq!(
             reach(&l, "go", &reg).unwrap().of("clip"),
             Some(&Verdict::SwitchedOff)
@@ -418,7 +611,7 @@ mod tests {
     fn saving_locally_keeps_the_video() {
         let reg = Reg::default();
         let l = layout(
-            vec![block("clip", BlockKind::Video)],
+            vec![block("clip", BlockKind::Video(Default::default()))],
             SharingButton::default(),
         );
         assert_eq!(
@@ -581,5 +774,224 @@ mod tests {
         let l = layout(vec![], to("x"));
         assert!(reach(&l, "nope", &Reg::default()).is_none());
         assert!(reach(&l, "go", &Reg::default()).is_some());
+    }
+
+    // ----- required blocks, and what a click sends once boxes are ticked or cleared -----
+
+    fn maps(field: &str, block: &str) -> InfoMapping {
+        InfoMapping {
+            field: field.into(),
+            source: ValueSource::Block(block.into()),
+        }
+    }
+
+    fn ticked(ids: &[&str]) -> Vec<String> {
+        ids.iter().map(|s| s.to_string()).collect()
+    }
+
+    fn jira() -> Reg {
+        Reg::default().with("j", ConnectionKind::Jira, ConnectionState::Connected)
+    }
+
+    #[test]
+    fn the_prompt_of_an_ai_chat_and_a_field_the_service_requires_are_required_and_nothing_else() {
+        let reg = Reg::default()
+            .with("c", ConnectionKind::Claude, ConnectionState::Connected)
+            .with("j", ConnectionKind::Jira, ConnectionState::Connected)
+            .requiring("j", "summary");
+        let claude = SharingButton {
+            prompt_block_id: Some("p".into()),
+            ..to("c")
+        };
+        let l = layout(
+            vec![
+                block("shot", BlockKind::Screenshot),
+                text("p", TextRole::Prompt),
+            ],
+            claude,
+        );
+        let r = reach(&l, "go", &reg).unwrap();
+        let req = |id: &str| r.blocks.iter().find(|b| b.block_id == id).unwrap().required;
+        assert!(req("p"), "Claude cannot do without the prompt");
+        assert!(!req("shot"));
+
+        let button = SharingButton {
+            prompt_block_id: Some("p".into()),
+            mappings: vec![maps("summary", "t"), maps("priority", "u")],
+            ..to("j")
+        };
+        let l = layout(
+            vec![
+                text("p", TextRole::Prompt),
+                text("t", TextRole::Plain),
+                text("u", TextRole::Plain),
+            ],
+            button,
+        );
+        let r = reach(&l, "go", &reg).unwrap();
+        let req = |id: &str| r.blocks.iter().find(|b| b.block_id == id).unwrap().required;
+        assert!(req("t"), "Jira requires a summary");
+        assert!(!req("u"));
+        assert!(!req("p"), "a prompt is only required by an AI chat");
+        let json = serde_json::to_value(&r).unwrap();
+        assert_eq!(json["blocks"][1]["required"], true);
+    }
+
+    #[test]
+    fn with_no_boxes_the_click_sends_what_the_layout_says() {
+        let button = SharingButton {
+            prompt_block_id: Some("p".into()),
+            mappings: vec![maps("summary", "t")],
+            ..to("j")
+        };
+        let l = layout(
+            vec![
+                block("shot", BlockKind::Screenshot),
+                files("f"),
+                text("p", TextRole::Prompt),
+                text("t", TextRole::Plain),
+            ],
+            button.clone(),
+        );
+        let s = select(&l, "go", &jira(), None).unwrap();
+        assert_eq!(s.button, button);
+        assert_eq!(s.mappings, button.mappings);
+        assert_eq!(s.files_blocks, ["f".to_string()].into());
+        assert!(s.left_out.is_empty());
+    }
+
+    #[test]
+    fn clearing_a_box_leaves_that_block_out_of_this_click_only() {
+        let button = SharingButton {
+            prompt_block_id: Some("p".into()),
+            mappings: vec![maps("summary", "t"), maps("description", "d")],
+            ..to("j")
+        };
+        let l = layout(
+            vec![
+                block("shot", BlockKind::Screenshot),
+                files("f"),
+                text("p", TextRole::Prompt),
+                text("t", TextRole::Plain),
+                text("d", TextRole::Plain),
+            ],
+            button.clone(),
+        );
+        // everything but the screenshot, the files, the prompt and the description
+        let s = select(&l, "go", &jira(), Some(&ticked(&["t"]))).unwrap();
+        assert!(!s.button.send.screenshot);
+        assert_eq!(s.button.send.files, FilesHow::None);
+        assert!(s.files_blocks.is_empty());
+        assert_eq!(s.button.prompt_block_id, None);
+        assert_eq!(s.mappings, vec![maps("summary", "t")]);
+        assert_eq!(s.left_out, ["shot", "f", "p", "d"].map(String::from).into());
+        // the layout itself is untouched
+        assert_eq!(
+            l.block("go").map(|b| &b.kind),
+            Some(&BlockKind::SharingButton(button))
+        );
+    }
+
+    #[test]
+    fn a_box_can_switch_on_what_the_layout_switched_off_when_the_destination_takes_it() {
+        let button = SharingButton {
+            send: SendRules {
+                screenshot: false,
+                files: FilesHow::None,
+                ..SendRules::default()
+            },
+            ..to("j")
+        };
+        let l = layout(
+            vec![block("shot", BlockKind::Screenshot), files("f")],
+            button,
+        );
+        let s = select(&l, "go", &jira(), Some(&ticked(&["shot", "f"]))).unwrap();
+        assert!(s.button.send.screenshot);
+        assert_eq!(s.button.send.files, FilesHow::Attach);
+        assert_eq!(s.files_blocks, ["f".to_string()].into());
+        // and left alone, they stay off
+        let s = select(&l, "go", &jira(), Some(&[])).unwrap();
+        assert!(!s.button.send.screenshot);
+        assert_eq!(s.button.send.files, FilesHow::None);
+    }
+
+    #[test]
+    fn only_the_ticked_files_blocks_go() {
+        let l = layout(vec![files("a"), files("b")], to("j"));
+        let s = select(&l, "go", &jira(), Some(&ticked(&["b"]))).unwrap();
+        assert_eq!(s.files_blocks, ["b".to_string()].into());
+        assert_eq!(s.left_out, ["a".to_string()].into());
+        assert_eq!(s.button.send.files, FilesHow::Attach);
+    }
+
+    #[test]
+    fn what_the_button_cannot_work_without_cannot_be_cleared() {
+        let reg = Reg::default().with("c", ConnectionKind::Claude, ConnectionState::Connected);
+        let button = SharingButton {
+            prompt_block_id: Some("p".into()),
+            ..to("c")
+        };
+        let l = layout(vec![text("p", TextRole::Prompt)], button);
+        let why = select(&l, "go", &reg, Some(&[])).unwrap_err();
+        assert_eq!(
+            why,
+            vec!["\u{201c}p\u{201d} is needed by this button".to_string()]
+        );
+        assert!(select(&l, "go", &reg, Some(&ticked(&["p"]))).is_ok());
+        // a required field, too
+        let reg = jira().requiring("j", "summary");
+        let button = SharingButton {
+            mappings: vec![maps("summary", "t")],
+            ..to("j")
+        };
+        let l = layout(vec![text("t", TextRole::Plain)], button);
+        assert!(select(&l, "go", &reg, Some(&[])).is_err());
+        assert!(select(&l, "go", &reg, Some(&ticked(&["t"]))).is_ok());
+    }
+
+    #[test]
+    fn a_box_for_what_cannot_be_sent_is_refused_and_says_why() {
+        let reg = Reg::default().with("r", ConnectionKind::Reddit, ConnectionState::Connected);
+        let l = layout(vec![files("f"), text("t", TextRole::Plain)], to("r"));
+        let why = select(&l, "go", &reg, Some(&ticked(&["f"]))).unwrap_err();
+        assert!(
+            why[0].starts_with("\u{201c}f\u{201d} cannot be sent"),
+            "{why:?}"
+        );
+        // a text the button has no field for
+        let why = select(&l, "go", &reg, Some(&ticked(&["t"]))).unwrap_err();
+        assert_eq!(
+            why,
+            vec!["This button has no field for \u{201c}t\u{201d}".to_string()]
+        );
+        // a block that is not in the layout at all
+        assert!(select(&l, "go", &reg, Some(&ticked(&["nope"]))).is_err());
+        // not a sharing button
+        assert!(select(&l, "f", &reg, None).is_err());
+    }
+
+    #[test]
+    fn clearing_the_chat_of_a_claude_button_opens_a_new_chat_even_though_it_is_filled_in_for_you() {
+        let reg = Reg::default().with("c", ConnectionKind::Claude, ConnectionState::Connected);
+        let button = SharingButton {
+            prompt_block_id: Some("p".into()),
+            ..to("c")
+        };
+        let l = layout(vec![text("p", TextRole::Prompt), chats("chat")], button);
+        let with = select(&l, "go", &reg, None).unwrap();
+        assert_eq!(with.mappings, vec![maps("chat", "chat")]);
+        let without = select(&l, "go", &reg, Some(&ticked(&["p"]))).unwrap();
+        assert!(without.mappings.is_empty());
+        assert_eq!(without.left_out, ["chat".to_string()].into());
+    }
+
+    #[test]
+    fn a_cleared_zip_name_is_left_out_so_the_zip_gets_its_own_name() {
+        let l = layout(vec![text("z", TextRole::ZipName)], SharingButton::default());
+        let s = select(&l, "go", &Reg::default(), Some(&[])).unwrap();
+        assert_eq!(s.left_out, ["z".to_string()].into());
+        let s = select(&l, "go", &Reg::default(), Some(&ticked(&["z"]))).unwrap();
+        assert!(s.left_out.is_empty());
     }
 }

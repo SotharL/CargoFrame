@@ -49,6 +49,8 @@ pub enum Code {
     ScreenshotAndVideo,
     /// A block the destination has no place for, so this button leaves it out.
     CannotSend,
+    /// More than [`MAX_SHARING_BUTTONS`] sharing buttons: the window has room for five boxes.
+    TooManySharingButtons,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -127,6 +129,11 @@ pub trait Registry {
     /// Is `name` something a `{{name}}` can resolve to (a data rule value or a built-in such
     /// as the capture or project-folder values)?
     fn is_known_variable(&self, name: &str) -> bool;
+    /// Does the service of connection `connection_id` need a value for `field`? Used to keep the
+    /// block that fills it from being cleared in the window. The default knows no such field.
+    fn field_required(&self, _connection_id: &str, _field: &str) -> bool {
+        false
+    }
 }
 
 /// What a sharing button does when pressed.
@@ -145,6 +152,19 @@ pub enum SharingState {
     /// Disabled, with the reasons shown on the chip.
     Disabled(Vec<Code>),
 }
+
+/// Is `block_id` one of the sharing buttons past the [`MAX_SHARING_BUTTONS`] the window shows?
+fn beyond_the_limit(layout: &Layout, block_id: &str) -> bool {
+    layout
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.kind, BlockKind::SharingButton(_)))
+        .position(|b| b.id == block_id)
+        .is_some_and(|at| at >= crate::MAX_SHARING_BUTTONS)
+}
+
+const TOO_MANY_BUTTONS: &str =
+    "A window has room for 5 sharing buttons: this one cannot send. Remove a button";
 
 fn issue(block: &Block, severity: Severity, code: Code, message: impl Into<String>) -> Issue {
     Issue {
@@ -183,6 +203,14 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
             }
             BlockKind::SharingButton(s) => {
                 check_variables(block, &s.label, reg, &mut out);
+                if beyond_the_limit(layout, &block.id) {
+                    out.push(issue(
+                        block,
+                        Severity::Error,
+                        Code::TooManySharingButtons,
+                        TOO_MANY_BUTTONS,
+                    ));
+                }
                 out.extend(sharing_issues(layout, block, s, reg));
             }
             BlockKind::Dropdown(d) => {
@@ -217,7 +245,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                 }
             }
             BlockKind::Screenshot => {}
-            BlockKind::Video => {
+            BlockKind::Video(_) => {
                 if has_screenshot {
                     out.push(issue(
                         block,
@@ -264,6 +292,9 @@ pub fn sharing_state(layout: &Layout, block_id: &str, reg: &dyn Registry) -> Sha
     let BlockKind::SharingButton(button) = &block.kind else {
         return SharingState::Disabled(vec![Code::MissingConnection]);
     };
+    if beyond_the_limit(layout, block_id) {
+        return SharingState::Disabled(vec![Code::TooManySharingButtons]);
+    }
     if sharing_mode(layout, block_id, reg) == SharingMode::SaveLocally {
         return SharingState::Ready;
     }
@@ -407,7 +438,7 @@ fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry)
                     .block(&b.block_id)
                     .map(|blk| match &blk.kind {
                         BlockKind::Screenshot => "the screenshot".to_string(),
-                        BlockKind::Video => "the video".to_string(),
+                        BlockKind::Video(_) => "the video".to_string(),
                         BlockKind::Files(f) if f.title.trim().is_empty() => "the files".to_string(),
                         BlockKind::Files(f) => {
                             format!("the files in \u{201c}{}\u{201d}", f.title.trim())
@@ -563,12 +594,12 @@ mod tests {
 
     #[test]
     fn a_video_block_alone_is_fine_and_with_a_screenshot_it_is_warned_about() {
-        let alone = layout(vec![at("clip", 0, BlockKind::Video)]);
+        let alone = layout(vec![at("clip", 0, BlockKind::Video(Default::default()))]);
         assert!(validate(&alone, &Reg::default()).is_empty());
 
         let both = layout(vec![
             at("shot", 0, BlockKind::Screenshot),
-            at("clip", 1, BlockKind::Video),
+            at("clip", 1, BlockKind::Video(Default::default())),
         ]);
         let issues = validate(&both, &Reg::default());
         assert_eq!(codes(&issues), vec![Code::ScreenshotAndVideo]);
@@ -596,6 +627,42 @@ mod tests {
         );
         // The layout itself has nothing to block; the folder for saved zips is the caller's check.
         assert_eq!(sharing_state(&l, "s", &Reg::default()), SharingState::Ready);
+    }
+
+    #[test]
+    fn a_window_has_room_for_five_sharing_buttons_and_the_sixth_cannot_send() {
+        let reg = Reg::default().with("jira", ConnectionKind::Jira, ConnectionState::Connected);
+        let buttons = |n: u32| {
+            layout(
+                (0..n)
+                    .map(|i| at(&format!("s{i}"), i, button(Some("jira"), None)))
+                    .collect(),
+            )
+        };
+        let five = buttons(5);
+        assert!(validate(&five, &reg).is_empty());
+        assert_eq!(sharing_state(&five, "s4", &reg), SharingState::Ready);
+
+        let six = buttons(6);
+        let issues = validate(&six, &reg);
+        assert_eq!(codes(&issues), vec![Code::TooManySharingButtons]);
+        assert_eq!(issues[0].block_id.as_deref(), Some("s5"));
+        assert_eq!(issues[0].severity, Severity::Error);
+        assert_eq!(sharing_state(&six, "s4", &reg), SharingState::Ready);
+        assert_eq!(
+            sharing_state(&six, "s5", &reg),
+            SharingState::Disabled(vec![Code::TooManySharingButtons])
+        );
+        // even a button that only saves locally cannot go past the limit
+        let local = layout(
+            (0..6)
+                .map(|i| at(&format!("s{i}"), i, button(None, None)))
+                .collect(),
+        );
+        assert_eq!(
+            sharing_state(&local, "s5", &Reg::default()),
+            SharingState::Disabled(vec![Code::TooManySharingButtons])
+        );
     }
 
     #[test]

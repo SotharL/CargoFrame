@@ -803,7 +803,7 @@ fn a_start_for_a_trigger_that_fails_leaves_nothing_marked_as_a_trigger_recording
     let dir = tempfile::tempdir().unwrap();
     // ffmpeg is not there, so neither start works, and neither leaves the flag set
     assert!(rec
-        .start_for_trigger(&video, Os::Linux, &session, dir.path(), 5)
+        .start_for_trigger(&video, Os::Linux, &session, dir.path(), 5, &Wish::default())
         .is_err());
     assert!(!rec.started_by_trigger());
 }
@@ -876,6 +876,7 @@ fn a_recording_from_a_trigger_becomes_a_session_whose_clip_plays_back() {
             height: trial.height,
             duration_ms: trial.clip_ms,
             bytes: trial.clip_bytes,
+            has_audio: trial.clip_audio,
         },
     )
     .unwrap();
@@ -888,4 +889,140 @@ fn a_recording_from_a_trigger_becomes_a_session_whose_clip_plays_back() {
     // and what `get_session_clip` sends is the whole file
     let bytes = read_clip(&clip.path, PREVIEW_LIMIT).unwrap();
     assert_eq!(bytes.len() as u64, clip.bytes);
+}
+
+// ----- what a layout's video block asks for -----
+
+fn layout_with(video: cargoframe_layout::VideoBlock) -> Layout {
+    let mut l = Layout::empty("l", "l");
+    l.blocks.push(cargoframe_layout::Block {
+        id: "v".into(),
+        rect: cargoframe_layout::Rect {
+            x: 0,
+            y: 0,
+            w: 12,
+            h: 6,
+        },
+        kind: BlockKind::Video(video),
+    });
+    l
+}
+
+#[test]
+fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
+    use cargoframe_layout::{AudioChoice, VideoBlock, VideoSubject};
+    let never = || -> Option<Area> { panic!("the window in focus was looked for when not asked") };
+    // no layout, or no video block: the whole screen, with the computer's sound
+    let (wish, notes) = wish_for(None, &never);
+    assert_eq!(wish.area, None);
+    assert_eq!(wish.audio, Some(VideoAudio::default()));
+    assert!(notes.is_empty());
+    let (wish, _) = wish_for(Some(&Layout::empty("l", "l")), &never);
+    assert_eq!(wish.area, None);
+    let (wish, _) = wish_for(Some(&layout_with(VideoBlock::default())), &never);
+    assert_eq!(wish.area, None);
+
+    let window = layout_with(VideoBlock {
+        subject: VideoSubject::FocusedWindow,
+        audio: VideoAudio {
+            desktop: AudioChoice::Off,
+            microphone: AudioChoice::Default,
+        },
+    });
+    let place = Area {
+        x: 40,
+        y: 30,
+        w: 800,
+        h: 600,
+    };
+    let (wish, notes) = wish_for(Some(&window), &|| Some(place));
+    assert_eq!(wish.area, Some(place));
+    assert_eq!(wish.audio.unwrap().microphone, AudioChoice::Default);
+    assert!(notes.is_empty());
+
+    // a window that cannot be found, or is a stub, falls back to the screen and says so
+    let (wish, notes) = wish_for(Some(&window), &|| None);
+    assert_eq!(wish.area, None);
+    assert!(
+        notes[0].contains("could not tell which window"),
+        "{notes:?}"
+    );
+    let stub = Area {
+        x: 0,
+        y: 0,
+        w: 10,
+        h: 10,
+    };
+    let (wish, notes) = wish_for(Some(&window), &|| Some(stub));
+    assert_eq!(wish.area, None);
+    assert!(notes[0].contains("too small"), "{notes:?}");
+}
+
+#[test]
+fn a_window_is_recorded_on_its_own_and_a_missing_sound_device_costs_only_the_sound() {
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    let Some(ffprobe) = locate("ffprobe", &[]) else {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    };
+    let _one = one_at_a_time();
+    let Some(screen) = Screen::start(93) else {
+        eprintln!("skipped: no virtual X screen (Xvfb) to record");
+        return;
+    };
+    let work = tempfile::tempdir().unwrap();
+    let work = work.path().join("video-test");
+    let f = Found {
+        ffmpeg,
+        ffprobe,
+        ..found(&[VideoEncoder::Software], &[VideoCapture::X11])
+    };
+    let session = Session {
+        wayland: false,
+        display: Some(screen.display.clone()),
+    };
+    let choice = Choice {
+        capture: VideoCapture::X11,
+        encoder: VideoEncoder::Software,
+    };
+    let video = Video {
+        fps: 10,
+        ..Video::default()
+    };
+    let extras = Extras {
+        area: Some(Area {
+            x: 100,
+            y: 50,
+            w: 321,
+            h: 241,
+        }),
+        sources: vec![AudioSource {
+            backend: recorder::AudioBackend::Pulse,
+            device: "cargoframe-no-such-device".into(),
+        }],
+        // a sound system that is not there is slow to say so
+        patience: Duration::from_secs(8),
+    };
+    let rec = Recording::new();
+    let started = rec
+        .start_with_extras(f, choice, &video, &session, &work, trial_window(3), &extras)
+        .unwrap();
+    // the device is not there: the recording goes on without it and says so
+    assert!(!started.sound);
+    assert!(
+        started
+            .notes
+            .iter()
+            .any(|n| n.contains("The sound could not be recorded")),
+        "{:?}",
+        started.notes
+    );
+    let t = rec.run_for(2);
+    assert!(t.ok, "{}", t.message);
+    // the window only, with even sides
+    assert_eq!((t.width, t.height), (320, 240));
+    assert!(!t.clip_audio);
 }

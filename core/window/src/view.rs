@@ -49,6 +49,8 @@ pub struct VideoView {
     pub height: u32,
     pub duration_ms: u64,
     pub bytes: u64,
+    /// The recording has a sound track (the player shows its volume only then).
+    pub audio: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -388,7 +390,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                 };
                 view.sharing.insert(block.id.clone(), sv);
             }
-            BlockKind::Screenshot | BlockKind::Video => {}
+            BlockKind::Screenshot | BlockKind::Video(_) => {}
         }
     }
     view

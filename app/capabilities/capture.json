@@ -3,7 +3,8 @@
   "identifier": "capture",
   "description": "What the CargoFrame (capture) window may ask the backend to do",
   "windows": [
-    "capture"
+    "capture",
+    "capture-*"
   ],
   "permissions": [
     "allow-get-session",

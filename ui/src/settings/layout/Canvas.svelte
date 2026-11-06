@@ -4,7 +4,7 @@
   import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
   import { lineFor, type Line } from './reach';
   import {
-    BLOCK_TYPES, COLUMNS, canPlace, makeBlock, moveTo, removeBlock, resizeTo, rowsNeeded, typeLabel,
+    BLOCK_TYPES, COLUMNS, MAX_SHARING_BUTTONS, canPlace, makeBlock, moveTo, removeBlock, resizeTo, rowsNeeded, typeLabel,
     type BlockType,
   } from './model';
 
@@ -189,6 +189,7 @@
   // cannot send is greyed out and says why, so the limit is seen where the block is.
   type Button = Extract<Block, { type: 'sharing_button' }>;
   const buttons = $derived(blocks.filter((b): b is Button => b.type === 'sharing_button'));
+  const buttonsFull = $derived(buttons.length >= MAX_SHARING_BUTTONS);
   const shown = $derived.by((): Button | null => {
     const pick = buttons.find((b) => b.id === selected);
     if (pick) return pick;
@@ -220,7 +221,10 @@
       <button
         type="button"
         class="chip"
-        title="{t.hint}. Click to add, or drag onto the grid."
+        disabled={t.type === 'sharing_button' && buttonsFull}
+        title={t.type === 'sharing_button' && buttonsFull
+          ? `A window has room for ${MAX_SHARING_BUTTONS} sharing buttons. Remove one to add another.`
+          : `${t.hint}. Click to add, or drag onto the grid.`}
         onpointerdown={(e) => beginNew(e, t.type)}
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addAt(t.type); } }}
       >＋ {t.label}</button>

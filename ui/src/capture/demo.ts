@@ -41,6 +41,17 @@ export async function demoSession(): Promise<SessionView> {
       },
     ],
   };
+  // `?buttons=3` adds buttons to Claude, Slack and Reddit (up to 5 with Google and a zip), to look at the boxes.
+  const extra: [string, ServiceKind | null][] = [['claude', 'claude'], ['slack', 'slack'], ['reddit', 'reddit'], ['google', 'google']];
+  const more = Math.max(1, Math.min(5, Number(params.get('buttons')) || 1)) - 1;
+  const kinds = new Map<string, ServiceKind | null>();
+  extra.slice(0, more).forEach(([id, k], i) => {
+    layout.blocks.push({
+      id: `send_${id}`, type: 'sharing_button', rect: { x: 8, y: 11 + i, w: 4, h: 1 },
+      label: id === 'claude' ? 'Ask Claude' : `To ${id}`, connection_id: id, prompt_block_id: 'prompt', on_success: 'keep_open', mappings: [],
+    });
+    kinds.set(`send_${id}`, k);
+  });
   // `?media=video` shows a recording where the picture would be.
   const video = params.get('media') === 'video';
   if (video) layout.blocks[0] = { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 9 } };
@@ -87,11 +98,19 @@ export async function demoSession(): Promise<SessionView> {
       },
       proj: { status: 'loading', selected: null, options: [], message: null },
     },
-    ...(video ? { video: { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 } } : {}),
+    ...(video ? { video: { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true } } : {}),
     issues: [],
-    sharing: local
-      ? { send: { enabled: true, reasons: [], mode: 'save_locally', note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }
-      : { send: { enabled: true, reasons: [], mode: 'send', note: null, kind, reach } },
+    sharing: {
+      ...(local
+        ? { send: { enabled: true, reasons: [], mode: 'save_locally' as const, note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }
+        : { send: { enabled: true, reasons: [], mode: 'send' as const, note: null, kind, reach } }),
+      ...Object.fromEntries(
+        [...kinds].map(([id, k]) => {
+          const b = layout.blocks.find((x) => x.id === id) as Extract<(typeof layout.blocks)[number], { type: 'sharing_button' }>;
+          return [id, { enabled: true, reasons: [], mode: 'send' as const, note: null, kind: k, reach: demoReach(layout, b, demoCapabilities(k!), k) }];
+        }),
+      ),
+    },
   };
 }
 

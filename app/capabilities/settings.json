@@ -39,6 +39,7 @@
     "allow-get-video",
     "allow-set-video",
     "allow-detect-video-tools",
+    "allow-list-audio-devices",
     "allow-try-video-recording",
     "allow-start-video-recording",
     "allow-get-video-recording",

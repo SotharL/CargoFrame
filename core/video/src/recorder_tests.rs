@@ -85,6 +85,164 @@ fn without_a_size_x11_takes_the_whole_screen() {
 }
 
 #[test]
+fn a_window_is_recorded_by_asking_the_capture_for_just_its_part() {
+    let dir = tempfile::tempdir().unwrap();
+    let ring = Ring::new(dir.path(), Window::default(), 1);
+    // odd sides are made even: the video format has no half pixels
+    let area = Some(Area {
+        x: 120,
+        y: 80,
+        w: 801,
+        h: 603,
+    });
+
+    let mut cfg = config(
+        Capture::X11 {
+            display: ":0.0".into(),
+            size: Some((2560, 1440)),
+        },
+        dir.path(),
+    );
+    cfg.area = area;
+    let a = strings(&args(&cfg, &ring));
+    assert_eq!(after(&a, "-video_size"), "800x602");
+    assert_eq!(after(&a, "-i"), ":0.0+120,80");
+
+    cfg.capture = Capture::Gdigrab;
+    let a = strings(&args(&cfg, &ring));
+    assert_eq!(after(&a, "-offset_x"), "120");
+    assert_eq!(after(&a, "-offset_y"), "80");
+    assert_eq!(after(&a, "-video_size"), "800x602");
+    assert_eq!(after(&a, "-i"), "desktop");
+
+    // gdigrab can start left of the first screen; x11grab and ddagrab cannot
+    cfg.area = Some(Area {
+        x: -300,
+        y: -20,
+        w: 640,
+        h: 480,
+    });
+    let a = strings(&args(&cfg, &ring));
+    assert_eq!(after(&a, "-offset_x"), "-300");
+    cfg.capture = Capture::X11 {
+        display: ":0".into(),
+        size: None,
+    };
+    assert_eq!(after(&strings(&args(&cfg, &ring)), "-i"), ":0+0,0");
+    cfg.capture = Capture::Ddagrab { output: 0 };
+    let a = strings(&args(&cfg, &ring));
+    assert_eq!(
+        after(&a, "-i"),
+        "ddagrab=output_idx=0:framerate=30:offset_x=0:offset_y=0:video_size=640x480"
+    );
+}
+
+#[test]
+fn a_part_too_small_to_be_a_window_records_the_whole_picture() {
+    let dir = tempfile::tempdir().unwrap();
+    let ring = Ring::new(dir.path(), Window::default(), 1);
+    let mut cfg = config(Capture::Gdigrab, dir.path());
+    for (w, h) in [(8, 600), (800, 15), (0, 0), (1, 1)] {
+        cfg.area = Some(Area { x: 5, y: 5, w, h });
+        let a = strings(&args(&cfg, &ring));
+        assert!(!a.iter().any(|x| x == "-offset_x"), "{w}x{h}");
+        assert!(!a.iter().any(|x| x == "-video_size"), "{w}x{h}");
+    }
+}
+
+fn pulse(device: &str) -> AudioSource {
+    AudioSource {
+        backend: AudioBackend::Pulse,
+        device: device.into(),
+    }
+}
+
+#[test]
+fn without_sound_nothing_audio_is_asked_for() {
+    let dir = tempfile::tempdir().unwrap();
+    let cfg = config(Capture::Gdigrab, dir.path());
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    for flag in ["-c:a", "-map", "-filter_complex", "pulse", "dshow"] {
+        assert!(!a.iter().any(|x| x == flag), "{flag}");
+    }
+}
+
+#[test]
+fn one_sound_is_a_second_input_that_is_encoded_with_the_picture() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(
+        Capture::X11 {
+            display: ":0".into(),
+            size: None,
+        },
+        dir.path(),
+    );
+    cfg.audio = vec![pulse("@DEFAULT_MONITOR@")];
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    // the picture is input 0 and the sound input 1, and the sound follows the picture's own
+    let inputs: Vec<usize> = (0..a.len()).filter(|i| a[*i] == "-i").collect();
+    assert_eq!(inputs.len(), 2);
+    assert_eq!(a[inputs[1] + 1], "@DEFAULT_MONITOR@");
+    assert_eq!(a[inputs[1] - 2], "-f");
+    assert_eq!(a[inputs[1] - 1], "pulse");
+    assert_eq!(a[inputs[1] - 3], "1024");
+    assert_eq!(a[inputs[1] - 4], "-thread_queue_size");
+    // both are mapped, the filters still apply to the picture only
+    assert_eq!(
+        a.iter().filter(|x| *x == "-map").count(),
+        2,
+        "one -map per stream"
+    );
+    assert!(a.windows(2).any(|w| w == ["-map", "0:v"]));
+    assert!(a.windows(2).any(|w| w == ["-map", "1:a"]));
+    assert_eq!(after(&a, "-c:a"), "aac");
+    assert_eq!(after(&a, "-ar"), "48000");
+    // the sound is encoded before the output options of the ring
+    let ring_args = strings(&ring.output_args(1));
+    assert_eq!(a[a.len() - ring_args.len()..], ring_args[..]);
+}
+
+#[test]
+fn a_windows_sound_goes_in_by_directshow_by_name() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(Capture::Gdigrab, dir.path());
+    cfg.audio = vec![AudioSource {
+        backend: AudioBackend::Dshow,
+        device: "Stereo Mix (Realtek(R) Audio)".into(),
+    }];
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    assert!(a.windows(2).any(|w| w == ["-f", "dshow"]));
+    assert!(a.iter().any(|x| x == "audio=Stereo Mix (Realtek(R) Audio)"));
+}
+
+#[test]
+fn two_sounds_are_mixed_into_one_track() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(
+        Capture::X11 {
+            display: ":0".into(),
+            size: None,
+        },
+        dir.path(),
+    );
+    cfg.audio = vec![pulse("@DEFAULT_MONITOR@"), pulse("default"), pulse("third")];
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    // a third is ignored: a recording has the screen's sound and the voice, no more
+    assert_eq!(a.iter().filter(|x| *x == "-i").count(), 3);
+    assert!(!a.iter().any(|x| x == "third"));
+    let graph = after(&a, "-filter_complex");
+    assert!(graph.starts_with("[0:v]scale="), "{graph}");
+    assert!(graph.contains("[v];[1:a][2:a]amix=inputs=2"), "{graph}");
+    assert!(!a.iter().any(|x| x == "-vf"));
+    assert!(a.windows(2).any(|w| w == ["-map", "[v]"]));
+    assert!(a.windows(2).any(|w| w == ["-map", "[a]"]));
+}
+
+#[test]
 fn vaapi_names_its_device_first_and_uploads_the_picture() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = config(
@@ -268,6 +426,13 @@ fn a_recorder_that_cannot_start_reports_why_and_a_cancelled_one_leaves_nothing()
         },
         dir.path().to_path_buf(),
     );
+    let mut early = Recorder::start(&cfg).unwrap();
+    let said = early.early_failure(Duration::from_secs(10));
+    assert!(
+        said.is_some_and(|m| !m.is_empty()),
+        "it should say why at once"
+    );
+    early.cancel();
     let mut rec = Recorder::start(&cfg).unwrap();
     let began = Instant::now();
     let err = loop {
@@ -298,7 +463,9 @@ fn a_recorder_that_cannot_start_reports_why_and_a_cancelled_one_leaves_nothing()
     );
     cfg.fps = 10;
     let mut rec = Recorder::start(&cfg).unwrap();
-    std::thread::sleep(Duration::from_millis(2_500));
+    // one that works is not reported as failed
+    assert_eq!(rec.early_failure(Duration::from_millis(700)), None);
+    std::thread::sleep(Duration::from_millis(1_800));
     rec.poll().unwrap();
     rec.cancel();
     let list = ring_dir.join("segments.csv");

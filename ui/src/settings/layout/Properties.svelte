@@ -3,6 +3,7 @@
   import LookInEditor from './LookInEditor.svelte';
   import TextAutomation from './TextAutomation.svelte';
   import SharingPanel from './SharingPanel.svelte';
+  import VideoOptions from './VideoOptions.svelte';
   import { buttonKind, kindStyle } from '../../lib/connector';
   import { blockName, lineFor } from './reach';
   import { roleHint } from '../../lib/roles';
@@ -150,6 +151,8 @@
         {/if}
       {/if}
     {/if}
+  {:else if block.type === 'video'}
+    <VideoOptions {block} />
   {:else if block.type === 'files'}
     <Field label="Title"><input type="text" bind:value={block.title} /></Field>
     <Field label="Show these files" hint="One pattern per line, relative to each folder looked in: *.log, logs/**/*.txt">
@@ -198,6 +201,7 @@
       kind={buttonKind(block.connection_id, connections)}
       reach={reach[block.id]}
       fallback={target?.capabilities ?? null}
+      fields={fieldsFor(block.connection_id).map(({ key, label }) => ({ key, label }))}
     />
     <div class="maps">
       <h3>Fill the service's fields</h3>

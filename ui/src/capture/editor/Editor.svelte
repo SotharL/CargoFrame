@@ -6,6 +6,7 @@
     type Annotation, type EditorState, type Pt, type PxRect, type Thickness,
   } from './model';
   import { exportPng, paint } from './render';
+  import StylePicker from './StylePicker.svelte';
 
   let {
     image,
@@ -208,33 +209,25 @@
       </button>
     </div>
 
-    <div class="group" role="group" aria-label="Colour">
-      {#each COLORS as c (c)}
-        <button
-          class="swatch"
-          class:on={color === c}
-          style:--sw={c}
-          aria-label="Colour {c}"
-          aria-pressed={color === c}
-          onclick={() => (color = c)}
-        ></button>
-      {/each}
-    </div>
+    <span class="sep" aria-hidden="true"></span>
 
-    <div class="group" role="group" aria-label="Thickness">
-      {#each THICKNESS as t (t)}
-        <button class="thick" class:on={thickness === t} aria-pressed={thickness === t} title={t} onclick={() => (thickness = t)}>
-          <span class="bar {t}"></span>
-          <span class="sr-only">{t}</span>
-        </button>
-      {/each}
-    </div>
+    <StylePicker colors={COLORS} thicknesses={THICKNESS} bind:color bind:thickness />
+
+    <span class="sep" aria-hidden="true"></span>
 
     <div class="group">
-      <button title="Undo (Ctrl+Z)" aria-label="Undo" disabled={doc.annotations.length === 0} onclick={() => (doc = undo(doc))}>Undo</button>
-      <button title="Redo (Ctrl+Y)" aria-label="Redo" disabled={doc.redo.length === 0} onclick={() => (doc = redo(doc))}>Redo</button>
-      <button disabled={!doc.crop} onclick={() => (doc = resetCrop(doc))}>Reset crop</button>
-      <button disabled={!edited} onclick={() => (doc = clearAll())}>Clear all</button>
+      <button class="tool" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={doc.annotations.length === 0} onclick={() => (doc = undo(doc))}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" /></svg>
+      </button>
+      <button class="tool" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={doc.redo.length === 0} onclick={() => (doc = redo(doc))}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" /></svg>
+      </button>
+      <button class="tool" title="Reset crop: show the whole picture again" aria-label="Reset crop" disabled={!doc.crop} onclick={() => (doc = resetCrop(doc))}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+      </button>
+      <button class="tool" title="Clear all: remove every mark and the crop" aria-label="Clear all" disabled={!edited} onclick={() => (doc = clearAll())}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6" /></svg>
+      </button>
     </div>
   </div>
 
@@ -277,19 +270,13 @@
 
 <style>
   .editor { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; height: 100%; min-height: 0; }
-  .toolbar { display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
-  .group { display: inline-flex; gap: 4px; align-items: center; }
-  .tool { width: 32px; height: 30px; padding: 0; display: inline-grid; place-items: center; }
-  .tool svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  /* One line: icon buttons only. A block too narrow for that wraps rather than cuts anything off. */
+  .toolbar { display: flex; flex-wrap: wrap; gap: 4px 4px; align-items: center; }
+  .group { display: inline-flex; gap: 2px; align-items: center; }
+  .sep { width: 1px; height: 18px; background: var(--border-strong); margin: 0 4px; }
+  .tool { width: 28px; height: 28px; padding: 0; display: inline-grid; place-items: center; }
+  .tool svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tool.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  .swatch { width: 20px; height: 20px; padding: 0; border-radius: 50%; background: var(--sw); border: 2px solid var(--border-strong); }
-  .swatch.on { outline: 2px solid var(--accent); outline-offset: 2px; }
-  .thick { width: 30px; height: 28px; padding: 0; display: inline-grid; place-items: center; }
-  .thick.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 18%, transparent); }
-  .bar { display: block; width: 16px; background: currentColor; border-radius: 2px; }
-  .bar.thin { height: 2px; }
-  .bar.medium { height: 4px; }
-  .bar.thick { height: 7px; }
   .stage {
     min-height: 0; display: grid; place-items: center;
     background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);

@@ -7,6 +7,7 @@
   import type { Block, Capabilities, Reach, ServiceKind } from '../../lib/types';
   import { DEFAULT_SEND_RULES, MAX_INLINE_KB } from '../../lib/types';
   import { blockName, CAPABILITY_ROWS, lineFor, SUPPORT_ICON, SUPPORT_WORD } from './reach';
+  import { applyRoute, currentRoute, isAutomatic, routeOptions, type RouteField } from './routes';
 
   type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
   let {
@@ -15,6 +16,7 @@
     kind,
     reach,
     fallback = null,
+    fields = [],
   }: {
     block: SharingBlock;
     blocks: Block[];
@@ -23,6 +25,8 @@
     reach: Reach | undefined;
     /** What to show before the backend has answered. */
     fallback?: Capabilities | null;
+    /** The fields the destination offers, to choose from when a block is sent in one. */
+    fields?: RouteField[];
   } = $props();
 
   const caps = $derived(reach?.capabilities ?? fallback);
@@ -32,6 +36,13 @@
     others.map((b) => ({ b, line: reach ? (reach.blocks.find((r) => r.block_id === b.id) ?? null) : null })),
   );
   const heading = $derived(kind ? `${KIND_NAME[kindKey(kind)]} can take` : 'Saving a zip on this computer keeps');
+
+  /** Send `blockId` as `route` (not sent, the prompt, or a field) by changing the button itself. */
+  function route(blockId: string, to: string) {
+    const next = applyRoute(block, blockId, to);
+    block.prompt_block_id = next.prompt_block_id;
+    block.mappings = next.mappings;
+  }
 
   function setRules(patch: Partial<typeof rules>) {
     block.send = { ...rules, ...patch };
@@ -65,9 +76,35 @@
       {#each verdicts as v (v.b.id)}
         {#if v.line}
           {@const l = lineFor(v.line, block, kind)}
+          {@const choosable = kind !== null && (v.b.type === 'text' || v.b.type === 'dropdown')}
           <li class="send {l.state}">
             <span class="icon" aria-hidden="true">{l.icon}</span>
-            <span><strong>{blockName(v.b)}</strong>: {l.text}</span>
+            {#if choosable}
+              {@const current = currentRoute(v.line)}
+              {@const automatic = isAutomatic(block, kind, v.line)}
+              <span class="choose">
+                <label>
+                  <strong>{blockName(v.b)}</strong>
+                  <select
+                    aria-label="{blockName(v.b)}: what this button does with it"
+                    value={current}
+                    disabled={v.line.state === 'cannot_send' || automatic}
+                    onchange={(e) => route(v.b.id, e.currentTarget.value)}
+                  >
+                    {#each routeOptions(block, blocks, v.b, fields, current) as o (o.value)}
+                      <option value={o.value} disabled={o.disabled}>{o.label}</option>
+                    {/each}
+                  </select>
+                </label>
+                {#if v.line.state === 'cannot_send'}
+                  <span class="quiet note">{l.text}</span>
+                {:else if automatic}
+                  <span class="quiet note">Always picks the chat to open</span>
+                {/if}
+              </span>
+            {:else}
+              <span><strong>{blockName(v.b)}</strong>: {l.text}</span>
+            {/if}
           </li>
         {/if}
       {/each}
@@ -137,5 +174,8 @@
   .send { display: grid; grid-template-columns: 16px 1fr; gap: 6px; font-size: 12.5px; padding: 3px 6px; border-radius: var(--radius-sm); }
   .send.cannot_send { background: color-mix(in srgb, var(--err) 10%, transparent); }
   .send.switched_off, .send.not_used { color: var(--quiet); }
+  .choose { display: grid; gap: 2px; min-width: 0; }
+  .choose label { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
+  .choose select { min-width: 0; max-width: 100%; }
   .check { display: flex; gap: 6px; align-items: center; font-size: 13px; }
 </style>

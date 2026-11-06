@@ -80,10 +80,29 @@ want, and press the sharing button at the bottom. If sending fails it retries, t
 so nothing is lost. A button with no connection says **Save locally** and saves that zip into the folder you
 chose in *General, Safety*.
 
+**Which button sends what:** a window can have up to five sharing buttons. Each block shows a small row of tick
+boxes on its top edge, one per button, in that button's colour and with a ✓ when ticked. Clear a box to leave the
+block out of that button's share this time, or tick one the button had switched off. A dashed box can't be ticked
+(hover it to see why: the destination can't take it, or the button has no field for it), and a box with a ring
+is needed by the button, so it stays. Pointing at a button or one of its boxes outlines everything that button
+sends. In the layout builder, choose for each text or dropdown block whether a button sends it, as the prompt, or
+in one of the destination's fields.
+
 **Video:** a trigger whose *Makes* is *A video* starts recording the first time you press its shortcut and stops
-the second time. The window then plays the clip, and you can trim it (drag the two handles under the clip, or
-press *Start here* and *End here* while it plays), crop it, and put one red ring with a text on it before sending.
-Only the last seconds are kept (10 by default, set in *Settings, Video*).
+the second time. The window then plays the clip (move the mouse over the picture for the play, stop, speed, volume
+and full screen buttons) and you can trim it by dragging the two handles of the thin timeline under it, crop it
+(*Crop*, drag the box, *Apply crop*; *Reset to full capture* undoes it), and put one red ring with a text on it
+(*Mark*) before sending. Only the last seconds are kept (10 by default, set in *Settings, Video*).
+
+In the layout builder, click the Video block to choose what is recorded: *the whole screen* or *the window in focus*
+(the one you were in when you pressed the shortcut), the *sound of the computer* (on by default) and a *microphone*
+(off by default), each off, on, or one device from the list. On Linux the computer's sound works as it is; on Windows
+ffmpeg can only record it through a loopback device, so turn on **Stereo Mix** in the Windows sound settings (Recording
+tab, right-click, Show disabled devices) or install one; without it the clip has no computer sound and the
+notification says so.
+
+**Several windows:** pressing a shortcut while a CargoFrame window is open opens another one, up to ten at a time,
+each with its own picture, boxes and choices. Closing one leaves the others open.
 
 **Pulling values from files (optional):** under *Data from files* you describe a value to read from a file in the
 program's project folder (JSON, YAML, TOML, INI, CSV, XML, a regular expression, or a line of a text or log file),

@@ -96,11 +96,18 @@ gate "Shortcut to capture ready" "$(ready_ms 1)" 150
 gate "Shortcut to usable window (cold)" "$cold" 700
 
 # 2. Warm: Escape hides the window (Balanced); the next press only shows it again.
-for _ in $(seq 8); do
+# The window is focused first (there is no window manager here to do it), and Escape is repeated
+# until it is really gone: with the window still open, a second press would open a second window.
+cf_window() { xdotool search --onlyvisible --name '^CargoFrame' 2>/dev/null | head -n1 || true; }
+for _ in $(seq 10); do
+  w="$(cf_window)"
+  [ -z "$w" ] && break
+  xdotool windowfocus "$w" 2>/dev/null || true
+  sleep 0.3
   xdotool key --clearmodifiers Escape
   sleep 0.6
-  grep -q "window closing" "$work/app.log" 2>/dev/null && break
 done
+[ -z "$(cf_window)" ] || fail "the CargoFrame window did not close on Escape, so the warm time cannot be measured"
 sleep 0.5
 focus_fake
 xdotool key --clearmodifiers ctrl+shift+F9

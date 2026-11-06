@@ -3,6 +3,7 @@ use crate::edit::{Crop, Overlay};
 use std::process::Command;
 
 const CLIP: Clip = Clip {
+    has_audio: false,
     width: 320,
     height: 240,
     duration_ms: 4000,
@@ -158,9 +159,23 @@ fn ffprobe_json_is_read() {
         Clip {
             width: 1920,
             height: 1080,
-            duration_ms: 10_013
+            duration_ms: 10_013,
+            has_audio: false,
         }
     );
+    // the sound is found among the streams, wherever the picture is
+    let with_sound = r#"{"streams":[{"codec_type":"audio"},{"codec_type":"video","width":640,"height":360}],"format":{"duration":"2.5"}}"#;
+    let clip = parse_probe(with_sound).unwrap();
+    assert_eq!(
+        (clip.width, clip.height, clip.duration_ms),
+        (640, 360, 2_500)
+    );
+    assert!(clip.has_audio);
+    let silent = r#"{"streams":[{"codec_type":"video","width":640,"height":360}],"format":{"duration":"2.5"}}"#;
+    assert!(!parse_probe(silent).unwrap().has_audio);
+    // a file with a sound and no picture is not a recording
+    let only_sound = r#"{"streams":[{"codec_type":"audio"}],"format":{"duration":"2.5"}}"#;
+    assert!(parse_probe(only_sound).is_err());
     for bad in [
         "not json",
         r#"{"streams":[],"format":{"duration":"1"}}"#,
@@ -355,6 +370,87 @@ fn an_odd_sized_clip_is_exported_even() {
     run(&ffmpeg, &p, &|| false, Duration::from_secs(60)).unwrap();
     let result = probe(&ffprobe, &out).unwrap();
     assert_eq!((result.width, result.height), (320, 240));
+}
+
+#[test]
+fn the_sound_of_a_recording_is_kept_when_there_is_one_and_left_out_when_not() {
+    let with = Clip {
+        has_audio: true,
+        ..CLIP
+    };
+    let a = strings(
+        &plan(
+            Path::new("/in.mp4"),
+            Path::new("/out.mp4"),
+            &Edit::default(),
+            &with,
+        )
+        .unwrap(),
+    );
+    assert!(a.windows(2).any(|w| w == ["-map", "0:a:0"]));
+    assert_eq!(after(&a, "-c:a"), "aac");
+    assert!(!a.iter().any(|x| x == "-an"));
+    let a = strings(
+        &plan(
+            Path::new("/in.mp4"),
+            Path::new("/out.mp4"),
+            &Edit::default(),
+            &CLIP,
+        )
+        .unwrap(),
+    );
+    assert!(a.iter().any(|x| x == "-an"));
+    assert!(!a.iter().any(|x| x == "-c:a" || x == "0:a:0"));
+}
+
+#[test]
+fn a_real_export_keeps_the_sound_and_cuts_it_with_the_picture() {
+    let Some((ffmpeg, ffprobe)) = tools() else {
+        eprintln!("skipped: ffmpeg and ffprobe are not installed");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let (clip, out) = (dir.path().join("sound.mp4"), dir.path().join("out.mp4"));
+    // a recording as the recorder leaves it: H.264 and AAC in an MP4 that starts at zero
+    if !make(
+        &ffmpeg,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "testsrc=s=320x240:r=10:d=4",
+            "-f",
+            "lavfi",
+            "-i",
+            "sine=frequency=440:duration=4",
+            "-c:v",
+            "libx264",
+            "-pix_fmt",
+            "yuv420p",
+            "-c:a",
+            "aac",
+            clip.to_str().unwrap(),
+        ],
+    ) {
+        eprintln!("skipped: this ffmpeg cannot make a test recording with sound");
+        return;
+    }
+    let info = probe(&ffprobe, &clip).unwrap();
+    assert!(info.has_audio);
+    let edit = Edit {
+        start_ms: 1000,
+        end_ms: Some(3000),
+        ..Edit::default()
+    };
+    let p = plan(&clip, &out, &edit, &info).unwrap();
+    run(&ffmpeg, &p, &|| false, Duration::from_secs(60)).unwrap();
+    let result = probe(&ffprobe, &out).unwrap();
+    assert!(result.has_audio, "the exported clip has no sound");
+    assert!(
+        (1_800..=2_300).contains(&result.duration_ms),
+        "{}",
+        result.duration_ms
+    );
 }
 
 #[test]

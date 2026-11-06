@@ -775,3 +775,104 @@ to a recording matches what it can do to a screenshot: cut, crop and mark.
   accent; the executable, installer and window icons keep the default blue.
 - **Not checked on a real Windows desktop:** how the icons look in the taskbar, the tray and the installer, at 100,
   125 and 150 percent scaling, and the colour picker in WebView2.
+
+### The capture window, after the first real use (6 Nov 2026)
+
+The owner tried the window and listed what was awkward. Each item and what was decided:
+
+- **The screenshot toolbar is one line.** Icon buttons only (each with a name and a tooltip). The eight colours and
+  the three thicknesses moved into one small button that shows the current colour and opens a panel; undo, redo,
+  reset crop and clear all became icons. A block too narrow for that wraps rather than cutting anything off.
+- **The video has the playback buttons people know**, laid over the top of the picture, see-through, shown while the
+  pointer is over the picture or a button has focus: play/pause, stop (back to the start of the kept part), slower,
+  faster (0.25, 0.5, 1, 1.5 and 2 times), mute and volume, and full screen. A click on the picture plays or pauses,
+  a double click goes full screen, and Space, K, F, M and the arrow keys work when the picture has focus. The
+  browser's own bar is not used, so the recording looks the same in WebView2 and WebKitGTK.
+- **The timeline is a thin track the full width of the picture** with the two cut handles, the shaded kept part and
+  the playing position. "Start here" and "End here" are gone: the handles do the cutting. (The Video page in Settings,
+  which tests a recording, keeps its own buttons.)
+- **Crop and mark take turns.** One of them has the mouse at a time. *Crop* shows the whole picture with a box that is
+  already what will be sent; *Apply crop* leaves the mode and the window then shows only the cropped part (the
+  recording is laid out so the box fills the picture, and the rest is clipped), *Cancel* puts back what was there
+  before, and *Edit crop* and *Reset to full capture* are there afterwards. The mark is placed in the cropped picture;
+  while the box is being set it stays in view but cannot be moved. Starting one tool while the other is open ends the
+  other and keeps its result. *Reset edits* undoes the cut, the crop and the mark together.
+- **Not checked on a real desktop:** full screen from a page inside WebView2 and WebKitGTK, and hover on a touch screen
+  (there is none: the buttons are also reachable with the keyboard).
+
+### Which button sends what: tick boxes (6 Nov 2026)
+
+The owner found the line of pills under every block took too much room and wanted the choice to be something to
+tick, colour-coded to the button, up to five side by side, safe, and easy to find. Decisions:
+
+- **A small row of boxes on the top edge of every block, one per sharing button.** Each box has the button's
+  destination colour and a ✓ when ticked, so colour is never the only sign; two buttons to the same kind of service
+  get a small 1, 2. The row sits on the edge of the block, not under it, so no layout space is used; the Logs block's
+  All/None moved next to its title to make room. The old pills ("✓ Jira", "✕ reason", "Not sent") are gone.
+- **The boxes start as the layout says and are the choice for this capture.** A box is ticked at the start when the
+  button's rules send the block. Clearing one leaves the block out of that button's share only; ticking a block the
+  button had switched off (the picture, the files) sends it this once. Nothing is saved back to the layout.
+- **A box that cannot be ticked is shown dashed and says why on hover**: the destination cannot take it (the reason
+  from the capability table) or the button has no field for it. **A box the button cannot work without stays ticked
+  and ringed**: the prompt of an AI chat and any field that the *Destination fields* page marks as required (the app
+  tells the layout checks which fields those are).
+- **The sharing code decides, not the window.** The window sends the ticked block ids with the share. The Rust side
+  (`cargoframe_layout::select`) refuses a box for a block the destination cannot take, a block the button has no field
+  for, a block that is not in the layout, and clearing a required one, with a sentence for each; it then drops the
+  cleared blocks' fields, prompt, files and picture. A Custom API whose request uses a field that was cleared is
+  refused by name ("The request uses {{summary}} but nothing fills it") and the share is kept, as before.
+- **Hovering or focusing a button, or one of its boxes, outlines every block that button sends.** The outline is in
+  the button's colour; the layout does not move.
+- **The line under a sharing button is one short line** ("Sends: Screenshot · 3 files (12 KB) · Prompt → Release
+  notes") with the whole text and the note in its tooltip. A button block only one row high hides the line and says
+  the same in the button's tooltip.
+- **At most five sharing buttons per window.** The builder disables "Add a sharing button" at five, says why, and the
+  layout check marks a sixth button as unable to send, so a hand-edited file cannot get round it.
+- **In the layout builder the lines for text and dropdown blocks are now choices** (not sent, the prompt, or one of
+  the destination's fields), taken from the destination's own field list so a typo cannot happen. A field another block
+  already fills is shown and cannot be taken twice; a field typed by hand in "Fill the service's fields" is kept in the
+  list; Claude's chat dropdown shows that it is always used. The picture and the files keep their switches under "Send
+  rules". A button that only saves a zip keeps plain lines.
+- **Not done:** per-block choices for several Files blocks on one button (the switch covers them all), and changing the
+  choice from the block's own "Sent by" list (it stays a plain list; change it on the button).
+
+### Several windows, the window in focus, and sound (6 Nov 2026)
+
+The owner asked for up to ten CargoFrame windows at once, for a video to be able to record just the window in focus,
+and for the video to have sound (the computer's by default, no microphone), chosen in the layout. Decisions:
+
+- **Up to ten capture windows, each its own capture.** Pressing a shortcut while another capture is open opens a new
+  window instead of replacing it (the new one is placed a little below and right of the last, so they fan out). The
+  eleventh press says so in a notification and does nothing. Each window has a label (`capture`, `capture-2` …) and its
+  own session, its own ticked boxes, its own edited picture and mark, and its own capture folder; closing one forgets
+  only that one, and "Send" in one window never touches another. Window events (`session-changed`) are sent to one
+  window, and the capability file lets `capture-*` use the same commands as `capture`. Only one capture is *started*
+  at a time (the screenshot or the recording stop is quick), but any number of finished ones stay open.
+- **What a video records is set in the layout's Video block,** not in a global setting, because the same person has
+  a "bug clip of this window" layout and a "tour of my screen" layout. The block has two settings: **Record** (*the
+  whole screen*, or *the window in focus*) and the sounds (*sound of the computer*: on / off / one device;
+  *microphone*: off / on / one device). New blocks and old layouts get the screen, the computer's sound on, and no
+  microphone.
+- **The window in focus is the one that has the focus when the first shortcut is pressed,** as it is placed and sized
+  then (the visible frame on Windows, without the invisible borders). The recording does not follow it if it moves
+  or is resized. If the system does not say which window it is (Wayland, nothing focused) or it is a stub smaller than
+  16 pixels, the whole screen is recorded and the notification says so. A part of the desktop is cut out by ffmpeg's
+  own capture (`gdigrab -offset_x/-offset_y/-video_size`, `x11grab` with `display+x,y`); on Windows, Desktop
+  Duplication only sees one screen, so a window recording uses GDI (which sees the whole desktop, any screen).
+- **Sound by backend.** Linux: PulseAudio (PipeWire answers the same way): the computer's sound is
+  `@DEFAULT_MONITOR@`, the microphone is `default`, and the layout can name one device (the list comes from
+  `ffmpeg -sources pulse`; a name ending `.monitor` is a computer sound, the others are microphones). Windows: ffmpeg
+  has no way of its own to record the sound of the computer, only DirectShow devices, so the computer's sound is
+  recorded when the PC has a loopback device (*Stereo Mix*, *What U Hear*, *virtual-audio-capturer*, found by name)
+  and the notification says what to turn on when it has not; the microphone is the first DirectShow microphone. A
+  native Windows loopback capture is a later step and is **not** built.
+- **Sound never costs the picture.** No sound system on Linux (checked by looking for the PulseAudio socket, because
+  asking ffmpeg takes seconds), a device that is not there, or any other reason ffmpeg gives up in the first
+  moments: the recording goes on without sound and the notification says why. Two sounds are mixed into one track
+  (`amix`), AAC at 128 kb/s, 48 kHz stereo; a third is ignored.
+- **The clip keeps its sound through the export.** The probe says whether a recording has a sound track
+  (`Clip.has_audio`); the export copies it (AAC), cut with the picture, and drops it only when there is none. The
+  player shows the volume and mute buttons only for a clip with sound and says "No sound" otherwise.
+- **Not checked here (no audio hardware, no real desktop):** the sound devices themselves (Pulse monitor and
+  microphone, Windows loopback), a window recording of a real GPU window, DPI scaling with GDI on Windows (ffmpeg's
+  GDI capture may take a scaled screen at the scaled size), and ten windows on a real desktop.

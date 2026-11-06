@@ -3,7 +3,7 @@ import type {
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
-  VideoRecording, VideoTestEdit, VideoTools, VideoTrial,
+  VideoRecording, VideoTestEdit, VideoTools, VideoTrial, AudioDevices,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
@@ -114,6 +114,8 @@ export interface Api {
   setVideo(video: Video): Promise<void>;
   /** Where ffmpeg is and what it can do, for the settings as they are in the form. */
   detectVideoTools(video: Video): Promise<VideoTools>;
+  /** The sound devices of this computer, for a video block's sound choices. */
+  listAudioDevices(): Promise<AudioDevices>;
   /** Record the screen for a few seconds with the settings as they are in the form. */
   tryVideoRecording(video: Video): Promise<VideoTrial>;
   /** Start recording until `stopVideoRecording`, keeping only the last seconds. */
@@ -167,9 +169,11 @@ async function tauriApi(): Promise<Api> {
     },
     closeCapture: () => invoke('close_capture'),
     editLayout: (layoutId) => invoke('edit_layout', { layoutId }),
+    // Only this window's own event: with several CargoFrame windows open, a new capture in one
+    // must not reload the others.
     onSessionChanged: async (callback) => {
-      const { listen } = await import('@tauri-apps/api/event');
-      return listen('session-changed', callback);
+      const { getCurrentWebviewWindow } = await import('@tauri-apps/api/webviewWindow');
+      return getCurrentWebviewWindow().listen('session-changed', callback);
     },
     openSettings: (page) => invoke('open_settings', { page }),
     onNavigate: async (callback) => {
@@ -236,6 +240,7 @@ async function tauriApi(): Promise<Api> {
     getVideo: () => invoke('get_video'),
     setVideo: (video) => invoke('set_video', { video }),
     detectVideoTools: (video) => invoke('detect_video_tools', { video }),
+    listAudioDevices: () => invoke('list_audio_devices'),
     tryVideoRecording: (video) => invoke('try_video_recording', { video }),
     startVideoRecording: (video) => invoke('start_video_recording', { video }),
     getVideoRecording: () => invoke('get_video_recording'),
@@ -271,6 +276,10 @@ export interface MemoryOptions {
   noFfmpeg?: boolean;
   /** The stand-in's test recording fails. */
   recordingFails?: boolean;
+  /** The stand-in is a Windows PC with no loopback device, so it cannot record the computer's sound. */
+  noLoopback?: boolean;
+  /** The stand-in finds no sound devices at all. */
+  noAudio?: boolean;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
   /** Called by `fetchOptions` and `previewOptions`. */
@@ -662,6 +671,26 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         found: true, ffmpeg: 'C:\\Tools\\ffmpeg\\bin\\ffmpeg.exe', version: '7.1-full_build',
         encoders: ['software', 'nvenc', 'media_foundation'], captures: ['gdigrab', 'ddagrab'],
         auto_capture: 'gdigrab', auto_encoder: 'software', os: 'windows', problem: null,
+      };
+    },
+    listAudioDevices: async () => {
+      if (opts.noAudio) {
+        return { os: 'linux', desktop: [], microphone: [], listed: false, note: 'No sound system answered (PulseAudio or PipeWire). Recordings will have no sound.' };
+      }
+      if (opts.noLoopback) {
+        return {
+          os: 'windows', desktop: [], listed: true,
+          microphone: [{ name: 'Microphone (Realtek(R) Audio)', label: 'Microphone (Realtek(R) Audio)', default: false }],
+          note: 'Windows does not let ffmpeg record the sound of the computer by itself. Turn on "Stereo Mix" in the Windows sound settings (Recording tab, right-click, Show disabled devices) or install a loopback device such as virtual-audio-capturer; until then the sound of the computer is left out.',
+        };
+      }
+      return {
+        os: 'linux', listed: true, note: null,
+        desktop: [{ name: 'alsa_output.pci-0000_00_1f.3.analog-stereo.monitor', label: 'Monitor of Built-in Audio Analog Stereo', default: true }],
+        microphone: [
+          { name: 'alsa_input.pci-0000_00_1f.3.analog-stereo', label: 'Built-in Audio Analog Stereo', default: true },
+          { name: 'bluez_input.00_1B_66_00_00_00.0', label: 'Headset (Bluetooth)', default: false },
+        ],
       };
     },
     tryVideoRecording: async (v) => {

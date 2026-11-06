@@ -102,6 +102,8 @@ export function demoReach(layout: Layout, button: Extract<Block, { type: 'sharin
     const chats = layout.blocks.find((b) => b.type === 'dropdown' && b.source.type === 'claude_chats');
     if (chats) mappings.push({ field: 'chat', source: { kind: 'block', value: chats.id } });
   }
+  // What the demo destinations cannot work without: an AI chat's prompt, a Jira issue's summary.
+  const needs = (role: 'prompt' | 'field', field?: string) => (kind === 'claude' && role === 'prompt') || (kind === 'jira' && field === 'summary');
   const fieldOf = (id: string) => mappings.find((m) => m.source.kind === 'block' && m.source.value === id)?.field;
   const blocks: BlockReach[] = [];
   for (const b of layout.blocks) {
@@ -115,7 +117,7 @@ export function demoReach(layout: Layout, button: Extract<Block, { type: 'sharin
     } else if (b.type === 'text') {
       const field = fieldOf(b.id);
       const sentAs = button.prompt_block_id === b.id ? ({ role: 'prompt' } as const) : field ? ({ role: 'field', field } as const) : null;
-      blocks.push(!sentAs ? { block_id: b.id, state: 'not_used' } : caps.text.support === 'no' ? { block_id: b.id, state: 'cannot_send', why: caps.text.note } : { block_id: b.id, state: 'sent', ...sentAs });
+      blocks.push(!sentAs ? { block_id: b.id, state: 'not_used' } : caps.text.support === 'no' ? { block_id: b.id, state: 'cannot_send', why: caps.text.note } : { block_id: b.id, state: 'sent', ...sentAs, required: needs(sentAs.role, field) });
     } else {
       const field = fieldOf(b.id);
       blocks.push(!field ? { block_id: b.id, state: 'not_used' } : caps.dropdown.support === 'no' ? { block_id: b.id, state: 'cannot_send', why: caps.dropdown.note } : { block_id: b.id, state: 'sent', role: 'field', field });

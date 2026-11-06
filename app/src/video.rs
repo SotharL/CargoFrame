@@ -7,12 +7,21 @@
 //! at once whether another choice works on their PC.
 
 use cargoframe_config::{Video, VideoCapture, VideoEncoder};
-use cargoframe_video::recorder::{self, Capture, Config, Encoder, Recorder, X264Preset};
+use cargoframe_layout::{BlockKind, Layout, VideoAudio, VideoSubject};
+use cargoframe_video::recorder::{
+    self, Area, AudioSource, Capture, Config, Encoder, Recorder, X264Preset,
+};
 use cargoframe_video::{ask, locate_in, plan, probe, run, Crop, Edit, Overlay, Window};
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
+
+/// How long a recording with sound waits to hear that ffmpeg could not open a sound device. With
+/// a sound system running, a device that is not there is refused at once; a sound system that is
+/// not running is looked for beforehand (see `audio::pulse_running`), because that takes seconds
+/// to be refused.
+const SOUND_PATIENCE: Duration = Duration::from_millis(600);
 
 /// How long the test recording runs.
 pub const TRIAL_SECONDS: u64 = 5;
@@ -41,7 +50,7 @@ impl Os {
         }
     }
 
-    fn name(self) -> &'static str {
+    pub(crate) fn name(self) -> &'static str {
         match self {
             Self::Windows => "windows",
             Self::Linux => "linux",
@@ -112,7 +121,7 @@ pub fn search_dirs(setting: Option<&str>, beside_app: Option<&Path>) -> (Vec<Pat
     )
 }
 
-fn program_beside_app() -> Option<PathBuf> {
+pub fn program_beside_app() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
         .and_then(|e| e.parent().map(Path::to_path_buf))
@@ -333,6 +342,73 @@ pub fn normalized(mut video: Video) -> Video {
     video
 }
 
+/// What a layout's video block asks of one recording, as it is when the shortcut is pressed.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Wish {
+    /// Record only this part of the desktop (the window in focus). `None` is the whole screen.
+    pub area: Option<Area>,
+    /// The sounds, in the layout's words. `None` records no sound (a test recording has none).
+    pub audio: Option<VideoAudio>,
+}
+
+/// What the layout a video trigger opens asks the recording to be. `focused` says where the
+/// window in focus is, when it is asked for. The second part is what the person should be told
+/// about anything that could not be done.
+pub fn wish_for(
+    layout: Option<&Layout>,
+    focused: &dyn Fn() -> Option<Area>,
+) -> (Wish, Vec<String>) {
+    let block = layout
+        .and_then(|l| {
+            l.blocks.iter().find_map(|b| match &b.kind {
+                BlockKind::Video(v) => Some(v.clone()),
+                _ => None,
+            })
+        })
+        .unwrap_or_default();
+    let mut notes = Vec::new();
+    let area = match block.subject {
+        VideoSubject::Screen => None,
+        VideoSubject::FocusedWindow => {
+            match focused() {
+                Some(a) if a.even().is_some() => Some(a),
+                Some(_) => {
+                    notes.push("The window in focus is too small to record, so the whole screen is recorded.".into());
+                    None
+                }
+                None => {
+                    notes.push("CargoFrame could not tell which window has the focus, so the whole screen is recorded.".into());
+                    None
+                }
+            }
+        }
+    };
+    (
+        Wish {
+            area,
+            audio: Some(block.audio),
+        },
+        notes,
+    )
+}
+
+/// A wish after the computer has been asked what it has.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Extras {
+    pub area: Option<Area>,
+    pub sources: Vec<AudioSource>,
+    /// How long to wait to hear that ffmpeg could not open a sound device.
+    pub patience: Duration,
+}
+
+/// How a recording began: whether it has sound, and what the person should be told about what
+/// was left out.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Started {
+    pub sound: bool,
+    pub notes: Vec<String>,
+}
+
 /// The recorder's own settings for a choice.
 pub fn recorder_config(
     found: &Found,
@@ -426,6 +502,8 @@ pub struct Trial {
     pub height: u32,
     pub clip_ms: u64,
     pub clip_bytes: u64,
+    /// The clip has a sound track.
+    pub clip_audio: bool,
     /// Wall time from start to finished clip.
     pub took_ms: u64,
     /// Where the clip is, to open and watch.
@@ -443,6 +521,7 @@ impl Trial {
             height: 0,
             clip_ms: 0,
             clip_bytes: 0,
+            clip_audio: false,
             took_ms: 0,
             clip: None,
         }
@@ -574,11 +653,12 @@ impl Recording {
         session: &Session,
         work: &Path,
         keep_secs: u32,
-    ) -> Result<(), String> {
-        self.start(video, os, session, work, keep_secs)?;
+        wish: &Wish,
+    ) -> Result<Started, String> {
+        let started = self.start_wanting(video, os, session, work, keep_secs, wish)?;
         self.by_trigger
             .store(true, std::sync::atomic::Ordering::SeqCst);
-        Ok(())
+        Ok(started)
     }
 
     fn lock(&self) -> std::sync::MutexGuard<'_, Slot> {
@@ -595,6 +675,20 @@ impl Recording {
         work: &Path,
         keep_secs: u32,
     ) -> Result<(), String> {
+        self.start_wanting(video, os, session, work, keep_secs, &Wish::default())
+            .map(|_| ())
+    }
+
+    /// `start`, with what a layout's video block asks for.
+    pub fn start_wanting(
+        &self,
+        video: &Video,
+        os: Os,
+        session: &Session,
+        work: &Path,
+        keep_secs: u32,
+        wish: &Wish,
+    ) -> Result<Started, String> {
         validate(video)?;
         // a recording started by hand has the ten-minute limit (see `view`)
         let idle = matches!(&*self.lock(), Slot::Idle { .. });
@@ -610,9 +704,30 @@ impl Recording {
         }
         let found = find(video, program_beside_app().as_deref())?;
         let choice = choose(video, &found, os, session)?;
-        self.start_with(found, choice, video, session, work, keep_secs)
+        let mut notes = Vec::new();
+        let sources = match &wish.audio {
+            Some(audio) => {
+                let plan = crate::audio::plan(audio, os, crate::audio::pulse_running(), &|| {
+                    crate::audio::list(&found.ffmpeg, os)
+                });
+                notes.extend(plan.notes);
+                plan.sources
+            }
+            None => Vec::new(),
+        };
+        let extras = Extras {
+            area: wish.area,
+            sources,
+            patience: SOUND_PATIENCE,
+        };
+        let mut started =
+            self.start_with_extras(found, choice, video, session, work, keep_secs, &extras)?;
+        notes.append(&mut started.notes);
+        started.notes = notes;
+        Ok(started)
     }
 
+    #[cfg(test)]
     fn start_with(
         &self,
         found: Found,
@@ -622,6 +737,38 @@ impl Recording {
         work: &Path,
         keep_secs: u32,
     ) -> Result<(), String> {
+        self.start_with_extras(
+            found,
+            choice,
+            video,
+            session,
+            work,
+            keep_secs,
+            &Extras::default(),
+        )
+        .map(|_| ())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_with_extras(
+        &self,
+        found: Found,
+        choice: Choice,
+        video: &Video,
+        session: &Session,
+        work: &Path,
+        keep_secs: u32,
+        extras: &Extras,
+    ) -> Result<Started, String> {
+        let mut choice = choice;
+        // A part of the desktop is cut out by the capture itself. GDI takes it from anywhere on
+        // the desktop, on any screen; the graphics-card capture only sees one screen.
+        if extras.area.is_some()
+            && choice.capture == VideoCapture::Ddagrab
+            && found.captures.contains(&VideoCapture::Gdigrab)
+        {
+            choice.capture = VideoCapture::Gdigrab;
+        }
         let mut slot = self.lock();
         match &*slot {
             Slot::Idle { .. } => {}
@@ -634,7 +781,25 @@ impl Recording {
             .map_err(|e| format!("CargoFrame could not make a folder for the recording: {e}"))?;
         let mut cfg = recorder_config(&found, &choice, video, session, &ring);
         cfg.window = Window::seconds(keep_secs);
-        let recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
+        cfg.area = extras.area;
+        cfg.audio = extras.sources.clone();
+        let mut recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
+        let mut notes = Vec::new();
+        if !cfg.audio.is_empty() {
+            // A sound device that is not there ends ffmpeg at once. The picture matters more than
+            // the sound, so go on without it, and say so.
+            if let Some(why) = recorder.early_failure(extras.patience) {
+                recorder.cancel();
+                let _ = std::fs::remove_dir_all(&ring);
+                let _ = std::fs::create_dir_all(&ring);
+                notes.push(format!(
+                    "The sound could not be recorded, so this recording has none ({why})."
+                ));
+                cfg.audio.clear();
+                recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
+            }
+        }
+        let sound = !cfg.audio.is_empty();
         *slot = Slot::Running(Box::new(Active {
             recorder,
             found,
@@ -643,7 +808,7 @@ impl Recording {
             keep_secs: cfg.window.as_secs(),
             began: Instant::now(),
         }));
-        Ok(())
+        Ok(Started { sound, notes })
     }
 
     /// Where the recording stands. Also notices a recorder that has stopped by itself, and stops
@@ -821,6 +986,7 @@ fn finish(active: Active) -> Trial {
         height: info.height,
         clip_ms: info.duration_ms,
         clip_bytes: bytes,
+        clip_audio: info.has_audio,
         took_ms,
         clip: Some(clip.display().to_string()),
     }
@@ -959,6 +1125,7 @@ pub fn export_test(video: &Video, edit: &TestEdit, recording: &Recording, work: 
         height: out.height,
         clip_ms: out.duration_ms,
         clip_bytes: bytes,
+        clip_audio: out.has_audio,
         took_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
         clip: Some(output.display().to_string()),
     }
@@ -1055,6 +1222,7 @@ pub fn edit_clip(
         height: out.height,
         clip_ms: out.duration_ms,
         clip_bytes: bytes,
+        clip_audio: out.has_audio,
         took_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
         clip: Some(output.display().to_string()),
     })

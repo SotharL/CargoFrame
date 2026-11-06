@@ -8,7 +8,18 @@ use cargoframe_config::General;
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const SETTINGS: &str = "settings";
+/// The first CargoFrame window; more are `capture-2` and so on (see `session::window_label`).
 pub const CAPTURE: &str = "capture";
+
+pub use crate::session::is_capture_label;
+
+/// The window `label` is closing: its capture is no longer open and its share, if it is sending,
+/// stops retrying. The other windows are not touched.
+pub fn forget_capture(state: &AppState, label: &str) {
+    if let Some(session) = state.sessions.clear(label) {
+        state.cancel_share(session.view.session_id);
+    }
+}
 
 /// Open the Settings window, or bring it to the front if it is already open.
 ///
@@ -65,41 +76,50 @@ fn open_settings_now(app: &AppHandle) -> tauri::Result<()> {
     Ok(())
 }
 
-/// Show the CargoFrame window for the current capture. If it is already open it is reused:
-/// the new capture replaces the old one without rebuilding the web view.
-pub fn open_capture(app: &AppHandle) {
+/// Show the CargoFrame window `label` for the capture it was given. If the window is already
+/// there (kept warm) it is reused: the new capture replaces the old one without rebuilding the
+/// web view.
+pub fn open_capture(app: &AppHandle, label: String) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = open_capture_now(&app) {
+        if let Err(e) = open_capture_now(&app, &label) {
             tracing::error!("could not open the CargoFrame window: {e}");
         }
     });
 }
 
-fn open_capture_now(app: &AppHandle) -> tauri::Result<()> {
-    shown(app, CAPTURE);
+fn open_capture_now(app: &AppHandle, label: &str) -> tauri::Result<()> {
+    shown(app, label);
     // The capture flow began at the shortcut; only say whether the window was ready.
     if let Some(state) = app.try_state::<AppState>() {
-        let warm = app.get_webview_window(CAPTURE).is_some();
+        let warm = app.get_webview_window(label).is_some();
         state
             .timings
             .note("capture", if warm { "warm" } else { "cold" });
     }
-    if let Some(win) = app.get_webview_window(CAPTURE) {
-        win.emit("session-changed", ())?;
+    if let Some(win) = app.get_webview_window(label) {
+        // only this window reloads its capture; the others keep theirs
+        app.emit_to(label.to_string(), "session-changed", ())?;
         let _ = win.unminimize();
         win.show()?;
         win.set_focus()?;
         timing_mark(app, "capture", "window");
         return Ok(());
     }
-    WebviewWindowBuilder::new(app, CAPTURE, WebviewUrl::App("capture.html".into()))
-        .title("CargoFrame")
+    let first = label == CAPTURE;
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App("capture.html".into()))
+        .title(if first {
+            "CargoFrame".to_string()
+        } else {
+            format!("CargoFrame {}", label.trim_start_matches("capture-"))
+        })
         .inner_size(1120.0, 760.0)
         .min_inner_size(640.0, 420.0)
-        .center()
-        .focused(true)
-        .build()?;
+        .focused(true);
+    if first {
+        builder = builder.center();
+    }
+    builder.build()?;
     timing_mark(app, "capture", "window");
     Ok(())
 }
@@ -135,7 +155,7 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
 /// otherwise it is hidden, and in Balanced a timer destroys it if nobody opens it again.
 pub fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestApi) {
     let label = window.label().to_string();
-    if label != SETTINGS && label != CAPTURE {
+    if label != SETTINGS && !is_capture_label(&label) {
         return;
     }
     let app = window.app_handle().clone();
@@ -156,10 +176,9 @@ pub fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestApi) {
         return;
     };
     api.prevent_close();
-    if label == CAPTURE {
+    if is_capture_label(&label) {
         // The screenshot is large and belongs to the capture that just ended.
-        state.cancel_share();
-        state.sessions.clear();
+        forget_capture(&state, &label);
     }
     let _ = window.hide();
     let ticket = state.warm.hidden(&label);

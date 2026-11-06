@@ -3,6 +3,7 @@
 //! The always-running part is small on purpose: a tray icon, a shortcut listener and the
 //! state. Windows (and their web views) exist only while open.
 
+mod audio;
 mod chats;
 mod cli;
 mod commands;
@@ -129,6 +130,7 @@ pub fn run() {
             commands::get_video,
             commands::set_video,
             commands::detect_video_tools,
+            commands::list_audio_devices,
             commands::try_video_recording,
             commands::start_video_recording,
             commands::get_video_recording,
@@ -144,10 +146,9 @@ pub fn run() {
                 windowing::close_requested(window, api)
             }
             // Closing the CargoFrame window frees its capture (the screenshot is large).
-            tauri::WindowEvent::Destroyed if window.label() == windowing::CAPTURE => {
+            tauri::WindowEvent::Destroyed if windowing::is_capture_label(window.label()) => {
                 if let Some(state) = window.app_handle().try_state::<AppState>() {
-                    state.cancel_share();
-                    state.sessions.clear();
+                    windowing::forget_capture(&state, window.label());
                 }
             }
             _ => {}
@@ -320,8 +321,16 @@ mod shipped_config_tests {
     fn windows_only_get_our_own_commands_and_event_listening() {
         for (name, cap) in capabilities() {
             let windows = cap["windows"].as_array().expect("windows");
-            assert_eq!(windows.len(), 1, "{name} capability is for one window only");
-            assert_eq!(windows[0], name);
+            // the CargoFrame window can be opened several times (capture, capture-2, ...)
+            let several = format!("{name}-*");
+            assert!(
+                windows[0] == name
+                    && (windows.len() == 1
+                        || (windows.len() == 2
+                            && windows[1] == several.as_str()
+                            && name == "capture")),
+                "{name} capability is for its own window only: {windows:?}"
+            );
             assert!(
                 cap.get("remote").is_none(),
                 "{name}: a capability must never be given to remote pages"

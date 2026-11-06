@@ -15,6 +15,7 @@ use cargoframe_window::view::{
     self, AppView, ImageView, LayoutProblem, ProjectView, SessionView, VideoView,
 };
 use chrono::{Datelike, Local, Timelike};
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
@@ -27,6 +28,8 @@ pub struct Clip {
     pub height: u32,
     pub duration_ms: u64,
     pub bytes: u64,
+    /// The recording has a sound track.
+    pub has_audio: bool,
 }
 
 pub struct Session {
@@ -73,6 +76,7 @@ impl Session {
             height: clip.height,
             duration_ms: clip.duration_ms,
             bytes: clip.bytes,
+            audio: clip.has_audio,
         });
         self.clip = Some(clip);
         self
@@ -198,37 +202,110 @@ impl Session {
     }
 }
 
-/// The capture the window is showing. One at a time: a new capture replaces it.
+/// How many CargoFrame windows can be open at once.
+pub const MAX_WINDOWS: usize = 10;
+
+/// The label of the window number `n` (1 to [`MAX_WINDOWS`]): `capture`, `capture-2`, `capture-3`...
+pub fn window_label(n: usize) -> String {
+    if n <= 1 {
+        "capture".to_string()
+    } else {
+        format!("capture-{n}")
+    }
+}
+
+/// Whether `label` is the label of a CargoFrame (capture) window.
+pub fn is_capture_label(label: &str) -> bool {
+    label == "capture"
+        || label
+            .strip_prefix("capture-")
+            .and_then(|n| n.parse::<usize>().ok())
+            .is_some_and(|n| (2..=MAX_WINDOWS).contains(&n))
+}
+
+/// The captures that are open, one per CargoFrame window, by the window's label. Up to
+/// [`MAX_WINDOWS`] at a time; a window that is closed gives its place back.
 pub struct Sessions {
-    current: Mutex<Option<Arc<Session>>>,
+    open: Mutex<BTreeMap<String, Arc<Session>>>,
     next: AtomicU64,
 }
+
+/// Every one of the windows is in use.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AllWindowsOpen;
 
 impl Sessions {
     pub fn new() -> Self {
         Self {
-            current: Mutex::new(None),
+            open: Mutex::new(BTreeMap::new()),
             next: AtomicU64::new(1),
         }
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, BTreeMap<String, Arc<Session>>> {
+        self.open.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     pub fn next_id(&self) -> u64 {
         self.next.fetch_add(1, Ordering::Relaxed)
     }
 
-    pub fn set(&self, session: Session) {
-        *self.current.lock().unwrap_or_else(|e| e.into_inner()) = Some(Arc::new(session));
+    /// Give `session` the first window that has no capture, and say which. Fails when all
+    /// [`MAX_WINDOWS`] have one.
+    pub fn place(&self, session: Session) -> Result<(String, Arc<Session>), AllWindowsOpen> {
+        let mut open = self.lock();
+        let label = (1..=MAX_WINDOWS)
+            .map(window_label)
+            .find(|l| !open.contains_key(l))
+            .ok_or(AllWindowsOpen)?;
+        let session = Arc::new(session);
+        open.insert(label.clone(), session.clone());
+        Ok((label, session))
     }
 
-    pub fn current(&self) -> Option<Arc<Session>> {
-        self.current
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .clone()
+    /// The capture the window `label` shows.
+    pub fn for_label(&self, label: &str) -> Option<Arc<Session>> {
+        self.lock().get(label).cloned()
     }
 
-    pub fn clear(&self) {
-        *self.current.lock().unwrap_or_else(|e| e.into_inner()) = None;
+    /// The capture with this number, whichever window shows it.
+    pub fn by_id(&self, id: u64) -> Option<Arc<Session>> {
+        self.lock()
+            .values()
+            .find(|s| s.view.session_id == id)
+            .cloned()
+    }
+
+    /// The window `label` was closed: its capture is no longer open.
+    pub fn clear(&self, label: &str) -> Option<Arc<Session>> {
+        self.lock().remove(label)
+    }
+
+    pub fn count(&self) -> usize {
+        self.lock().len()
+    }
+
+    pub fn is_full(&self) -> bool {
+        self.count() >= MAX_WINDOWS
+    }
+
+    /// The capture taken last, whichever window shows it.
+    pub fn latest(&self) -> Option<Arc<Session>> {
+        self.lock()
+            .values()
+            .max_by_key(|s| s.view.session_id)
+            .cloned()
+    }
+
+    /// Every open capture.
+    pub fn all(&self) -> Vec<Arc<Session>> {
+        self.lock().values().cloned().collect()
+    }
+}
+
+impl Default for Sessions {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -276,6 +353,7 @@ pub struct ClipInfo {
     pub height: u32,
     pub duration_ms: u64,
     pub bytes: u64,
+    pub has_audio: bool,
 }
 
 /// A picture taken now, when a recording has just been stopped: what the program in focus is
@@ -318,6 +396,7 @@ pub fn prepare_video(
         height: info.height,
         duration_ms: info.duration_ms,
         bytes: info.bytes,
+        has_audio: info.has_audio,
     }))
 }
 
@@ -590,7 +669,7 @@ pub(crate) mod tests {
                     w: 8,
                     h: 8,
                 },
-                kind: BlockKind::Video,
+                kind: BlockKind::Video(Default::default()),
             }],
         };
         store.save_item(Kind::Layouts, "clip", &layout).unwrap();
@@ -621,6 +700,7 @@ pub(crate) mod tests {
                 height: 720,
                 duration_ms: 9_500,
                 bytes: 18,
+                has_audio: false,
             },
         )
         .unwrap();
@@ -1214,13 +1294,10 @@ pub(crate) mod tests {
         assert_eq!(s.image_to_send(), vec![1, 2]);
     }
 
-    #[test]
-    fn sessions_hold_one_capture_at_a_time() {
-        let sessions = Sessions::new();
-        assert!(sessions.current().is_none());
+    fn a_session(sessions: &Sessions) -> Session {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(Dirs::under(dir.path()));
-        let s = prepare_with(
+        prepare_with(
             &store,
             &no_connections(),
             "t",
@@ -1229,11 +1306,69 @@ pub(crate) mod tests {
             NOW,
             sessions.next_id(),
         )
-        .unwrap();
-        sessions.set(s);
-        assert_eq!(sessions.current().unwrap().view.session_id, 1);
-        assert_eq!(sessions.next_id(), 2);
-        sessions.clear();
-        assert!(sessions.current().is_none());
+        .unwrap()
+    }
+
+    #[test]
+    fn each_window_holds_its_own_capture() {
+        let sessions = Sessions::new();
+        assert!(sessions.for_label("capture").is_none());
+        let (first, a) = sessions.place(a_session(&sessions)).unwrap();
+        let (second, b) = sessions.place(a_session(&sessions)).unwrap();
+        assert_eq!((first.as_str(), second.as_str()), ("capture", "capture-2"));
+        assert_eq!(a.view.session_id, 1);
+        assert_eq!(b.view.session_id, 2);
+        assert_eq!(sessions.for_label("capture-2").unwrap().view.session_id, 2);
+        assert_eq!(sessions.by_id(1).unwrap().view.session_id, 1);
+        assert_eq!(sessions.latest().unwrap().view.session_id, 2);
+        assert_eq!(sessions.count(), 2);
+        // closing the first window leaves the second alone, and its place is used next
+        assert!(sessions.clear("capture").is_some());
+        assert!(sessions.for_label("capture").is_none());
+        assert!(sessions.by_id(1).is_none());
+        assert_eq!(sessions.for_label("capture-2").unwrap().view.session_id, 2);
+        let (third, _) = sessions.place(a_session(&sessions)).unwrap();
+        assert_eq!(third, "capture");
+        assert!(sessions.clear("capture-9").is_none());
+    }
+
+    #[test]
+    fn there_is_room_for_ten_windows_and_the_eleventh_is_refused() {
+        let sessions = Sessions::new();
+        let mut labels = Vec::new();
+        for _ in 0..MAX_WINDOWS {
+            assert!(!sessions.is_full());
+            labels.push(sessions.place(a_session(&sessions)).unwrap().0);
+        }
+        assert!(sessions.is_full());
+        assert_eq!(sessions.all().len(), 10);
+        assert_eq!(labels[0], "capture");
+        assert_eq!(labels[9], "capture-10");
+        assert!(sessions.place(a_session(&sessions)).is_err());
+        // a closed window gives its place back
+        sessions.clear("capture-4");
+        assert!(!sessions.is_full());
+        assert_eq!(sessions.place(a_session(&sessions)).unwrap().0, "capture-4");
+    }
+
+    #[test]
+    fn only_the_windows_of_a_capture_have_a_capture_label() {
+        assert_eq!(window_label(1), "capture");
+        assert_eq!(window_label(2), "capture-2");
+        assert!(is_capture_label("capture"));
+        assert!(is_capture_label("capture-2"));
+        assert!(is_capture_label("capture-10"));
+        for not in [
+            "capture-1",
+            "capture-11",
+            "capture-0",
+            "capture-x",
+            "capture2",
+            "settings",
+            "",
+            "Capture",
+        ] {
+            assert!(!is_capture_label(not), "{not}");
+        }
     }
 }

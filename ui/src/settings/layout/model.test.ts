@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Block, Layout } from '../../lib/types';
 import {
-  canPlace, cellAt, COLUMNS, firstFree, fits, makeBlock, moveTo, newBlockId, overlaps, removeBlock,
+  canPlace, cellAt, COLUMNS, firstFree, fits, makeBlock, MAX_SHARING_BUTTONS, moveTo, newBlockId, overlaps, removeBlock,
   resizeTo, rowsNeeded, tidy,
 } from './model';
 
@@ -132,5 +132,23 @@ describe('tidy', () => {
     const layout: Layout = { id: 'l', name: 'L', blocks: [text('c', 4, 2), text('a', 0, 0), text('b', 4, 0)] };
     expect(tidy(layout).blocks.map((b) => b.id)).toEqual(['a', 'b', 'c']);
     expect(layout.blocks[0]!.id).toBe('c');
+  });
+});
+
+describe('the limit of sharing buttons', () => {
+  it('adds sharing buttons up to the limit of a window and refuses the next one', () => {
+    let blocks: Block[] = [];
+    for (let i = 0; i < MAX_SHARING_BUTTONS; i++) {
+      const b = makeBlock(blocks, 'sharing_button');
+      expect(b).not.toBeNull();
+      blocks = [...blocks, b!];
+    }
+    expect(MAX_SHARING_BUTTONS).toBe(5);
+    expect(makeBlock(blocks, 'sharing_button')).toBeNull();
+    expect(makeBlock(blocks, 'sharing_button', { x: 0, y: 20 })).toBeNull();
+    // other blocks are not counted against it
+    expect(makeBlock(blocks, 'text')).not.toBeNull();
+    // removing one makes room again
+    expect(makeBlock(removeBlock(blocks, blocks[0]!.id), 'sharing_button')).not.toBeNull();
   });
 });

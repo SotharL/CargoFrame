@@ -47,8 +47,76 @@ describe('SharingPanel', () => {
     const { button, blocks, reach } = setup('reddit');
     render(SharingPanel, { block: button, blocks, kind: 'reddit', reach });
     expect(screen.getByText(/Sent as the screenshot/)).toBeTruthy();
-    expect(screen.getByText(/Sent as the prompt/)).toBeTruthy();
+    // a text block is a choice, and the choice shows what the button does now
+    const prompt = screen.getByLabelText('What happened: what this button does with it') as HTMLSelectElement;
+    expect(prompt.value).toBe('@prompt');
     expect(screen.getByText(/Cannot be sent: Reddit cannot take files on a post/)).toBeTruthy();
+  });
+
+  describe('choosing where a block goes', () => {
+    const fields = [{ key: 'summary', label: 'Summary' }, { key: 'description', label: 'Description' }];
+    function withNote(kind: ServiceKind | null) {
+      const s = setup(kind);
+      s.blocks.splice(3, 0, { id: 'note', type: 'text', rect: { x: 0, y: 3, w: 4, h: 1 }, title: 'Note', placement: 'above', role: 'plain', default_text: '' });
+      const layout: Layout = { id: 'l', name: 'L', blocks: s.blocks };
+      return { ...s, reach: demoReach(layout, s.button, kind ? demoCapabilities(kind) : LOCAL_CAPABILITIES, kind) };
+    }
+    function liveWith(s: ReturnType<typeof withNote>, kind: ServiceKind | null) {
+      const seen: { now: Button } = { now: s.button };
+      render(Harness, { initial: s.button, blocks: s.blocks, kind, reach: s.reach, fields, onchange: (b: Button) => (seen.now = b) });
+      return seen;
+    }
+
+    it('lists not sent, the prompt and the fields of the destination', () => {
+      liveWith(withNote('jira'), 'jira');
+      const note = screen.getByLabelText('Note: what this button does with it') as HTMLSelectElement;
+      expect([...note.options].map((o) => o.textContent)).toEqual(['Not sent', 'Summary', 'Description']);
+      const prompt = screen.getByLabelText('What happened: what this button does with it') as HTMLSelectElement;
+      expect([...prompt.options].map((o) => o.textContent)).toEqual(['Not sent', 'The prompt', 'Summary', 'Description']);
+    });
+
+    it('sends a block in a field of the destination, and stops sending it', async () => {
+      const seen = liveWith(withNote('jira'), 'jira');
+      const note = screen.getByLabelText('Note: what this button does with it');
+      await fireEvent.change(note, { target: { value: 'description' } });
+      await waitFor(() => expect(seen.now.mappings).toEqual([{ field: 'description', source: { kind: 'block', value: 'note' } }]));
+      await fireEvent.change(note, { target: { value: '' } });
+      await waitFor(() => expect(seen.now.mappings).toEqual([]));
+    });
+
+    it('moves the prompt to another block', async () => {
+      const seen = liveWith(withNote('jira'), 'jira');
+      await fireEvent.change(screen.getByLabelText('What happened: what this button does with it'), { target: { value: '' } });
+      await waitFor(() => expect(seen.now.prompt_block_id).toBeNull());
+    });
+
+    it('does not offer a field that another block already fills, and says which block', async () => {
+      const s = withNote('jira');
+      s.button.mappings = [{ field: 'summary', source: { kind: 'block', value: 'note' } }];
+      s.reach = demoReach({ id: 'l', name: 'L', blocks: s.blocks }, s.button, demoCapabilities('jira'), 'jira');
+      liveWith(s, 'jira');
+      const prompt = screen.getByLabelText('What happened: what this button does with it') as HTMLSelectElement;
+      const summary = [...prompt.options].find((o) => o.value === 'summary')!;
+      expect(summary.textContent).toBe('Summary (used by Note)');
+      expect(summary.disabled).toBe(true);
+    });
+
+    it('is switched off, with the reason, for a block the destination cannot take', () => {
+      const s = withNote('custom');
+      s.blocks.splice(3, 0, { id: 'proj', type: 'dropdown', rect: { x: 0, y: 4, w: 4, h: 1 }, title: 'Project', source: { type: 'claude_chats' } });
+      s.button.mappings = [{ field: 'project', source: { kind: 'block', value: 'proj' } }];
+      s.reach = demoReach({ id: 'l', name: 'L', blocks: s.blocks }, s.button, demoCapabilities('custom'), 'custom');
+      liveWith(s, 'custom');
+      // a Custom API takes text but has no lists to pick from
+      expect((screen.getByLabelText('Note: what this button does with it') as HTMLSelectElement).disabled).toBe(false);
+      expect((screen.getByLabelText('Project: what this button does with it') as HTMLSelectElement).disabled).toBe(true);
+      expect(screen.getByText(/Cannot be sent: This connection has no lists to pick from/)).toBeTruthy();
+    });
+
+    it('is a plain line, not a choice, when the button only saves a zip here', () => {
+      liveWith(withNote(null), null);
+      expect(screen.queryByLabelText('Note: what this button does with it')).toBeNull();
+    });
   });
 
   it('names the saved zip case when nothing is connected', () => {

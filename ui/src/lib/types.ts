@@ -68,9 +68,45 @@ export type DropdownSource =
   | { type: 'web_api'; connection_id: string; options_id: string }
   | { type: 'claude_chats' };
 
+/** What a video block records: the whole screen, or the window that has the focus when it starts. */
+export type VideoSubject = 'screen' | 'focused_window';
+
+/** Where one sound comes from: off, the system's own choice, or one device by name. */
+export type AudioChoice = 'off' | 'default' | { device: string };
+
+/** The sounds in a recording: what the computer plays, and what a microphone hears. */
+export interface VideoAudio {
+  desktop: AudioChoice;
+  microphone: AudioChoice;
+}
+
+/** What a new video block records: the screen, with the computer's sound and no microphone. */
+export const DEFAULT_VIDEO_AUDIO: VideoAudio = { desktop: 'default', microphone: 'off' };
+
+/** A sound device the person can pick (mirrors app/src/audio.rs). */
+export interface AudioDevice {
+  /** What is stored in the layout and given to ffmpeg. */
+  name: string;
+  label: string;
+  default: boolean;
+}
+
+/** The sound devices of this computer, by what they carry. */
+export interface AudioDevices {
+  os: 'windows' | 'linux' | 'other';
+  /** Carry what the computer plays. */
+  desktop: AudioDevice[];
+  /** Carry what a microphone hears. */
+  microphone: AudioDevice[];
+  /** ffmpeg answered. */
+  listed: boolean;
+  /** What the person should know about their choices. */
+  note: string | null;
+}
+
 export type BlockContent =
   | { type: 'screenshot' }
-  | { type: 'video' }
+  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio }
   | {
       type: 'text';
       title: string;
@@ -185,6 +221,8 @@ export interface VideoClipInfo {
   height: number;
   duration_ms: number;
   bytes: number;
+  /** The recording has a sound track; without one the player shows no volume. */
+  audio: boolean;
 }
 
 export interface SessionView {
@@ -516,7 +554,11 @@ export type Verdict =
   | { state: 'switched_off' }
   | { state: 'not_used' };
 
-export type BlockReach = { block_id: string } & Verdict;
+export type BlockReach = {
+  block_id: string;
+  /** The button cannot do its job without this block: its box stays ticked. */
+  required?: boolean;
+} & Verdict;
 
 /** What one sharing button does with every other block of the layout. */
 export interface Reach {
@@ -612,6 +654,11 @@ export interface ShareRequest {
   image_edited: boolean;
   /** For a recording: what was cut or cropped. Left out (or `null`) sends it as it is. */
   clip_edit?: ClipEdit | null;
+  /**
+   * The blocks whose boxes are ticked for this button. Left out (or `null`) sends what the layout
+   * says; a list sends exactly those blocks.
+   */
+  send_blocks?: string[] | null;
 }
 
 /**

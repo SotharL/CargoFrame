@@ -1,7 +1,7 @@
 //! What the layout checks know about the rest of the configuration.
 
 use crate::connections::Connections;
-use cargoframe_config::{Kind, Store};
+use cargoframe_config::{InfoType, Kind, Store};
 use cargoframe_layout::{ConnectionInfo, Registry};
 use cargoframe_window::vars;
 use std::collections::BTreeSet;
@@ -11,6 +11,8 @@ type ConnectionLookup<'a> = Box<dyn Fn(&str) -> Option<ConnectionInfo> + 'a>;
 pub struct AppRegistry<'a> {
     pub rules: BTreeSet<String>,
     connection: ConnectionLookup<'a>,
+    /// (connection id, field) of every field its service requires.
+    required: BTreeSet<(String, String)>,
 }
 
 impl<'a> AppRegistry<'a> {
@@ -18,6 +20,17 @@ impl<'a> AppRegistry<'a> {
     /// looked at only when a layout asks about it, so a layout that uses none never touches the
     /// credential store.
     pub fn from_store(store: &'a Store, connections: &'a Connections) -> Self {
+        let required = store
+            .load_all::<InfoType>(Kind::InfoTypes)
+            .map(|l| {
+                l.items
+                    .into_iter()
+                    .map(|(_, t)| t)
+                    .filter(|t| t.required)
+                    .map(|t| (t.connection_id, t.field))
+                    .collect()
+            })
+            .unwrap_or_default();
         Self::with(
             store
                 .list_ids(Kind::Rules)
@@ -26,6 +39,13 @@ impl<'a> AppRegistry<'a> {
                 .collect(),
             move |id| connections.info(store, id),
         )
+        .requiring(required)
+    }
+
+    /// The fields the services require, as (connection id, field).
+    pub fn requiring(mut self, required: BTreeSet<(String, String)>) -> Self {
+        self.required = required;
+        self
     }
 
     pub fn with(
@@ -35,6 +55,7 @@ impl<'a> AppRegistry<'a> {
         Self {
             rules,
             connection: Box::new(connection),
+            required: BTreeSet::new(),
         }
     }
 }
@@ -53,6 +74,11 @@ impl Registry for AppRegistry<'_> {
             || name
                 .strip_prefix("rule.")
                 .is_some_and(|id| self.rules.contains(id))
+    }
+
+    fn field_required(&self, connection_id: &str, field: &str) -> bool {
+        self.required
+            .contains(&(connection_id.to_string(), field.to_string()))
     }
 }
 
@@ -76,5 +102,14 @@ mod tests {
         assert!(reg.rule_exists("version") && !reg.rule_exists("x"));
         assert!(reg.connection("jira").is_some());
         assert!(reg.connection("other").is_none());
+    }
+
+    #[test]
+    fn required_fields_are_known_by_connection_and_field() {
+        let reg = AppRegistry::with(BTreeSet::new(), |_| None)
+            .requiring([("jira".to_string(), "summary".to_string())].into());
+        assert!(reg.field_required("jira", "summary"));
+        assert!(!reg.field_required("jira", "priority"));
+        assert!(!reg.field_required("slack", "summary"));
     }
 }

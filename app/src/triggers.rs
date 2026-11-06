@@ -82,11 +82,7 @@ pub fn reload(app: &AppHandle) {
 
 /// Copy the files ticked by default into the capture's temporary folder, off the thread that
 /// opens the window. A share that starts while this runs waits for it (see `Session::with_dir`).
-fn stage_files_in_background(app: &AppHandle) {
-    let state = app.state::<AppState>();
-    let Some(session) = state.sessions.current() else {
-        return;
-    };
+fn stage_files_in_background(app: &AppHandle, session: std::sync::Arc<session::Session>) {
     if session.preselected().is_empty() {
         return;
     }
@@ -96,9 +92,10 @@ fn stage_files_in_background(app: &AppHandle) {
         .spawn(move || {
             let state = app.state::<AppState>();
             let open = || {
+                // the window may have been closed while the files were being copied
                 state
                     .sessions
-                    .current()
+                    .by_id(session.view.session_id)
                     .is_some_and(|c| std::sync::Arc::ptr_eq(&c, &session))
             };
             let staged = session.stage_preselected(
@@ -111,6 +108,37 @@ fn stage_files_in_background(app: &AppHandle) {
         });
     if let Err(e) = spawned {
         tracing::warn!("could not start copying the files: {e}");
+    }
+}
+
+/// Tell the person every CargoFrame window is in use. True when there is no room.
+fn no_room(app: &AppHandle, state: &AppState) -> bool {
+    if !state.sessions.is_full() {
+        return false;
+    }
+    notify::problem(
+        app,
+        &format!("CargoFrame has {} windows open", session::MAX_WINDOWS),
+        "Close one of them, then press the shortcut again.",
+    );
+    true
+}
+
+/// Give a finished capture a window of its own and open it. The windows already open keep
+/// their captures: up to ten can be open together.
+fn show(app: &AppHandle, state: &AppState, s: session::Session) {
+    match state.sessions.place(s) {
+        Ok((label, session)) => {
+            stage_files_in_background(app, session);
+            if let Some(ms) = state.timings.mark("capture", "ready") {
+                tracing::info!(ready_ms = ms, "timing: capture ready");
+            }
+            windowing::open_capture(app, label);
+        }
+        Err(session::AllWindowsOpen) => {
+            // a window was opened while this capture was being taken
+            no_room(app, state);
+        }
     }
 }
 
@@ -135,6 +163,9 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         press_video(app, trigger_id);
         return;
     }
+    if no_room(app, &state) {
+        return;
+    }
     if !state.try_begin_capture() {
         tracing::debug!("a capture is already running");
         return;
@@ -154,12 +185,7 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         match result {
             Ok(Ok(s)) => {
                 state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
-                state.sessions.set(s);
-                stage_files_in_background(&app);
-                if let Some(ms) = state.timings.mark("capture", "ready") {
-                    tracing::info!(ready_ms = ms, "timing: capture ready");
-                }
-                windowing::open_capture(&app);
+                show(&app, &state, s);
             }
             Ok(Err(e)) => {
                 tracing::error!(trigger = %trigger_id, "capture failed: {e}");
@@ -198,36 +224,75 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
             tray::refresh_menu(app);
             notify::problem(app, "The recording stopped by itself", &why);
         }
-        Step::Start => start_recording(app, &state),
+        // a recording is not started, or finished, when there would be no window to show it in
+        Step::Start | Step::Stop if no_room(app, &state) => {}
+        Step::Start => start_recording(app, &state, trigger_id),
         Step::Stop => stop_recording(app, &state, trigger_id),
     }
 }
 
-fn start_recording(app: &AppHandle, state: &AppState) {
+/// Where the window in focus is, as a part of the desktop to record.
+fn focused_area() -> Option<cargoframe_video::recorder::Area> {
+    let app = cargoframe_capture::focused_app().ok().flatten()?;
+    let b = app.bounds;
+    Some(cargoframe_video::recorder::Area {
+        x: b.x,
+        y: b.y,
+        w: b.w,
+        h: b.h,
+    })
+}
+
+fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     let settings = state
         .store
         .load_or_default::<Video>()
         .map(video::normalized)
         .unwrap_or_default();
     let work = crate::video::work_dir(&state.store);
+    // the layout this trigger opens says what to record: the screen or the window in focus, and
+    // which sounds go in
+    let layout = state
+        .store
+        .load_item::<Trigger>(Kind::Triggers, trigger_id)
+        .ok()
+        .flatten()
+        .and_then(|t| t.layout_id)
+        .and_then(|id| {
+            state
+                .store
+                .load_item::<cargoframe_layout::Layout>(Kind::Layouts, &id)
+                .ok()
+                .flatten()
+        });
+    let (wish, mut notes) = video::wish_for(layout.as_ref(), &focused_area);
+    let window = wish.area.is_some();
     let started = state.recording.start_for_trigger(
         &settings,
         video::Os::current(),
         &video::Session::current(),
         &work,
         settings.window_secs,
+        &wish,
     );
     match started {
-        Ok(()) => {
-            tracing::info!("recording started by a trigger");
-            notify::info(
-                app,
-                "CargoFrame is recording your screen",
-                &format!(
-                    "Press the shortcut again to stop. Only the last {} seconds are kept.",
-                    settings.window_secs
-                ),
+        Ok(s) => {
+            tracing::info!(window, sound = s.sound, "recording started by a trigger");
+            notes.extend(s.notes);
+            let what = format!(
+                "your {}{}",
+                if window { "window" } else { "screen" },
+                if s.sound { ", with sound" } else { "" }
             );
+            let mut body = format!(
+                "Press the shortcut again to stop. Only the last {} seconds are kept.",
+                settings.window_secs
+            );
+            for n in &notes {
+                body.push(' ');
+                body.push_str(n);
+            }
+            notify::info(app, &format!("CargoFrame is recording {what}"), &body);
             tray::refresh_menu(app);
         }
         Err(e) => {
@@ -249,9 +314,7 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     match made {
         Ok(s) => {
             state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
-            state.sessions.set(s);
-            stage_files_in_background(app);
-            windowing::open_capture(app);
+            show(app, state, s);
         }
         Err(e) => {
             tracing::error!(trigger = %trigger_id, "video capture failed: {e}");
@@ -294,6 +357,7 @@ fn session_from_recording(
             height: trial.height,
             duration_ms: trial.clip_ms,
             bytes: trial.clip_bytes,
+            has_audio: trial.clip_audio,
         },
     )
     .map_err(|e| e.to_string())
