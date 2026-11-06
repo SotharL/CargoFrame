@@ -81,9 +81,10 @@ so nothing is lost. A button with no connection says **Save locally** and saves 
 chose in *General, Safety*.
 
 **Video:** a trigger whose *Makes* is *A video* starts recording the first time you press its shortcut and stops
-the second time. The window then plays the clip, and you can trim it (drag the two handles under the clip, or
-press *Start here* and *End here* while it plays), crop it, and put one red ring with a text on it before sending.
-Only the last seconds are kept (10 by default, set in *Settings, Video*).
+the second time. The window then plays the clip (move the mouse over the picture for the play, stop, speed, volume
+and full screen buttons) and you can trim it by dragging the two handles of the thin timeline under it, crop it
+(*Crop*, drag the box, *Apply crop*; *Reset to full capture* undoes it), and put one red ring with a text on it
+(*Mark*) before sending. Only the last seconds are kept (10 by default, set in *Settings, Video*).
 
 **Pulling values from files (optional):** under *Data from files* you describe a value to read from a file in the
 program's project folder (JSON, YAML, TOML, INI, CSV, XML, a regular expression, or a line of a text or log file),

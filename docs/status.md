@@ -85,8 +85,10 @@ those is true for each piece.
    sharing button), press its shortcut, do something on the screen, press it again; the window should open
    with the clip playing. Send it to Slack, Google Drive, Jira and Discord and write down which size limits
    you hit; try Reddit/Teams/Claude to see the reason shown. Press the shortcut once and use the tray's "Recording: stop and
-   discard it". In the window, drag the two handles under the clip (or use the arrow keys),
-   press "Start here" / "End here" while it plays, tick "Crop" and drag the box and its corner, tick "Mark", click where the ring goes and type a text, send, and check that
+   discard it". In the window, drag the two handles of the thin timeline under the clip (or use the arrow keys),
+   hover the picture and try the play, stop, slower, faster, volume and full-screen buttons (full screen is
+   untested in WebView2 and WebKitGTK), press "Crop", drag the box and its corner and press "Apply crop" (the window
+   must then show the cropped picture), "Mark", click where the ring goes and type a text, then "Reset to full capture", send, and check that
    what arrives is only the kept part and the kept area, with the ring and its text where you put them.
    Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
    buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons

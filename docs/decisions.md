@@ -775,3 +775,27 @@ to a recording matches what it can do to a screenshot: cut, crop and mark.
   accent; the executable, installer and window icons keep the default blue.
 - **Not checked on a real Windows desktop:** how the icons look in the taskbar, the tray and the installer, at 100,
   125 and 150 percent scaling, and the colour picker in WebView2.
+
+### The capture window, after the first real use (6 Nov 2026)
+
+The owner tried the window and listed what was awkward. Each item and what was decided:
+
+- **The screenshot toolbar is one line.** Icon buttons only (each with a name and a tooltip). The eight colours and
+  the three thicknesses moved into one small button that shows the current colour and opens a panel; undo, redo,
+  reset crop and clear all became icons. A block too narrow for that wraps rather than cutting anything off.
+- **The video has the playback buttons people know**, laid over the top of the picture, see-through, shown while the
+  pointer is over the picture or a button has focus: play/pause, stop (back to the start of the kept part), slower,
+  faster (0.25, 0.5, 1, 1.5 and 2 times), mute and volume, and full screen. A click on the picture plays or pauses,
+  a double click goes full screen, and Space, K, F, M and the arrow keys work when the picture has focus. The
+  browser's own bar is not used, so the recording looks the same in WebView2 and WebKitGTK.
+- **The timeline is a thin track the full width of the picture** with the two cut handles, the shaded kept part and
+  the playing position. "Start here" and "End here" are gone: the handles do the cutting. (The Video page in Settings,
+  which tests a recording, keeps its own buttons.)
+- **Crop and mark take turns.** One of them has the mouse at a time. *Crop* shows the whole picture with a box that is
+  already what will be sent; *Apply crop* leaves the mode and the window then shows only the cropped part (the
+  recording is laid out so the box fills the picture, and the rest is clipped), *Cancel* puts back what was there
+  before, and *Edit crop* and *Reset to full capture* are there afterwards. The mark is placed in the cropped picture;
+  while the box is being set it stays in view but cannot be moved. Starting one tool while the other is open ends the
+  other and keeps its result. *Reset edits* undoes the cut, the crop and the mark together.
+- **Not checked on a real desktop:** full screen from a page inside WebView2 and WebKitGTK, and hover on a touch screen
+  (there is none: the buttons are also reachable with the keyboard).
