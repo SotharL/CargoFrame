@@ -1,19 +1,26 @@
 name: Release
 
-# Builds the installers for a version tag, checks them on real machines, and puts them in a DRAFT
-# release with checksums. Nothing is published until you open the draft and publish it.
+# Builds the installers, checks them on real machines, and puts them in a DRAFT release with
+# checksums. Nothing is published until you open the draft and publish it.
 #
 #   git tag v0.1.0 && git push origin v0.1.0
 #
-# Or run it by hand (Actions > Release > Run workflow) for a tag that already exists.
+# Or run it by hand (Actions > Release > Run workflow):
+#   * with a tag that already exists (for example v0.1.0), to build that tag again; or
+#   * with the tag left empty, to build the tip of the branch you run it on. The draft release
+#     then points at that commit and GitHub creates the tag v<version> when you publish it, so
+#     nobody needs to push a tag.
+# Publishing the draft creates the tag, which starts this workflow again; it then sees that the
+# release is already published and does nothing.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing tag to build, for example v0.1.0'
-        required: true
+        description: 'An existing tag to build, for example v0.1.0. Leave empty to build this branch.'
+        required: false
+        default: ''
 
 permissions:
   contents: read
@@ -23,37 +30,58 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  TAG: ${{ inputs.tag || github.ref_name }}
+  # Empty when the run builds a branch rather than a tag.
+  TAG: ${{ inputs.tag || (github.ref_type == 'tag' && github.ref_name) || '' }}
 
 jobs:
   check:
-    name: The tag matches the version
+    name: What is built, and whether the tag matches the version
     runs-on: ubuntu-24.04
     outputs:
       version: ${{ steps.v.outputs.version }}
+      tag: ${{ steps.v.outputs.tag }}
+      ref: ${{ steps.v.outputs.ref }}
+      skip: ${{ steps.v.outputs.skip }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ env.TAG || github.sha }}
       - id: v
         shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           version="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)"
           [ -n "$version" ] || { echo "::error::no version in Cargo.toml"; exit 1; }
-          if [ "$TAG" != "v$version" ]; then
-            echo "::error title=Tag and version differ::The tag is $TAG but Cargo.toml says $version. Bump the version, commit, and tag again."
-            exit 1
+          tag="$TAG"
+          if [ -n "$tag" ]; then
+            if [ "$tag" != "v$version" ]; then
+              echo "::error title=Tag and version differ::The tag is $tag but Cargo.toml says $version. Bump the version, commit, and tag again."
+              exit 1
+            fi
+            ref="$tag"
+          else
+            tag="v$version"
+            ref="$GITHUB_SHA"
           fi
-          echo "version=$version" >> "$GITHUB_OUTPUT"
+          skip=false
+          # A release that is already published is never touched (publishing the draft creates the
+          # tag, which starts this workflow again).
+          if [ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || true)" = "false" ]; then
+            skip=true
+            echo "::notice::$tag is already published; nothing to do."
+          fi
+          { echo "version=$version"; echo "tag=$tag"; echo "ref=$ref"; echo "skip=$skip"; } >> "$GITHUB_OUTPUT"
 
   windows:
     name: Windows installer
     needs: check
+    if: needs.check.outputs.skip != 'true'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.check.outputs.ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -98,11 +126,12 @@ jobs:
   linux:
     name: Linux package
     needs: check
+    if: needs.check.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.check.outputs.ref }}
       - uses: actions/setup-node@v7
         with:
           node-version: 22
@@ -145,13 +174,17 @@ jobs:
   draft:
     name: Draft release
     needs: [check, windows, linux]
+    if: needs.check.outputs.skip != 'true'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+    env:
+      TAG: ${{ needs.check.outputs.tag }}
+      REF: ${{ needs.check.outputs.ref }}
     steps:
       - uses: actions/checkout@v7
         with:
-          ref: ${{ env.TAG }}
+          ref: ${{ needs.check.outputs.ref }}
       - uses: actions/download-artifact@v8
         with:
           pattern: release-*
@@ -172,8 +205,13 @@ jobs:
             [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ] \
               || { echo "::error::$TAG is already published; make a new tag instead."; exit 1; }
             gh release upload "$TAG" dist/* --clobber
-          else
+          elif [ "$REF" = "$TAG" ]; then
+            # the tag exists: the release is made for it
             gh release create "$TAG" dist/* --draft --verify-tag \
+              --title "CargoFrame ${{ needs.check.outputs.version }}" --generate-notes
+          else
+            # no tag yet: the draft points at the commit that was built, and publishing it creates the tag
+            gh release create "$TAG" dist/* --draft --target "$REF" \
               --title "CargoFrame ${{ needs.check.outputs.version }}" --generate-notes
           fi
           {

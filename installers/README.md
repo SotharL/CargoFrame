@@ -2,7 +2,9 @@
 
 Both installers are per-user: no administrator or root prompt, nothing outside the user's own
 folders. Both are built and smoke-tested by `.github/workflows/bundle.yml` on every push, and
-built, checked and drafted as a release by `.github/workflows/release.yml` for a version tag.
+built, checked and drafted as a release by `.github/workflows/release.yml` for a version tag, or by
+hand from the Actions tab (**Release, Run workflow**) with the tag left empty: the draft then points at
+the commit that was built and publishing it creates the tag `v<version>`, so no tag has to be pushed.
 
 ## Windows (`installers/windows/`)
 

@@ -915,3 +915,9 @@ single button. Decisions (taken for them, the safest option each time, while the
   setting).
 - **ffmpeg is found without a new PATH.** After winget installs it, the app looks in winget's links folder as well,
   so no sign-out is needed; if it still cannot find it, the message says what to do.
+- **A release can be made without pushing a tag.** The release workflow can be run by hand with the tag left
+  empty: it builds the tip of the chosen branch, runs the same checks (silent install, upgrade, uninstall and the
+  window click test), and makes a *draft* release that points at that commit; GitHub creates the tag `v<version>`
+  when the owner publishes it. Publishing starts the workflow again through the new tag, which now sees the release
+  is already published and does nothing. This was added because the tool that prepared the work was not allowed to
+  push tags.
