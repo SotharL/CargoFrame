@@ -58,7 +58,7 @@ those is true for each piece.
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
 | 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, Connections page, share flow | Done against mock servers |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
-| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block, ready-made video layouts (save locally, Jira, Drive, Slack), a trigger that makes a video (press to start, press to stop), the clip played, cut (start and end), cropped, marked (a ring with a text) and sent from the CargoFrame window. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); per-connection size hints and marks that come and go at chosen moments are not built |
+| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block (record the screen or the window in focus; the computer's sound and a microphone), up to ten CargoFrame windows at once, ready-made video layouts (save locally, Jira, Drive, Slack), a trigger that makes a video (press to start, press to stop), the clip played, cut (timeline with handles), cropped, marked (a ring with a text) and sent from the CargoFrame window. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); per-connection size hints and marks that come and go at chosen moments are not built; sound of the computer on Windows needs a loopback device such as Stereo Mix (no native capture yet) |
 
 ## What the owner needs to do before calling V1 solid
 
@@ -93,6 +93,14 @@ those is true for each piece.
    Tick boxes: with two or three sharing buttons in a layout (Jira, Claude, Slack), look at the boxes on the top
    edge of each block, clear one and send, and check that button left that block out and the others did not; hover a
    button and check its blocks light up; in the layout builder, choose where a text block goes from a button's list.
+   Windows, window and sound: press shortcuts of two triggers one after the other and check that two CargoFrame windows
+   are open, each sending only its own capture (try ten, then an eleventh: a notification says there is no room);
+   in a Video block choose *The window in focus*, record a clip while a smaller window is in front and check that only
+   that window is in it (also with a second screen, a window half off the screen, and Windows display scaling at 150%,
+   where ffmpeg's GDI capture may come out the wrong size); turn the computer's sound on and play something while you
+   record (Linux: the default output; Windows: needs Stereo Mix or another loopback device), switch the microphone on
+   and speak, and check both are in the clip and in what is sent; remove the loopback device and check the notification
+   says why there is no computer sound.
    Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
    buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons
    (program, installer, tray) on a light and a dark taskbar.

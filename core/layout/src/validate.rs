@@ -245,7 +245,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                 }
             }
             BlockKind::Screenshot => {}
-            BlockKind::Video => {
+            BlockKind::Video(_) => {
                 if has_screenshot {
                     out.push(issue(
                         block,
@@ -438,7 +438,7 @@ fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry)
                     .block(&b.block_id)
                     .map(|blk| match &blk.kind {
                         BlockKind::Screenshot => "the screenshot".to_string(),
-                        BlockKind::Video => "the video".to_string(),
+                        BlockKind::Video(_) => "the video".to_string(),
                         BlockKind::Files(f) if f.title.trim().is_empty() => "the files".to_string(),
                         BlockKind::Files(f) => {
                             format!("the files in \u{201c}{}\u{201d}", f.title.trim())
@@ -594,12 +594,12 @@ mod tests {
 
     #[test]
     fn a_video_block_alone_is_fine_and_with_a_screenshot_it_is_warned_about() {
-        let alone = layout(vec![at("clip", 0, BlockKind::Video)]);
+        let alone = layout(vec![at("clip", 0, BlockKind::Video(Default::default()))]);
         assert!(validate(&alone, &Reg::default()).is_empty());
 
         let both = layout(vec![
             at("shot", 0, BlockKind::Screenshot),
-            at("clip", 1, BlockKind::Video),
+            at("clip", 1, BlockKind::Video(Default::default())),
         ]);
         let issues = validate(&both, &Reg::default());
         assert_eq!(codes(&issues), vec![Code::ScreenshotAndVideo]);

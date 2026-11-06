@@ -39,6 +39,45 @@ pub enum Capture {
     Ddagrab { output: u32 },
 }
 
+/// A part of the desktop, in pixels (`x` and `y` may be negative on Windows, where a screen can
+/// lie left of or above the first one).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Area {
+    pub x: i32,
+    pub y: i32,
+    pub w: u32,
+    pub h: u32,
+}
+
+impl Area {
+    /// The smallest recording worth making: anything tinier is a tray stub, not a window.
+    pub const MIN_SIDE: u32 = 16;
+
+    /// The same area with even sides (the video format needs them), or `None` if it is too small.
+    pub fn even(self) -> Option<Self> {
+        let (w, h) = (self.w & !1, self.h & !1);
+        (w >= Self::MIN_SIDE && h >= Self::MIN_SIDE).then_some(Self { w, h, ..self })
+    }
+}
+
+/// How a sound reaches ffmpeg.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AudioBackend {
+    /// PulseAudio, or PipeWire speaking its language: what most Linux desktops have.
+    Pulse,
+    /// DirectShow: the Windows sound devices ffmpeg can list.
+    Dshow,
+}
+
+/// One sound that goes into the recording.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AudioSource {
+    pub backend: AudioBackend,
+    /// The device, as the backend names it. For Pulse, `@DEFAULT_MONITOR@` is whatever the
+    /// computer is playing and `default` is the default microphone.
+    pub device: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Encoder {
     /// Software H.264: works everywhere, costs the most CPU.
@@ -78,6 +117,10 @@ pub struct Config {
     /// in the middle of a recording nobody is left to delete old pieces, and this keeps the
     /// leftovers from growing for ever.
     pub max_run_secs: u32,
+    /// Record only this part of the desktop (a window), not all of what the capture sees.
+    pub area: Option<Area>,
+    /// The sounds to record: none, one, or two (mixed together).
+    pub audio: Vec<AudioSource>,
 }
 
 impl Config {
@@ -94,6 +137,8 @@ impl Config {
             max_bytes: 400 * 1024 * 1024,
             max_height: Some(1080),
             max_run_secs: DEFAULT_MAX_RUN_SECS,
+            area: None,
+            audio: Vec::new(),
         }
     }
 
@@ -105,6 +150,8 @@ impl Config {
 /// The whole ffmpeg command line for recording into `ring`.
 pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
     let fps = cfg.fps();
+    // a part too small to be a window is not a part: the whole picture is recorded
+    let area = cfg.area.and_then(Area::even);
     let mut a: Vec<OsString> = ["-hide_banner", "-loglevel", "error", "-y"]
         .iter()
         .map(OsString::from)
@@ -121,21 +168,43 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         Capture::X11 { display, size } => {
             a.extend(["-f".into(), "x11grab".into()]);
             a.extend(["-framerate".into(), fps.to_string().into()]);
-            if let Some((w, h)) = size {
+            // the root window has no negative places: a window half off the screen starts at 0
+            let mut input = display.clone();
+            if let Some(r) = &area {
+                a.extend(["-video_size".into(), format!("{}x{}", r.w, r.h).into()]);
+                input = format!("{display}+{},{}", r.x.max(0), r.y.max(0));
+            } else if let Some((w, h)) = size {
                 a.extend(["-video_size".into(), format!("{w}x{h}").into()]);
             }
-            a.extend(["-i".into(), display.clone().into()]);
+            a.extend(["-i".into(), input.into()]);
         }
         Capture::Gdigrab => {
             a.extend(["-f".into(), "gdigrab".into()]);
             a.extend(["-framerate".into(), fps.to_string().into()]);
+            if let Some(r) = &area {
+                a.extend(["-offset_x".into(), r.x.to_string().into()]);
+                a.extend(["-offset_y".into(), r.y.to_string().into()]);
+                a.extend(["-video_size".into(), format!("{}x{}", r.w, r.h).into()]);
+            }
             a.extend(["-i".into(), "desktop".into()]);
         }
         Capture::Ddagrab { output } => {
             a.extend(["-f".into(), "lavfi".into()]);
+            // offsets are inside the screen the picture is taken from
+            let part = area
+                .map(|r| {
+                    format!(
+                        ":offset_x={}:offset_y={}:video_size={}x{}",
+                        r.x.max(0),
+                        r.y.max(0),
+                        r.w,
+                        r.h
+                    )
+                })
+                .unwrap_or_default();
             a.extend([
                 "-i".into(),
-                format!("ddagrab=output_idx={output}:framerate={fps}").into(),
+                format!("ddagrab=output_idx={output}:framerate={fps}{part}").into(),
             ]);
             filters.push("hwdownload".into());
             filters.push("format=bgra".into());
@@ -153,7 +222,43 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         }
         .into(),
     );
-    a.extend(["-vf".into(), filters.join(",").into()]);
+    // the sounds: each is one more input, after the picture
+    for source in cfg.audio.iter().take(2) {
+        a.extend(["-thread_queue_size".into(), "1024".into()]);
+        match source.backend {
+            AudioBackend::Pulse => {
+                a.extend([
+                    "-f".into(),
+                    "pulse".into(),
+                    "-i".into(),
+                    source.device.clone().into(),
+                ]);
+            }
+            AudioBackend::Dshow => {
+                a.extend([
+                    "-f".into(),
+                    "dshow".into(),
+                    "-i".into(),
+                    format!("audio={}", source.device).into(),
+                ]);
+            }
+        }
+    }
+    let sounds = cfg.audio.len().min(2);
+    if sounds == 2 {
+        // two sounds are mixed into one (the mix is half as loud as each, so it is raised)
+        let graph = format!(
+            "[0:v]{}[v];[1:a][2:a]amix=inputs=2:duration=longest,volume=2[a]",
+            filters.join(",")
+        );
+        a.extend(["-filter_complex".into(), graph.into()]);
+        a.extend(["-map".into(), "[v]".into(), "-map".into(), "[a]".into()]);
+    } else {
+        a.extend(["-vf".into(), filters.join(",").into()]);
+        if sounds == 1 {
+            a.extend(["-map".into(), "0:v".into(), "-map".into(), "1:a".into()]);
+        }
+    }
 
     // a keyframe every second, so every segment can start on one
     a.extend(["-g".into(), fps.to_string().into()]);
@@ -169,6 +274,11 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         Encoder::Vaapi { .. } => &["-c:v", "h264_vaapi", "-qp", "24"],
     };
     a.extend(enc.iter().map(OsString::from));
+    if sounds > 0 {
+        for x in ["-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000"] {
+            a.push(x.into());
+        }
+    }
     a.extend(["-t".into(), cfg.max_run_secs.max(1).to_string().into()]);
     a.extend(ring.output_args(1));
     a
@@ -233,6 +343,24 @@ impl Recorder {
             said,
             started: Instant::now(),
         })
+    }
+
+    /// Wait up to `wait` to see whether ffmpeg gives up at once (a sound device that is not
+    /// there, a screen that cannot be opened). `Some(what it said)` if it did; `None` if it is
+    /// still running, which is the usual case.
+    pub fn early_failure(&mut self, wait: Duration) -> Option<String> {
+        let until = Instant::now() + wait;
+        loop {
+            if let Ok(Some(_)) = self.child.try_wait() {
+                // give the reader of its messages a moment to finish
+                std::thread::sleep(Duration::from_millis(50));
+                return Some(self.last_message());
+            }
+            if Instant::now() >= until {
+                return None;
+            }
+            std::thread::sleep(Duration::from_millis(25));
+        }
     }
 
     /// Take in the segments finished so far. An error means the recorder is gone.

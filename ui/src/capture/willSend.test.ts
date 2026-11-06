@@ -39,7 +39,7 @@ describe('willSend', () => {
     const { view, button } = await viewFor('slack', (b) => { b.prompt_block_id = 'prompt'; });
     view.layout!.blocks = view.layout!.blocks.filter((b) => b.type !== 'screenshot');
     view.layout!.blocks.unshift({ id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 8 } });
-    view.video = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 };
+    view.video = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true };
     view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('slack'), 'slack');
     expect(willSend(view, button, initialValues(view), false)[0]).toBe('Video (9.5 s, 3.0 MB)');
     // a recording that was cut says how much of it goes

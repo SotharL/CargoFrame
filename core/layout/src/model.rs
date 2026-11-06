@@ -51,10 +51,65 @@ pub enum BlockKind {
     Text(TextBlock),
     Screenshot,
     /// The recording a video trigger made: played, trimmed, cropped and marked in the window.
-    Video,
+    /// What is recorded (the screen or the window in focus) and which sounds go in is set here.
+    Video(VideoBlock),
     SharingButton(SharingButton),
     Dropdown(DropdownBlock),
     Files(FilesBlock),
+}
+
+/// What a video trigger records, set in the layout the trigger opens.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoBlock {
+    /// What is recorded.
+    pub subject: VideoSubject,
+    /// Which sounds go into the recording.
+    pub audio: VideoAudio,
+}
+
+/// What a recording shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum VideoSubject {
+    /// The whole screen.
+    #[default]
+    Screen,
+    /// The window that has the focus when the recording starts, as it is placed and sized then.
+    FocusedWindow,
+}
+
+/// Where one sound comes from.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum AudioChoice {
+    /// Not recorded.
+    Off,
+    /// The system's own choice: the sound the computer plays (for the desktop sound), or the
+    /// default microphone.
+    #[default]
+    Default,
+    /// One device, by the name the system gives it.
+    Device(String),
+}
+
+/// The sounds that go into a recording: what the computer plays, and what a microphone hears.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct VideoAudio {
+    /// The sound of the computer. On by default.
+    pub desktop: AudioChoice,
+    /// A microphone. Off by default.
+    pub microphone: AudioChoice,
+}
+
+impl Default for VideoAudio {
+    fn default() -> Self {
+        Self {
+            desktop: AudioChoice::Default,
+            microphone: AudioChoice::Off,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -419,8 +474,62 @@ mod serde_tests {
             r#"{"id": "clip", "type": "video", "rect": {"x":0,"y":0,"w":8,"h":8}}"#,
         )
         .unwrap();
-        assert_eq!(block.kind, BlockKind::Video);
+        assert_eq!(block.kind, BlockKind::Video(VideoBlock::default()));
         assert_eq!(serde_json::to_value(&block).unwrap()["type"], "video");
+    }
+
+    #[test]
+    fn an_old_video_block_records_the_screen_with_the_computer_sound_and_no_microphone() {
+        let block: Block = serde_json::from_str(
+            r#"{"id": "clip", "type": "video", "rect": {"x":0,"y":0,"w":8,"h":8}}"#,
+        )
+        .unwrap();
+        let BlockKind::Video(v) = &block.kind else {
+            panic!("not video");
+        };
+        assert_eq!(v.subject, VideoSubject::Screen);
+        assert_eq!(v.audio.desktop, AudioChoice::Default);
+        assert_eq!(v.audio.microphone, AudioChoice::Off);
+    }
+
+    #[test]
+    fn what_a_video_block_records_is_written_with_plain_names() {
+        let block = Block {
+            id: "clip".into(),
+            rect: Rect {
+                x: 0,
+                y: 0,
+                w: 8,
+                h: 8,
+            },
+            kind: BlockKind::Video(VideoBlock {
+                subject: VideoSubject::FocusedWindow,
+                audio: VideoAudio {
+                    desktop: AudioChoice::Off,
+                    microphone: AudioChoice::Device("USB Mic".into()),
+                },
+            }),
+        };
+        let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["type"], "video");
+        assert_eq!(json["subject"], "focused_window");
+        assert_eq!(json["audio"]["desktop"], "off");
+        assert_eq!(
+            json["audio"]["microphone"],
+            serde_json::json!({"device": "USB Mic"})
+        );
+        assert_eq!(serde_json::from_value::<Block>(json).unwrap(), block);
+        // each part may be left out of a file: it then takes its default
+        let partial: Block = serde_json::from_str(
+            r#"{"id":"c","type":"video","rect":{"x":0,"y":0,"w":8,"h":8},"audio":{"microphone":"default"}}"#,
+        )
+        .unwrap();
+        let BlockKind::Video(v) = &partial.kind else {
+            panic!("not video");
+        };
+        assert_eq!(v.audio.desktop, AudioChoice::Default);
+        assert_eq!(v.audio.microphone, AudioChoice::Default);
+        assert_eq!(v.subject, VideoSubject::Screen);
     }
 
     #[test]

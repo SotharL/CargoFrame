@@ -98,7 +98,7 @@ export async function demoSession(): Promise<SessionView> {
       },
       proj: { status: 'loading', selected: null, options: [], message: null },
     },
-    ...(video ? { video: { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 } } : {}),
+    ...(video ? { video: { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true } } : {}),
     issues: [],
     sharing: {
       ...(local

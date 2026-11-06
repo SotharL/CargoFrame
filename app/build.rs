@@ -44,6 +44,7 @@ fn main() {
             "get_video",
             "set_video",
             "detect_video_tools",
+            "list_audio_devices",
             "try_video_recording",
             "start_video_recording",
             "get_video_recording",

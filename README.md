@@ -94,6 +94,16 @@ and full screen buttons) and you can trim it by dragging the two handles of the 
 (*Crop*, drag the box, *Apply crop*; *Reset to full capture* undoes it), and put one red ring with a text on it
 (*Mark*) before sending. Only the last seconds are kept (10 by default, set in *Settings, Video*).
 
+In the layout builder, click the Video block to choose what is recorded: *the whole screen* or *the window in focus*
+(the one you were in when you pressed the shortcut), the *sound of the computer* (on by default) and a *microphone*
+(off by default), each off, on, or one device from the list. On Linux the computer's sound works as it is; on Windows
+ffmpeg can only record it through a loopback device, so turn on **Stereo Mix** in the Windows sound settings (Recording
+tab, right-click, Show disabled devices) or install one; without it the clip has no computer sound and the
+notification says so.
+
+**Several windows:** pressing a shortcut while a CargoFrame window is open opens another one, up to ten at a time,
+each with its own picture, boxes and choices. Closing one leaves the others open.
+
 **Pulling values from files (optional):** under *Data from files* you describe a value to read from a file in the
 program's project folder (JSON, YAML, TOML, INI, CSV, XML, a regular expression, or a line of a text or log file),
 and use it in your text boxes and dropdowns. CargoFrame only reads files these rules allow.

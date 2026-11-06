@@ -5,7 +5,7 @@ import Harness from './VideoBlock.harness.svelte';
 import type { ClipEdit } from '../../lib/types';
 import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
 
-const info = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024 };
+const info = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true };
 let revoked: string[];
 
 beforeEach(() => {
@@ -355,6 +355,18 @@ describe('VideoBlock', () => {
         await fireEvent.click(button('Unmute'));
         expect(video.muted).toBe(false);
         expect(video.volume).toBe(0.5);
+      });
+
+      it('leave out the volume for a recording without sound, and say so', async () => {
+        setApiForTests(memoryApi());
+        render(Harness, { info: { ...info, audio: false }, onedit: () => {} });
+        await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+        expect(screen.queryByRole('button', { name: 'Mute' })).toBeNull();
+        expect(screen.queryByLabelText('Volume')).toBeNull();
+        expect(screen.getByText('No sound')).toBeTruthy();
+        // the other buttons stay
+        expect(button('Play')).toBeTruthy();
+        expect(button('Full screen')).toBeTruthy();
       });
 
       it('go full screen with the picture and its buttons, and come back', async () => {

@@ -260,7 +260,7 @@ pub fn select(
             left_out.insert(r.block_id.clone());
         }
         match &block.kind {
-            BlockKind::Screenshot | BlockKind::Video => {
+            BlockKind::Screenshot | BlockKind::Video(_) => {
                 has_picture = true;
                 picture_on |= goes;
             }
@@ -312,7 +312,7 @@ fn block_name(b: &Block) -> String {
     };
     match &b.kind {
         BlockKind::Screenshot => "The screenshot".into(),
-        BlockKind::Video => "The video".into(),
+        BlockKind::Video(_) => "The video".into(),
         BlockKind::Text(t) => format!("\u{201c}{}\u{201d}", titled(&t.title)),
         BlockKind::Dropdown(d) => format!("\u{201c}{}\u{201d}", titled(&d.title)),
         BlockKind::Files(f) => format!("\u{201c}{}\u{201d}", titled(&f.title)),
@@ -346,7 +346,7 @@ fn verdict(
                 }
             }
         }
-        BlockKind::Video => {
+        BlockKind::Video(_) => {
             // the button's "send the picture" switch covers the recording too
             if !button.send.screenshot {
                 Verdict::SwitchedOff
@@ -571,12 +571,18 @@ mod tests {
             .with("s", ConnectionKind::Slack, ConnectionState::Connected)
             .with("r", ConnectionKind::Reddit, ConnectionState::Connected)
             .with("c", ConnectionKind::Claude, ConnectionState::Connected);
-        let l = layout(vec![block("clip", BlockKind::Video)], to("s"));
+        let l = layout(
+            vec![block("clip", BlockKind::Video(Default::default()))],
+            to("s"),
+        );
         let r = reach(&l, "go", &reg).unwrap();
         assert_eq!(r.of("clip"), Some(&sent(Role::Video)));
 
         for (conn, word) in [("r", "Reddit"), ("c", "Claude")] {
-            let l = layout(vec![block("clip", BlockKind::Video)], to(conn));
+            let l = layout(
+                vec![block("clip", BlockKind::Video(Default::default()))],
+                to(conn),
+            );
             match reach(&l, "go", &reg).unwrap().of("clip") {
                 Some(Verdict::CannotSend { why }) => assert!(why.contains(word), "{why}"),
                 other => panic!("{other:?}"),
@@ -591,7 +597,10 @@ mod tests {
             },
             ..to("s")
         };
-        let l = layout(vec![block("clip", BlockKind::Video)], off);
+        let l = layout(
+            vec![block("clip", BlockKind::Video(Default::default()))],
+            off,
+        );
         assert_eq!(
             reach(&l, "go", &reg).unwrap().of("clip"),
             Some(&Verdict::SwitchedOff)
@@ -602,7 +611,7 @@ mod tests {
     fn saving_locally_keeps_the_video() {
         let reg = Reg::default();
         let l = layout(
-            vec![block("clip", BlockKind::Video)],
+            vec![block("clip", BlockKind::Video(Default::default()))],
             SharingButton::default(),
         );
         assert_eq!(

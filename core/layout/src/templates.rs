@@ -533,7 +533,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             .map(|mut b| {
                 if matches!(b.kind, BlockKind::Screenshot) {
                     b.id = "clip".to_string();
-                    b.kind = BlockKind::Video;
+                    b.kind = BlockKind::Video(Default::default());
                 }
                 b
             })
@@ -641,7 +641,7 @@ mod tests {
             assert_eq!(
                 l.blocks
                     .iter()
-                    .filter(|b| matches!(b.kind, BlockKind::Screenshot | BlockKind::Video))
+                    .filter(|b| matches!(b.kind, BlockKind::Screenshot | BlockKind::Video(_)))
                     .count(),
                 1,
                 "{}",
@@ -684,7 +684,7 @@ mod tests {
             let clip = v
                 .block("clip")
                 .unwrap_or_else(|| panic!("{video}: no video block"));
-            assert!(matches!(clip.kind, BlockKind::Video));
+            assert!(matches!(clip.kind, BlockKind::Video(_)));
             // same place, same size, as the picture had
             assert_eq!(clip.rect, p.block("shot").unwrap().rect, "{video}");
             // everything else is the same as the picture's template

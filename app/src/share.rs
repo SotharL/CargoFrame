@@ -2167,6 +2167,7 @@ mod tests {
                 height: 720,
                 duration_ms: 9_000,
                 bytes: bytes.len() as u64,
+                has_audio: false,
             },
         );
     }

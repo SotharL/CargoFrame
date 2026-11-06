@@ -12,6 +12,7 @@
     now,
     total,
     fullscreen = false,
+    audio = true,
     onplaypause,
     onstop,
     onslower,
@@ -30,6 +31,8 @@
     now: number;
     total: number;
     fullscreen?: boolean;
+    /** The recording has a sound; without one the volume and mute buttons are left out. */
+    audio?: boolean;
     onplaypause: () => void;
     onstop: () => void;
     onslower: () => void;
@@ -62,6 +65,7 @@
   </button>
   <span class="time" aria-label="Position">{now.toFixed(1)} / {total.toFixed(1)} s</span>
   <span class="gap"></span>
+  {#if audio}
   <button type="button" class="b" title={silent ? 'Unmute (M)' : 'Mute (M)'} aria-label={silent ? 'Unmute' : 'Mute'} onclick={onmute}>
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" />
@@ -82,6 +86,9 @@
     value={muted ? 0 : volume}
     oninput={(e) => onvolume(Number(e.currentTarget.value))}
   />
+  {:else}
+    <span class="nosound" title="This recording has no sound">No sound</span>
+  {/if}
   <button type="button" class="b" title={fullscreen ? 'Leave full screen (F)' : 'Full screen (F)'} aria-label={fullscreen ? 'Leave full screen' : 'Full screen'} onclick={onfullscreen}>
     <svg viewBox="0 0 24 24" aria-hidden="true">
       {#if fullscreen}
@@ -115,5 +122,6 @@
   .rate { min-width: 34px; text-align: center; font-variant-numeric: tabular-nums; }
   .time { margin-left: 8px; font-variant-numeric: tabular-nums; opacity: 0.9; white-space: nowrap; }
   .gap { flex: 1; }
+  .nosound { margin: 0 6px; opacity: 0.7; white-space: nowrap; }
   .vol { width: 64px; margin: 0 4px; accent-color: #fff; background: transparent; }
 </style>

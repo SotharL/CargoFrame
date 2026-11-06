@@ -6,7 +6,7 @@ use crate::updates::Updates;
 use crate::warm::Warm;
 use cargoframe_bundle::{Sweep, Workspace};
 use cargoframe_config::Store;
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -20,7 +20,7 @@ pub struct AppState {
     paused: AtomicBool,
     /// False when a Linux desktop has no tray host.
     pub tray_available: bool,
-    /// The capture the CargoFrame window is showing.
+    /// The captures the CargoFrame windows are showing, one per window.
     pub sessions: Sessions,
     /// Where each capture keeps its temporary copies while its window is open.
     pub workspace: Workspace,
@@ -37,10 +37,11 @@ pub struct AppState {
     last_program: Mutex<Option<String>>,
     /// A capture is being taken; a second shortcut press meanwhile is ignored.
     busy: AtomicBool,
-    /// A share is being sent; a second press of a sharing button meanwhile is refused.
-    sharing: AtomicBool,
-    /// The CargoFrame window was closed during a share: stop retrying and say how it ended.
-    share_cancelled: AtomicBool,
+    /// The captures whose share is being sent; a second press of a sharing button of the same
+    /// window meanwhile is refused. Windows send independently of each other.
+    sharing: Mutex<BTreeSet<u64>>,
+    /// The captures whose window was closed during a share: stop retrying and say how it ended.
+    share_cancelled: Mutex<BTreeSet<u64>>,
     /// Shortcuts that could not be registered, by trigger id, with the reason.
     shortcut_errors: Mutex<BTreeMap<String, String>>,
     /// The settings file the person opened to import, read and checked, waiting for their
@@ -67,8 +68,8 @@ impl AppState {
                 std::sync::Arc::new(crate::secrets::KeyringStore),
             )),
             busy: AtomicBool::new(false),
-            sharing: AtomicBool::new(false),
-            share_cancelled: AtomicBool::new(false),
+            sharing: Mutex::new(BTreeSet::new()),
+            share_cancelled: Mutex::new(BTreeSet::new()),
             shortcut_errors: Mutex::new(BTreeMap::new()),
             pending_import: Mutex::new(None),
         }
@@ -79,9 +80,9 @@ impl AppState {
     pub fn sweep_captures(&self, older_than: Duration) -> Sweep {
         let keep: Vec<_> = self
             .sessions
-            .current()
-            .and_then(|s| s.dir_path())
-            .into_iter()
+            .all()
+            .iter()
+            .filter_map(|s| s.dir_path())
             .collect();
         self.workspace.sweep(&keep, older_than)
     }
@@ -117,25 +118,29 @@ impl AppState {
         self.busy.store(false, Ordering::Release);
     }
 
-    /// Claim the right to send. False if a share is already running.
-    pub fn try_begin_share(&self) -> bool {
-        if self.sharing.swap(true, Ordering::AcqRel) {
+    /// Claim the right to send the capture `id`. False if its share is already running.
+    pub fn try_begin_share(&self, id: u64) -> bool {
+        if !lock(&self.sharing).insert(id) {
             return false;
         }
-        self.share_cancelled.store(false, Ordering::Release);
+        lock(&self.share_cancelled).remove(&id);
         true
     }
 
-    pub fn end_share(&self) {
-        self.sharing.store(false, Ordering::Release);
+    pub fn end_share(&self, id: u64) {
+        lock(&self.sharing).remove(&id);
+        lock(&self.share_cancelled).remove(&id);
     }
 
-    pub fn cancel_share(&self) {
-        self.share_cancelled.store(true, Ordering::Release);
+    /// The window of the capture `id` was closed: its share stops retrying.
+    pub fn cancel_share(&self, id: u64) {
+        if lock(&self.sharing).contains(&id) {
+            lock(&self.share_cancelled).insert(id);
+        }
     }
 
-    pub fn share_cancelled(&self) -> bool {
-        self.share_cancelled.load(Ordering::Acquire)
+    pub fn share_cancelled(&self, id: u64) -> bool {
+        lock(&self.share_cancelled).contains(&id)
     }
 
     pub fn set_pending_import(&self, entries: Option<Vec<Entry>>) {
@@ -165,5 +170,50 @@ impl AppState {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()
+    }
+}
+
+fn lock<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cargoframe_config::Dirs;
+
+    fn state() -> (AppState, tempfile::TempDir) {
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        (
+            AppState::new(store, false, crate::session::tests::no_connections()),
+            dir,
+        )
+    }
+
+    #[test]
+    fn two_windows_send_at_the_same_time_but_one_window_does_not_send_twice() {
+        let (s, _d) = state();
+        assert!(s.try_begin_share(1));
+        assert!(s.try_begin_share(2), "another window can send meanwhile");
+        assert!(!s.try_begin_share(1), "this one is already sending");
+        s.end_share(1);
+        assert!(s.try_begin_share(1));
+    }
+
+    #[test]
+    fn closing_a_window_stops_only_its_own_share() {
+        let (s, _d) = state();
+        assert!(s.try_begin_share(1));
+        assert!(s.try_begin_share(2));
+        s.cancel_share(1);
+        assert!(s.share_cancelled(1));
+        assert!(!s.share_cancelled(2));
+        // a share that is not running has nothing to cancel, so the next one starts clean
+        s.end_share(1);
+        s.cancel_share(1);
+        assert!(!s.share_cancelled(1));
+        assert!(s.try_begin_share(1));
+        assert!(!s.share_cancelled(1));
     }
 }

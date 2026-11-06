@@ -22,6 +22,9 @@ pub struct Clip {
     pub width: u32,
     pub height: u32,
     pub duration_ms: u64,
+    /// The recording has a sound track, which the export keeps.
+    #[serde(default)]
+    pub has_audio: bool,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -224,6 +227,7 @@ mod tests {
     use super::*;
 
     const CLIP: Clip = Clip {
+        has_audio: false,
         width: 1920,
         height: 1080,
         duration_ms: 10_000,
@@ -256,6 +260,7 @@ mod tests {
     #[test]
     fn an_odd_sized_picture_is_exported_one_pixel_smaller() {
         let odd = Clip {
+            has_audio: false,
             width: 1279,
             height: 719,
             duration_ms: 3000,
@@ -384,6 +389,7 @@ mod tests {
             [Problem::TooManyOverlays(MAX_OVERLAYS + 1)]
         );
         let empty = Clip {
+            has_audio: false,
             width: 0,
             height: 0,
             duration_ms: 0,

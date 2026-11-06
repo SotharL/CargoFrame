@@ -8,8 +8,8 @@
 //!   and one that starts with `-` for an option.
 //! * Marks are laid on the uncropped picture and the crop comes last, so changing the crop never
 //!   moves a mark. Their times are on the output's own timeline once the start is cut.
-//! * The result is H.264 in an MP4 with the index at the front (so it plays while it downloads),
-//!   without sound: CargoFrame records the screen only.
+//! * The result is H.264 in an MP4 with the index at the front (so it plays while it downloads).
+//!   The sound of the recording, if it has one, is kept as AAC and cut with the picture.
 
 use crate::edit::{resolve, Clip, Edit, Problem, Resolved};
 use std::ffi::OsString;
@@ -97,7 +97,12 @@ fn plan_resolved(input: &Path, output: &Path, r: &Resolved, clip: &Clip) -> Plan
         )),
     }
     args.extend(["-filter_complex".into(), graph.into()]);
-    args.extend(["-map".into(), "[out]".into(), "-an".into()]);
+    args.extend(["-map".into(), "[out]".into()]);
+    if clip.has_audio {
+        args.extend(["-map".into(), "0:a:0".into()]);
+    } else {
+        args.push("-an".into());
+    }
     args.extend(["-t".into(), secs(r.length_ms()).into()]);
     for a in [
         "-c:v",
@@ -112,6 +117,11 @@ fn plan_resolved(input: &Path, output: &Path, r: &Resolved, clip: &Clip) -> Plan
         "+faststart",
     ] {
         args.push(a.into());
+    }
+    if clip.has_audio {
+        for a in ["-c:a", "aac", "-b:a", "128k"] {
+            args.push(a.into());
+        }
     }
     args.push(file_arg(output));
 
@@ -255,7 +265,20 @@ pub fn ask(program: &Path, args: &[&str]) -> Result<String, ExportError> {
 pub fn parse_probe(json: &str) -> Result<Clip, String> {
     let v: serde_json::Value =
         serde_json::from_str(json).map_err(|_| "ffprobe answered with something unreadable")?;
-    let stream = v.pointer("/streams/0").ok_or("the file has no picture")?;
+    let streams = v
+        .get("streams")
+        .and_then(serde_json::Value::as_array)
+        .ok_or("the file has no picture")?;
+    fn kind(s: &serde_json::Value) -> Option<&str> {
+        s.get("codec_type").and_then(serde_json::Value::as_str)
+    }
+    // the picture is the first video stream (or, from a probe that does not say, the first)
+    let stream = streams
+        .iter()
+        .find(|s| kind(s) == Some("video"))
+        .or_else(|| streams.iter().find(|s| kind(s).is_none()))
+        .ok_or("the file has no picture")?;
+    let has_audio = streams.iter().any(|s| kind(s) == Some("audio"));
     let dim = |k: &str| {
         stream
             .get(k)
@@ -281,6 +304,7 @@ pub fn parse_probe(json: &str) -> Result<Clip, String> {
         width,
         height,
         duration_ms: (seconds * 1000.0).round() as u64,
+        has_audio,
     })
 }
 
@@ -289,10 +313,8 @@ pub fn probe(ffprobe: &Path, file: &Path) -> Result<Clip, ExportError> {
     let args: Vec<OsString> = [
         "-v",
         "error",
-        "-select_streams",
-        "v:0",
         "-show_entries",
-        "stream=width,height:format=duration",
+        "stream=codec_type,width,height:format=duration",
         "-of",
         "json",
     ]

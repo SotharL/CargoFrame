@@ -61,8 +61,8 @@ pub fn window_state(exists: bool, visible: bool) -> WindowState {
 /// One window's line in Settings, General, Performance.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WindowStatus {
-    pub label: &'static str,
-    pub name: &'static str,
+    pub label: String,
+    pub name: String,
     pub state: WindowState,
 }
 
@@ -149,8 +149,8 @@ mod tests {
         let status = MemoryStatus {
             mode: MemoryMode::LowMemory,
             windows: vec![WindowStatus {
-                label: "capture",
-                name: "Capture window",
+                label: "capture".into(),
+                name: "Capture window".into(),
                 state: WindowState::Kept,
             }],
         };

@@ -191,7 +191,7 @@
     const key = e.key.toLowerCase();
     if (key === ' ' || key === 'k') playOrPause();
     else if (key === 'f') toggleFullscreen();
-    else if (key === 'm') toggleMute();
+    else if (key === 'm' && info.audio) toggleMute();
     else if (key === 'arrowleft') seek(Math.max(start, now - 1));
     else if (key === 'arrowright') seek(Math.min(end, now + 1));
     else return;
@@ -266,6 +266,7 @@
             {now}
             {total}
             {fullscreen}
+            audio={info.audio}
             onplaypause={playOrPause}
             onstop={stop}
             onslower={() => (rate = stepRate(rate, -1))}

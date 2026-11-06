@@ -835,3 +835,44 @@ tick, colour-coded to the button, up to five side by side, safe, and easy to fin
   rules". A button that only saves a zip keeps plain lines.
 - **Not done:** per-block choices for several Files blocks on one button (the switch covers them all), and changing the
   choice from the block's own "Sent by" list (it stays a plain list; change it on the button).
+
+### Several windows, the window in focus, and sound (6 Nov 2026)
+
+The owner asked for up to ten CargoFrame windows at once, for a video to be able to record just the window in focus,
+and for the video to have sound (the computer's by default, no microphone), chosen in the layout. Decisions:
+
+- **Up to ten capture windows, each its own capture.** Pressing a shortcut while another capture is open opens a new
+  window instead of replacing it (the new one is placed a little below and right of the last, so they fan out). The
+  eleventh press says so in a notification and does nothing. Each window has a label (`capture`, `capture-2` …) and its
+  own session, its own ticked boxes, its own edited picture and mark, and its own capture folder; closing one forgets
+  only that one, and "Send" in one window never touches another. Window events (`session-changed`) are sent to one
+  window, and the capability file lets `capture-*` use the same commands as `capture`. Only one capture is *started*
+  at a time (the screenshot or the recording stop is quick), but any number of finished ones stay open.
+- **What a video records is set in the layout's Video block,** not in a global setting, because the same person has
+  a "bug clip of this window" layout and a "tour of my screen" layout. The block has two settings: **Record** (*the
+  whole screen*, or *the window in focus*) and the sounds (*sound of the computer*: on / off / one device;
+  *microphone*: off / on / one device). New blocks and old layouts get the screen, the computer's sound on, and no
+  microphone.
+- **The window in focus is the one that has the focus when the first shortcut is pressed,** as it is placed and sized
+  then (the visible frame on Windows, without the invisible borders). The recording does not follow it if it moves
+  or is resized. If the system does not say which window it is (Wayland, nothing focused) or it is a stub smaller than
+  16 pixels, the whole screen is recorded and the notification says so. A part of the desktop is cut out by ffmpeg's
+  own capture (`gdigrab -offset_x/-offset_y/-video_size`, `x11grab` with `display+x,y`); on Windows, Desktop
+  Duplication only sees one screen, so a window recording uses GDI (which sees the whole desktop, any screen).
+- **Sound by backend.** Linux: PulseAudio (PipeWire answers the same way): the computer's sound is
+  `@DEFAULT_MONITOR@`, the microphone is `default`, and the layout can name one device (the list comes from
+  `ffmpeg -sources pulse`; a name ending `.monitor` is a computer sound, the others are microphones). Windows: ffmpeg
+  has no way of its own to record the sound of the computer, only DirectShow devices, so the computer's sound is
+  recorded when the PC has a loopback device (*Stereo Mix*, *What U Hear*, *virtual-audio-capturer*, found by name)
+  and the notification says what to turn on when it has not; the microphone is the first DirectShow microphone. A
+  native Windows loopback capture is a later step and is **not** built.
+- **Sound never costs the picture.** No sound system on Linux (checked by looking for the PulseAudio socket, because
+  asking ffmpeg takes seconds), a device that is not there, or any other reason ffmpeg gives up in the first
+  moments: the recording goes on without sound and the notification says why. Two sounds are mixed into one track
+  (`amix`), AAC at 128 kb/s, 48 kHz stereo; a third is ignored.
+- **The clip keeps its sound through the export.** The probe says whether a recording has a sound track
+  (`Clip.has_audio`); the export copies it (AAC), cut with the picture, and drops it only when there is none. The
+  player shows the volume and mute buttons only for a clip with sound and says "No sound" otherwise.
+- **Not checked here (no audio hardware, no real desktop):** the sound devices themselves (Pulse monitor and
+  microphone, Windows loopback), a window recording of a real GPU window, DPI scaling with GDI on Windows (ffmpeg's
+  GDI capture may take a scaled screen at the scaled size), and ten windows on a real desktop.
