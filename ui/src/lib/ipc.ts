@@ -129,7 +129,7 @@ export interface Api {
   getSetup(): Promise<SetupReport>;
   /** The one button: install what is missing (Windows). It runs in the background; ask `getSetup`. */
   installMissing(): Promise<SetupReport>;
-  /** Open the Windows sound settings, where Stereo Mix is switched on. */
+  /** Open the Windows sound settings, on the Playback tab, where the default output is chosen. */
   openSoundSettings(): Promise<void>;
   /** Record the screen for a few seconds with the settings as they are in the form. */
   tryVideoRecording(video: Video): Promise<VideoTrial>;

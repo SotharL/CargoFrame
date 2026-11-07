@@ -97,20 +97,20 @@
 
 <div class="page">
   {#if infos.failure}<Chip kind="err" label={infos.failure} />{/if}
-  {#each infos.problems as p (p)}<Chip kind="warn" label={`Could not read a destination field file: ${p}`} />{/each}
+  {#each infos.problems as p (p)}<Chip kind="warn" label={`Could not read an extra field file: ${p}`} />{/each}
 
   {#if infos.loaded && infos.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No destination fields yet</h2>
+      <h2>No extra fields yet</h2>
       <p class="quiet">
-        A destination field is one box on the service you share to, such as Jira's Priority, Labels
+        An extra field is one box on the service you share to, such as Jira's Priority, Labels
         or a custom field. Describe it once here; a sharing button in a layout then fills it for you
         from a text block, a value read from a file, or a fixed value.
       </p>
       <p class="example">
         Example: <strong>Jira → priority</strong>, filled with the fixed value <strong>High</strong> each time.
       </p>
-      <button class="primary" data-tour="infotypes.add" onclick={add}>Add a destination field</button>
+      <button class="primary" data-tour="infotypes.add" onclick={add}>Add an extra field</button>
     </div>
   {/if}
 
@@ -137,12 +137,12 @@
   {/each}
 
   {#if infos.items.length > 0 && !draft}
-    <div><button class="primary" data-tour="infotypes.add" onclick={add}>Add a destination field</button></div>
+    <div><button class="primary" data-tour="infotypes.add" onclick={add}>Add an extra field</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit destination field' : 'New destination field'}</h2>
+      <h2>{draft.id ? 'Edit extra field' : 'New extra field'}</h2>
       <Field label="Name" tour="infotypes.name"><input type="text" bind:value={draft.value.name} placeholder="Priority" /></Field>
       <Field label="Connection" tour="infotypes.connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
         <select bind:value={draft.value.connection_id}>

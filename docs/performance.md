@@ -93,3 +93,12 @@ The settings window's script grew from 52 to 94 KB with the video pages, the gui
    the runner was just slow: re-run before changing anything.
 3. If it fails everywhere, the change is the cause. Do not raise a budget to make a build pass;
    change the plan first (`docs/decisions.md`) so the new number is a decision, not drift.
+
+## Second 7 November round
+
+Nothing here is on the always-on path. The Windows sound capture runs only while a recording runs, on its own thread,
+in a small buffer (a fifth of a second), and sends the samples to ffmpeg over a local connection. Formatting is a pass
+over the text when a share is built (it scans a bounded stretch around each mark, so a long note stays fast). The
+data-page sizes are read when the page opens. The size budgets and the real capture run in the same gate as before
+(`scripts/dev/check.sh all`). The recording's cost with sound on a real Windows PC is not yet measured.
+

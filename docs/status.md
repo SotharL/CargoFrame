@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-07 (the twelve changes of the 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
+_Last updated 2026-11-07, evening (the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -8,13 +8,19 @@ those is true for each piece.
 
 ## What is verified
 
-- **Unit and integration tests:** 832 Rust tests and 428 UI tests pass. `cargo clippy -D warnings`,
+- **Unit and integration tests:** about 890 Rust tests and 499 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
 - **The 7 November round** (Discord webhooks and bot, dependent dropdowns, last five choices, get-token buttons, the
   Claude app line, screenshot with video, the guides): unit tests on each piece, connector tests against the mock
   servers, and the guides are walked step by step in a browser test (`walk.test.ts`) and checked against the
   fields that exist (`tours.test.ts`). The capture window with a recording and a screenshot, the Settings Setup page
   with the Discord form, and a Jira guide were also looked at in a browser with demo data.
+- **The second 7 November round:** the path with a thread step (the layout rules, the Discord webhook routing of a thread
+  post to its own channel, the remembered posts, the pasted link) against the mock server; the text converter for each
+  service (`richtext_tests.rs` and each connector's tests); the clean-up on temporary folders; the toolbar, the Setup
+  rows and the data page against the in-memory stand-in; the Windows sound capture is compiled by Windows CI and its
+  feed is tested on Linux with a fake source (`pcm_tests.rs`). A new test checks that every command the web view can
+  call is registered, listed and given to a window (it found the data buttons were not granted before this was fixed).
 - **Linux end to end** (virtual X11 display): the shortcut captures a fake program, the CargoFrame
   window opens with the capture, closing and reopening behaves as each of the three memory modes
   promises, and the real release binary stays at 19.6 MB of its own memory while idle
@@ -51,6 +57,10 @@ those is true for each piece.
   app install through winget, and the picture of a frame taken from a playing clip in WebView2 (the screenshot at the
   end of a recording) have not been tried on real hardware or with real accounts. Slack has no webhook mode (a Slack
   webhook cannot attach files). Google, Reddit and Teams still need an app ID you register yourself.
+- **The second 7 November round on a real PC.** The user has run the installer ("works well"). Not yet seen on real
+  hardware: the Windows sound capture (everything, and one program's sound; the program is found from the window in
+  focus), a Discord thread post through a real webhook (the earlier failure could not be reproduced here; the cause found
+  is a thread sent through another channel's webhook), and the thread list of a bot token. Slack still needs a bot token.
 - **A real desktop.** Windows 11 capture and tray, GNOME and KDE trays, Wayland capture and
   clipboard, notification clicks: spikes S1 to S5 in `docs/spikes.md` are all still "not run".
 - **Real accounts.** OAuth sign-in with Google and Reddit, Jira tokens, and a Claude chat opened
@@ -82,7 +92,7 @@ those is true for each piece.
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
 | 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, Connections page, share flow | Done against mock servers |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
-| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block (record the screen or the window in focus; the computer's sound and a microphone), up to ten CargoFrame windows at once, ready-made video layouts (save locally, Jira, Drive, Slack), a trigger that makes a video (press to start, press to stop), the clip played, cut (timeline with handles), cropped, marked (a ring with a text) and sent from the CargoFrame window. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); per-connection size hints and marks that come and go at chosen moments are not built; sound of the computer on Windows needs a loopback device such as Stereo Mix (no native capture yet) |
+| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block (record the screen or the window in focus; the computer's sound and a microphone), up to ten CargoFrame windows at once, ready-made video layouts (save locally, Jira, Drive, Slack), a trigger that makes a video (press to start, press to stop), the clip played, cut (timeline with handles), cropped, marked (a ring with a text) and sent from the CargoFrame window. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); per-connection size hints and marks that come and go at chosen moments are not built; sound of the computer on Windows is recorded by CargoFrame itself (everything, or the program in focus; not yet tried on a real PC) |
 
 ## What the owner needs to do before calling V1 solid
 
@@ -125,6 +135,13 @@ those is true for each piece.
    record (Linux: the default output; Windows: needs Stereo Mix or another loopback device), switch the microphone on
    and speak, and check both are in the clip and in what is sent; remove the loopback device and check the notification
    says why there is no computer sound.
+   The second 7 November round, on a real PC: record a video with a video playing and check the sound is in it (Sound
+   from: everything, then The program in focus); in Setup press the sound button and check it opens the **Playback** tab;
+   in a Discord layout choose a channel, then a thread, send, press the shortcut again and check it starts on the same
+   thread, then pick a forum and check the posts are listed (bot) or the last ones used (webhook); type in the Title and
+   check the thread list narrows (and *Show all* undoes it); in General switch both notice kinds off, record, and check
+   nothing pops up; open *Your data*, clear one kind and then press *Reset CargoFrame* on a spare install; in a text block
+   use the formatting buttons and send to Jira, Slack and Discord and look at how each shows bold, a list and code.
    Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
    buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons
    (program, installer, tray) on a light and a dark taskbar.

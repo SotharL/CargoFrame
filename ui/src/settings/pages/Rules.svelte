@@ -129,7 +129,7 @@
       <p class="quiet">
         CargoFrame can read one value out of a file in the project folder, such as the version in
         package.json or the last line of a log, and give it a name. You then use that name in a text
-        block, or pick it as the source for a destination field.
+        block, or pick it as the source for an extra field.
       </p>
       <p class="example">
         Example: read <code>version</code> from <code>package.json</code>, call it “version”, and write

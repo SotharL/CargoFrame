@@ -8,6 +8,9 @@
   "permissions": [
     "allow-app-info",
     "allow-get-general",
+    "allow-get-data-report",
+    "allow-clean-data",
+    "allow-reset-everything",
     "allow-set-general",
     "allow-get-autostart",
     "allow-get-memory-status",
