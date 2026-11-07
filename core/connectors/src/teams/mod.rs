@@ -20,6 +20,7 @@ use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model;
 use crate::oauth::{self, ClientAuth, OAuthClient, Redirect};
 use crate::payload::{OptionItem, Payload, SendOutcome};
+use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -520,8 +521,8 @@ pub fn compose(payload: &Payload, with_image: bool, subject: bool) -> Composed {
         } else {
             b
         };
-        let lines: Vec<String> = b.lines().map(|l| escape(l.trim_end())).collect();
-        html.push_str(&format!("<p>{}</p>", lines.join("<br>")));
+        // bold, italic, underline, code, quotes and lists (see `richtext`); every text is escaped
+        html.push_str(&render(&b, Style::Html));
     }
     if with_image {
         html.push_str("<p><img src=\"../hostedContents/1/$value\" alt=\"Screenshot\"></p>");

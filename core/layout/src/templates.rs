@@ -139,6 +139,7 @@ fn text(title: &str, role: TextRole, default_text: &str) -> BlockKind {
         placement: TitlePlacement::Above,
         role,
         default_text: default_text.to_string(),
+        formatting: true,
     })
 }
 

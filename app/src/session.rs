@@ -773,6 +773,7 @@ pub(crate) mod tests {
                         placement: Default::default(),
                         role: Default::default(),
                         default_text: "{{project.name}} at {{capture.date}}".into(),
+                        formatting: true,
                     }),
                 },
                 Block {
@@ -1132,6 +1133,7 @@ pub(crate) mod tests {
                     placement: Default::default(),
                     role: Default::default(),
                     default_text: "b={{rule.build}} g={{rule.gone}} s={{rule.soft}}".into(),
+                    formatting: true,
                 }),
             }],
         };

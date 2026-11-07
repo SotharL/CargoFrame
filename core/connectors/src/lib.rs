@@ -15,6 +15,7 @@ pub mod model;
 pub mod oauth;
 pub mod payload;
 pub mod reddit;
+pub mod richtext;
 pub mod secrets;
 pub mod slack;
 pub mod teams;

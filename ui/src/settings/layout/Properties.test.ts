@@ -92,3 +92,22 @@ describe('Properties: a dropdown fed by a service', () => {
     expect(screen.queryByRole('switch', { name: 'Remember the last choices' })).toBeNull();
   });
 });
+
+describe('Properties: a text block', () => {
+  it('offers the formatting buttons for plain text, on unless switched off', async () => {
+    const block = { ...title, role: 'plain' } as Block & { formatting?: boolean };
+    open(block);
+    const box = screen.getByRole('switch', { name: 'Formatting buttons' }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(block.formatting).toBe(false);
+    await fireEvent.click(box);
+    expect(block.formatting).toBe(true);
+  });
+
+  it('has no formatting for a prompt or a zip name', () => {
+    open({ ...title, role: 'prompt' } as Block);
+    expect(screen.queryByRole('switch', { name: 'Formatting buttons' })).toBeNull();
+  });
+});
+

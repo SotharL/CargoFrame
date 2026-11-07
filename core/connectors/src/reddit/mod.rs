@@ -11,6 +11,7 @@ use crate::error::{from_net, from_response, invalid};
 use crate::model;
 use crate::oauth::{self, ClientAuth, OAuthClient};
 use crate::payload::{OptionItem, Payload, SendOutcome};
+use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use cargoframe_net::{check_url, Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
@@ -295,7 +296,9 @@ impl Connector for RedditConnector {
         let text = payload
             .value("text")
             .map(str::to_string)
-            .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()));
+            .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
+            // bold, italic, code, quotes and lists in Reddit's markdown (see `richtext`)
+            .map(|t| render(&t, Style::Reddit));
 
         let mut notes = Vec::new();
         if payload.files_zip.is_some() {

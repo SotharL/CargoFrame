@@ -15,6 +15,7 @@
   import { nowhereToPost } from './destination';
   import { recentChoices, type Recent } from '../lib/recent';
   import { rememberChoices, remembers } from './remembering';
+  import { marksFor } from './blocks/formatting';
   import ResultPanel from './ResultPanel.svelte';
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
@@ -262,7 +263,14 @@
                   <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
                 {/if}
               {:else if b.type === 'text'}
-                <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
+                {@const formats = marksFor(view, b)}
+                <TextBlock
+                  block={b}
+                  bind:value={values.texts[b.id]!}
+                  unresolved={view.texts[b.id]?.unresolved ?? []}
+                  marks={formats.marks}
+                  services={formats.services}
+                />
               {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
                 <DropdownBlock
                   block={b}

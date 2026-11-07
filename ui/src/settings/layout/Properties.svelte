@@ -100,6 +100,15 @@
         <option value="zip_name">Zip name</option>
       </select>
     </Field>
+    {#if block.role === 'plain'}
+      <div class="toggles">
+        <Toggle label="Formatting buttons" checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
+        <p class="quiet hint">
+          Bold, italic, underline, code, quotes and lists above the box, only the ones the service it is sent to can show.
+          They need a button that sends this box as the message of Jira, Slack, Discord, Reddit or Teams.
+        </p>
+      </div>
+    {/if}
     <div class="auto-field">
       <span class="auto-title">Text automation</span>
       <TextAutomation bind:value={block.default_text} {variables} {rules} />

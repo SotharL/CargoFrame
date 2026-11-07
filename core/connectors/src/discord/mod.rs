@@ -23,6 +23,7 @@ use crate::ctx::Ctx;
 use crate::error::{from_net, invalid, not_set_up};
 use crate::model::{self, DiscordMode};
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
+use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, InsideSpec, ListSpec, Status};
 use cargoframe_net::{Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
@@ -512,7 +513,7 @@ pub fn compose(payload: &Payload, with_title: bool) -> (String, bool) {
         }
     }
     if let Some(b) = body {
-        parts.push(b);
+        parts.push(render(&b, Style::Discord));
     }
     let text = parts.join("\n");
     if text.chars().count() > MAX_CONTENT {

@@ -647,6 +647,7 @@ mod tests {
             placement: TitlePlacement::Above,
             role,
             default_text: body.into(),
+            formatting: true,
         })
     }
 
@@ -929,6 +930,7 @@ mod tests {
                 placement: TitlePlacement::Above,
                 role: TextRole::Plain,
                 default_text: String::new(),
+                formatting: true,
             }),
         );
         assert!(validate(&layout(vec![list(Some("title")), title.clone()]), &reg).is_empty());

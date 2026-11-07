@@ -160,6 +160,10 @@ pub struct TextBlock {
     /// Initial content; may use `{{variables}}`.
     #[serde(default)]
     pub default_text: String,
+    /// Offer bold, italic, code, lists and the like above a plain text box, for the services that
+    /// can show them. A block that is not plain text never has them.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub formatting: bool,
 }
 
 /// Where a value for an info-type field comes from.
@@ -484,6 +488,7 @@ mod serde_tests {
                         placement: TitlePlacement::Inside,
                         role: TextRole::Prompt,
                         default_text: "Look at {{app.title}}".into(),
+                        formatting: true,
                     }),
                 },
                 Block {
@@ -740,5 +745,20 @@ mod serde_tests {
     fn an_unknown_block_type_is_an_error_not_a_silent_drop() {
         let text = r#"{"blocks":[{"id":"x","type":"hologram","rect":{"x":0,"y":0,"w":1,"h":1}}]}"#;
         assert!(serde_json::from_str::<Layout>(text).is_err());
+    }
+    #[test]
+    fn a_text_block_offers_formatting_unless_it_is_switched_off() {
+        let plain: TextBlock = serde_json::from_str(r#"{"title": "Note"}"#).unwrap();
+        assert!(plain.formatting);
+        // the default is not written, so older files stay as they were
+        assert!(!serde_json::to_string(&plain)
+            .unwrap()
+            .contains("formatting"));
+        let off: TextBlock =
+            serde_json::from_str(r#"{"title": "Note", "formatting": false}"#).unwrap();
+        assert!(!off.formatting);
+        assert!(serde_json::to_string(&off)
+            .unwrap()
+            .contains("\"formatting\":false"));
     }
 }

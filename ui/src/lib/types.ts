@@ -182,6 +182,8 @@ export type BlockContent =
       placement: 'above' | 'inside';
       role: 'plain' | 'prompt' | 'zip_name';
       default_text: string;
+      /** Formatting buttons above a plain text box, for the services that can show them. Absent: on. */
+      formatting?: boolean;
     }
   | {
       type: 'sharing_button';

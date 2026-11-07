@@ -20,8 +20,8 @@ mod imp {
     use std::time::Duration;
 
     use wasapi::{
-        AudioCaptureClient, AudioClient, DeviceEnumerator, Direction, Handle, SampleType,
-        StreamMode, WasapiError, WaveFormat, deinitialize, initialize_mta,
+        deinitialize, initialize_mta, AudioCaptureClient, AudioClient, DeviceEnumerator, Direction,
+        Handle, SampleType, StreamMode, WasapiError, WaveFormat,
     };
 
     use crate::pcm::{PcmFormat, PcmSource};
@@ -172,7 +172,8 @@ mod imp {
                 // the speakers were unplugged or changed: the new default gets a second chance, in
                 // the same format, since ffmpeg has been told that one
                 self.stream = None;
-                let (rate, channels) = (self.format.rate as usize, usize::from(self.format.channels));
+                let (rate, channels) =
+                    (self.format.rate as usize, usize::from(self.format.channels));
                 match Stream::start(self.program, rate, channels) {
                     Ok(stream) => self.stream = Some(stream),
                     Err(_) => return Err(format!("the sound stopped ({broken})")),

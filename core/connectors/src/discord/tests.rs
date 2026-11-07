@@ -1259,3 +1259,15 @@ fn several_channels_and_nothing_picked_asks_for_the_channel() {
     );
     assert!(server.requests().is_empty());
 }
+
+#[test]
+fn the_message_keeps_its_formatting_in_discords_markdown() {
+    let p = payload(&[(
+        "message",
+        "**Crash** on *save*, __urgent__ `x`\n- one\n2. two\n> seen",
+    )]);
+    assert_eq!(
+        compose(&p, false).0,
+        "**Crash** on *save*, __urgent__ `x`\n- one\n1. two\n> seen"
+    );
+}

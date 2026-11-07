@@ -204,7 +204,9 @@ mod tests {
     fn a_folder_that_is_not_there_is_not_an_error() {
         let d = tempfile::tempdir().unwrap();
         assert_eq!(clean_all(d.path()), Cleaned::default());
-        assert!(report(d.path()).iter().all(|a| a.files == 0 && a.bytes == 0));
+        assert!(report(d.path())
+            .iter()
+            .all(|a| a.files == 0 && a.bytes == 0));
     }
 
     #[cfg(unix)]
