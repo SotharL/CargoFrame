@@ -51,21 +51,22 @@ The tray-only process never holds a web view, whatever the mode.
 ## Measured so far
 
 Measured on the cloud build machine (Linux, virtual display `xvfb`, software rendering, release
-build). These are the numbers the gates were set against.
+build), last re-run on 7 Nov 2026 after the feedback round. These are the numbers the gates were set against.
+The settings window's script grew from 52 to 94 KB with the video pages, the guides and the Discord form; both windows stay far under the 250 KB budget.
 
 | Measurement | Result |
 |-------------|--------|
 | 4K screenshot to PNG, fast setting | 96 ms (11.7 MB for a screenshot-like picture) |
 | Crop 1920×1080 out of 4K | 1.7 ms |
 | Shortcut → capture ready (small window) | 3 ms |
-| CargoFrame window usable, cold | 823 ms |
+| CargoFrame window usable, cold | 736 ms |
 | CargoFrame window usable, warm (Balanced, reopened) | 36 ms |
 | Settings window open, cold | 686 ms |
-| Tray-only process, anonymous memory | 19.6 MB |
+| Tray-only process, anonymous memory | 19.7 MB |
 | Tray-only process, resident set / proportional set | 100 MB / 79 MB |
 | Tray-only process, CPU over the idle window | 0.13% |
-| JavaScript up front, CargoFrame window | 31 KB gzip |
-| JavaScript up front, Settings window | 52 KB gzip |
+| JavaScript up front, CargoFrame window | 52 KB gzip |
+| JavaScript up front, Settings window | 94 KB gzip |
 
 ## What these numbers do not prove
 
@@ -75,7 +76,7 @@ build). These are the numbers the gates were set against.
   Linux gate measures anonymous memory and reports the other two. On a real desktop with a GPU
   driver the picture will differ. **The 40 MB budget still has to be confirmed on a reference
   machine** (spike S6 in `docs/spikes.md`), on Windows 11 and on one GNOME and one KDE desktop.
-- **Cold open times.** 823 ms and 686 ms are slightly over the 700 ms and 500 ms budgets on a
+- **Cold open times.** 736 ms and 684 ms are slightly over the 700 ms and 500 ms budgets on a
   virtual display with software rendering, which is why CI uses a scale of 2. A real GPU should
   be faster, but that is an expectation, not a measurement.
 - **Windows.** Capture, window and idle timings on Windows 11 have only the smoke test behind
