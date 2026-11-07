@@ -262,7 +262,7 @@
       {#if !connections.length}
         <p class="quiet small">
           Add a connection to see layouts for Jira, Google, Reddit, Claude, Slack, Discord, Teams or your own API.
-          <button class="link" onclick={() => go('connections')}>Go to Connections</button>
+          <button class="link" onclick={() => go('setup', 'connections')}>Go to Connections</button>
         </p>
       {/if}
     </section>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import { PAGES } from './nav';
   import { go, parseTarget, restore, route } from './route.svelte';
   import General from './pages/General.svelte';
@@ -33,6 +33,13 @@
       });
     });
     return () => stop?.();
+  });
+
+  // "Connections" is the lower half of the Setup page: an address that names it scrolls there
+  $effect(() => {
+    if (route.page === 'setup' && route.arg === 'connections') {
+      void tick().then(() => setTimeout(() => document.getElementById('connections')?.scrollIntoView({ block: 'start' }), 60));
+    }
   });
 
   const current = $derived(PAGES.find((p) => p.id === page)!);
@@ -82,8 +89,6 @@
       <General />
     {:else if page === 'triggers'}
       <Triggers />
-    {:else if page === 'connections'}
-      <Connections />
     {:else if page === 'rules'}
       <Rules />
     {:else if page === 'infotypes'}
@@ -92,6 +97,11 @@
       <Layouts />
     {:else if page === 'setup'}
       <Setup />
+      <section id="connections" class="connections" aria-labelledby="connections-title">
+        <h2 id="connections-title">Connections</h2>
+        <p class="quiet">Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, or your own API.</p>
+        <Connections />
+      </section>
     {:else if page === 'video'}
       <VideoPage />
     {:else}
@@ -121,6 +131,9 @@
   .item.on { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
   main { overflow: auto; padding: 24px 32px 40px; display: grid; align-content: start; gap: 20px; }
   header { display: grid; gap: 4px; }
+  .connections { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .connections h2 { margin: 0; font-size: 20px; }
+  .connections > p { margin: -8px 0 0; }
   main > :global(*) { max-width: 720px; }
   main.wide > :global(*) { max-width: none; }
   .banner {

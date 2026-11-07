@@ -173,8 +173,9 @@ pub fn edit_layout(app: AppHandle, layout_id: Option<String>) {
 /// Open Settings on one of its pages (for example `connections`, to reconnect).
 #[tauri::command]
 pub fn open_settings(app: AppHandle, page: String) {
-    const PAGES: [&str; 6] = [
+    const PAGES: [&str; 7] = [
         "general",
+        "setup",
         "connections",
         "triggers",
         "rules",
