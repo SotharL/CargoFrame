@@ -380,6 +380,7 @@ mod tests {
                 mime: "image/png".into(),
                 data: vec![1, 2, 3],
             }),
+            still: None,
             files_zip: Some(Attachment {
                 name: "files.zip".into(),
                 mime: "application/zip".into(),

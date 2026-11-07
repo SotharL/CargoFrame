@@ -120,6 +120,7 @@
 
 <style>
   .channels { display: grid; gap: 10px; }
+  .channels > button { justify-self: start; }
   .title { font-weight: 600; font-size: 13px; }
   .channel { display: grid; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
   .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }

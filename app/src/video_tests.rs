@@ -928,6 +928,7 @@ fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
             desktop: AudioChoice::Off,
             microphone: AudioChoice::Default,
         },
+        ..VideoBlock::default()
     });
     let place = Area {
         x: 40,

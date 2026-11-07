@@ -30,6 +30,14 @@ describe('VideoOptions', () => {
     expect(select('Microphone').value).toBe('off');
   });
 
+  it('can fill the screenshot block with the picture taken when the recording stops', async () => {
+    const seen = open(fresh());
+    const box = screen.getByRole('switch', { name: 'Take a screenshot when the recording stops' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(seen.now.screenshot_at_end).toBe(true);
+  });
+
   it('records the window in focus when asked, and says what happens when it cannot be found', async () => {
     const seen = open(fresh());
     await fireEvent.change(select('Record'), { target: { value: 'focused_window' } });

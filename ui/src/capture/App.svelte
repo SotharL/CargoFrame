@@ -17,7 +17,7 @@
   import ResultPanel from './ResultPanel.svelte';
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
-  import { chatToOpen, willSend } from './willSend';
+  import { chatToOpen, pairedWithRecording, willSend } from './willSend';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
   import { applyAccent, applyTheme } from '../lib/theme';
@@ -43,6 +43,13 @@
   /** The choices made before in each dropdown block (newest first), read when the capture opens. */
   let recents = $state<Record<string, Recent[]>>({});
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
+  /** With a recording and a screenshot block: the picture taken from it, or `null` while there is none. */
+  let still = $state<Blob | null>(null);
+  let stillSize = $state({ width: 0, height: 0 });
+  /** The picture is the one taken when the recording stopped, which the app already holds. */
+  let stillIsPoster = $state(false);
+  /** Counts the pictures taken, so the editor starts again on each. */
+  let stillKey = $state(0);
   let clip = $state<ReturnType<typeof VideoBlock>>();
 
   function reportPainted() {
@@ -65,6 +72,8 @@
       image = img;
       values = initialValues(v);
       imageEdited = false;
+      still = null;
+      stillIsPoster = false;
       clipEdit = null;
       failure = null;
       notice = null;
@@ -78,8 +87,17 @@
           .map((b) => [b.id, recentChoices(v.layout?.id, b.id)]),
       );
       const sessionId = v.session_id;
-      // Without a screenshot block the window is usable as soon as it has drawn.
-      if (!v.layout?.blocks.some((b) => b.type === 'screenshot')) afterPaint(reportPainted);
+      // A recording's screenshot block starts empty, or with the picture taken when it stopped.
+      const paired = pairedWithRecording(v);
+      const atEnd = paired && v.layout?.blocks.some((b) => b.type === 'video' && b.screenshot_at_end === true);
+      if (atEnd) {
+        still = img;
+        stillSize = v.image;
+        stillIsPoster = true;
+        stillKey++;
+      }
+      // Without a picture to draw the window is usable as soon as it has drawn.
+      if (!v.layout?.blocks.some((b) => b.type === 'screenshot') || (paired && !atEnd)) afterPaint(reportPainted);
       // Lists that come from a service arrive after the window is already usable.
       void loadDropdowns(api, v, () => view?.session_id === sessionId, (blockId, next) => {
         if (!view) return;
@@ -124,6 +142,16 @@
   });
 
   const blocks = $derived(view?.layout?.blocks ?? []);
+  const paired = $derived(view !== null && pairedWithRecording(view));
+
+  function takeShot(frame: Blob) {
+    if (!view?.video) return;
+    still = frame;
+    stillSize = { width: view.video.width, height: view.video.height };
+    stillIsPoster = false;
+    imageEdited = false;
+    stillKey++;
+  }
   const rows = $derived(blocks.reduce((m, b) => Math.max(m, b.rect.y + b.rect.h), 0));
   const empty = $derived(view !== null && blocks.length === 0);
   // "This button does not send X" is shown on the block itself, so the header does not repeat it.
@@ -137,7 +165,7 @@
 
   async function share(button: Extract<Block, { type: 'sharing_button' }>) {
     if (!view || !api || sending) return;
-    const request = collectShare(view, button, values, imageEdited, clipEdit, ticks);
+    const request = collectShare(view, button, values, imageEdited, clipEdit, ticks, paired && still !== null);
     result = null;
     opened = null;
     if (promptIsEmpty(request)) {
@@ -148,10 +176,9 @@
     sending = button.id;
     try {
       // The edits live in this window; the backend sends them as they are now.
-      await api.setEditedImage(
-        view.session_id,
-        imageEdited && screenshot ? await screenshot.exportImage() : null,
-      );
+      const edited = imageEdited && screenshot ? await screenshot.exportImage() : null;
+      // A picture taken from the recording is only here, so it goes up even when it is not edited.
+      await api.setEditedImage(view.session_id, paired ? (still && !stillIsPoster ? (edited ?? still) : edited) : edited);
       // The mark on a recording is drawn here too; the backend lays it over the recording.
       if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
       const chat = chatToOpen(view, button, values);
@@ -230,11 +257,17 @@
           <div class="slot" style={place(b)}>
             <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
               <div class="body">
-              {#if b.type === 'screenshot' && image}
+              {#if b.type === 'screenshot' && paired}
+                {#if still}
+                  {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} />{/key}
+                {:else}
+                  <p class="quiet videonote">No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.</p>
+                {/if}
+              {:else if b.type === 'screenshot' && image}
                 <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
               {:else if b.type === 'video'}
                 {#if view.video}
-                  {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} />{/key}
+                  {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} onshot={paired ? takeShot : undefined} />{/key}
                 {:else}
                   <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
                 {/if}
@@ -259,7 +292,7 @@
                   mode={nowhereToPost(view, b) ? 'save_locally' : (view.sharing[b.id]?.mode ?? 'send')}
                   note={view.sharing[b.id]?.note ?? null}
                   kind={view.sharing[b.id]?.kind ?? null}
-                  parts={willSend(view, b, values, imageEdited, clipEdit, ticks)}
+                  parts={willSend(view, b, values, imageEdited, clipEdit, ticks, still !== null)}
                   opening={chatToOpen(view, b, values)}
                   lit={hovered === b.id}
                   onshare={() => share(b)}

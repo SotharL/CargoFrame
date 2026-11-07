@@ -941,6 +941,21 @@ let cached: Promise<Api> | undefined;
 /** A copy that is safe to keep: the real backend gets JSON too, and a Svelte proxy cannot be structured-cloned. */
 const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
+const channel = (server: string, category: string | null, name: string): DropdownOption => ({
+  value: `${server}/${name}`, label: `#${name}`, group: server, server, category,
+});
+const DEMO_CHANNELS: DropdownOption[] = [
+  channel('Team Foo', 'Development', 'bugs'), channel('Team Foo', 'Development', 'builds'), channel('Team Foo', 'Development', 'general-dev'),
+  channel('Team Foo', 'Support', 'help'), channel('Team Foo', 'Support', 'feedback'), channel('Team Foo', null, 'announcements'),
+  channel('Friends', null, 'chat'), channel('Friends', null, 'screenshots'),
+];
+const thread = (parent: string, name: string): DropdownOption => ({
+  value: `thread-${name}`, label: name, group: 'Team Foo', server: 'Team Foo', category: parent,
+});
+const DEMO_THREADS: DropdownOption[] = [
+  thread('bugs', 'What is wrong in Foo? (crash)'), thread('bugs', 'Slow start on Windows'), thread('builds', 'Nightly 2026-11-06'),
+];
+
 /** Outside the app: the in-memory backend, with the demo's answers to a share. */
 async function demoApi(): Promise<Api> {
   const { demoShare } = await import('../capture/demo');
@@ -953,7 +968,17 @@ async function demoApi(): Promise<Api> {
       : query.get('update') === 'fails'
         ? { fails: { message: 'GitHub says the CargoFrame repository was not found. It may be private: add a token below.', needs_token: true } }
         : undefined;
-  return memoryApi({ share: () => demoShare(kind), update });
+  // `?demo=discord`: a bot's lists, to look at the server > category > channel steps
+  const options =
+    query.get('demo') === 'discord'
+      ? (_c: string, block: string) => (block === 'thread' ? DEMO_THREADS : DEMO_CHANNELS)
+      : undefined;
+  const api = memoryApi({ share: () => demoShare(kind), update, options });
+  // `?media=both` plays a real clip, so "Take screenshot" has a frame to take
+  if (query.get('media') === 'both' && typeof MediaRecorder !== 'undefined') {
+    api.getSessionClip = async () => (await import('../capture/demo')).demoClip();
+  }
+  return api;
 }
 
 /** The backend for this page: Tauri when running in the app, an in-memory one otherwise. */

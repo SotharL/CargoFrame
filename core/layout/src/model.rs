@@ -66,6 +66,9 @@ pub struct VideoBlock {
     pub subject: VideoSubject,
     /// Which sounds go into the recording.
     pub audio: VideoAudio,
+    /// With a screenshot block in the same layout: start it filled with the picture taken when
+    /// the recording stopped. Off, it starts empty and the person takes one from the recording.
+    pub screenshot_at_end: bool,
 }
 
 /// What a recording shows.
@@ -540,11 +543,13 @@ mod serde_tests {
                     desktop: AudioChoice::Off,
                     microphone: AudioChoice::Device("USB Mic".into()),
                 },
+                screenshot_at_end: true,
             }),
         };
         let json = serde_json::to_value(&block).unwrap();
         assert_eq!(json["type"], "video");
         assert_eq!(json["subject"], "focused_window");
+        assert_eq!(json["screenshot_at_end"], true);
         assert_eq!(json["audio"]["desktop"], "off");
         assert_eq!(
             json["audio"]["microphone"],

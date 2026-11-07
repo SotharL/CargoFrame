@@ -55,6 +55,9 @@ pub struct Request {
     pub files: BTreeMap<String, Vec<String>>,
     /// The picture was edited: send the edited one the window uploaded.
     pub image_edited: bool,
+    /// For a video capture whose layout has a screenshot block: that block holds a picture (taken
+    /// from the recording, and edited or not, the window uploaded it).
+    pub still: bool,
     /// For a video capture: what was done to the recording (cut, cropped). `None` sends it as it is.
     #[serde(default)]
     pub clip_edit: Option<crate::video::ClipEdit>,
@@ -410,29 +413,59 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         return Err(reasons);
     }
 
-    // A video capture sends its recording where a screenshot capture sends the picture.
-    let image = match &session.clip {
-        Some(clip) if button.send.screenshot => {
-            let edited = match edited_recording(svc, session, clip, req.clip_edit) {
-                Ok(c) => c,
-                Err(why) => return Err(vec![why]),
+    // A video capture sends its recording where a screenshot capture sends the picture. With a
+    // video block and a screenshot block in one layout, each goes by its own box, and the
+    // screenshot is the picture the person took from the recording.
+    let in_layout = |wanted: fn(&BlockKind) -> bool| layout.blocks.iter().find(|b| wanted(&b.kind));
+    let video_block = in_layout(|k| matches!(k, BlockKind::Video(_)));
+    let shot_block = in_layout(|k| matches!(k, BlockKind::Screenshot));
+    let goes = |b: Option<&cargoframe_layout::Block>| {
+        b.is_some_and(|b| !selection.left_out.contains(&b.id))
+    };
+    let (image, still) = match &session.clip {
+        Some(clip) => {
+            let both = video_block.is_some() && shot_block.is_some();
+            let recording_goes = if both {
+                goes(video_block)
+            } else {
+                button.send.screenshot
             };
-            match video_attachment(edited.as_deref().unwrap_or(&clip.path), kind) {
-                Ok(a) => Some(a),
-                Err(why) => return Err(vec![why]),
+            let recording = if recording_goes {
+                let edited = match edited_recording(svc, session, clip, req.clip_edit) {
+                    Ok(c) => c,
+                    Err(why) => return Err(vec![why]),
+                };
+                match video_attachment(edited.as_deref().unwrap_or(&clip.path), kind) {
+                    Ok(a) => Some(a),
+                    Err(why) => return Err(vec![why]),
+                }
+            } else {
+                None
+            };
+            let picture = (both && req.still && goes(shot_block)).then(|| Attachment {
+                name: "screenshot.png".into(),
+                mime: "image/png".into(),
+                data: session.image_to_send(),
+            });
+            match (recording, picture) {
+                // without the recording the picture is the one thing sent, where it would be
+                (None, picture) => (picture, None),
+                (recording, picture) => (recording, picture),
             }
         }
-        Some(_) => None,
-        None if !button.send.screenshot => None,
-        None => Some(Attachment {
-            name: "screenshot.png".into(),
-            mime: "image/png".into(),
-            data: if req.image_edited {
-                session.image_to_send()
-            } else {
-                session.png.clone()
-            },
-        }),
+        None if !button.send.screenshot => (None, None),
+        None => (
+            Some(Attachment {
+                name: "screenshot.png".into(),
+                mime: "image/png".into(),
+                data: if req.image_edited {
+                    session.image_to_send()
+                } else {
+                    session.png.clone()
+                },
+            }),
+            None,
+        ),
     };
     let title = view
         .app
@@ -443,6 +476,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let payload = Payload {
         title,
         image,
+        still,
         files_zip: None,
         local: None,
         inline_files: Vec::new(),
@@ -794,7 +828,7 @@ fn build_keep_zip(
     });
     let mut items = Vec::new();
     // The picture is left out when the button's rules leave it out.
-    if let Some(image) = &p.payload.image {
+    for image in p.payload.image.iter().chain(p.payload.still.iter()) {
         items.push(Item {
             name: image.name.clone(),
             source: Source::Bytes(image.data.clone()),
@@ -1275,6 +1309,7 @@ mod tests {
             dropdowns: BTreeMap::new(),
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
+            still: false,
             clip_edit: None,
             send_blocks: None,
             save_here: false,
@@ -2218,6 +2253,75 @@ mod tests {
         let names = zip_names(&path);
         assert!(!names.contains(&"recording.mp4".to_string()), "{names:?}");
         assert!(!names.contains(&"screenshot.png".to_string()), "{names:?}");
+    }
+
+    /// A recording capture saved locally, in a layout that has a screenshot block and a video block.
+    fn recording_with_a_picture_block(w: &mut World) -> PathBuf {
+        make_video(w, b"MP4 BYTES");
+        let layout = w.session.view.layout.as_mut().unwrap();
+        for (id, kind, x) in [
+            ("shot", json!({"type": "screenshot"}), 0),
+            ("clip", json!({"type": "video"}), 6),
+        ] {
+            let mut block = json!({"id": id, "rect": {"x": x, "y": 4, "w": 6, "h": 4}});
+            block.as_object_mut().unwrap().extend(kind.as_object().unwrap().clone());
+            layout.blocks.push(serde_json::from_value(block).unwrap());
+        }
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(w, Some(&dir.display().to_string()), 0);
+        disconnect(w);
+        dir
+    }
+
+    #[test]
+    fn a_picture_taken_from_the_recording_goes_with_it() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        recording_with_a_picture_block(&mut w);
+        let mut req = request();
+        req.still = true;
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let names = zip_names(&path);
+        assert!(names.contains(&"recording.mp4".to_string()), "{names:?}");
+        assert!(names.contains(&"screenshot.png".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn an_empty_screenshot_block_sends_only_the_recording() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        recording_with_a_picture_block(&mut w);
+        let (r, _) = go(&w, &request(), vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        let names = zip_names(&path);
+        assert!(names.contains(&"recording.mp4".to_string()), "{names:?}");
+        assert!(!names.contains(&"screenshot.png".to_string()), "{names:?}");
+    }
+
+    #[test]
+    fn each_picture_block_goes_by_its_own_box() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        recording_with_a_picture_block(&mut w);
+        let names_for = |w: &World, ticked: &[&str]| {
+            let mut req = request();
+            req.still = true;
+            req.send_blocks = Some(ticked.iter().map(|b| b.to_string()).collect());
+            let (r, _) = go(w, &req, vec![]);
+            let ShareResult::SavedLocally { path, .. } = r else {
+                panic!("{r:?}");
+            };
+            zip_names(&path)
+        };
+        let only_the_picture = names_for(&w, &["shot"]);
+        assert!(only_the_picture.contains(&"screenshot.png".to_string()), "{only_the_picture:?}");
+        assert!(!only_the_picture.contains(&"recording.mp4".to_string()), "{only_the_picture:?}");
+        let only_the_recording = names_for(&w, &["clip"]);
+        assert!(only_the_recording.contains(&"recording.mp4".to_string()), "{only_the_recording:?}");
+        assert!(!only_the_recording.contains(&"screenshot.png".to_string()), "{only_the_recording:?}");
     }
 
     #[test]

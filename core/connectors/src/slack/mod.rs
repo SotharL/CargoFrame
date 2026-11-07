@@ -529,6 +529,7 @@ impl Connector for SlackConnector {
         let text = compose(payload);
         let uploads: Vec<(&str, &Attachment)> = [
             ("slack.file.image", payload.image.as_ref()),
+            ("slack.file.still", payload.still.as_ref()),
             ("slack.file.zip", payload.files_zip.as_ref()),
         ]
         .into_iter()

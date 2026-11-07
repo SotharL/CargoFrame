@@ -75,8 +75,11 @@ impl Field {
 pub struct Payload {
     /// The captured window's title (or "Screen"): a default subject for services that need one.
     pub title: String,
-    /// The screenshot as shown (edited, if the person edited it).
+    /// The screenshot as shown (edited, if the person edited it). For a recording, the recording.
     pub image: Option<Attachment>,
+    /// A screenshot that goes with a recording (a frame taken from it, say). Only set when `image`
+    /// is the recording: otherwise the screenshot is `image`.
+    pub still: Option<Attachment>,
     /// The ticked project files, zipped. `None` when none were ticked.
     pub files_zip: Option<Attachment>,
     /// Copies of the screenshot and the ticked files on disk, in the capture's own folder, for a

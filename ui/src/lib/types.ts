@@ -138,7 +138,7 @@ export interface AudioDevices {
 
 export type BlockContent =
   | { type: 'screenshot' }
-  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio }
+  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio; screenshot_at_end?: boolean }
   | {
       type: 'text';
       title: string;
@@ -704,6 +704,8 @@ export interface ShareRequest {
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;
+  /** A recording with a screenshot block: the block holds a picture taken from it (uploaded first). */
+  still?: boolean;
   /** For a recording: what was cut or cropped. Left out (or `null`) sends it as it is. */
   clip_edit?: ClipEdit | null;
   /**

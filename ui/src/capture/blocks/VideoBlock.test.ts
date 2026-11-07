@@ -417,5 +417,47 @@ describe('VideoBlock mark picture', () => {
     expect(draw).toHaveBeenCalledWith(1280, 720, { x: 640, y: 360 }, 'Here');
     draw.mockRestore();
   });
+  describe('Take screenshot', () => {
+    /** A canvas that "draws" and hands back a small picture, which jsdom cannot do. */
+    function fakeCanvas(blob: Blob | null) {
+      const drawn: number[][] = [];
+      vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockReturnValue({
+        drawImage: (_v: unknown, ...a: number[]) => drawn.push(a),
+      } as never);
+      vi.spyOn(HTMLCanvasElement.prototype, 'toBlob').mockImplementation((done) => done(blob));
+      return drawn;
+    }
+    afterEach(() => vi.restoreAllMocks());
+
+    it('is not there unless the layout has a screenshot block to put the picture in', async () => {
+      setApiForTests(memoryApi());
+      render(VideoBlock, { info });
+      await screen.findByLabelText('Recording');
+      expect(screen.queryByRole('button', { name: 'Take screenshot' })).toBeNull();
+    });
+
+    it('hands over the frame on screen, whole, at the size of the recording', async () => {
+      setApiForTests(memoryApi());
+      const picture = new Blob(['png'], { type: 'image/png' });
+      const drawn = fakeCanvas(picture);
+      const taken: Blob[] = [];
+      render(VideoBlock, { info, onshot: (b: Blob) => taken.push(b) });
+      await screen.findByLabelText('Recording');
+      await fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      await waitFor(() => expect(taken).toEqual([picture]));
+      expect(drawn).toEqual([[0, 0, 1280, 720]]);
+    });
+
+    it('says so when no picture could be made', async () => {
+      setApiForTests(memoryApi());
+      fakeCanvas(null);
+      const taken: Blob[] = [];
+      render(VideoBlock, { info, onshot: (b: Blob) => taken.push(b) });
+      await screen.findByLabelText('Recording');
+      await fireEvent.click(screen.getByRole('button', { name: 'Take screenshot' }));
+      expect((await screen.findByRole('alert')).textContent).toContain('could not take a picture');
+      expect(taken).toEqual([]);
+    });
+  });
 });
 

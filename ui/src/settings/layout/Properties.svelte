@@ -1,5 +1,6 @@
 <script lang="ts">
   import Field from '../../lib/components/Field.svelte';
+  import Toggle from '../../lib/components/Toggle.svelte';
   import LookInEditor from './LookInEditor.svelte';
   import TextAutomation from './TextAutomation.svelte';
   import SharingPanel from './SharingPanel.svelte';
@@ -48,6 +49,7 @@
   const mine = $derived(issues.filter((i) => i.block_id === block.id));
   type TextBlock = Extract<Block, { type: 'text' }>;
   type DropdownBlock = Extract<Block, { type: 'dropdown' }>;
+  const textBlocks = $derived(blocks.filter((b): b is TextBlock => b.type === 'text'));
   const promptBlocks = $derived(blocks.filter((b): b is TextBlock => b.type === 'text' && b.role === 'prompt'));
   const valueBlocks = $derived(
     blocks.filter((b): b is TextBlock | DropdownBlock => b.type === 'text' || b.type === 'dropdown'),
@@ -149,6 +151,23 @@
             />
           </Field>
         {/if}
+      {/if}
+      <div class="toggles">
+        <Toggle label="Remember the last choices" checked={block.remember !== false} onchange={(v) => (block.remember = v)} />
+        <p class="quiet hint">The last five go to the top of the list, and it starts on the last one used.</p>
+        <Toggle label="Allow no choice" checked={block.optional === true} onchange={(v) => (block.optional = v)} />
+        <p class="quiet hint">The box can stay empty, or hold something typed or pasted that is not in the list.</p>
+      </div>
+      {#if textBlocks.length > 0}
+        <Field label="Narrow the list by" hint="Only the choices with this text in their name are shown, for example a thread named like the title.">
+          <select
+            value={block.narrow_by ?? ''}
+            onchange={(e) => (block.narrow_by = e.currentTarget.value || null)}
+          >
+            <option value="">Nothing: show them all</option>
+            {#each textBlocks as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+          </select>
+        </Field>
       {/if}
     {/if}
   {:else if block.type === 'video'}
@@ -288,6 +307,8 @@
   .issue.error { border-color: var(--err); background: color-mix(in srgb, var(--err) 12%, transparent); }
   .issue.warning { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
   .issue.debug { border-color: var(--dbg); background: color-mix(in srgb, var(--dbg) 12%, transparent); }
+  .toggles { display: grid; gap: 4px; }
+  .toggles .hint { margin: 0 0 6px 46px; font-size: 12px; }
   .auto-field { display: grid; gap: 4px; }
   .auto-title { font-weight: 600; font-size: 13px; }
   .maps { display: grid; gap: 8px; }

@@ -986,10 +986,14 @@ impl Connector for DiscordConnector {
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
-        let files: Vec<&Attachment> = [payload.image.as_ref(), payload.files_zip.as_ref()]
-            .into_iter()
-            .flatten()
-            .collect();
+        let files: Vec<&Attachment> = [
+            payload.image.as_ref(),
+            payload.still.as_ref(),
+            payload.files_zip.as_ref(),
+        ]
+        .into_iter()
+        .flatten()
+        .collect();
 
         // A share that already went through is not repeated.
         if let Some(done) = ctx.progress.get("discord.url") {

@@ -19,6 +19,7 @@ export function collectShare(
   imageEdited: boolean,
   clipEdit: ClipEdit | null = null,
   ticks: Ticks | null = null,
+  still = false,
 ): ShareRequest {
   const ids = new Set(view.layout?.blocks.map((b) => b.id) ?? []);
   const keep = <T>(m: Record<string, T>): Record<string, T> =>
@@ -39,6 +40,7 @@ export function collectShare(
     dropdowns: keep(values.dropdowns),
     files: keep(values.files),
     image_edited: imageEdited,
+    still,
     clip_edit: view.video ? clipEdit : null,
     send_blocks: sendBlocks,
     save_here: nowhereToPost(view, button, values) || undefined,

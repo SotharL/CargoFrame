@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { demoSession } from './demo';
 import { demoCapabilities, demoReach } from '../lib/demoReach';
 import { initialValues } from './values';
-import { chatToOpen, willSend } from './willSend';
+import { chatToOpen, pairedWithRecording, willSend } from './willSend';
 import { initialTicks, setTick } from './ticks';
 import type { Block, ServiceKind, SessionView } from '../lib/types';
 
@@ -54,6 +54,18 @@ describe('willSend', () => {
     // where video cannot go, it is not listed
     view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('teams'), 'teams');
     expect(willSend(view, button, initialValues(view), false).join()).not.toContain('Video');
+  });
+
+  it('lists the screenshot of a recording only once a picture was taken from it', async () => {
+    const { view, button } = await viewFor('slack', (b) => { b.prompt_block_id = 'prompt'; });
+    view.layout!.blocks.push({ id: 'clip', type: 'video', rect: { x: 0, y: 12, w: 8, h: 4 } });
+    view.video = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true };
+    view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('slack'), 'slack');
+    const values = initialValues(view);
+    expect(pairedWithRecording(view)).toBe(true);
+    // the screenshot block starts empty: nothing to list for it
+    expect(willSend(view, button, values, false, null, initialTicks(view), false).join()).not.toContain('Screenshot');
+    expect(willSend(view, button, values, false, null, initialTicks(view), true).slice(0, 2)).toEqual(['Screenshot', 'Video (9.5 s, 3.0 MB)']);
   });
 
   it('says when the picture was edited and counts every ticked file', async () => {

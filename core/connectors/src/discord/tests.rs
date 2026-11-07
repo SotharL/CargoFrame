@@ -348,6 +348,30 @@ fn the_screenshot_and_the_zip_ride_along_as_attachments() {
 }
 
 #[test]
+fn a_picture_taken_from_a_recording_rides_along_beside_it() {
+    let server = MockServer::start(discord);
+    let w = world();
+    let mut p = payload(&[("channel", TEXT)]);
+    p.image = Some(Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0, 0, 24],
+    });
+    p.still = Some(png());
+    w.with("dc", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.method == "POST")
+        .unwrap();
+    assert_eq!(
+        payload_json(&post)["attachments"],
+        json!([{ "id": 0, "filename": "recording.mp4" }, { "id": 1, "filename": "screenshot.png" }])
+    );
+}
+
+#[test]
 fn a_forum_gets_a_new_post_named_from_the_title() {
     let server = MockServer::start(discord);
     let w = world();

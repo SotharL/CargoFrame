@@ -31,6 +31,8 @@
     onchange?: (value: string) => void;
   } = $props();
 
+  /** The narrowest the list is drawn, in pixels, however small its box. */
+  const MIN_LIST = 260;
   const uid = `cb-${Math.random().toString(36).slice(2, 8)}`;
   const listId = `${uid}-list`;
 
@@ -50,9 +52,11 @@
     const below = window.innerHeight - r.bottom - 8;
     const above = r.top - 8;
     const up = below < 160 && above > below;
+    // A narrow box (one of three in a row) still gets a list wide enough to read, kept on screen.
+    const width = Math.min(Math.max(r.width, MIN_LIST), window.innerWidth - 16);
     pos = {
-      left: r.left,
-      width: r.width,
+      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
+      width,
       top: up ? r.top - 2 : r.bottom + 2,
       maxH: Math.max(100, Math.min(240, up ? above : below)),
       up,
@@ -206,7 +210,7 @@
   li.active { background: color-mix(in srgb, var(--accent) 18%, transparent); }
   li[aria-selected='true'] .text { font-weight: 600; }
   .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .note { flex: none; font-size: 11.5px; color: var(--quiet); }
+  .note { flex: 0 1 auto; min-width: 0; max-width: 50%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11.5px; color: var(--quiet); }
   .none { color: var(--quiet); cursor: default; }
   .heading { display: block; padding: 6px 8px 2px; font-size: 11.5px; font-weight: 600; color: var(--quiet); cursor: default; }
 </style>

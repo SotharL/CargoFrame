@@ -347,6 +347,32 @@ fn the_screenshot_and_the_zip_are_uploaded_then_shared_with_the_message() {
 }
 
 #[test]
+fn a_picture_taken_from_a_recording_is_uploaded_beside_it() {
+    let base = Arc::new(std::sync::Mutex::new(String::new()));
+    let server = MockServer::start(slack_with_uploads(base.clone()));
+    *base.lock().unwrap() = server.base();
+    let w = world();
+    let mut p = payload(&[("channel", "C0123ABCD")]);
+    p.image = Some(Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0, 0, 24],
+    });
+    p.still = Some(png());
+    w.with("slack", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    let names: Vec<Option<String>> = server
+        .requests_to("/api/files.getUploadURLExternal")
+        .iter()
+        .map(|r| r.form_value("filename"))
+        .collect();
+    assert_eq!(
+        names,
+        [Some("recording.mp4".to_string()), Some("screenshot.png".to_string())]
+    );
+}
+
+#[test]
 fn a_retry_does_not_upload_or_post_twice() {
     let base = Arc::new(std::sync::Mutex::new(String::new()));
     let fail_complete = Arc::new(AtomicU32::new(1));

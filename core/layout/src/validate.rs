@@ -47,8 +47,6 @@ pub enum Code {
     BadSubfolder,
     /// A dropdown narrowed by a text block that is not in the layout.
     NarrowByMissing,
-    /// A screenshot block and a video block in one layout: a trigger makes one or the other.
-    ScreenshotAndVideo,
     /// A block the destination has no place for, so this button leaves it out.
     CannotSend,
     /// More than [`MAX_SHARING_BUTTONS`] sharing buttons: the window has room for five boxes.
@@ -182,10 +180,6 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
     let mut out = Vec::new();
     check_geometry(layout, &mut out);
     let mut zip_names = 0;
-    let has_screenshot = layout
-        .blocks
-        .iter()
-        .any(|b| matches!(b.kind, BlockKind::Screenshot));
     for block in &layout.blocks {
         match &block.kind {
             BlockKind::Text(t) => {
@@ -259,16 +253,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                 }
             }
             BlockKind::Screenshot => {}
-            BlockKind::Video(_) => {
-                if has_screenshot {
-                    out.push(issue(
-                        block,
-                        Severity::Warning,
-                        Code::ScreenshotAndVideo,
-                        "A trigger makes a screenshot or a video, not both: keep the video block in a layout of its own",
-                    ));
-                }
-            }
+            BlockKind::Video(_) => {}
         }
     }
     out.sort_by_key(|i| std::cmp::Reverse(i.severity));
@@ -333,7 +318,6 @@ fn is_blocking(code: Code) -> bool {
             | Code::MappingRuleMissing
             | Code::UnresolvedVariable
             | Code::CannotSend
-            | Code::ScreenshotAndVideo
     )
 }
 
@@ -607,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn a_video_block_alone_is_fine_and_with_a_screenshot_it_is_warned_about() {
+    fn a_video_block_is_fine_alone_and_beside_a_screenshot() {
         let alone = layout(vec![at("clip", 0, BlockKind::Video(Default::default()))]);
         assert!(validate(&alone, &Reg::default()).is_empty());
 
@@ -615,12 +599,7 @@ mod tests {
             at("shot", 0, BlockKind::Screenshot),
             at("clip", 1, BlockKind::Video(Default::default())),
         ]);
-        let issues = validate(&both, &Reg::default());
-        assert_eq!(codes(&issues), vec![Code::ScreenshotAndVideo]);
-        assert_eq!(issues[0].severity, Severity::Warning);
-        assert_eq!(issues[0].block_id.as_deref(), Some("clip"));
-        // a warning does not stop a button from working
-        assert!(!is_blocking(Code::ScreenshotAndVideo));
+        assert!(validate(&both, &Reg::default()).is_empty());
     }
 
     #[test]
