@@ -2264,7 +2264,10 @@ mod tests {
             ("clip", json!({"type": "video"}), 6),
         ] {
             let mut block = json!({"id": id, "rect": {"x": x, "y": 4, "w": 6, "h": 4}});
-            block.as_object_mut().unwrap().extend(kind.as_object().unwrap().clone());
+            block
+                .as_object_mut()
+                .unwrap()
+                .extend(kind.as_object().unwrap().clone());
             layout.blocks.push(serde_json::from_value(block).unwrap());
         }
         let dir = w.out.path().join("zips");
@@ -2317,11 +2320,23 @@ mod tests {
             zip_names(&path)
         };
         let only_the_picture = names_for(&w, &["shot"]);
-        assert!(only_the_picture.contains(&"screenshot.png".to_string()), "{only_the_picture:?}");
-        assert!(!only_the_picture.contains(&"recording.mp4".to_string()), "{only_the_picture:?}");
+        assert!(
+            only_the_picture.contains(&"screenshot.png".to_string()),
+            "{only_the_picture:?}"
+        );
+        assert!(
+            !only_the_picture.contains(&"recording.mp4".to_string()),
+            "{only_the_picture:?}"
+        );
         let only_the_recording = names_for(&w, &["clip"]);
-        assert!(only_the_recording.contains(&"recording.mp4".to_string()), "{only_the_recording:?}");
-        assert!(!only_the_recording.contains(&"screenshot.png".to_string()), "{only_the_recording:?}");
+        assert!(
+            only_the_recording.contains(&"recording.mp4".to_string()),
+            "{only_the_recording:?}"
+        );
+        assert!(
+            !only_the_recording.contains(&"screenshot.png".to_string()),
+            "{only_the_recording:?}"
+        );
     }
 
     #[test]

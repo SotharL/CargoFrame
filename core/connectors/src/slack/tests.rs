@@ -368,7 +368,10 @@ fn a_picture_taken_from_a_recording_is_uploaded_beside_it() {
         .collect();
     assert_eq!(
         names,
-        [Some("recording.mp4".to_string()), Some("screenshot.png".to_string())]
+        [
+            Some("recording.mp4".to_string()),
+            Some("screenshot.png".to_string())
+        ]
     );
 }
 

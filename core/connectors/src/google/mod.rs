@@ -357,14 +357,7 @@ impl Connector for GoogleConnector {
                         l
                     }
                 };
-                links.push((
-                    if step == "google.zip" {
-                        "zip"
-                    } else {
-                        "image"
-                    },
-                    link,
-                ));
+                links.push((if step == "google.zip" { "zip" } else { "image" }, link));
             }
         }
 
