@@ -205,6 +205,9 @@ jobs:
             [ "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = "true" ] \
               || { echo "::error::$TAG is already published; make a new tag instead."; exit 1; }
             gh release upload "$TAG" dist/* --clobber
+            # a draft that has no tag yet must point at the commit just built, or publishing it
+            # would put the tag on an older commit than the files
+            [ "$REF" = "$TAG" ] || gh release edit "$TAG" --target "$REF"
           elif [ "$REF" = "$TAG" ]; then
             # the tag exists: the release is made for it
             gh release create "$TAG" dist/* --draft --verify-tag \
