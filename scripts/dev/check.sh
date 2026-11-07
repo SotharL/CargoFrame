@@ -40,6 +40,7 @@ if [ "$mode" != quick ]; then
   step "cargo test (all crates)" rust_tests
 fi
 if [ "$mode" != rust ]; then
+  step "file names (Windows-safe)" node scripts/ci/check-names.mjs
   step "svelte-check" bash -c 'cd ui && npx svelte-check'
   step "vitest" bash -c 'cd ui && npx vitest run'
 fi

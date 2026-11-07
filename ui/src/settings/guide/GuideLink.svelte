@@ -1,6 +1,6 @@
 <script lang="ts">
   // A small "Show me how" button that starts one guide from where the person already is.
-  import { startTour } from './guide.svelte';
+  import { startTour } from './tourState.svelte';
 
   let { tour }: { tour: string } = $props();
 </script>

@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import App from '../App.svelte';
-import { guide, startTour, stopTour } from './guide.svelte';
+import { guide, startTour, stopTour } from './tourState.svelte';
 import { selectorOf, TOURS } from './tours';
 import { go } from '../route.svelte';
 import { memoryApi, setApiForTests } from '../../lib/ipc';

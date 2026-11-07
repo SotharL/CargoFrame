@@ -4,7 +4,7 @@
   // appear, and follows it if the page moves. Esc closes it.
   import { onDestroy, untrack } from 'svelte';
   import { go, route } from '../route.svelte';
-  import { guide, stopTour } from './guide.svelte';
+  import { guide, stopTour } from './tourState.svelte';
   import { selectorOf } from './tours';
 
   /** How long to wait for the target to appear before saying it is not on the screen yet. */

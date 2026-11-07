@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import Harness from './Guide.harness.svelte';
-import { guide, startTour, stopTour } from './guide.svelte';
+import { guide, startTour, stopTour } from './tourState.svelte';
 import { route, go } from '../route.svelte';
 import { TOURS } from './tours';
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   // The list of all guides, at the foot of the sidebar.
-  import { startTour } from './guide.svelte';
+  import { startTour } from './tourState.svelte';
   import { TOURS } from './tours';
 
   let menu = $state<HTMLDetailsElement>();
