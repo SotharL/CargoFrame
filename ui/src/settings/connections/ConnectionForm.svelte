@@ -11,27 +11,27 @@
   let { value = $bindable(), hooks = null }: { value: Connection; hooks?: HookStore | null } = $props();
 </script>
 
-<Field label="Name" hint="How you will see it in lists.">
+<Field label="Name" hint="How you will see it in lists." tour="conn.name">
   <input type="text" bind:value={value.name} placeholder="Work Jira" />
 </Field>
 
 {#if value.kind === 'jira'}
-  <Field label="Jira address" hint="For example https://yourteam.atlassian.net">
+  <Field label="Jira address" hint="For example https://yourteam.atlassian.net" tour="jira.address">
     <input type="text" bind:value={value.site_url} placeholder="https://yourteam.atlassian.net" />
   </Field>
-  <Field label="Sign in with">
+  <Field label="Sign in with" tour="jira.auth">
     <select bind:value={value.auth}>
       <option value="api_token">Jira Cloud: e-mail and API token</option>
       <option value="pat">Jira Server or Data Center: personal access token</option>
     </select>
   </Field>
   {#if value.auth === 'api_token'}
-    <Field label="Account e-mail" hint="The address you sign in to Jira with.">
+    <Field label="Account e-mail" hint="The address you sign in to Jira with." tour="jira.email">
       <input type="text" bind:value={value.email} placeholder="you@example.com" />
     </Field>
   {/if}
 {:else if value.kind === 'google'}
-  <Field label="Client ID" hint="From a “Desktop app” OAuth client in your own Google Cloud project.">
+  <Field label="Client ID" hint="From a “Desktop app” OAuth client in your own Google Cloud project." tour="google.client_id">
     <span class="with-link"><input type="text" bind:value={value.client_id} /><GetLink link={getLinkFor(value, 'client_id')} /></span>
   </Field>
   <Toggle label="Also add a row to a spreadsheet" bind:checked={value.sheets} />
@@ -41,7 +41,7 @@
   </p>
 {:else if value.kind === 'reddit'}
   {@const r = value}
-  <Field label="Client ID" hint="From an “installed app” you register at reddit.com/prefs/apps.">
+  <Field label="Client ID" hint="From an “installed app” you register at reddit.com/prefs/apps." tour="reddit.client_id">
     <span class="with-link"><input type="text" bind:value={value.client_id} /><GetLink link={getLinkFor(value, 'client_id')} /></span>
   </Field>
   <Field
@@ -53,7 +53,7 @@
   </Field>
 {:else if value.kind === 'claude'}
   {@const claude = value}
-  <Field label="Open Claude with" hint="The chat is opened by link, then CargoFrame pastes the screenshot, the ticked files and your message into it. Leave Claude in front for a few seconds while it works.">
+  <Field label="Open Claude with" hint="The chat is opened by link, then CargoFrame pastes the screenshot, the ticked files and your message into it. Leave Claude in front for a few seconds while it works." tour="claude.open_with">
     <select bind:value={claude.open_with}>
       <option value="auto">The desktop app on Windows, the browser on Linux</option>
       <option value="app">The desktop app</option>
@@ -72,7 +72,7 @@
     CargoFrame posts as a Slack app you create in your own workspace. Nothing here to fill in: the
     token you paste below says which workspace.
   </p>
-  <details class="steps">
+  <details class="steps" data-tour="slack.steps">
     <summary>How to get the token</summary>
     <ol>
       <li>Open <span class="mono">api.slack.com/apps</span> and choose Create New App, From scratch. Pick your workspace.</li>
@@ -95,7 +95,7 @@
     CargoFrame posts as you, through an app you register in your own Microsoft Entra ID (free).
     Work and school accounts only; a personal Microsoft account cannot be used.
   </p>
-  <Field label="Application (client) ID" hint="From the Overview page of your app registration.">
+  <Field label="Application (client) ID" hint="From the Overview page of your app registration." tour="teams.client_id">
     <span class="with-link"><input type="text" bind:value={t.client_id} placeholder="00000000-0000-0000-0000-000000000000" /><GetLink link={getLinkFor(t, 'client_id')} /></span>
   </Field>
   <Field
@@ -104,7 +104,7 @@
   >
     <input type="text" bind:value={t.tenant} />
   </Field>
-  <details class="steps">
+  <details class="steps" data-tour="teams.steps">
     <summary>How to register the app</summary>
     <ol>
       <li>Open <span class="mono">entra.microsoft.com</span>, then App registrations, New registration. Name it CargoFrame.</li>

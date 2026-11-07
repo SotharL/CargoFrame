@@ -32,7 +32,7 @@
   }
 </script>
 
-<Field label="How should CargoFrame post?">
+<Field label="How should CargoFrame post?" tour="discord.mode">
   <Segmented
     label="How CargoFrame posts to Discord"
     bind:value={value.mode}
@@ -52,7 +52,7 @@
     <input type="text" bind:value={value.shown_as} placeholder="Your name" maxlength="80" />
   </Field>
 
-  <div class="channels">
+  <div class="channels" data-tour="discord.channels">
     <span class="title">Channels</span>
     {#each value.hooks as h (h.slot)}
       <div class="channel">
@@ -80,11 +80,11 @@
       </div>
     {/each}
     {#if value.hooks.length < MAX}
-      <button type="button" onclick={add}>{value.hooks.length === 0 ? 'Add a channel' : 'Add another channel'}</button>
+      <button type="button" data-tour="discord.add-channel" onclick={add}>{value.hooks.length === 0 ? 'Add a channel' : 'Add another channel'}</button>
     {/if}
   </div>
 
-  <details class="steps">
+  <details class="steps" data-tour="discord.steps">
     <summary>How to make a webhook</summary>
     <ol>
       <li>In Discord, open the channel's settings (the gear beside its name), then Integrations, then Webhooks.</li>

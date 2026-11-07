@@ -8,6 +8,8 @@
   import SecretInput from '../connections/SecretInput.svelte';
   import type { HookStore } from '../connections/DiscordForm.svelte';
   import { getLinkFor } from '../../lib/connectorHelp';
+  import GuideLink from '../guide/GuideLink.svelte';
+  import { connectTour } from '../guide/tours';
   import ClaudeChats from '../connections/ClaudeChats.svelte';
 
   const items = createItems<Connection>('connection');
@@ -230,14 +232,14 @@
               <span class="quiet">Waiting for your browser…</span>
               <button onclick={() => (void (async () => (await getApi()).cancelSignIn())())}>Cancel</button>
             {:else if v.state === 'connected'}
-              <button onclick={() => act(id, (api) => api.testConnection(id))}>Test</button>
+              <button data-tour="conn.test" onclick={() => act(id, (api) => api.testConnection(id))}>Test</button>
               <button onclick={() => act(id, (api) => api.disconnectConnection(id))}>Sign out</button>
             {:else}
-              <button class="primary" onclick={() => signIn(id)}>{v.state === 'expired' ? 'Sign in again' : 'Sign in'}</button>
+              <button class="primary" data-tour="conn.signin" onclick={() => signIn(id)}>{v.state === 'expired' ? 'Sign in again' : 'Sign in'}</button>
             {/if}
           {:else if item.kind !== 'claude'}
             {#if v.state === 'connected' || v.state === 'expired'}
-              <button onclick={() => act(id, (api) => api.testConnection(id))}>Test</button>
+              <button data-tour="conn.test" onclick={() => act(id, (api) => api.testConnection(id))}>Test</button>
             {/if}
           {/if}
         {/if}
@@ -261,7 +263,7 @@
       <h2>Add a connection</h2>
       <div class="kinds">
         {#each KINDS as k (k.kind)}
-          <button class="kind" onclick={() => add(k.kind)}>
+          <button class="kind" data-tour={`add-${k.kind}`} onclick={() => add(k.kind)}>
             <strong>{k.label}</strong>
             <span class="quiet">{k.blurb}</span>
           </button>
@@ -270,7 +272,10 @@
     </section>
   {:else}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit connection' : `New ${KINDS.find((k) => k.kind === draft!.value.kind)?.label} connection`}</h2>
+      <div class="heading">
+        <h2>{draft.id ? 'Edit connection' : `New ${KINDS.find((k) => k.kind === draft!.value.kind)?.label} connection`}</h2>
+        {#if connectTour(draft.value.kind)}<GuideLink tour={connectTour(draft.value.kind)!} />{/if}
+      </div>
       <ConnectionForm bind:value={draft.value} hooks={hookStore()} />
       {#if draft.id}
         {@const v = viewOf(draft.id)}
@@ -298,8 +303,8 @@
       {#if note}<div role="status"><Chip kind="ok" label={note} /></div>{/if}
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" disabled={busy}>Save</button>
-        <button type="button" onclick={() => (draft = null)}>{draft.id ? 'Done' : 'Cancel'}</button>
+        <button class="primary" type="submit" data-tour="conn.save" disabled={busy}>Save</button>
+        <button type="button" data-tour="conn.done" onclick={() => (draft = null)}>{draft.id ? 'Done' : 'Cancel'}</button>
       </div>
     </form>
   {/if}
@@ -320,6 +325,8 @@
   .kind { display: grid; gap: 4px; text-align: left; padding: 10px 12px; }
   .kind .quiet { font-size: 12.5px; }
   .editor { display: grid; gap: 14px; }
+  .heading { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
+  .heading h2 { margin: 0; }
   .buttons { display: flex; gap: 8px; }
   .error { color: var(--err); font-size: 13px; }
   .danger { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }

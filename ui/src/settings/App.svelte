@@ -10,6 +10,8 @@
   import Connections from './pages/Connections.svelte';
   import VideoPage from './pages/Video.svelte';
   import Setup from './pages/Setup.svelte';
+  import Guide from './guide/Guide.svelte';
+  import GuideMenu from './guide/GuideMenu.svelte';
   import { setupState } from './setupState.svelte';
   import Placeholder from './pages/Placeholder.svelte';
   import Chip from '../lib/components/Chip.svelte';
@@ -69,6 +71,7 @@
         >{p.title}{#if p.id === 'setup' && setupState.missing > 0}<span class="count" aria-label="{setupState.missing} missing">{setupState.missing}</span>{/if}</button
       >
     {/each}
+    <GuideMenu />
   </nav>
 
   <main class:wide={page === 'layouts'}>
@@ -109,6 +112,7 @@
     {/if}
   </main>
 </div>
+<Guide />
 
 <style>
   .shell { display: grid; grid-template-columns: 220px 1fr; height: 100%; }

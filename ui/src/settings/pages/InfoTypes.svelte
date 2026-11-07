@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import GuideLink from '../guide/GuideLink.svelte';
   import Combobox from '../../lib/components/Combobox.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
@@ -96,6 +97,7 @@
 </script>
 
 <div class="page">
+  <div class="guide-link"><GuideLink tour="destination-fields" /></div>
   {#if infos.failure}<Chip kind="err" label={infos.failure} />{/if}
   {#each infos.problems as p (p)}<Chip kind="warn" label={`Could not read a destination field file: ${p}`} />{/each}
 
@@ -110,7 +112,7 @@
       <p class="example">
         Example: <strong>Jira → priority</strong>, filled with the fixed value <strong>High</strong> each time.
       </p>
-      <button class="primary" onclick={add}>Add a destination field</button>
+      <button class="primary" data-tour="infotypes.add" onclick={add}>Add a destination field</button>
     </div>
   {/if}
 
@@ -137,14 +139,14 @@
   {/each}
 
   {#if infos.items.length > 0 && !draft}
-    <div><button class="primary" onclick={add}>Add a destination field</button></div>
+    <div><button class="primary" data-tour="infotypes.add" onclick={add}>Add a destination field</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? 'Edit destination field' : 'New destination field'}</h2>
-      <Field label="Name"><input type="text" bind:value={draft.value.name} placeholder="Priority" /></Field>
-      <Field label="Connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
+      <Field label="Name" tour="infotypes.name"><input type="text" bind:value={draft.value.name} placeholder="Priority" /></Field>
+      <Field label="Connection" tour="infotypes.connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
         <select bind:value={draft.value.connection_id}>
           <option value="">Choose…</option>
           {#if draft.value.connection_id && !connectionOf(draft.value.connection_id)}
@@ -153,10 +155,10 @@
           {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
         </select>
       </Field>
-      <Field label="Field key" hint="The field's key in that service's API, such as priority or customfield_10042. Search the ones the service offers, or type your own.">
+      <Field label="Field key" tour="infotypes.key" hint="The field's key in that service's API, such as priority or customfield_10042. Search the ones the service offers, or type your own.">
         <Combobox label="Field key" options={knownFields} free bind:value={draft.value.field} placeholder="Search or type a key, for example priority" />
       </Field>
-      <Field label="Kind">
+      <Field label="Kind" tour="infotypes.kind">
         <select bind:value={draft.value.kind} onchange={onKind}>
           {#each KINDS as k (k.value)}<option value={k.value}>{k.label}</option>{/each}
         </select>
@@ -194,7 +196,7 @@
 
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" disabled={busy}>Save</button>
+        <button class="primary" type="submit" data-tour="infotypes.save" disabled={busy}>Save</button>
         <button type="button" onclick={() => (draft = null)}>Cancel</button>
       </div>
     </form>
@@ -202,6 +204,7 @@
 </div>
 
 <style>
+  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; }
   .empty, .card, .editor {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;

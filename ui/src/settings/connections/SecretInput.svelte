@@ -40,7 +40,7 @@
   }
 </script>
 
-<div class="secret">
+<div class="secret" data-tour="conn.secret">
   <span class="label">{label}</span>
   {#if stored && !replacing}
     <div class="row">

@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import GuideLink from '../guide/GuideLink.svelte';
   import Field from '../../lib/components/Field.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import ShortcutInput from '../../lib/components/ShortcutInput.svelte';
@@ -92,6 +93,7 @@
 </script>
 
 <div class="page">
+  <div class="guide-link"><GuideLink tour="first-capture" /></div>
   {#if triggers.failure}<Chip kind="err" label={triggers.failure} />{/if}
   {#each triggers.problems as p (p)}<Chip kind="warn" label={`Could not read a trigger file: ${p}`} />{/each}
 
@@ -99,7 +101,7 @@
     <div class="empty">
       <h2>No triggers yet</h2>
       <p class="quiet">A trigger is a shortcut that captures your screen and opens a CargoFrame window with the layout you choose.</p>
-      <button class="primary" onclick={add}>Add a trigger</button>
+      <button class="primary" data-tour="triggers.add" onclick={add}>Add a trigger</button>
     </div>
   {/if}
 
@@ -146,14 +148,14 @@
   {/each}
 
   {#if triggers.items.length > 0 && !draft}
-    <div><button class="primary" onclick={add}>Add a trigger</button></div>
+    <div><button class="primary" data-tour="triggers.add" onclick={add}>Add a trigger</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? 'Edit trigger' : 'New trigger'}</h2>
       <Field label="Name"><input type="text" bind:value={draft.value.name} placeholder="Bug report" /></Field>
-      <div class="field">
+      <div class="field" data-tour="triggers.shortcut">
         <span class="label">Shortcut</span>
         <ShortcutInput bind:value={draft.value.shortcut} label="Shortcut" />
         <p class="quiet hint">Click the box, then press the keys. Leave it empty to start this trigger from the tray menu only.</p>
@@ -170,7 +172,7 @@
           </select>
         </Field>
       {/if}
-      <Field label="Layout" hint="The window this trigger opens.">
+      <Field label="Layout" hint="The window this trigger opens." tour="triggers.layout">
         <select bind:value={draft.value.layout_id}>
           <option value={null}>None (empty window)</option>
           {#each layouts.items as l (l.id)}<option value={l.id}>{l.item.name}</option>{/each}
@@ -180,7 +182,7 @@
       <Toggle label="Enabled" bind:checked={draft.value.enabled} />
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" disabled={busy}>Save</button>
+        <button class="primary" type="submit" data-tour="triggers.save" disabled={busy}>Save</button>
         <button type="button" onclick={() => (draft = null)}>Cancel</button>
       </div>
     </form>
@@ -188,6 +190,7 @@
 </div>
 
 <style>
+  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; }
   .empty, .card, .editor {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
