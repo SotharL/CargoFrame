@@ -303,6 +303,8 @@ export interface MemoryOptions {
   setupThen?: SetupScenario;
   /** The stand-in's install does not work. */
   installFails?: boolean;
+  /** Windows stand-in: whether the Claude desktop app is installed (default: it is). */
+  claudeApp?: 'installed' | 'missing';
   /** How many times the stand-in's install is asked about before it is done. */
   installPolls?: number;
   /** Called by `share`; the default answers with a made-up success. */
@@ -375,6 +377,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let setupChecks = 0;
   const hasFfmpeg = (s: SetupScenario) => s === 'ready' || s === 'windows_no_loopback' || s === 'windows_no_output';
   let installed = hasFfmpeg(scenario);
+  let claudeInstalled = opts.claudeApp !== 'missing';
   let installLeft = 0;
   let installFailed = false;
   let soundSettingsOpened = 0;
@@ -398,10 +401,22 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       } else {
         items.push(output('ok', installed ? 'Speakers (Realtek(R) Audio). Videos can include its sound.' : 'Speakers (Realtek(R) Audio). Install ffmpeg to check whether videos can include its sound.'));
       }
-      if (!installed) {
+      // a Claude connection that opens the desktop app makes the app a line of its own
+      const opensApp = [...store.connection.values()].some(
+        (c) => (c as Connection).kind === 'claude' && (c as Connection & { open_with: string }).open_with !== 'browser',
+      );
+      if (opensApp) {
+        items.push({
+          id: 'claude_app', name: 'Claude desktop app',
+          what_for: 'Where a Claude connection opens your chat. Without it, set that connection to open in the browser.',
+          status: claudeInstalled ? 'ok' : 'missing', detail: claudeInstalled ? 'Installed.' : 'Not installed.', action: null,
+        });
+      }
+      const claudeMissing = opensApp && !claudeInstalled;
+      if (!installed || claudeMissing) {
         install = scenario === 'windows_no_winget'
           ? { type: 'manual', text: 'Windows\' package manager (winget) was not found. Install "App Installer" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Video.' }
-          : { type: 'run', label: 'Install ffmpeg' };
+          : { type: 'run', label: !installed && claudeMissing ? 'Install what is missing' : installed ? 'Install the Claude app' : 'Install ffmpeg' };
       }
     } else {
       items.push(output('ok', 'Built-in Audio Analog Stereo. Videos can include its sound.'));
@@ -409,7 +424,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       if (!installed) install = { type: 'copy', command: 'sudo apt install ffmpeg xdotool' };
     }
     if (installLeft > 0) install = { type: 'running' };
-    else if (installFailed && !installed) install = { type: 'failed', message: 'winget said: No network connection.' };
+    else if (installFailed && !(installed && claudeInstalled)) install = { type: 'failed', message: 'winget said: No network connection.' };
     return { os: windows ? 'windows' : 'linux', items, missing: items.filter((i) => i.status === 'missing').length, install };
   };
   let copyMade = false;
@@ -441,7 +456,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     phase: updatePhase,
   });
   const TYPED: Record<string, string[]> = {
-    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], discord: ['token'], teams: [], custom: ['secret'],
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], teams: [], custom: ['secret'],
+    discord: ['token', ...Array.from({ length: 10 }, (_, i) => `hook${i}`)],
   };
   const OAUTH = new Set(['google', 'reddit', 'teams']);
   const describeFor = (c: Connection): Describe => {
@@ -517,6 +533,9 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     if (c.kind === 'claude') return 'connected';
     if (c.kind === 'custom' && c.auth.type === 'none') return 'connected';
     if (OAUTH.has(c.kind)) return signedIn.has(id) ? 'connected' : 'disconnected';
+    if (c.kind === 'discord' && c.mode === 'webhook') {
+      return c.hooks.some((h) => secretsSet.has(`${id}/hook${h.slot}`)) ? 'connected' : 'disconnected';
+    }
     return secretsSet.has(`${id}/${TYPED[c.kind]![0]}`) ? 'connected' : 'disconnected';
   };
   const BUILTINS: VariableInfo[] = [
@@ -748,7 +767,10 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       }
       if (installLeft > 0) {
         installLeft -= 1;
-        if (installLeft === 0 && !opts.installFails) installed = true;
+        if (installLeft === 0 && !opts.installFails) {
+          installed = true;
+          claudeInstalled = true;
+        }
         else if (installLeft === 0) installFailed = true;
       }
       return setupReport();

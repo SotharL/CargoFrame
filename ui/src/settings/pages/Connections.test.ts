@@ -87,9 +87,42 @@ describe('Connections page', () => {
     });
   });
 
-  it('adds a Discord connection: the steps, a bot token, then it is ready', async () => {
+  it('adds a Discord connection with a webhook: no bot, a link per channel, then it is ready', async () => {
     render(Connections);
     await fireEvent.click(await screen.findByRole('button', { name: /^Discord/ }));
+    // The easy way is the one shown first, with the steps to make a webhook.
+    const steps = screen.getByText('How to make a webhook').closest('details')!;
+    for (const word of ['Copy Webhook URL', 'Manage Webhooks', 'Forums work too']) {
+      expect(steps.textContent).toContain(word);
+    }
+    expect(screen.queryByLabelText('Bot token')).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Add a channel' }));
+    await fireEvent.input(screen.getByPlaceholderText('bugs'), { target: { value: 'bugs' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Saved. Now add a channel and paste its webhook link.')).toBeTruthy();
+    expect(screen.getByText('Needs a webhook link')).toBeTruthy();
+
+    const box = await screen.findByLabelText('Webhook link');
+    await fireEvent.input(box, { target: { value: 'https://discord.com/api/webhooks/1/secret-part' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save Webhook link' }));
+    expect(await screen.findByText("Stored in your system's password store")).toBeTruthy();
+    expect(document.body.textContent).not.toContain('secret-part');
+    await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+    expect(await screen.findByText('Connected')).toBeTruthy();
+    const saved = await api.listItems('connection');
+    expect(saved.items[0]!.item).toMatchObject({
+      kind: 'discord',
+      name: 'Discord',
+      enabled: true,
+      mode: 'webhook',
+      hooks: [{ slot: 0, name: 'bugs' }],
+    });
+  });
+
+  it('adds a Discord bot: the steps, a bot token, then it is ready', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Discord/ }));
+    await fireEvent.click(screen.getByRole('radio', { name: 'Bot (advanced)' }));
     const steps = screen.getByText('How to get the token').closest('details')!;
     for (const word of ['Reset Token', 'Attach Files', 'Create Public', 'URL Generator']) {
       expect(steps.textContent).toContain(word);
@@ -104,7 +137,7 @@ describe('Connections page', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(await screen.findByText('Connected')).toBeTruthy();
     const saved = await api.listItems('connection');
-    expect(saved.items[0]!.item).toMatchObject({ kind: 'discord', name: 'Discord', enabled: true });
+    expect(saved.items[0]!.item).toMatchObject({ kind: 'discord', name: 'Discord', enabled: true, mode: 'bot' });
   });
 
   it('adds a Slack connection: setup steps, then a bot token, then it is ready', async () => {
@@ -131,5 +164,23 @@ describe('Connections page', () => {
     expect(screen.getByRole('button', { name: 'Test' })).toBeTruthy();
     const saved = await api.listItems('connection');
     expect(saved.items[0]!.item).toMatchObject({ kind: 'slack', name: 'Slack', enabled: true });
+  });
+  it('puts a button to the page where each secret is obtained beside its box', async () => {
+    const opened: string[] = [];
+    api = memoryApi();
+    api.openLink = async (url) => void opened.push(url);
+    setApiForTests(api);
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Slack/ }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await screen.findByLabelText('Bot token (starts with xoxb-)');
+    await fireEvent.click(screen.getByRole('button', { name: /Open Slack apps/ }));
+    expect(opened).toEqual(['https://api.slack.com/apps']);
+  });
+
+  it('puts the same button beside an app id', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Teams/ }));
+    expect(screen.getByRole('button', { name: /Open app registrations/ })).toBeTruthy();
   });
 });

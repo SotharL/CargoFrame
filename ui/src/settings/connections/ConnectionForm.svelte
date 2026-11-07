@@ -2,9 +2,13 @@
   import Field from '../../lib/components/Field.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import CustomForm from './CustomForm.svelte';
+  import DiscordForm, { type HookStore } from './DiscordForm.svelte';
+  import ClaudeAppNote from './ClaudeAppNote.svelte';
+  import GetLink from '../../lib/components/GetLink.svelte';
+  import { getLinkFor } from '../../lib/connectorHelp';
   import type { Connection } from '../../lib/types';
 
-  let { value = $bindable() }: { value: Connection } = $props();
+  let { value = $bindable(), hooks = null }: { value: Connection; hooks?: HookStore | null } = $props();
 </script>
 
 <Field label="Name" hint="How you will see it in lists.">
@@ -28,7 +32,7 @@
   {/if}
 {:else if value.kind === 'google'}
   <Field label="Client ID" hint="From a “Desktop app” OAuth client in your own Google Cloud project.">
-    <input type="text" bind:value={value.client_id} />
+    <span class="with-link"><input type="text" bind:value={value.client_id} /><GetLink link={getLinkFor(value, 'client_id')} /></span>
   </Field>
   <Toggle label="Also add a row to a spreadsheet" bind:checked={value.sheets} />
   <Toggle label="Upload into any of my Drive folders" bind:checked={value.full_drive} />
@@ -38,7 +42,7 @@
 {:else if value.kind === 'reddit'}
   {@const r = value}
   <Field label="Client ID" hint="From an “installed app” you register at reddit.com/prefs/apps.">
-    <input type="text" bind:value={value.client_id} />
+    <span class="with-link"><input type="text" bind:value={value.client_id} /><GetLink link={getLinkFor(value, 'client_id')} /></span>
   </Field>
   <Field
     label="Redirect port"
@@ -56,6 +60,7 @@
       <option value="browser">The browser</option>
     </select>
   </Field>
+  <ClaudeAppNote />
   <Toggle label="Send the message for me (press Enter)" bind:checked={claude.send_automatically} />
   <p class="quiet">Turn this off to look at the message in Claude first and press Enter yourself.</p>
   <Field label="Extra seconds to wait before pasting" hint="Raise this if the chat is slow to open and the paste lands too early.">
@@ -83,24 +88,7 @@
     </ol>
   </details>
 {:else if value.kind === 'discord'}
-  <p class="quiet">
-    CargoFrame posts as a Discord bot you create. Nothing here to fill in: the token you paste
-    below, and the servers you add the bot to, decide where it can post.
-  </p>
-  <details class="steps">
-    <summary>How to get the token</summary>
-    <ol>
-      <li>Open <span class="mono">discord.com/developers/applications</span> and choose New Application.</li>
-      <li>Under Bot, choose Reset Token and copy it. You do not need any of the privileged intents.</li>
-      <li>
-        Under OAuth2, URL Generator: tick <span class="mono">bot</span>, then the permissions
-        View Channels, Send Messages, Send Messages in Threads, Attach Files and Create Public
-        Threads (for forum posts).
-      </li>
-      <li>Open the address it makes and add the bot to your server.</li>
-      <li>Save this connection, then paste the token below. Test connection says how many servers the bot is in.</li>
-    </ol>
-  </details>
+  <DiscordForm bind:value {hooks} />
 {:else if value.kind === 'teams'}
   {@const t = value}
   <p class="quiet">
@@ -108,7 +96,7 @@
     Work and school accounts only; a personal Microsoft account cannot be used.
   </p>
   <Field label="Application (client) ID" hint="From the Overview page of your app registration.">
-    <input type="text" bind:value={t.client_id} placeholder="00000000-0000-0000-0000-000000000000" />
+    <span class="with-link"><input type="text" bind:value={t.client_id} placeholder="00000000-0000-0000-0000-000000000000" /><GetLink link={getLinkFor(t, 'client_id')} /></span>
   </Field>
   <Field
     label="Directory"
@@ -143,6 +131,8 @@
 <Toggle label="Enabled" bind:checked={value.enabled} />
 
 <style>
+  .with-link { display: flex; gap: 8px; align-items: center; }
+  .with-link input { flex: 1; min-width: 0; }
   .steps { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
   .steps summary { cursor: pointer; font-weight: 600; font-size: 13px; }
   .steps ol { margin: 8px 0 2px; padding-left: 20px; display: grid; gap: 6px; font-size: 13px; }

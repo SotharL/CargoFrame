@@ -113,7 +113,12 @@ impl Payload {
 pub struct OptionItem {
     pub value: String,
     pub label: String,
+    /// A heading the choice is listed under ("Pinned", "Public channels").
     pub group: Option<String>,
+    /// Where the choice lives, for a list the window narrows step by step: the server...
+    pub server: Option<String>,
+    /// ...and, inside it, the category (a Discord category, the channel a thread is in).
+    pub category: Option<String>,
 }
 
 impl OptionItem {
@@ -122,7 +127,16 @@ impl OptionItem {
             value: value.into(),
             label: label.into(),
             group: None,
+            server: None,
+            category: None,
         }
+    }
+
+    /// Place the choice under a server and, optionally, a category.
+    pub fn within(mut self, server: &str, category: Option<&str>) -> Self {
+        self.server = Some(server.to_string());
+        self.category = category.map(String::from);
+        self
     }
 }
 

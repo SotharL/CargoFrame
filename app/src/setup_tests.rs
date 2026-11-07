@@ -14,6 +14,7 @@ fn probes() -> Probes {
         winget: true,
         loopback: Some(true),
         output: Output::Found("Speakers (Realtek(R) Audio)".into()),
+        claude_app: None,
         xdotool: true,
         packages: Packages::Apt,
     }
@@ -189,8 +190,8 @@ fn pactl_answers_name_the_default_sink_by_its_description() {
 fn every_check_asks_the_computer_again() {
     // Check again must see a changed device, so nothing is remembered between two checks: the
     // probe is a plain function of the machine at that moment.
-    let a = probe(Os::current(), &cargoframe_config::Video::default());
-    let b = probe(Os::current(), &cargoframe_config::Video::default());
+    let a = probe(Os::current(), &cargoframe_config::Video::default(), false);
+    let b = probe(Os::current(), &cargoframe_config::Video::default(), false);
     assert_eq!(a.output, b.output);
 }
 
@@ -313,9 +314,13 @@ fn the_package_manager_is_read_from_the_os_release_file() {
 }
 
 #[test]
-fn winget_is_run_for_the_one_fixed_package_and_never_asks_a_question() {
-    let args = winget_args();
+fn winget_is_run_for_one_of_our_packages_and_never_asks_a_question() {
+    let args = winget_args(FFMPEG_PACKAGE);
     assert_eq!(&args[..3], ["install", "--id", "Gyan.FFmpeg"]);
+    assert_eq!(
+        &winget_args(CLAUDE_PACKAGE)[..3],
+        ["install", "--id", "Anthropic.Claude"]
+    );
     for flag in [
         "--exact",
         "--silent",
@@ -338,7 +343,7 @@ fn what_winget_said_is_shortened_to_the_last_lines_without_progress_bars() {
     );
     assert_eq!(
         winget_failure("", Some(2316632107u32 as i32)),
-        "winget stopped with code -1978335189. Try again, or install ffmpeg by hand."
+        "winget stopped with code -1978335189. Try again, or install the app by hand."
     );
     assert_eq!(
         winget_failure("  \n", None),
@@ -417,7 +422,7 @@ fn looking_at_this_computer_never_panics() {
         ffmpeg: Some("/no/such/folder".into()),
         ..Default::default()
     };
-    let p = probe(Os::current(), &video);
+    let p = probe(Os::current(), &video, false);
     assert!(p.ffmpeg.is_err());
     let r = report(Os::current(), &p, false, None);
     assert!(r.missing >= 1);
@@ -436,4 +441,95 @@ fn windows_answers_when_asked_for_its_default_playback_device() {
         ),
         "unexpected answer from PowerShell: {text:?}"
     );
+}
+
+// ----- the Claude desktop app -----
+
+#[test]
+fn the_claude_app_is_listed_only_when_a_connection_opens_it() {
+    // Nothing opens it: no line, and no mention in the count.
+    let r = report(Os::Windows, &probes(), false, None);
+    assert!(r.items.iter().all(|i| i.id != "claude_app"));
+
+    let found = Probes {
+        claude_app: Some(true),
+        ..probes()
+    };
+    let r = report(Os::Windows, &found, false, None);
+    assert_eq!(item(&r, "claude_app").status, Status::Ok);
+    assert_eq!((r.missing, r.install), (0, Install::None));
+
+    // Linux opens chats in the browser: there is nothing to install there.
+    assert!(report(Os::Linux, &found, false, None)
+        .items
+        .iter()
+        .all(|i| i.id != "claude_app"));
+}
+
+#[test]
+fn a_missing_claude_app_gets_the_same_one_button() {
+    let p = Probes {
+        claude_app: Some(false),
+        ..probes()
+    };
+    let r = report(Os::Windows, &p, false, None);
+    assert_eq!(item(&r, "claude_app").status, Status::Missing);
+    assert_eq!(r.missing, 1);
+    assert_eq!(
+        r.install,
+        Install::Run {
+            label: "Install the Claude app".into()
+        }
+    );
+
+    // Both missing: one button for both.
+    let both = Probes {
+        ffmpeg: missing(),
+        claude_app: Some(false),
+        ..probes()
+    };
+    let r = report(Os::Windows, &both, false, None);
+    assert_eq!(r.missing, 2);
+    assert_eq!(
+        r.install,
+        Install::Run {
+            label: "Install what is missing".into()
+        }
+    );
+
+    // Without winget it says where to get each.
+    let no_winget = Probes {
+        winget: false,
+        ..both
+    };
+    let Install::Manual { text } = report(Os::Windows, &no_winget, false, None).install else {
+        panic!("expected a manual step");
+    };
+    assert!(
+        text.contains("claude.ai/download") && text.contains("ffmpeg"),
+        "{text}"
+    );
+}
+
+#[test]
+fn a_failed_install_of_the_claude_app_is_shown_until_it_is_found() {
+    let p = Probes {
+        claude_app: Some(false),
+        ..probes()
+    };
+    let r = report(Os::Windows, &p, false, Some("winget said: no"));
+    assert_eq!(
+        r.install,
+        Install::Failed {
+            message: "winget said: no".into()
+        }
+    );
+}
+
+#[test]
+fn powershell_answers_yes_or_no_about_the_claude_app() {
+    assert_eq!(parse_yes_no("yes\r\n"), Some(true));
+    assert_eq!(parse_yes_no(" No "), Some(false));
+    assert_eq!(parse_yes_no(""), None);
+    assert_eq!(parse_yes_no("ERROR"), None);
 }

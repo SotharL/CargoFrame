@@ -76,3 +76,34 @@ describe('Combobox', () => {
     expect((box() as HTMLInputElement).disabled).toBe(true);
   });
 });
+
+describe('Combobox groups and wider search', () => {
+  afterEach(cleanup);
+
+  it('shows a heading where the group changes and keeps arrow keys on the options', async () => {
+    const grouped: ComboOption[] = [
+      { value: 'a', label: 'Alpha', group: 'Recent' },
+      { value: 'b', label: 'Beta', group: 'Recent' },
+      { value: 'c', label: 'Gamma' },
+    ];
+    const onchange = vi.fn();
+    render(Combobox, { options: grouped, value: '', label: 'Field', onchange });
+    await fireEvent.focus(box());
+    expect(screen.getAllByText('Recent')).toHaveLength(1);
+    expect(names()).toEqual(['Alpha', 'Beta', 'Gamma']);
+    await fireEvent.keyDown(box(), { key: 'ArrowDown' });
+    await fireEvent.keyDown(box(), { key: 'ArrowDown' });
+    await fireEvent.keyDown(box(), { key: 'Enter' });
+    expect(onchange).toHaveBeenCalledWith('c');
+  });
+
+  it('searches the extra choices only once something is typed', async () => {
+    const here: ComboOption[] = [{ value: 'a', label: 'Alpha' }];
+    const elsewhere: ComboOption[] = [{ value: 'z', label: 'Zulu', note: 'Other server' }];
+    render(Combobox, { options: here, also: elsewhere, value: '', label: 'Field' });
+    await fireEvent.focus(box());
+    expect(names()).toEqual(['Alpha']);
+    await fireEvent.input(box(), { target: { value: 'zul' } });
+    expect(names()).toEqual(['Zulu Other server']);
+  });
+});

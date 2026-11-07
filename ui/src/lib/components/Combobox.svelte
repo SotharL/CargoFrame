@@ -1,11 +1,14 @@
 <script lang="ts">
   // A drop down you can search: type to narrow the list, arrows and Enter to pick, Esc to close.
   // `free` lets the person keep what they typed when it is not in the list (a field key, say);
-  // without it the value is always one of the options.
+  // without it the value is always one of the options. `also` holds choices that are not listed
+  // until something is typed, then are searched together with the others. An option with a `group`
+  // is listed under that heading, where the heading changes.
   import type { ComboOption } from '../types';
 
   let {
     options,
+    also = [],
     value = $bindable(''),
     free = false,
     placeholder = 'Type to search…',
@@ -16,6 +19,7 @@
     onchange,
   }: {
     options: readonly ComboOption[];
+    also?: readonly ComboOption[];
     value: string;
     free?: boolean;
     placeholder?: string;
@@ -67,16 +71,20 @@
     };
   });
 
-  const shown = $derived(options.find((o) => o.value === value)?.label ?? (free ? value : ''));
+  const shown = $derived(
+    options.find((o) => o.value === value)?.label ?? also.find((o) => o.value === value)?.label ?? (free ? value : ''),
+  );
   const matches = $derived.by(() => {
     const q = (typing ? query : '').trim().toLowerCase();
     if (!q) return options;
-    return options.filter((o) => `${o.label} ${o.value} ${o.note ?? ''}`.toLowerCase().includes(q));
+    const seen = new Set(options.map((o) => o.value));
+    const everything = [...options, ...also.filter((o) => !seen.has(o.value))];
+    return everything.filter((o) => `${o.label} ${o.value} ${o.note ?? ''}`.toLowerCase().includes(q));
   });
 
   $effect(() => {
     // Keep the highlighted entry in view while arrowing through a long list.
-    if (open) (list?.children[active] as HTMLElement | undefined)?.scrollIntoView?.({ block: 'nearest' });
+    if (open) (list?.querySelectorAll('[role="option"]')[active] as HTMLElement | undefined)?.scrollIntoView?.({ block: 'nearest' });
   });
 
   function pick(o: ComboOption) {
@@ -163,6 +171,9 @@
       style:transform={pos.up ? 'translateY(-100%)' : undefined}
     >
       {#each matches as o, i (i)}
+        {#if o.group && o.group !== matches[i - 1]?.group}
+          <li class="heading" role="presentation">{o.group}</li>
+        {/if}
         <li
           id="{uid}-o{i}"
           role="option"
@@ -197,4 +208,5 @@
   .text { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .note { flex: none; font-size: 11.5px; color: var(--quiet); }
   .none { color: var(--quiet); cursor: default; }
+  .heading { display: block; padding: 6px 8px 2px; font-size: 11.5px; font-weight: 600; color: var(--quiet); cursor: default; }
 </style>

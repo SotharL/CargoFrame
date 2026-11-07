@@ -11,7 +11,9 @@
   import SharingBlock from './blocks/SharingBlock.svelte';
   import { collectShare, promptIsEmpty } from './collect';
   import { initialValues, type FormValues } from './values';
-  import { loadDropdowns } from './options';
+  import { loadDropdowns, type Memory } from './options';
+  import { nowhereToPost } from './destination';
+  import { recentChoices, remember, type Recent } from '../lib/recent';
   import ResultPanel from './ResultPanel.svelte';
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
@@ -38,6 +40,8 @@
   let hovered = $state<string | null>(null);
   /** The Claude chat the last share opened, kept to say "Opened: …" once it is done. */
   let opened = $state<string | null>(null);
+  /** The choices made before in each dropdown block (newest first), read when the capture opens. */
+  let recents = $state<Record<string, Recent[]>>({});
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
   let clip = $state<ReturnType<typeof VideoBlock>>();
 
@@ -68,6 +72,11 @@
       opened = null;
       hovered = null;
       ticks = initialTicks(v);
+      recents = Object.fromEntries(
+        (v.layout?.blocks ?? [])
+          .filter((b) => b.type === 'dropdown')
+          .map((b) => [b.id, recentChoices(v.layout?.id, b.id)]),
+      );
       const sessionId = v.session_id;
       // Without a screenshot block the window is usable as soon as it has drawn.
       if (!v.layout?.blocks.some((b) => b.type === 'screenshot')) afterPaint(reportPainted);
@@ -77,9 +86,30 @@
         const state = next(view.dropdowns[blockId]!);
         view.dropdowns[blockId] = state;
         values.dropdowns[blockId] = state.selected;
-      });
+      }, memoryOf);
     } catch (e) {
       failure = String(e);
+    }
+  }
+
+  const dropdownBlock = (id: string) => {
+    const b = view?.layout?.blocks.find((x) => x.id === id);
+    return b?.type === 'dropdown' ? b : null;
+  };
+  /** Lists a service sends start on the last choice used; chats keep their own order. */
+  const remembers = (b: Extract<Block, { type: 'dropdown' }>) => b.remember !== false && b.source.type === 'web_api';
+  function memoryOf(blockId: string): Memory {
+    const b = dropdownBlock(blockId);
+    return { prefer: b && remembers(b) ? (recents[blockId] ?? []).map((r) => r.value) : [], optional: b?.optional === true };
+  }
+  /** After a share that went somewhere, the choices made become the recent ones. */
+  function rememberChoices() {
+    if (!view) return;
+    for (const b of view.layout?.blocks ?? []) {
+      if (b.type !== 'dropdown' || !remembers(b)) continue;
+      const value = values.dropdowns[b.id];
+      const label = view.dropdowns[b.id]?.options.find((o) => o.value === value)?.label;
+      if (value && label) remember(view.layout?.id, b.id, { value, label });
     }
   }
 
@@ -126,6 +156,7 @@
       if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
       const chat = chatToOpen(view, button, values);
       result = await api.share(request);
+      if (result.status === 'sent' || result.status === 'saved_locally') rememberChoices();
       if (result.status === 'sent' && chat) opened = chat;
       if (result.status === 'sent' && result.close && !result.url) {
         // Nothing left to use from the result: let the confirmation be read, then go.
@@ -210,7 +241,13 @@
               {:else if b.type === 'text'}
                 <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
               {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
-                <DropdownBlock block={b} info={view.dropdowns[b.id]!} bind:value={values.dropdowns[b.id]!} />
+                <DropdownBlock
+                  block={b}
+                  info={view.dropdowns[b.id]!}
+                  bind:value={values.dropdowns[b.id]!}
+                  recent={recents[b.id] ?? []}
+                  narrowText={b.narrow_by ? (values.texts[b.narrow_by] ?? '') : ''}
+                />
               {:else if b.type === 'files' && view.files[b.id]}
                 <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} />
               {:else if b.type === 'sharing_button'}
@@ -219,7 +256,7 @@
                   enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
                   sending={sending === b.id}
                   reasons={view.sharing[b.id]?.reasons ?? []}
-                  mode={view.sharing[b.id]?.mode ?? 'send'}
+                  mode={nowhereToPost(view, b) ? 'save_locally' : (view.sharing[b.id]?.mode ?? 'send')}
                   note={view.sharing[b.id]?.note ?? null}
                   kind={view.sharing[b.id]?.kind ?? null}
                   parts={willSend(view, b, values, imageEdited, clipEdit, ticks)}

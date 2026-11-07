@@ -80,7 +80,8 @@ impl Kind {
             Kind::Google => &["client_secret", "oauth"],
             Kind::Reddit => &["oauth"],
             Kind::Claude => &[],
-            Kind::Slack | Kind::Discord => &["token"],
+            Kind::Slack => &["token"],
+            Kind::Discord => &DISCORD_SECRETS,
             Kind::Teams => &["oauth"],
             Kind::Custom => &["secret"],
         }
@@ -91,7 +92,8 @@ impl Kind {
         match self {
             Kind::Jira => &["token"],
             Kind::Google => &["client_secret"],
-            Kind::Slack | Kind::Discord => &["token"],
+            Kind::Slack => &["token"],
+            Kind::Discord => &DISCORD_SECRETS,
             Kind::Reddit | Kind::Claude | Kind::Teams => &[],
             Kind::Custom => &["secret"],
         }
@@ -196,6 +198,18 @@ pub struct Claude {
     pub extra_wait_seconds: u32,
 }
 
+impl Claude {
+    /// Does a chat open in the Claude desktop app (so the app has to be installed)? `Auto` means
+    /// the app on Windows and the browser elsewhere.
+    pub fn opens_desktop_app(&self, windows: bool) -> bool {
+        match self.open_with {
+            OpenWith::App => true,
+            OpenWith::Browser => false,
+            OpenWith::Auto => windows,
+        }
+    }
+}
+
 impl Default for Claude {
     fn default() -> Self {
         Self {
@@ -216,10 +230,52 @@ pub struct Slack {}
 
 // ----- Discord -----
 
-/// Like Slack: only a bot token, which says which servers the bot is in.
+/// Most channels one connection can hold a webhook for.
+pub const MAX_HOOKS: usize = 10;
+
+/// The bot token, then one slot for each webhook link (`hook0` to `hook9`).
+const DISCORD_SECRETS: [&str; 1 + MAX_HOOKS] = [
+    "token", "hook0", "hook1", "hook2", "hook3", "hook4", "hook5", "hook6", "hook7", "hook8",
+    "hook9",
+];
+
+/// The name of the secret that holds the webhook link of slot `slot`.
+pub fn hook_secret(slot: u8) -> Option<&'static str> {
+    DISCORD_SECRETS.get(1 + usize::from(slot)).copied()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DiscordMode {
+    /// A bot you create and add to your servers: it can list servers, channels and threads.
+    /// (The mode of connections saved before webhooks existed.)
+    #[default]
+    Bot,
+    /// A webhook link made in a channel's settings: no bot, one link for each channel.
+    Webhook,
+}
+
+/// One channel reached by a webhook. The link itself is a secret, in slot `slot`.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
-pub struct Discord {}
+pub struct Hook {
+    pub slot: u8,
+    /// What the person calls the channel ("bugs").
+    pub name: String,
+    /// Optional: the server it belongs to, so the list can be narrowed by server.
+    pub server: String,
+}
+
+/// With a bot, the token says which servers it is in. With webhooks, each link is one channel.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Discord {
+    pub mode: DiscordMode,
+    /// Webhook mode: the name shown on each post. Empty keeps the webhook's own name.
+    pub shown_as: String,
+    /// Webhook mode: the channels.
+    pub hooks: Vec<Hook>,
+}
 
 // ----- Custom API -----
 
@@ -340,7 +396,8 @@ pub fn check(c: &Connection) -> Result<(), String> {
             }
         }
         Settings::Teams(t) => check_teams(t)?,
-        Settings::Claude(_) | Settings::Slack(_) | Settings::Discord(_) => {}
+        Settings::Claude(_) | Settings::Slack(_) => {}
+        Settings::Discord(d) => check_discord(d)?,
         Settings::Custom(cu) => check_custom(cu)?,
     }
     Ok(())
@@ -354,6 +411,25 @@ pub fn is_guid(s: &str) -> bool {
             .iter()
             .zip(&parts)
             .all(|(n, p)| p.len() == *n && p.chars().all(|c| c.is_ascii_hexdigit()))
+}
+
+fn check_discord(d: &Discord) -> Result<(), String> {
+    if d.hooks.len() > MAX_HOOKS {
+        return Err(format!("A connection holds {MAX_HOOKS} webhooks at most"));
+    }
+    let mut seen = std::collections::BTreeSet::new();
+    for h in &d.hooks {
+        if hook_secret(h.slot).is_none() || !seen.insert(h.slot) {
+            return Err("Two channels share one webhook slot: remove one and add it again".into());
+        }
+        if d.mode == DiscordMode::Webhook && h.name.trim().is_empty() {
+            return Err("Give each channel a name, so you can tell them apart in the list".into());
+        }
+    }
+    if d.shown_as.chars().count() > 80 {
+        return Err("The name shown on posts is 80 characters at most".into());
+    }
+    Ok(())
 }
 
 fn check_teams(t: &Teams) -> Result<(), String> {
@@ -488,6 +564,49 @@ mod tests {
         );
         assert_eq!(Kind::Google.secret_names(), &["client_secret", "oauth"]);
         assert_eq!(Kind::Google.typed_secrets(), &["client_secret"]);
+    }
+
+    #[test]
+    fn only_a_chat_opened_in_the_app_needs_it_installed() {
+        let claude = |open_with| Claude {
+            open_with,
+            ..Claude::default()
+        };
+        assert!(claude(OpenWith::App).opens_desktop_app(false));
+        assert!(!claude(OpenWith::Browser).opens_desktop_app(true));
+        assert!(claude(OpenWith::Auto).opens_desktop_app(true));
+        assert!(!claude(OpenWith::Auto).opens_desktop_app(false));
+    }
+
+    #[test]
+    fn discord_webhooks_need_names_and_their_own_slots() {
+        let hook = |slot, name: &str| Hook {
+            slot,
+            name: name.into(),
+            server: String::new(),
+        };
+        let discord = |hooks: Vec<Hook>| Connection {
+            name: "D".into(),
+            enabled: true,
+            settings: Settings::Discord(Discord {
+                mode: DiscordMode::Webhook,
+                shown_as: String::new(),
+                hooks,
+            }),
+        };
+        assert!(check(&discord(vec![hook(0, "bugs"), hook(3, "chat")])).is_ok());
+        assert!(check(&discord(vec![hook(0, "bugs"), hook(0, "chat")]))
+            .unwrap_err()
+            .contains("share one"));
+        assert!(check(&discord(vec![hook(10, "far")])).is_err());
+        assert!(check(&discord(vec![hook(0, " ")]))
+            .unwrap_err()
+            .contains("name"));
+        assert_eq!(hook_secret(0), Some("hook0"));
+        assert_eq!(hook_secret(9), Some("hook9"));
+        assert_eq!(hook_secret(10), None);
+        // The window may set the bot token and every webhook slot, and nothing else.
+        assert_eq!(Kind::Discord.typed_secrets().len(), 1 + MAX_HOOKS);
     }
 
     fn jira(site: &str, auth: JiraAuth, email: &str) -> Connection {

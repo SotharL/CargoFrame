@@ -62,6 +62,9 @@ pub struct Request {
     /// the layout says; a list sends exactly those blocks (see `cargoframe_layout::select`).
     #[serde(default)]
     pub send_blocks: Option<Vec<String>>,
+    /// The window found nowhere to post (a list the service answered with nothing, such as a
+    /// bot in no server): keep a zip here instead of sending, as with no connection.
+    pub save_here: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -286,7 +289,8 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     )?;
     let button: SharingButton = selection.button;
     // With no active connection the button saves a zip in the folder for saved zips.
-    let local = sharing_mode(layout, &req.button_id, &registry) == SharingMode::SaveLocally;
+    let local = req.save_here
+        || sharing_mode(layout, &req.button_id, &registry) == SharingMode::SaveLocally;
     let destination = if local {
         None
     } else {
@@ -1273,6 +1277,7 @@ mod tests {
             image_edited: false,
             clip_edit: None,
             send_blocks: None,
+            save_here: false,
         }
     }
 
@@ -1766,10 +1771,10 @@ mod tests {
         layout.blocks.push(cargoframe_layout::Block {
             id: "chat".into(),
             rect: cargoframe_layout::Rect::new(0, 4, 6, 1),
-            kind: BlockKind::Dropdown(cargoframe_layout::DropdownBlock {
-                title: "Chat".into(),
-                source: DropdownSource::ClaudeChats,
-            }),
+            kind: BlockKind::Dropdown(cargoframe_layout::DropdownBlock::new(
+                "Chat",
+                DropdownSource::ClaudeChats,
+            )),
         });
         let mut req = request();
         req.dropdowns.insert("chat".into(), Some(CHAT.into()));
@@ -2599,6 +2604,22 @@ mod tests {
             panic!("{r:?}");
         };
         assert!(reasons[0].contains("record a shorter one"), "{reasons:?}");
+    }
+
+    #[test]
+    fn a_window_with_nowhere_to_post_saves_a_zip_instead_of_sending() {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        let mut req = request();
+        req.save_here = true;
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::SavedLocally { .. }), "{r:?}");
+        assert!(
+            w.server.requests().is_empty(),
+            "nothing is sent to the service"
+        );
     }
 
     #[test]

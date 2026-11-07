@@ -1,6 +1,7 @@
 import type { Block, ClipEdit, SessionView, ShareRequest } from '../lib/types';
 import type { FormValues } from './values';
 import type { Ticks } from './ticks';
+import { nowhereToPost } from './destination';
 
 export type { ShareRequest };
 
@@ -40,6 +41,7 @@ export function collectShare(
     image_edited: imageEdited,
     clip_edit: view.video ? clipEdit : null,
     send_blocks: sendBlocks,
+    save_here: nowhereToPost(view, button, values) || undefined,
   };
 }
 

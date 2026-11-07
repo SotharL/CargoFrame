@@ -15,6 +15,9 @@
 //!   page says so. On Windows ffmpeg can only record that sound through a loopback device such as
 //!   *Stereo Mix*; CargoFrame cannot add one by a click, so the line says whether there is one and
 //!   opens the Windows sound settings where it is switched on.
+//! * **The Claude desktop app** (Windows): where a Claude connection opens a chat when it is set
+//!   to use the app. It is listed only while such a connection exists, and the same button
+//!   installs it with `winget` (the catalogue's package `Anthropic.Claude`, hash-checked).
 //! * **xdotool** (Linux, X11): lets CargoFrame press Ctrl+V and Enter in a Claude chat.
 //!
 //! [`report`] is plain data in, plain data out, so every sentence here is tested. Looking at the
@@ -30,6 +33,9 @@ use std::time::{Duration, Instant};
 /// The winget package for ffmpeg: a hash-checked, per-user install of the "full" build.
 pub const FFMPEG_PACKAGE: &str = "Gyan.FFmpeg";
 
+/// The winget package for the Claude desktop app.
+pub const CLAUDE_PACKAGE: &str = "Anthropic.Claude";
+
 /// How long winget may take before it is stopped.
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
 
@@ -44,12 +50,12 @@ pub enum Output {
     Unknown,
 }
 
-/// What `winget` is run with: the package is fixed, nothing a person typed goes into it.
-pub fn winget_args() -> Vec<&'static str> {
+/// What `winget` is run with: the package is one of ours, nothing a person typed goes into it.
+pub fn winget_args(package: &'static str) -> Vec<&'static str> {
     vec![
         "install",
         "--id",
-        FFMPEG_PACKAGE,
+        package,
         "--exact",
         "--silent",
         "--accept-package-agreements",
@@ -175,6 +181,9 @@ pub struct Probes {
     pub loopback: Option<bool>,
     /// The default sound output.
     pub output: Output,
+    /// Windows: whether the Claude desktop app is installed. `None`: no Claude connection opens
+    /// it, or the computer could not be asked, so the page says nothing about it.
+    pub claude_app: Option<bool>,
     /// Linux: xdotool is installed.
     pub xdotool: bool,
     pub packages: Packages,
@@ -275,24 +284,64 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
         });
     }
 
+    if let (Os::Windows, Some(found)) = (os, p.claude_app) {
+        items.push(Item {
+            id: "claude_app",
+            name: "Claude desktop app",
+            what_for: "Where a Claude connection opens your chat. Without it, set that connection to open in the browser.",
+            status: if found { Status::Ok } else { Status::Missing },
+            detail: if found {
+                "Installed.".into()
+            } else {
+                "Not installed.".into()
+            },
+            action: None,
+        });
+    }
+
     let missing = items.iter().filter(|i| i.status == Status::Missing).count();
-    let ffmpeg_missing = items
-        .iter()
-        .any(|i| i.id == "ffmpeg" && i.status == Status::Missing);
+    let is_missing = |id: &str| {
+        items
+            .iter()
+            .any(|i| i.id == id && i.status == Status::Missing)
+    };
+    let ffmpeg_missing = is_missing("ffmpeg");
+    let claude_missing = is_missing("claude_app");
+    let windows_wants = ffmpeg_missing || claude_missing;
 
     let install = if installing {
         Install::Running
-    } else if let Some(message) = failed.filter(|_| ffmpeg_missing) {
+    } else if let Some(message) = failed.filter(|_| match os {
+        Os::Windows => windows_wants,
+        _ => ffmpeg_missing,
+    }) {
         Install::Failed {
             message: message.to_string(),
         }
     } else {
         match os {
-            Os::Windows if ffmpeg_missing && p.winget => Install::Run {
-                label: "Install ffmpeg".into(),
+            Os::Windows if windows_wants && p.winget => Install::Run {
+                label: match (ffmpeg_missing, claude_missing) {
+                    (true, true) => "Install what is missing",
+                    (true, false) => "Install ffmpeg",
+                    _ => "Install the Claude app",
+                }
+                .into(),
             },
-            Os::Windows if ffmpeg_missing => Install::Manual {
-                text: "Windows' package manager (winget) was not found. Install \"App Installer\" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Video.".into(),
+            Os::Windows if windows_wants => Install::Manual {
+                text: format!(
+                    "Windows' package manager (winget) was not found. Install \"App Installer\" from the Microsoft Store, then come back{}{}",
+                    if ffmpeg_missing {
+                        "; or download ffmpeg yourself and choose its folder under Video"
+                    } else {
+                        ""
+                    },
+                    if claude_missing {
+                        "; or get the Claude app at claude.ai/download"
+                    } else {
+                        ""
+                    },
+                ) + ".",
             },
             Os::Linux => {
                 let mut wanted = Vec::new();
@@ -430,6 +479,42 @@ fn ask_windows_output() -> Result<String, cargoframe_video::ExportError> {
     )
 }
 
+/// Asked of PowerShell: is an app called Claude in the Start menu (however it was installed)? The
+/// text is fixed. It answers `yes` or `no`.
+const CLAUDE_APP_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+if (Get-StartApps | Where-Object { $_.Name -like 'Claude*' }) { 'yes' } else { 'no' }
+"#;
+
+/// Read PowerShell's `yes` or `no`; anything else is "could not be told".
+pub fn parse_yes_no(text: &str) -> Option<bool> {
+    match text.trim().to_ascii_lowercase().as_str() {
+        "yes" => Some(true),
+        "no" => Some(false),
+        _ => None,
+    }
+}
+
+/// Is the Claude desktop app installed? Asked fresh each time; `None` when it cannot be told.
+pub fn claude_app_installed() -> Option<bool> {
+    if !cfg!(windows) {
+        return None;
+    }
+    cargoframe_video::ask(
+        Path::new("powershell.exe"),
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            CLAUDE_APP_SCRIPT,
+        ],
+    )
+    .ok()
+    .and_then(|text| parse_yes_no(&text))
+}
+
 /// Ask this computer for the default sound output, fresh each time.
 fn sound_output(os: Os) -> Output {
     match os {
@@ -460,7 +545,7 @@ fn sound_output(os: Os) -> Output {
 }
 
 /// Look at this computer.
-pub fn probe(os: Os, video: &cargoframe_config::Video) -> Probes {
+pub fn probe(os: Os, video: &cargoframe_config::Video, wants_claude_app: bool) -> Probes {
     let ffmpeg = crate::video::find(video, crate::video::program_beside_app().as_deref())
         .map(|f| (f.ffmpeg, f.version));
     let loopback = match (&ffmpeg, os) {
@@ -474,6 +559,11 @@ pub fn probe(os: Os, video: &cargoframe_config::Video) -> Probes {
         winget: os == Os::Windows && on_path("winget"),
         loopback,
         output: sound_output(os),
+        claude_app: if os == Os::Windows && wants_claude_app {
+            claude_app_installed()
+        } else {
+            None
+        },
         xdotool: os == Os::Linux && on_path("xdotool"),
         packages: if os == Os::Linux {
             std::fs::read_to_string("/etc/os-release")
@@ -588,18 +678,19 @@ pub fn winget_failure(output: &str, code: Option<i32>) -> String {
     let said: String = said.chars().take(300).collect();
     match (said.is_empty(), code) {
         (true, Some(c)) => {
-            format!("winget stopped with code {c}. Try again, or install ffmpeg by hand.")
+            format!("winget stopped with code {c}. Try again, or install the app by hand.")
         }
         (true, None) => "winget stopped before it finished.".into(),
         (false, _) => format!("winget said: {said}"),
     }
 }
 
-/// The real install: ffmpeg by winget. Blocks until it is done (call it from a background job).
-pub fn install_ffmpeg_with_winget() -> Result<(), String> {
+/// The real install: one of our packages by winget. Blocks until it is done (call it from a
+/// background job).
+pub fn install_with_winget(package: &'static str) -> Result<(), String> {
     let mut command = Command::new("winget");
     command
-        .args(winget_args())
+        .args(winget_args(package))
         .stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -637,7 +728,7 @@ pub fn install_ffmpeg_with_winget() -> Result<(), String> {
         err.join().unwrap_or_default()
     );
     // "already installed" and similar end with a code that is not 0: whether it worked is
-    // decided by looking for ffmpeg afterwards, not by the code
+    // decided by looking for the app afterwards, not by the code
     if status.success() {
         Ok(())
     } else {

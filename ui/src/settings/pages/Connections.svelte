@@ -6,6 +6,8 @@
   import type { Connection, ConnectionsView, ConnectionView, ServiceKind } from '../../lib/types';
   import ConnectionForm from '../connections/ConnectionForm.svelte';
   import SecretInput from '../connections/SecretInput.svelte';
+  import type { HookStore } from '../connections/DiscordForm.svelte';
+  import { getLinkFor } from '../../lib/connectorHelp';
   import ClaudeChats from '../connections/ClaudeChats.svelte';
 
   const items = createItems<Connection>('connection');
@@ -42,7 +44,7 @@
       case 'slack':
         return { kind, name: 'Slack', enabled: true };
       case 'discord':
-        return { kind, name: 'Discord', enabled: true };
+        return { kind, name: 'Discord', enabled: true, mode: 'webhook', shown_as: '', hooks: [] };
       case 'teams':
         return { kind, name: 'Teams', enabled: true, client_id: '', tenant: 'organizations' };
       case 'custom':
@@ -67,12 +69,12 @@
   const viewOf = (id: string): ConnectionView | undefined => view?.items.find((c) => c.id === id);
   const oauth = (k: ServiceKind) => k === 'google' || k === 'reddit' || k === 'teams';
 
-  function stateChip(c: ConnectionView): { kind: 'ok' | 'warn' | 'err' | 'dbg'; label: string } {
+  function stateChip(c: ConnectionView, saved: Connection): { kind: 'ok' | 'warn' | 'err' | 'dbg'; label: string } {
     switch (c.state) {
       case 'connected': return { kind: 'ok', label: c.kind === 'claude' ? 'Ready' : 'Connected' };
       case 'expired': return { kind: 'err', label: 'Sign-in expired' };
       case 'disabled': return { kind: 'dbg', label: 'Turned off' };
-      default: return { kind: 'warn', label: oauth(c.kind) ? 'Not signed in' : 'Needs its token' };
+      default: return { kind: 'warn', label: oauth(c.kind) ? 'Not signed in' : saved.kind === 'discord' && saved.mode === 'webhook' ? 'Needs a webhook link' : 'Needs its token' };
     }
   }
 
@@ -86,8 +88,12 @@
     }
     return 'Secret';
   }
-  const needsSecret = (c: Connection, name: string) =>
-    !(c.kind === 'custom' && name === 'secret' && c.auth.type === 'none');
+  const needsSecret = (c: Connection, name: string) => {
+    if (c.kind === 'custom' && name === 'secret' && c.auth.type === 'none') return false;
+    // Discord: the bot token only for a bot; each webhook link has its own box in the channel list
+    if (c.kind === 'discord') return c.mode === 'bot' && name === 'token';
+    return true;
+  };
 
   async function act(id: string, f: (api: Awaited<ReturnType<typeof getApi>>) => Promise<string | void>) {
     delete messages[id];
@@ -129,10 +135,11 @@
       await refresh();
       const v = viewOf(id);
       const wantsSecret = v?.secrets.some((s) => !s.stored && needsSecret(d.value, s.name));
-      if (wasNew && wantsSecret) {
-        // Stay open: the token can only be stored once the connection exists.
+      const wantsLinks = d.value.kind === 'discord' && d.value.mode === 'webhook';
+      if (wasNew && (wantsSecret || wantsLinks)) {
+        // Stay open: the token or link can only be stored once the connection exists.
         d.id = id;
-        note = 'Saved. Now add the token below.';
+        note = wantsLinks ? 'Saved. Now add a channel and paste its webhook link.' : 'Saved. Now add the token below.';
       } else {
         draft = null;
       }
@@ -156,6 +163,23 @@
     } catch (e) {
       formError = String(e);
     }
+  }
+
+  /** Where a Discord webhook link is kept, once the connection exists (and not before). */
+  function hookStore(): HookStore | null {
+    const d = draft;
+    if (!d?.id) return null;
+    const id = d.id;
+    const set = async (slot: number, link: string) => {
+      await (await getApi()).setConnectionSecret(id, `hook${slot}`, link);
+      note = '';
+      await refresh();
+    };
+    return {
+      stored: (slot) => viewOf(id)?.secrets.some((s) => s.name === `hook${slot}` && s.stored) ?? false,
+      save: set,
+      clear: (slot) => set(slot, ''),
+    };
   }
 
   const hasClaude = $derived(items.items.some((i) => i.item.kind === 'claude'));
@@ -192,7 +216,7 @@
         <div class="head">
           <h2>{item.name}</h2>
           <span class="quiet">{v?.kind_label ?? item.kind}</span>
-          {#if v}{@const chip = stateChip(v)}<Chip kind={chip.kind} label={chip.label} />{/if}
+          {#if v}{@const chip = stateChip(v, item)}<Chip kind={chip.kind} label={chip.label} />{/if}
         </div>
         {#if v?.describe.summary}<p class="quiet">{v.describe.summary}</p>{/if}
         {#if messages[id]}
@@ -247,7 +271,7 @@
   {:else}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? 'Edit connection' : `New ${KINDS.find((k) => k.kind === draft!.value.kind)?.label} connection`}</h2>
-      <ConnectionForm bind:value={draft.value} />
+      <ConnectionForm bind:value={draft.value} hooks={hookStore()} />
       {#if draft.id}
         {@const v = viewOf(draft.id)}
         {#each v?.secrets ?? [] as s (s.name)}
@@ -256,6 +280,7 @@
               label={secretLabel(draft.value, s.name)}
               hint="Kept in your system's password store. You cannot read it back from here."
               stored={s.stored}
+              get={getLinkFor(draft.value, s.name === 'client_secret' ? 'client_secret' : 'token')}
               onsave={async (value) => {
                 await (await getApi()).setConnectionSecret(draft!.id!, s.name, value);
                 note = '';

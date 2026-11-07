@@ -152,13 +152,28 @@ fn files(title: &str) -> BlockKind {
 }
 
 fn web_list(title: &str, connection_id: &str, options_id: &str) -> BlockKind {
-    BlockKind::Dropdown(DropdownBlock {
-        title: title.to_string(),
-        source: DropdownSource::WebApi {
+    BlockKind::Dropdown(DropdownBlock::new(
+        title,
+        DropdownSource::WebApi {
             connection_id: connection_id.to_string(),
             options_id: options_id.to_string(),
         },
-    })
+    ))
+}
+
+/// A list that may stay empty or hold something pasted, narrowed by the words of a text block.
+fn optional_list(
+    title: &str,
+    connection_id: &str,
+    options_id: &str,
+    narrow_by: Option<&str>,
+) -> BlockKind {
+    let BlockKind::Dropdown(mut d) = web_list(title, connection_id, options_id) else {
+        unreachable!("web_list makes a dropdown")
+    };
+    d.optional = true;
+    d.narrow_by = narrow_by.map(String::from);
+    BlockKind::Dropdown(d)
 }
 
 fn from_block(field: &str, block_id: &str) -> InfoMapping {
@@ -375,10 +390,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "chat",
                 rect(7, 0, 5, 1),
-                BlockKind::Dropdown(DropdownBlock {
-                    title: "Chat".to_string(),
-                    source: DropdownSource::ClaudeChats,
-                }),
+                BlockKind::Dropdown(DropdownBlock::new("Chat", DropdownSource::ClaudeChats)),
             ),
             block(
                 "prompt",
@@ -448,10 +460,12 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 rect(7, 2, 5, 3),
                 text("Message", TextRole::Plain, SEEN_IN),
             ),
+            // A thread or forum post to reply in; with a webhook there is no list, so it is a box
+            // to paste a link in. The title narrows the list: a thread named like it comes first.
             block(
                 "thread",
                 rect(7, 5, 5, 1),
-                text("Reply in a thread (link, optional)", TextRole::Plain, ""),
+                optional_list("Reply in a thread (optional)", c, "threads", Some("title")),
             ),
             block("files", rect(7, 6, 5, 3), files("Attach files")),
             button(

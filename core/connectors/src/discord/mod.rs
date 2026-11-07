@@ -1,7 +1,15 @@
 //! Discord: post a message into a text channel or a thread, or start a post in a forum channel,
-//! with the screenshot and a zip of the ticked files attached. The person creates a bot in the
-//! Discord Developer Portal, adds it to their server and pastes the bot token once. The token is
-//! kept in the credential store and sent to Discord's API address only.
+//! with the screenshot and a zip of the ticked files attached. Two ways in:
+//!
+//! - **Webhook** (the easy one, no bot): the person copies a webhook link from a channel's
+//!   settings and pastes it once, one link for each channel they post to. A webhook cannot list
+//!   servers, channels or threads, so the person names each channel. Posts can carry any name.
+//! - **Bot**: the person creates a bot in the Developer Portal, adds it to their servers and
+//!   pastes its token. A bot can list every server, category, channel and thread it can see.
+//!
+//! Posting as a personal account is not offered: Discord's terms forbid automating one.
+//!
+//! Links and tokens are kept in the credential store and sent to Discord's API address only.
 //!
 //! Nothing the bot posts can ping anyone: every message says `allowed_mentions: {parse: []}`, so
 //! a window title or a data rule that contains `@everyone` stays text.
@@ -13,7 +21,7 @@
 
 use crate::ctx::Ctx;
 use crate::error::{from_net, invalid, not_set_up};
-use crate::model;
+use crate::model::{self, DiscordMode};
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use cargoframe_net::{Body, Method, Multipart, Request, Response};
@@ -45,6 +53,7 @@ impl Default for Endpoints {
 
 pub struct DiscordConnector {
     ep: Endpoints,
+    settings: model::Discord,
 }
 
 /// What kind of place an id is, as far as posting goes.
@@ -68,10 +77,15 @@ struct Guild {
 }
 
 impl DiscordConnector {
-    pub fn new(_settings: model::Discord) -> Self {
+    pub fn new(settings: model::Discord) -> Self {
         Self {
             ep: Endpoints::default(),
+            settings,
         }
+    }
+
+    fn webhooks(&self) -> bool {
+        self.settings.mode == DiscordMode::Webhook
     }
 
     pub fn with_endpoints(mut self, ep: Endpoints) -> Self {
@@ -207,8 +221,15 @@ impl DiscordConnector {
     }
 
     fn all_channels(&self, ctx: &Ctx) -> Result<Vec<ChannelInfo>, SendError> {
+        let guilds = self.guilds(ctx)?;
+        self.channels_in(ctx, &guilds)
+    }
+
+    /// The text channels and forums of these servers, each with the category it sits in and the
+    /// place Discord shows it (uncategorised channels come first, like in Discord).
+    fn channels_in(&self, ctx: &Ctx, guilds: &[Guild]) -> Result<Vec<ChannelInfo>, SendError> {
         let mut out = Vec::new();
-        for g in self.guilds(ctx)? {
+        for g in guilds {
             let list = match self.get(
                 ctx,
                 &format!("/guilds/{}/channels", g.id),
@@ -218,22 +239,37 @@ impl DiscordConnector {
                 Err(e) if Self::skippable(&e) => continue,
                 Err(e) => return Err(e),
             };
-            for c in list.as_array().into_iter().flatten() {
-                let kind = c.get("type").and_then(Value::as_i64).unwrap_or(-1);
+            let all: Vec<&Value> = list.as_array().into_iter().flatten().collect();
+            let text_of =
+                |c: &Value, key: &str| c.get(key).and_then(Value::as_str).map(String::from);
+            let number = |c: &Value, key: &str| c.get(key).and_then(Value::as_i64).unwrap_or(0);
+            let kind_of = |c: &Value| c.get("type").and_then(Value::as_i64).unwrap_or(-1);
+            let categories: std::collections::BTreeMap<String, (String, i64)> = all
+                .iter()
+                .filter(|c| kind_of(c) == 4)
+                .filter_map(|c| {
+                    Some((
+                        text_of(c, "id")?,
+                        (text_of(c, "name")?, number(c, "position")),
+                    ))
+                })
+                .collect();
+            for c in &all {
+                let kind = kind_of(c);
                 if !matches!(kind, 0 | 5 | 15) {
                     continue;
                 }
-                let (Some(id), Some(name)) = (
-                    c.get("id").and_then(Value::as_str),
-                    c.get("name").and_then(Value::as_str),
-                ) else {
+                let (Some(id), Some(name)) = (text_of(c, "id"), text_of(c, "name")) else {
                     continue;
                 };
+                let parent = text_of(c, "parent_id").and_then(|p| categories.get(&p));
                 out.push(ChannelInfo {
-                    id: id.into(),
+                    id,
                     name: name.to_lowercase(),
                     forum: kind == 15,
                     guild: g.name.clone(),
+                    category: parent.map(|(n, _)| n.clone()),
+                    order: (parent.map_or(-1, |(_, pos)| *pos), number(c, "position")),
                 });
             }
         }
@@ -310,11 +346,198 @@ impl DiscordConnector {
     }
 }
 
+/// What Discord says about a webhook: the server and channel it posts in.
+struct HookInfo {
+    guild: Option<String>,
+    channel: Option<String>,
+}
+
+impl DiscordConnector {
+    /// The id and token inside the link pasted for this slot.
+    fn hook_link(&self, ctx: &Ctx, slot: u8) -> Result<(String, String), SendError> {
+        let name =
+            model::hook_secret(slot).ok_or_else(|| invalid("That webhook slot does not exist"))?;
+        let raw = ctx
+            .secret(name)?
+            .map(|t| t.trim().to_string())
+            .filter(|t| !t.is_empty())
+            .ok_or_else(|| {
+                not_set_up("That channel has no webhook link yet: open Connections, paste it and press Save")
+            })?;
+        parse_webhook(&raw).map_err(invalid)
+    }
+
+    /// The channel a share is for: the one picked (`hook3`), else the only one there is.
+    fn hook_for(&self, chosen: Option<&str>) -> Result<&model::Hook, SendError> {
+        let hooks = &self.settings.hooks;
+        match chosen {
+            Some(c) => c
+                .strip_prefix("hook")
+                .and_then(|n| n.parse::<u8>().ok())
+                .and_then(|slot| hooks.iter().find(|h| h.slot == slot))
+                .ok_or_else(|| invalid("Pick one of the channels you added a webhook for")),
+            None => match hooks.as_slice() {
+                [one] => Ok(one),
+                [] => Err(not_set_up("Discord has no channel yet: open Connections and add a webhook")),
+                _ => Err(invalid("Pick the channel to post in: map one to the field \"channel\" on the sharing button")),
+            },
+        }
+    }
+
+    fn hook_request(&self, ctx: &Ctx, method: Method, path: &str) -> Request {
+        Request::new(method, format!("{}{path}", self.ep.api))
+            .header("User-Agent", USER_AGENT)
+            .header("Accept", "application/json")
+            .timeout(ctx.timeout)
+    }
+
+    fn hook_info(&self, ctx: &Ctx, id: &str, token: &str) -> Result<HookInfo, SendError> {
+        let req = self.hook_request(ctx, Method::Get, &format!("/webhooks/{id}/{token}"));
+        let v = self.call(ctx, req, "look at the webhook")?;
+        let text = |k: &str| v.get(k).and_then(Value::as_str).map(String::from);
+        Ok(HookInfo {
+            guild: text("guild_id"),
+            channel: text("channel_id"),
+        })
+    }
+
+    /// One post through a webhook. A forum channel answers a plain post with "a forum needs a
+    /// post name"; that is a clean refusal, so the caller may try again with a name. Once Discord
+    /// might have taken the post, it is never sent again.
+    fn hook_post(
+        &self,
+        ctx: &Ctx,
+        link: &(String, String),
+        thread: Option<&str>,
+        post_name: Option<&str>,
+        content: &str,
+        files: &[&Attachment],
+    ) -> Result<Option<Value>, SendError> {
+        let mut path = format!("/webhooks/{}/{}?wait=true", link.0, link.1);
+        if let Some(t) = thread {
+            path.push_str(&format!("&thread_id={t}"));
+        }
+        let mut body = json!({ "content": content, "allowed_mentions": { "parse": [] } });
+        if let Some(who) = Some(self.settings.shown_as.trim()).filter(|w| !w.is_empty()) {
+            body["username"] = json!(who);
+        }
+        if let Some(n) = post_name {
+            body["thread_name"] = json!(n);
+        }
+        if !files.is_empty() {
+            body["attachments"] = attachments_json(files);
+        }
+        let req = self
+            .hook_request(ctx, Method::Post, &path)
+            .body(if files.is_empty() {
+                Body::json(&body)
+            } else {
+                multipart(&body, files)
+            });
+        let unknown = |mut e: SendError| {
+            e.kind = FailureKind::Rejected(0);
+            e.message = format!(
+                "{}. Discord may or may not have posted it, so CargoFrame did not retry: look in the channel",
+                e.message
+            );
+            e
+        };
+        let resp = ctx.http.send(&req).map_err(|e| unknown(from_net(&e)))?;
+        if resp.is_success() {
+            return Ok(Some(resp.json().unwrap_or(Value::Null)));
+        }
+        let code = resp
+            .json()
+            .and_then(|v| v.get("code").and_then(Value::as_i64));
+        if code == Some(220003) && post_name.is_none() && thread.is_none() {
+            return Ok(None);
+        }
+        let err = discord_error(&resp, "post the message");
+        Err(match err.kind {
+            FailureKind::Server(_) | FailureKind::Timeout | FailureKind::NoNetwork => unknown(err),
+            _ => err,
+        })
+    }
+
+    fn send_webhook(
+        &self,
+        ctx: &Ctx,
+        payload: &Payload,
+        files: &[&Attachment],
+    ) -> Result<SendOutcome, SendError> {
+        let hook = self.hook_for(payload.value("channel"))?;
+        let link = self.hook_link(ctx, hook.slot)?;
+        let thread = payload
+            .value("thread")
+            .map(|t| parse_place(t).map_err(invalid))
+            .transpose()?;
+        let (content, cut) = compose(payload, true);
+        if content.is_empty() && files.is_empty() {
+            return Err(invalid(
+                "There is nothing to send to Discord: no text, no screenshot and no files",
+            ));
+        }
+        // Asks Discord where the webhook posts (for the link back), and finds out early when the
+        // webhook has been deleted.
+        let info = self.hook_info(ctx, &link.0, &link.1)?;
+
+        let mut notes = Vec::new();
+        if cut {
+            notes.push(format!(
+                "The message was cut to Discord's {MAX_CONTENT} characters"
+            ));
+        }
+        let (posted, started) =
+            match self.hook_post(ctx, &link, thread.as_deref(), None, &content, files)? {
+                Some(v) => (v, false),
+                None => {
+                    // A forum: the first message of a new post has no bold title line; its name does that.
+                    let (body, _) = compose(payload, false);
+                    let name = post_name(payload);
+                    let v = self
+                        .hook_post(ctx, &link, None, Some(&name), &body, files)?
+                        .ok_or_else(|| invalid("Discord would not start a post in that channel"))?;
+                    (v, true)
+                }
+            };
+        let place = posted
+            .get("channel_id")
+            .and_then(Value::as_str)
+            .map(String::from)
+            .or(thread.clone())
+            .or(info.channel.clone())
+            .unwrap_or_default();
+        let message = posted.get("id").and_then(Value::as_str);
+        let url = if started {
+            link_to(info.guild.as_deref(), &place, None)
+        } else {
+            link_to(info.guild.as_deref(), &place, message)
+        };
+        let summary = if started {
+            "Started a post in the Discord forum"
+        } else {
+            "Posted to Discord"
+        }
+        .to_string();
+        ctx.progress.set("discord.summary", &summary);
+        ctx.progress.set("discord.url", &url);
+        Ok(SendOutcome {
+            summary,
+            url: Some(url),
+            notes,
+        })
+    }
+}
+
 struct ChannelInfo {
     id: String,
     name: String,
     forum: bool,
     guild: String,
+    /// The category it sits in, if any.
+    category: Option<String>,
+    /// Where Discord shows it: the category's place, then its own.
+    order: (i64, i64),
 }
 
 fn attachments_json(files: &[&Attachment]) -> Value {
@@ -371,6 +594,52 @@ pub fn parse_place(raw: &str) -> Result<String, String> {
     }
     let channel = parts.next().filter(|c| is_snowflake(c)).ok_or_else(bad)?;
     Ok(channel.to_string())
+}
+
+/// A webhook link (`https://discord.com/api/webhooks/<id>/<token>`) split into its id and token.
+/// Only Discord's own addresses are taken, so a mistyped or planted link is refused.
+pub fn parse_webhook(raw: &str) -> Result<(String, String), String> {
+    let bad = || {
+        "That is not a Discord webhook link: in Discord, open the channel's settings, then Integrations, Webhooks, and choose Copy Webhook URL".to_string()
+    };
+    let rest = raw.trim().strip_prefix("https://").ok_or_else(bad)?;
+    let (authority, path) = rest.split_once('/').ok_or_else(bad)?;
+    let host = authority.to_lowercase();
+    let known = ["discord.com", "discordapp.com"]
+        .iter()
+        .any(|d| host == *d || host.ends_with(&format!(".{d}")));
+    if !known
+        || !host
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '.' || c == '-')
+    {
+        return Err(bad());
+    }
+    let path = path.split(['?', '#']).next().unwrap_or("");
+    let mut parts = path.trim_end_matches('/').split('/');
+    if parts.next() != Some("api") {
+        return Err(bad());
+    }
+    let mut next = parts.next().ok_or_else(bad)?;
+    let is_version =
+        next.len() > 1 && next.starts_with('v') && next[1..].chars().all(|c| c.is_ascii_digit());
+    if is_version {
+        next = parts.next().ok_or_else(bad)?;
+    }
+    if next != "webhooks" {
+        return Err(bad());
+    }
+    let id = parts.next().filter(|i| is_snowflake(i)).ok_or_else(bad)?;
+    let token = parts
+        .next()
+        .filter(|t| {
+            !t.is_empty()
+                && t.len() <= 100
+                && t.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+        })
+        .ok_or_else(bad)?;
+    Ok((id.to_string(), token.to_string()))
 }
 
 /// The words of the message: an optional bold first line, then the message, then (when nothing
@@ -451,6 +720,10 @@ pub fn discord_error(resp: &Response, what: &str) -> SendError {
             FailureKind::AuthExpired,
             "Discord does not accept the bot token any more: open Connections and paste a new one".to_string(),
         ),
+        (_, 10015 | 50027) => (
+            FailureKind::AuthExpired,
+            "Discord does not know that webhook any more: make a new one in the channel's settings and paste its link".to_string(),
+        ),
         (429, _) => (
             FailureKind::Throttled(429),
             "Discord says to slow down".to_string(),
@@ -527,7 +800,7 @@ fn make_nonce(ctx: &Ctx, channel: &str, content: &str) -> String {
     nonce
 }
 
-fn link(guild: Option<&str>, channel: &str, message: Option<&str>) -> String {
+fn link_to(guild: Option<&str>, channel: &str, message: Option<&str>) -> String {
     let server = guild.unwrap_or("@me");
     match message {
         Some(m) => format!("https://discord.com/channels/{server}/{channel}/{m}"),
@@ -543,17 +816,40 @@ impl Connector for DiscordConnector {
             hint,
             list,
         };
+        let hooks = self.webhooks();
         Describe {
             fields: vec![
-                f("channel", "Channel", "A text channel, or a forum to start a post in. The bot must be able to see it", Some("channels")),
-                f("thread", "Thread or forum post", "To reply in an existing one: pick it, or paste its link. Overrides the channel", Some("threads")),
+                f(
+                    "channel",
+                    "Channel",
+                    if hooks {
+                        "One of the channels you added a webhook for"
+                    } else {
+                        "A text channel, or a forum to start a post in. The bot must be able to see it"
+                    },
+                    Some("channels"),
+                ),
+                f(
+                    "thread",
+                    "Thread or forum post",
+                    if hooks {
+                        "To reply in an existing one: paste its link (Copy Link in Discord). A webhook cannot list threads. Overrides the channel"
+                    } else {
+                        "To reply in an existing one: pick it, or paste its link. Overrides the channel"
+                    },
+                    Some("threads"),
+                ),
                 f("message", "Message", "Defaults to the prompt text, then the window title. 2000 characters at most", None),
                 f("title", "Title", "The name of a forum post; a bold first line in a channel. Defaults to the window title for a forum", None),
             ],
             lists: vec![
                 ListSpec {
                     id: "channels".into(),
-                    label: "Channels and forums the bot can see".into(),
+                    label: if hooks {
+                        "Channels you added a webhook for".into()
+                    } else {
+                        "Channels and forums the bot can see".into()
+                    },
                     param: None,
                 },
                 ListSpec {
@@ -567,19 +863,34 @@ impl Connector for DiscordConnector {
     }
 
     fn status(&self, ctx: &Ctx) -> Status {
-        match ctx.secret(TOKEN) {
-            Ok(Some(t)) if !t.trim().is_empty() => Status::Connected,
-            _ => Status::Disconnected,
+        let has = |name: &str| matches!(ctx.secret(name), Ok(Some(t)) if !t.trim().is_empty());
+        let connected = if self.webhooks() {
+            self.settings
+                .hooks
+                .iter()
+                .any(|h| model::hook_secret(h.slot).is_some_and(has))
+        } else {
+            has(TOKEN)
+        };
+        if connected {
+            Status::Connected
+        } else {
+            Status::Disconnected
         }
     }
 
     fn disconnect(&self, ctx: &Ctx) {
-        let _ = ctx
-            .secrets
-            .delete(&crate::secrets::key(ctx.connection_id, TOKEN));
+        for name in model::Kind::Discord.secret_names() {
+            let _ = ctx
+                .secrets
+                .delete(&crate::secrets::key(ctx.connection_id, name));
+        }
     }
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
+        if self.webhooks() {
+            return self.test_webhooks(ctx);
+        }
         let me = self.get(ctx, "/users/@me", "check the sign-in")?;
         let name = ["global_name", "username"]
             .iter()
@@ -600,10 +911,20 @@ impl Connector for DiscordConnector {
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
+        if self.webhooks() {
+            return match list {
+                "channels" => self.hook_options(ctx),
+                // A webhook cannot look at the server; a thread is pasted as a link instead.
+                "threads" => Ok(Vec::new()),
+                other => Err(invalid(format!("Discord has no list called \"{other}\""))),
+            };
+        }
         match list {
             "channels" => {
                 let mut channels = self.all_channels(ctx)?;
-                channels.sort_by(|a, b| (&a.guild, &a.name).cmp(&(&b.guild, &b.name)));
+                channels.sort_by(|a, b| {
+                    (&a.guild, a.order, &a.name).cmp(&(&b.guild, b.order, &b.name))
+                });
                 Ok(channels
                     .into_iter()
                     .map(|c| {
@@ -612,15 +933,19 @@ impl Connector for DiscordConnector {
                         } else {
                             format!("#{}", c.name)
                         };
-                        let mut item = OptionItem::new(c.id, label);
-                        item.group = Some(c.guild);
-                        item
+                        OptionItem::new(c.id, label).within(&c.guild, c.category.as_deref())
                     })
                     .collect())
             }
             "threads" => {
+                let guilds = self.guilds(ctx)?;
+                let names: std::collections::BTreeMap<String, String> = self
+                    .channels_in(ctx, &guilds)?
+                    .into_iter()
+                    .map(|c| (c.id, c.name))
+                    .collect();
                 let mut out = Vec::new();
-                for g in self.guilds(ctx)? {
+                for g in &guilds {
                     let v = match self.get(
                         ctx,
                         &format!("/guilds/{}/threads/active", g.id),
@@ -642,12 +967,18 @@ impl Connector for DiscordConnector {
                         ) else {
                             continue;
                         };
-                        let mut item = OptionItem::new(id, name);
-                        item.group = Some(g.name.clone());
-                        out.push(item);
+                        // The channel or forum a thread belongs to narrows the list.
+                        let parent = t
+                            .get("parent_id")
+                            .and_then(Value::as_str)
+                            .and_then(|p| names.get(p))
+                            .map(|n| format!("#{n}"));
+                        out.push(OptionItem::new(id, name).within(&g.name, parent.as_deref()));
                     }
                 }
-                out.sort_by(|a, b| (&a.group, &a.label).cmp(&(&b.group, &b.label)));
+                out.sort_by(|a, b| {
+                    (&a.server, &a.category, &a.label).cmp(&(&b.server, &b.category, &b.label))
+                });
                 Ok(out)
             }
             other => Err(invalid(format!("Discord has no list called \"{other}\""))),
@@ -655,15 +986,6 @@ impl Connector for DiscordConnector {
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
-        let raw = payload
-            .value("thread")
-            .or_else(|| payload.value("channel"))
-            .ok_or_else(|| {
-                invalid(
-                    "Discord needs a channel: map one to the field \"channel\" on the sharing button",
-                )
-            })?
-            .to_string();
         let files: Vec<&Attachment> = [payload.image.as_ref(), payload.files_zip.as_ref()]
             .into_iter()
             .flatten()
@@ -677,6 +999,19 @@ impl Connector for DiscordConnector {
                 notes: Vec::new(),
             });
         }
+        if self.webhooks() {
+            return self.send_webhook(ctx, payload, &files);
+        }
+
+        let raw = payload
+            .value("thread")
+            .or_else(|| payload.value("channel"))
+            .ok_or_else(|| {
+                invalid(
+                    "Discord needs a channel: map one to the field \"channel\" on the sharing button",
+                )
+            })?
+            .to_string();
 
         let target = self.resolve(ctx, &raw)?;
         let forum = target.place == Place::Forum;
@@ -708,7 +1043,7 @@ impl Connector for DiscordConnector {
                 .or(target.guild.clone());
             (
                 "Started a post in the Discord forum".to_string(),
-                link(guild.as_deref(), &thread, None),
+                link_to(guild.as_deref(), &thread, None),
             )
         } else {
             let nonce = make_nonce(ctx, &target.id, &content);
@@ -716,7 +1051,7 @@ impl Connector for DiscordConnector {
             let message = v.get("id").and_then(Value::as_str);
             (
                 "Posted to Discord".to_string(),
-                link(target.guild.as_deref(), &target.id, message),
+                link_to(target.guild.as_deref(), &target.id, message),
             )
         };
         ctx.progress.set("discord.summary", &summary);
@@ -726,6 +1061,72 @@ impl Connector for DiscordConnector {
             url: Some(url),
             notes,
         })
+    }
+}
+
+impl DiscordConnector {
+    /// The channels that have a webhook link stored, in the order they were added.
+    fn hook_options(&self, ctx: &Ctx) -> Result<Vec<OptionItem>, SendError> {
+        let mut out = Vec::new();
+        for h in &self.settings.hooks {
+            let Some(name) = model::hook_secret(h.slot) else {
+                continue;
+            };
+            if !matches!(ctx.secret(name)?, Some(t) if !t.trim().is_empty()) {
+                continue;
+            }
+            let label = Some(h.name.trim())
+                .filter(|n| !n.is_empty())
+                .unwrap_or("Channel");
+            let item = OptionItem::new(format!("hook{}", h.slot), label);
+            out.push(match h.server.trim() {
+                "" => item,
+                server => item.within(server, None),
+            });
+        }
+        Ok(out)
+    }
+
+    /// Asks Discord about every webhook, so a deleted or mistyped link shows up at once.
+    fn test_webhooks(&self, ctx: &Ctx) -> Result<String, SendError> {
+        let (mut good, mut bad) = (Vec::new(), Vec::new());
+        for h in &self.settings.hooks {
+            let name = Some(h.name.trim())
+                .filter(|n| !n.is_empty())
+                .unwrap_or("A channel");
+            match self
+                .hook_link(ctx, h.slot)
+                .and_then(|(id, token)| self.hook_info(ctx, &id, &token))
+            {
+                Ok(_) => good.push(name.to_string()),
+                Err(e)
+                    if matches!(
+                        e.kind,
+                        FailureKind::NoNetwork | FailureKind::Timeout | FailureKind::Certificate
+                    ) =>
+                {
+                    return Err(e)
+                }
+                Err(e) => bad.push(format!("{name}: {}", e.message)),
+            }
+        }
+        match (good.is_empty(), bad.is_empty()) {
+            (true, true) => Err(not_set_up(
+                "Discord has no channel yet: open Connections, add a webhook and paste its link",
+            )),
+            (true, false) => Err(not_set_up(bad.join("; "))),
+            (false, true) => Ok(format!(
+                "{} channel{} work: {}",
+                good.len(),
+                if good.len() == 1 { "" } else { "s" },
+                good.join(", ")
+            )),
+            (false, false) => Ok(format!(
+                "Works: {}. Needs a look: {}",
+                good.join(", "),
+                bad.join("; ")
+            )),
+        }
     }
 }
 

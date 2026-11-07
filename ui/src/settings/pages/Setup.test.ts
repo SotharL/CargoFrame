@@ -96,4 +96,17 @@ describe('Setup', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
     await screen.findByText('1 app is missing');
   });
+  it('lists the Claude desktop app when a Claude connection opens it, and the one button installs both', async () => {
+    const api = memoryApi({ setup: 'windows_missing', claudeApp: 'missing', installPolls: 1 });
+    await api.saveItem('connection', 'claude', {
+      kind: 'claude', name: 'Claude', enabled: true, open_with: 'desktop', send_automatically: false,
+    } as never);
+    setApiForTests(api);
+    render(Setup, { pollMs: 10 });
+    await screen.findByText('2 apps are missing');
+    expect(screen.getByText('Claude desktop app')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Install what is missing' }));
+    await screen.findByText('Everything CargoFrame can use is here', {}, { timeout: 3000 });
+    expect(setupState.missing).toBe(0);
+  });
 });
