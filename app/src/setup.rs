@@ -9,10 +9,12 @@
 //!   checks the download against the hash in its catalogue, and it installs for this user only
 //!   (no administrator prompt). On Linux a program cannot install packages without a password, so
 //!   the button copies the one command to run.
-//! * **The sound of the computer** (Windows): ffmpeg can only record it through a loopback device
-//!   such as *Stereo Mix*. CargoFrame cannot add one by a click, so it opens the Windows sound
-//!   settings where it is switched on.
-//! * **A sound system** (Linux): PulseAudio or PipeWire, for the sound in videos.
+//! * **A sound output**: the speakers or headphones the computer plays on, which is where a video's
+//!   computer sound comes from. It is looked up fresh at every check (Windows: the default
+//!   playback device; Linux: PulseAudio's or PipeWire's default sink), and when there is none the
+//!   page says so. On Windows ffmpeg can only record that sound through a loopback device such as
+//!   *Stereo Mix*; CargoFrame cannot add one by a click, so the line says whether there is one and
+//!   opens the Windows sound settings where it is switched on.
 //! * **xdotool** (Linux, X11): lets CargoFrame press Ctrl+V and Enter in a Claude chat.
 //!
 //! [`report`] is plain data in, plain data out, so every sentence here is tested. Looking at the
@@ -30,6 +32,17 @@ pub const FFMPEG_PACKAGE: &str = "Gyan.FFmpeg";
 
 /// How long winget may take before it is stopped.
 const INSTALL_TIMEOUT: Duration = Duration::from_secs(15 * 60);
+
+/// What plays the computer's sound.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Output {
+    /// The default one, by the name the system gives it.
+    Found(String),
+    /// There is none, and why (no device, no sound system).
+    None(String),
+    /// The computer could not be asked.
+    Unknown,
+}
 
 /// What `winget` is run with: the package is fixed, nothing a person typed goes into it.
 pub fn winget_args() -> Vec<&'static str> {
@@ -160,8 +173,8 @@ pub struct Probes {
     pub winget: bool,
     /// Windows: a loopback device is listed (`None`: could not be asked).
     pub loopback: Option<bool>,
-    /// Linux: PulseAudio or PipeWire is running.
-    pub sound_system: bool,
+    /// The default sound output.
+    pub output: Output,
     /// Linux: xdotool is installed.
     pub xdotool: bool,
     pub packages: Packages,
@@ -172,6 +185,46 @@ fn first_sentence(text: &str) -> String {
     match text.split_once(". ") {
         Some((first, _)) => format!("{first}."),
         None => text.lines().next().unwrap_or(text).to_string(),
+    }
+}
+
+const SOUND_WHAT_FOR: &str =
+    "The speakers or headphones this computer plays on. A video takes the computer's sound from it.";
+
+/// The line about the sound output: which device is the default, and what that means for videos.
+fn sound_output_item(os: Os, p: &Probes) -> Item {
+    let line = |status, detail: String, action| Item {
+        id: "sound_output",
+        name: "Sound output",
+        what_for: SOUND_WHAT_FOR,
+        status,
+        detail,
+        action,
+    };
+    match &p.output {
+        Output::Found(name) => {
+            // Windows records the computer's sound through a loopback device only
+            let (note, action) = match (os, p.loopback) {
+                (Os::Windows, Some(true)) => (" Videos can include its sound.", None),
+                (Os::Windows, Some(false)) => (
+                    " Videos cannot include its sound yet: Windows needs \"Stereo Mix\" (or a similar loopback device) switched on. Its settings open with the button.",
+                    Some("sound_settings"),
+                ),
+                (Os::Windows, None) => (" Install ffmpeg to check whether videos can include its sound.", None),
+                _ => (" Videos can include its sound.", None),
+            };
+            line(Status::Ok, format!("{name}.{note}"), action)
+        }
+        Output::None(why) => line(
+            Status::Missing,
+            why.clone(),
+            (os == Os::Windows).then_some("sound_settings"),
+        ),
+        Output::Unknown => line(
+            Status::Unknown,
+            "This computer could not be asked. Press Check again.".into(),
+            None,
+        ),
     }
 }
 
@@ -200,60 +253,26 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
         },
     });
 
-    match os {
-        Os::Windows => items.push(match (&p.ffmpeg, p.loopback) {
-            (Err(_), _) | (_, None) => Item {
-                id: "computer_sound",
-                name: "Sound of the computer",
-                what_for: "Lets a video include what this PC plays. Needs a loopback device such as Stereo Mix.",
-                status: Status::Unknown,
-                detail: "Install ffmpeg first; then this can be checked.".into(),
-                action: None,
+    if os != Os::Other {
+        items.push(sound_output_item(os, p));
+    }
+    if os == Os::Linux {
+        items.push(Item {
+            id: "xdotool",
+            name: "xdotool",
+            what_for: "Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).",
+            status: if p.xdotool {
+                Status::Ok
+            } else {
+                Status::Missing
             },
-            (Ok(_), Some(true)) => Item {
-                id: "computer_sound",
-                name: "Sound of the computer",
-                what_for: "Lets a video include what this PC plays. Needs a loopback device such as Stereo Mix.",
-                status: Status::Ok,
-                detail: "A loopback device is available.".into(),
-                action: None,
+            detail: if p.xdotool {
+                "Installed.".into()
+            } else {
+                "Not installed.".into()
             },
-            (Ok(_), Some(false)) => Item {
-                id: "computer_sound",
-                name: "Sound of the computer",
-                what_for: "Lets a video include what this PC plays. Needs a loopback device such as Stereo Mix.",
-                status: Status::Missing,
-                detail: "No loopback device found. Turn on \"Stereo Mix\" in the Windows sound settings (Recording tab, right-click, Show disabled devices). Without it, videos have no computer sound.".into(),
-                action: Some("sound_settings"),
-            },
-        }),
-        Os::Linux => {
-            items.push(Item {
-                id: "sound_system",
-                name: "Sound system (PulseAudio or PipeWire)",
-                what_for: "Records the computer's sound and the microphone in videos.",
-                status: if p.sound_system { Status::Ok } else { Status::Missing },
-                detail: if p.sound_system {
-                    "Running.".into()
-                } else {
-                    "None is running. Install PipeWire (with its PulseAudio layer) or PulseAudio with your package manager, and sign in again.".into()
-                },
-                action: None,
-            });
-            items.push(Item {
-                id: "xdotool",
-                name: "xdotool",
-                what_for: "Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).",
-                status: if p.xdotool { Status::Ok } else { Status::Missing },
-                detail: if p.xdotool {
-                    "Installed.".into()
-                } else {
-                    "Not installed.".into()
-                },
-                action: None,
-            });
-        }
-        Os::Other => {}
+            action: None,
+        });
     }
 
     let missing = items.iter().filter(|i| i.status == Status::Missing).count();
@@ -330,6 +349,116 @@ pub fn winget_links() -> Option<PathBuf> {
     })
 }
 
+/// Asked of PowerShell: the id of Windows' default playback device, and its name from the registry
+/// (`PKEY_Device_FriendlyName`, which is what the sound settings show). The text is fixed; nothing a
+/// person typed goes into it. It answers one line: `OK|name`, `NONE` or `ERROR|why`.
+const WINDOWS_OUTPUT_SCRIPT: &str = r#"
+$ErrorActionPreference = 'Stop'
+try {
+  [void][Windows.Media.Devices.MediaDevice, Windows.Media.Devices, ContentType = WindowsRuntime]
+  $id = [Windows.Media.Devices.MediaDevice]::GetDefaultAudioRenderId(0)
+} catch { 'ERROR|' + $_.Exception.Message; exit 0 }
+if ([string]::IsNullOrEmpty($id)) { 'NONE'; exit 0 }
+$guid = [regex]::Match($id, '\{0\.0\.0\.00000000\}\.(\{[0-9a-fA-F-]+\})').Groups[1].Value
+$key = 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\MMDevices\Audio\Render\' + $guid
+$p = Get-ItemProperty -Path ($key + '\Properties') -ErrorAction SilentlyContinue
+$name = $p.'{a45c254e-df1c-4efd-8020-67d146a850e0},14'
+if (-not $name) { $name = $p.'{a45c254e-df1c-4efd-8020-67d146a850e0},2' }
+if (-not $name) { $name = 'the default playback device' }
+'OK|' + $name
+"#;
+
+/// Read PowerShell's one-line answer about the default playback device.
+pub fn parse_windows_output(text: &str) -> Output {
+    let line = text
+        .lines()
+        .map(str::trim)
+        .rfind(|l| !l.is_empty())
+        .unwrap_or("");
+    if let Some(name) = line.strip_prefix("OK|") {
+        return Output::Found(name.trim().to_string());
+    }
+    if line == "NONE" {
+        return Output::None(
+            "Windows has no default playback device: no speakers or headphones are set, or none is plugged in. Plug one in, or choose one in the Windows sound settings (the button).".into(),
+        );
+    }
+    Output::Unknown
+}
+
+/// Read what `pactl` says: `info` names the default sink, `sinks` (`pactl list sinks`) describes
+/// each one.
+pub fn parse_pactl_output(info: &str, sinks: &str) -> Output {
+    let default = info
+        .lines()
+        .find_map(|l| l.trim().strip_prefix("Default Sink:"))
+        .map(str::trim)
+        .unwrap_or("");
+    if default.is_empty() || default == "auto_null" {
+        return Output::None(
+            "The sound system has no output: no speakers or headphones are set, or none is plugged in. Choose one in your system's sound settings.".into(),
+        );
+    }
+    // the description of that sink, if the listing has one
+    let mut current = "";
+    let mut description = None;
+    for l in sinks.lines().map(str::trim) {
+        if let Some(n) = l.strip_prefix("Name:") {
+            current = n.trim();
+        } else if let Some(d) = l.strip_prefix("Description:") {
+            if current == default {
+                description = Some(d.trim().to_string());
+                break;
+            }
+        }
+    }
+    Output::Found(description.unwrap_or_else(|| default.to_string()))
+}
+
+/// PowerShell's raw answer about the default playback device.
+fn ask_windows_output() -> Result<String, cargoframe_video::ExportError> {
+    cargoframe_video::ask(
+        Path::new("powershell.exe"),
+        &[
+            "-NoProfile",
+            "-NonInteractive",
+            "-ExecutionPolicy",
+            "Bypass",
+            "-Command",
+            WINDOWS_OUTPUT_SCRIPT,
+        ],
+    )
+}
+
+/// Ask this computer for the default sound output, fresh each time.
+fn sound_output(os: Os) -> Output {
+    match os {
+        Os::Windows => match ask_windows_output() {
+            Ok(text) => parse_windows_output(&text),
+            Err(_) => Output::Unknown,
+        },
+        Os::Linux => {
+            if !crate::audio::pulse_running() {
+                return Output::None(
+                    "No sound system is running. Install PipeWire (with its PulseAudio layer) or PulseAudio with your package manager, and sign in again.".into(),
+                );
+            }
+            let Some(pactl) = cargoframe_video::locate("pactl", &[]) else {
+                return Output::Unknown;
+            };
+            match cargoframe_video::ask(&pactl, &["info"]) {
+                Ok(info) => {
+                    let sinks =
+                        cargoframe_video::ask(&pactl, &["list", "sinks"]).unwrap_or_default();
+                    parse_pactl_output(&info, &sinks)
+                }
+                Err(_) => Output::Unknown,
+            }
+        }
+        Os::Other => Output::Unknown,
+    }
+}
+
 /// Look at this computer.
 pub fn probe(os: Os, video: &cargoframe_config::Video) -> Probes {
     let ffmpeg = crate::video::find(video, crate::video::program_beside_app().as_deref())
@@ -344,7 +473,7 @@ pub fn probe(os: Os, video: &cargoframe_config::Video) -> Probes {
     Probes {
         winget: os == Os::Windows && on_path("winget"),
         loopback,
-        sound_system: os == Os::Linux && crate::audio::pulse_running(),
+        output: sound_output(os),
         xdotool: os == Os::Linux && on_path("xdotool"),
         packages: if os == Os::Linux {
             std::fs::read_to_string("/etc/os-release")

@@ -17,17 +17,16 @@ describe('TextBlock title', () => {
     expect(document.querySelector('.inner')).toBeNull();
   });
 
-  it('inside the box: shown while empty, gone as soon as there is text, back as a hover tab', async () => {
+  it('inside the box: shown while empty, gone as soon as there is text, still the tooltip', async () => {
     render(TextBlock, { block: block('inside', 'prompt'), value: '' });
     const box = screen.getByRole('textbox', { name: 'Description' }) as HTMLTextAreaElement;
     expect(document.querySelector('.inner')?.textContent).toContain('Description');
     expect(document.querySelector('.inner')?.textContent).toContain('Prompt');
-    expect(document.querySelector('.tab')).toBeNull();
 
     await fireEvent.input(box, { target: { value: 'hello' } });
     expect(document.querySelector('.inner')).toBeNull();
-    // The title still exists for hovering: a tab on the edge, and the native tooltip.
-    expect(document.querySelector('.tab')?.textContent).toContain('Description');
+    // No bubble on the box's edge (it was cut off at the top); the tooltip is the native one.
+    expect(document.querySelector('.tab')).toBeNull();
     expect(document.querySelector('.field')?.getAttribute('title')).toBe('Description');
   });
 

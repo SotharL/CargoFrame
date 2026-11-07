@@ -277,6 +277,14 @@ async function tauriApi(): Promise<Api> {
 }
 
 /** Options for the in-memory stand-in: what a share and a list request should do. */
+export type SetupScenario =
+  | 'ready'
+  | 'windows_missing'
+  | 'windows_no_winget'
+  | 'windows_no_loopback'
+  | 'windows_no_output'
+  | 'linux_missing';
+
 export interface MemoryOptions {
   general?: Partial<General>;
   /** Starting video settings. */
@@ -290,7 +298,9 @@ export interface MemoryOptions {
   /** The stand-in finds no sound devices at all. */
   noAudio?: boolean;
   /** What the Setup page finds: everything there (the default), or one of the ways it is not. */
-  setup?: 'ready' | 'windows_missing' | 'windows_no_winget' | 'windows_no_loopback' | 'linux_missing';
+  setup?: SetupScenario;
+  /** What the computer looks like from the second check on (a device was plugged in, say). */
+  setupThen?: SetupScenario;
   /** The stand-in's install does not work. */
   installFails?: boolean;
   /** How many times the stand-in's install is asked about before it is done. */
@@ -361,8 +371,10 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
   let trialRan = false;
   // the Setup page's stand-in: what is installed changes only when the install button is pressed
-  const scenario = opts.setup ?? 'ready';
-  let installed = scenario === 'ready' || scenario === 'windows_no_loopback';
+  let scenario: SetupScenario = opts.setup ?? 'ready';
+  let setupChecks = 0;
+  const hasFfmpeg = (s: SetupScenario) => s === 'ready' || s === 'windows_no_loopback' || s === 'windows_no_output';
+  let installed = hasFfmpeg(scenario);
   let installLeft = 0;
   let installFailed = false;
   let soundSettingsOpened = 0;
@@ -373,22 +385,26 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       : { id: 'ffmpeg', name: 'ffmpeg', what_for: 'Recording video, and the sound in it. Screenshots and sharing do not need it.', status: 'missing', detail: 'ffmpeg was not found.', action: null };
     const items: SetupItem[] = [ffmpeg];
     let install: SetupInstall = { type: 'none' };
+    const output = (status: SetupItem['status'], detail: string, action: SetupItem['action'] = null): SetupItem => ({
+      id: 'sound_output', name: 'Sound output',
+      what_for: "The speakers or headphones this computer plays on. A video takes the computer's sound from it.",
+      status, detail, action,
+    });
     if (windows) {
-      const loop = scenario === 'windows_no_loopback' ? 'missing' : installed ? 'ok' : 'unknown';
-      items.push({
-        id: 'computer_sound', name: 'Sound of the computer',
-        what_for: 'Lets a video include what this PC plays. Needs a loopback device such as Stereo Mix.',
-        status: loop,
-        detail: loop === 'ok' ? 'A loopback device is available.' : loop === 'unknown' ? 'Install ffmpeg first; then this can be checked.' : 'No loopback device found. Turn on "Stereo Mix" in the Windows sound settings (Recording tab, right-click, Show disabled devices). Without it, videos have no computer sound.',
-        action: loop === 'missing' ? 'sound_settings' : null,
-      });
+      if (scenario === 'windows_no_output') {
+        items.push(output('missing', 'Windows has no default playback device: no speakers or headphones are set, or none is plugged in. Plug one in, or choose one in the Windows sound settings (the button).', 'sound_settings'));
+      } else if (scenario === 'windows_no_loopback') {
+        items.push(output('ok', 'Speakers (Realtek(R) Audio). Videos cannot include its sound yet: Windows needs "Stereo Mix" (or a similar loopback device) switched on. Its settings open with the button.', 'sound_settings'));
+      } else {
+        items.push(output('ok', installed ? 'Speakers (Realtek(R) Audio). Videos can include its sound.' : 'Speakers (Realtek(R) Audio). Install ffmpeg to check whether videos can include its sound.'));
+      }
       if (!installed) {
         install = scenario === 'windows_no_winget'
           ? { type: 'manual', text: 'Windows\' package manager (winget) was not found. Install "App Installer" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Video.' }
           : { type: 'run', label: 'Install ffmpeg' };
       }
     } else {
-      items.push({ id: 'sound_system', name: 'Sound system (PulseAudio or PipeWire)', what_for: "Records the computer's sound and the microphone in videos.", status: 'ok', detail: 'Running.', action: null });
+      items.push(output('ok', 'Built-in Audio Analog Stereo. Videos can include its sound.'));
       items.push({ id: 'xdotool', name: 'xdotool', what_for: 'Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).', status: installed ? 'ok' : 'missing', detail: installed ? 'Installed.' : 'Not installed.', action: null });
       if (!installed) install = { type: 'copy', command: 'sudo apt install ffmpeg xdotool' };
     }
@@ -725,6 +741,11 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       };
     },
     getSetup: async () => {
+      // every check looks at the machine again; a test can change the machine between two checks
+      if (setupChecks++ > 0 && opts.setupThen && opts.setupThen !== scenario) {
+        scenario = opts.setupThen;
+        installed = hasFfmpeg(scenario);
+      }
       if (installLeft > 0) {
         installLeft -= 1;
         if (installLeft === 0 && !opts.installFails) installed = true;

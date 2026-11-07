@@ -55,11 +55,25 @@ describe('Setup', () => {
     expect(screen.queryByRole('button', { name: 'Install ffmpeg' })).toBeNull();
   });
 
-  it('with no loopback device it says how to turn Stereo Mix on and opens the sound settings', async () => {
+  it('names the default sound output, and is calm when there is no loopback device', async () => {
     open({ setup: 'windows_no_loopback' });
-    await screen.findByText(/Stereo Mix/, { selector: 'p.detail' });
+    await screen.findByText(/Speakers \(Realtek\(R\) Audio\)\. Videos cannot include its sound yet/, { selector: 'p.detail' });
+    // it is not called missing: the output is there
+    expect(screen.getAllByText('Found').length).toBe(2);
+    expect(screen.queryByText(/is missing|are missing/)).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Open the Windows sound settings' }));
     expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('raises attention when no sound output is set, and Check again sees one that was plugged in', async () => {
+    open({ setup: 'windows_no_output', setupThen: 'ready' });
+    await screen.findByText('1 app is missing');
+    await screen.findByText(/no default playback device/, { selector: 'p.detail' });
+    expect(setupState.missing).toBe(1);
+    await fireEvent.click(screen.getByRole('button', { name: 'Check again' }));
+    await screen.findByText('Everything CargoFrame can use is here');
+    expect(screen.queryByText(/no default playback device/)).toBeNull();
+    expect(setupState.missing).toBe(0);
   });
 
   it('on Linux the command is shown and can be copied, never run by the app', async () => {

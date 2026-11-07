@@ -13,7 +13,7 @@ fn probes() -> Probes {
         ffmpeg: found(),
         winget: true,
         loopback: Some(true),
-        sound_system: true,
+        output: Output::Found("Speakers (Realtek(R) Audio)".into()),
         xdotool: true,
         packages: Packages::Apt,
     }
@@ -50,8 +50,10 @@ fn without_ffmpeg_windows_offers_one_button_that_installs_it() {
     assert_eq!(item(&r, "ffmpeg").status, Status::Missing);
     // only the first sentence of the long explanation is shown on the line
     assert_eq!(item(&r, "ffmpeg").detail, "ffmpeg was not found.");
-    // what depends on it cannot be told yet, and is not counted as missing
-    assert_eq!(item(&r, "computer_sound").status, Status::Unknown);
+    // the sound output does not depend on ffmpeg; only whether videos can use it does
+    let sound = item(&r, "sound_output");
+    assert_eq!(sound.status, Status::Ok);
+    assert!(sound.detail.contains("Install ffmpeg"));
 }
 
 #[test]
@@ -72,19 +74,124 @@ fn without_winget_the_button_says_what_to_do_instead() {
 }
 
 #[test]
-fn a_pc_with_no_loopback_device_opens_the_sound_settings_and_installs_nothing() {
+fn a_pc_with_no_loopback_device_still_has_a_sound_output_and_offers_the_sound_settings() {
     let p = Probes {
         loopback: Some(false),
         ..probes()
     };
     let r = report(Os::Windows, &p, false, None);
-    let sound = item(&r, "computer_sound");
-    assert_eq!(sound.status, Status::Missing);
-    assert_eq!(sound.action, Some("sound_settings"));
+    let sound = item(&r, "sound_output");
+    // the output is there: that is what was asked, and it is not "missing"
+    assert_eq!(sound.status, Status::Ok);
+    assert!(sound.detail.starts_with("Speakers (Realtek(R) Audio)."));
+    // what videos can do with it is said, with the way to fix it
     assert!(sound.detail.contains("Stereo Mix"));
-    assert_eq!(r.missing, 1);
+    assert_eq!(sound.action, Some("sound_settings"));
+    assert_eq!(r.missing, 0);
     // nothing winget can fix: the button does not claim to
     assert_eq!(r.install, Install::None);
+}
+
+#[test]
+fn the_default_sound_output_is_named_and_videos_are_told_they_can_use_it() {
+    let r = report(Os::Windows, &probes(), false, None);
+    let sound = item(&r, "sound_output");
+    assert_eq!(sound.status, Status::Ok);
+    assert_eq!(
+        sound.detail,
+        "Speakers (Realtek(R) Audio). Videos can include its sound."
+    );
+    assert_eq!(sound.action, None);
+}
+
+#[test]
+fn no_sound_output_raises_attention_and_counts_as_missing() {
+    let p = Probes {
+        output: Output::None("Windows has no default playback device.".into()),
+        ..probes()
+    };
+    let r = report(Os::Windows, &p, false, None);
+    let sound = item(&r, "sound_output");
+    assert_eq!(sound.status, Status::Missing);
+    assert_eq!(sound.detail, "Windows has no default playback device.");
+    assert_eq!(sound.action, Some("sound_settings"));
+    assert_eq!(r.missing, 1);
+    // Linux has no settings window to open from here
+    let r = report(Os::Linux, &p, false, None);
+    assert_eq!(item(&r, "sound_output").action, None);
+    assert_eq!(r.missing, 1);
+}
+
+#[test]
+fn a_computer_that_cannot_be_asked_is_not_called_missing() {
+    let p = Probes {
+        output: Output::Unknown,
+        ..probes()
+    };
+    let r = report(Os::Windows, &p, false, None);
+    assert_eq!(item(&r, "sound_output").status, Status::Unknown);
+    assert!(item(&r, "sound_output").detail.contains("Check again"));
+    assert_eq!(r.missing, 0);
+}
+
+#[test]
+fn an_unsupported_system_shows_no_sound_line() {
+    assert!(report(Os::Other, &probes(), false, None)
+        .items
+        .iter()
+        .all(|i| i.id != "sound_output"));
+}
+
+#[test]
+fn windows_answers_about_the_default_playback_device_are_read() {
+    assert_eq!(
+        parse_windows_output("OK|Speakers (Realtek(R) Audio)\r\n"),
+        Output::Found("Speakers (Realtek(R) Audio)".into())
+    );
+    // other lines before the answer (a banner, a warning) do not matter
+    assert_eq!(
+        parse_windows_output("WARNING: something\nOK|Headphones (USB)\n"),
+        Output::Found("Headphones (USB)".into())
+    );
+    assert!(matches!(parse_windows_output("NONE\n"), Output::None(_)));
+    assert_eq!(parse_windows_output("ERROR|nope"), Output::Unknown);
+    assert_eq!(parse_windows_output(""), Output::Unknown);
+}
+
+const PACTL_INFO: &str = "Server String: /run/user/1000/pulse/native\nServer Name: PulseAudio (on PipeWire 1.0.5)\nDefault Sample Specification: float32le 2ch 48000Hz\nDefault Sink: alsa_output.pci-0000_00_1f.3.analog-stereo\nDefault Source: alsa_input.pci-0000_00_1f.3.analog-stereo\n";
+const PACTL_SINKS: &str = "Sink #1\n\tState: RUNNING\n\tName: alsa_output.usb-dock.analog-stereo\n\tDescription: USB Dock\n\nSink #2\n\tState: IDLE\n\tName: alsa_output.pci-0000_00_1f.3.analog-stereo\n\tDescription: Built-in Audio Analog Stereo\n";
+
+#[test]
+fn pactl_answers_name_the_default_sink_by_its_description() {
+    assert_eq!(
+        parse_pactl_output(PACTL_INFO, PACTL_SINKS),
+        Output::Found("Built-in Audio Analog Stereo".into())
+    );
+    // no description to be found: the sink's own name
+    assert_eq!(
+        parse_pactl_output(PACTL_INFO, ""),
+        Output::Found("alsa_output.pci-0000_00_1f.3.analog-stereo".into())
+    );
+    // a dummy output, or none at all, is no output
+    for info in [
+        "Default Sink: auto_null\n",
+        "Default Sink: \n",
+        "Server Name: x\n",
+    ] {
+        assert!(
+            matches!(parse_pactl_output(info, ""), Output::None(_)),
+            "{info}"
+        );
+    }
+}
+
+#[test]
+fn every_check_asks_the_computer_again() {
+    // Check again must see a changed device, so nothing is remembered between two checks: the
+    // probe is a plain function of the machine at that moment.
+    let a = probe(Os::current(), &cargoframe_config::Video::default());
+    let b = probe(Os::current(), &cargoframe_config::Video::default());
+    assert_eq!(a.output, b.output);
 }
 
 #[test]
@@ -171,11 +278,11 @@ fn linux_gets_one_command_for_everything_missing() {
 #[test]
 fn linux_without_a_sound_system_says_so_but_has_no_command_for_it() {
     let p = Probes {
-        sound_system: false,
+        output: Output::None("No sound system is running.".into()),
         ..probes()
     };
     let r = report(Os::Linux, &p, false, None);
-    assert_eq!(item(&r, "sound_system").status, Status::Missing);
+    assert_eq!(item(&r, "sound_output").status, Status::Missing);
     assert_eq!(r.missing, 1);
     assert_eq!(r.install, Install::None);
 }
@@ -314,4 +421,19 @@ fn looking_at_this_computer_never_panics() {
     assert!(p.ffmpeg.is_err());
     let r = report(Os::current(), &p, false, None);
     assert!(r.missing >= 1);
+}
+
+// Runs only on a Windows machine (CI has one): PowerShell and the Windows API must answer in the
+// shape this program reads, whether or not the machine has speakers.
+#[cfg(windows)]
+#[test]
+fn windows_answers_when_asked_for_its_default_playback_device() {
+    let text = ask_windows_output().expect("PowerShell could not be run");
+    assert!(
+        matches!(
+            parse_windows_output(&text),
+            Output::Found(_) | Output::None(_)
+        ),
+        "unexpected answer from PowerShell: {text:?}"
+    );
 }
