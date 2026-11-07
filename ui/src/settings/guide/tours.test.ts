@@ -5,7 +5,7 @@ import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import connections from '../pages/Connections.svelte?raw';
 import { isPageId } from '../nav';
-import { MAX_SAY, TOURS, connectTour } from './tours';
+import { MAX_SAY, TOURS, tourById } from './tours';
 
 // Every page's code, as text: the guides name things by their `data-tour` attribute.
 const pages = import.meta.glob('../../**/*.svelte', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
@@ -57,6 +57,6 @@ describe('the guides', () => {
 
   it('cover every service a connection can be made for', () => {
     expect(kinds.length).toBeGreaterThan(5);
-    for (const k of kinds) expect(connectTour(k), k).not.toBeNull();
+    for (const k of kinds) expect(tourById(`connect-${k}`), k).toBeDefined();
   });
 });

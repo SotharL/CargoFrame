@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
-  import GuideLink from '../guide/GuideLink.svelte';
   import Combobox from '../../lib/components/Combobox.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
@@ -97,7 +96,6 @@
 </script>
 
 <div class="page">
-  <div class="guide-link"><GuideLink tour="destination-fields" /></div>
   {#if infos.failure}<Chip kind="err" label={infos.failure} />{/if}
   {#each infos.problems as p (p)}<Chip kind="warn" label={`Could not read a destination field file: ${p}`} />{/each}
 
@@ -204,7 +202,6 @@
 </div>
 
 <style>
-  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; }
   .empty, .card, .editor {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;

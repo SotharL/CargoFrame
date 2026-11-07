@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
-  import GuideLink from '../guide/GuideLink.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Reach, Rule, Trigger, VariableInfo } from '../../lib/types';
@@ -216,7 +215,6 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="page">
-  <div class="guide-link"><GuideLink tour="first-capture" /></div>
   {#if layouts.failure}<Chip kind="err" label={layouts.failure} />{/if}
   {#each layouts.problems as p (p)}<Chip kind="warn" label={`Could not read a layout file: ${p}`} />{/each}
 
@@ -356,7 +354,6 @@
 </div>
 
 <style>
-  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; min-width: 0; }
   .bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .pick { display: grid; gap: 2px; }

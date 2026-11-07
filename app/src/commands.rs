@@ -81,6 +81,80 @@ pub fn set_general(
     Ok(())
 }
 
+// ----- your data (Settings, General) -----
+
+/// What CargoFrame keeps on this computer, by kind, and where.
+#[derive(Serialize)]
+pub struct DataReport {
+    pub areas: Vec<crate::cleanup::Area>,
+    pub config_dir: String,
+    pub data_dir: String,
+}
+
+#[tauri::command]
+pub fn get_data_report(state: State<'_, AppState>) -> DataReport {
+    let dirs = state.store.dirs();
+    DataReport {
+        areas: crate::cleanup::report(dirs.data()),
+        config_dir: dirs.config().display().to_string(),
+        data_dir: dirs.data().display().to_string(),
+    }
+}
+
+/// Clearing data in use would break a window that is open or a recording that is running.
+fn busy(state: &AppState) -> Result<(), String> {
+    if state.sessions.count() > 0 {
+        return Err("Close the capture windows first: they are using some of it.".into());
+    }
+    if !matches!(
+        state.recording.view(),
+        crate::video::RecordingView::Idle | crate::video::RecordingView::Failed { .. }
+    ) {
+        return Err("A recording is running: stop it first.".into());
+    }
+    Ok(())
+}
+
+/// Remove the kinds of data named (`work`, `kept`, `logs`, `updates`).
+#[tauri::command]
+pub fn clean_data(
+    state: State<'_, AppState>,
+    areas: Vec<String>,
+) -> Result<crate::cleanup::Cleaned, String> {
+    busy(&state)?;
+    Ok(crate::cleanup::clean(state.store.dirs().data(), &areas))
+}
+
+/// Put CargoFrame back as a new install is: sign-ins forgotten, settings, layouts, triggers and
+/// everything it kept removed. The program itself stays.
+#[tauri::command]
+pub fn reset_everything(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::cleanup::Cleaned, String> {
+    busy(&state)?;
+    // Passwords and tokens live in the credential store, not in a settings file.
+    for id in state
+        .store
+        .list_ids(cargoframe_config::Kind::Connections)
+        .unwrap_or_default()
+    {
+        if let Ok(c) = state.connections.load(&state.store, &id) {
+            state.connections.forget_secrets(&id, c.settings.kind());
+        }
+    }
+    let dirs = state.store.dirs();
+    let mut done = crate::cleanup::clean_all(dirs.data());
+    let settings = crate::cleanup::reset_settings(dirs.config());
+    done.files += settings.files;
+    done.bytes += settings.bytes;
+    done.left += settings.left;
+    crate::triggers::reload(&app);
+    crate::tray::refresh_menu(&app);
+    crate::tray::refresh_icon(&app);
+    Ok(done)
+}
+
 #[tauri::command]
 pub fn get_autostart(app: AppHandle) -> Result<bool, String> {
     app.autolaunch().is_enabled().map_err(|e| e.to_string())
@@ -1160,9 +1234,9 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     // The window was closed while sending: nobody is watching, so say how it ended.
     if cancelled_while_sending {
         match &result {
-            ShareResult::Sent { summary, .. } => crate::notify::problem(&app, "Shared", summary),
+            ShareResult::Sent { summary, .. } => crate::notify::info(&app, "Shared", summary),
             ShareResult::SavedLocally { path, .. } => {
-                crate::notify::problem(&app, "Saved locally", &format!("A zip is in {path}"));
+                crate::notify::info(&app, "Saved locally", &format!("A zip is in {path}"));
             }
             ShareResult::Failed { label, saved, .. } => {
                 let kept = saved

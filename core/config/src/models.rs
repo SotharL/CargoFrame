@@ -40,6 +40,28 @@ pub struct General {
     /// The accent colour as `#rrggbb`: buttons, focus rings, links and the arrow of the logo.
     /// A value that is not a colour counts as the default wherever it is used.
     pub accent: String,
+    /// Which notices CargoFrame may show (a Windows toast, a Linux notification).
+    pub notifications: Notifications,
+}
+
+/// What CargoFrame may say in a notification. A notice can show up inside a recording of the
+/// screen, so each kind can be switched off.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Notifications {
+    /// "CargoFrame is running", "CargoFrame is recording…", "Shared", "Saved locally".
+    pub routine: bool,
+    /// Something went wrong: a capture or a recording that failed, a share that did not go.
+    pub problems: bool,
+}
+
+impl Default for Notifications {
+    fn default() -> Self {
+        Self {
+            routine: true,
+            problems: true,
+        }
+    }
 }
 
 /// The accent colour a new install starts with (the plan's design system).
@@ -81,6 +103,7 @@ impl Default for General {
             memory_mode: MemoryMode::default(),
             check_updates: false,
             accent: DEFAULT_ACCENT.to_string(),
+            notifications: Notifications::default(),
         }
     }
 }

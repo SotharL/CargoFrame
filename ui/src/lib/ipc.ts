@@ -1,5 +1,5 @@
 import type {
-  AppInfo, Block, ChatView, Connection, ConnectionsView, ConnectionView, Describe, DropdownOption,
+  AppInfo, Block, ChatView, Cleaned, Connection, ConnectionsView, ConnectionView, DataReport, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
@@ -28,6 +28,12 @@ export interface Api {
   getAutostart(): Promise<boolean>;
   setAutostart(enabled: boolean): Promise<void>;
   openConfigFolder(): Promise<void>;
+  /** What CargoFrame keeps on this computer, by kind. */
+  getDataReport(): Promise<DataReport>;
+  /** Remove some kinds of data (`work`, `kept`, `logs`, `updates`). Rejects while a window or recording uses it. */
+  cleanData(areas: string[]): Promise<Cleaned>;
+  /** Back to a new install: sign-ins, settings, layouts, triggers and kept data removed. */
+  resetEverything(): Promise<Cleaned>;
 
   // ----- the CargoFrame window -----
   getSession(): Promise<SessionView>;
@@ -93,8 +99,11 @@ export interface Api {
   removeChat(id: string): Promise<void>;
 
   // ----- sharing (the CargoFrame window) -----
-  /** The list behind a dropdown block. Rejects with an `OptionsError`. */
-  fetchOptions(sessionId: number, blockId: string): Promise<DropdownOption[]>;
+  /**
+   * The list behind a dropdown block, or with `parent` the list inside that choice (the threads of
+   * a channel). Rejects with an `OptionsError`.
+   */
+  fetchOptions(sessionId: number, blockId: string, parent?: string): Promise<DropdownOption[]>;
   /** The picture as edited, uploaded before a share. `null` goes back to the capture. */
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
   /** The mark drawn over a recording (a see-through PNG the size of the recording), or none. */
@@ -164,6 +173,9 @@ async function tauriApi(): Promise<Api> {
     getAutostart: () => invoke<boolean>('get_autostart'),
     setAutostart: (enabled) => invoke('set_autostart', { enabled }),
     openConfigFolder: () => invoke('open_config_folder'),
+    getDataReport: () => invoke<DataReport>('get_data_report'),
+    cleanData: (areas) => invoke<Cleaned>('clean_data', { areas }),
+    resetEverything: () => invoke<Cleaned>('reset_everything'),
     getSession: () => invoke<SessionView>('get_session'),
     getSessionImage: async () => {
       const bytes = await invoke<ArrayBuffer>('get_session_image');
@@ -220,9 +232,9 @@ async function tauriApi(): Promise<Api> {
     pinChat: (link, title) => invoke('pin_chat', { link, title }),
     setChatPinned: (id, pinned) => invoke('set_chat_pinned', { id, pinned }),
     removeChat: (id) => invoke('remove_chat', { id }),
-    fetchOptions: async (sessionId, blockId) => {
+    fetchOptions: async (sessionId, blockId, parent) => {
       try {
-        return await invoke<DropdownOption[]>('fetch_options', { sessionId, blockId });
+        return await invoke<DropdownOption[]>('fetch_options', { sessionId, blockId, parent: parent ?? null });
       } catch (e) {
         throw asOptionsError(e);
       }
@@ -309,7 +321,7 @@ export interface MemoryOptions {
   installPolls?: number;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
-  /** Called by `fetchOptions` and `previewOptions`. */
+  /** Called by `fetchOptions` (as `<block>:<choice>` for the list inside a choice) and `previewOptions`. */
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
   /** What `openImport` finds in the "file" the person picks; the default is a cancelled dialog. */
   importFile?: ImportPreview;
@@ -366,7 +378,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     memory_mode: 'balanced',
     check_updates: false,
     accent: '#4f8ee0',
+    notifications: { routine: true, problems: true },
     ...initial,
+  };
+  // what the Your data section finds, and clears (sizes in bytes)
+  let kept: Record<string, { files: number; bytes: number }> = {
+    work: { files: 4, bytes: 5_300_000 }, kept: { files: 0, bytes: 0 }, logs: { files: 3, bytes: 120_000 }, updates: { files: 0, bytes: 0 },
   };
   let autostart = true;
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
@@ -495,12 +512,15 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         summary: 'Posts a message into a channel or thread, or starts a forum post, with the screenshot and a zip of the ticked files attached. Nobody is pinged.',
         fields: [
           { key: 'channel', label: 'Channel', hint: 'A text channel, or a forum to start a post in', list: 'channels' },
-          { key: 'thread', label: 'Thread or forum post', hint: 'Overrides the channel', list: 'threads' },
+          { key: 'thread', label: 'Thread or forum post', hint: 'A thread of the channel; leave empty to start a new one', list: 'threads' },
           { key: 'message', label: 'Message', hint: 'Defaults to the prompt text', list: null },
           { key: 'title', label: 'Title', hint: 'The name of a forum post', list: null },
         ],
         lists: [
-          { id: 'channels', label: 'Channels and forums the bot can see', param: null },
+          {
+            id: 'channels', label: 'Channels and forums the bot can see', param: null,
+            inside: { list: 'threads', field: 'thread', label: 'Thread or post' },
+          },
           { id: 'threads', label: 'Active threads and forum posts', param: null },
         ],
       };
@@ -562,6 +582,37 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       autostart = enabled;
     },
     openConfigFolder: async () => {},
+    getDataReport: async () => ({
+      config_dir: '~/.config/CargoFrame',
+      data_dir: '~/.local/share/CargoFrame/data',
+      areas: [
+        { id: 'work', label: 'Captures and recordings in progress', what: 'Kept for a little while so a window can use them, then removed by themselves.' },
+        { id: 'kept', label: 'Zips kept here', what: 'Saved here when the folder for saved zips could not be used.' },
+        { id: 'logs', label: 'Log files', what: 'What CargoFrame wrote about itself, for finding a problem.' },
+        { id: 'updates', label: 'Downloaded updates', what: 'Installers downloaded by an update, removed after the install.' },
+      ].map((a) => ({ ...a, ...kept[a.id]! })),
+    }),
+    cleanData: async (areas) => {
+      const done: Cleaned = { files: 0, bytes: 0, left: 0 };
+      for (const id of areas) {
+        const k = kept[id];
+        if (!k) continue;
+        done.files += k.files;
+        done.bytes += k.bytes;
+        kept[id] = { files: 0, bytes: 0 };
+      }
+      return done;
+    },
+    resetEverything: async () => {
+      const done: Cleaned = { files: 12, bytes: 40_000, left: 0 };
+      for (const id of Object.keys(kept)) {
+        done.files += kept[id]!.files;
+        done.bytes += kept[id]!.bytes;
+        kept[id] = { files: 0, bytes: 0 };
+      }
+      general = { ...general, notifications: { routine: true, problems: true } };
+      return done;
+    },
     getSession: async () => (await import('../capture/demo')).demoSession(),
     getSessionImage: async () => (await import('../capture/demo')).demoImage(),
     getSessionClip: async () => new Blob([new Uint8Array(16)], { type: 'video/mp4' }),
@@ -709,8 +760,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     removeChat: async (id) => {
       chats = chats.filter((c) => c.id !== id);
     },
-    fetchOptions: async (_sessionId, blockId) =>
-      opts.options ? opts.options('demo', blockId) : [{ value: 'P1', label: 'Demo project', group: null }],
+    fetchOptions: async (_sessionId, blockId, parent) =>
+      opts.options
+        ? opts.options('demo', parent ? `${blockId}:${parent}` : blockId)
+        : parent
+          ? []
+          : [{ value: 'P1', label: 'Demo project', group: null }],
     setEditedImage: async () => {},
     setClipMark: async () => {},
     share: async (request) =>
@@ -968,7 +1023,9 @@ async function demoApi(): Promise<Api> {
   // `?demo=discord`: a bot's lists, to look at the server > category > channel steps
   const options =
     query.get('demo') === 'discord'
-      ? (_c: string, block: string) => (block === 'thread' ? DEMO_THREADS : DEMO_CHANNELS)
+      ? (_c: string, list: string) =>
+          // `<block>:<channel>` is the threads inside one channel
+          list.includes(':') ? DEMO_THREADS.filter((t) => list.endsWith(`/${t.category}`)) : DEMO_CHANNELS
       : undefined;
   const api = memoryApi({ share: () => demoShare(kind), update, options });
   // `?media=both` plays a real clip, so "Take screenshot" has a frame to take

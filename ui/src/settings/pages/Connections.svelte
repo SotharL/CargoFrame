@@ -8,8 +8,6 @@
   import SecretInput from '../connections/SecretInput.svelte';
   import type { HookStore } from '../connections/DiscordForm.svelte';
   import { getLinkFor } from '../../lib/connectorHelp';
-  import GuideLink from '../guide/GuideLink.svelte';
-  import { connectTour } from '../guide/tours';
   import ClaudeChats from '../connections/ClaudeChats.svelte';
 
   const items = createItems<Connection>('connection');
@@ -272,10 +270,7 @@
     </section>
   {:else}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <div class="heading">
-        <h2>{draft.id ? 'Edit connection' : `New ${KINDS.find((k) => k.kind === draft!.value.kind)?.label} connection`}</h2>
-        {#if connectTour(draft.value.kind)}<GuideLink tour={connectTour(draft.value.kind)!} />{/if}
-      </div>
+      <h2>{draft.id ? 'Edit connection' : `New ${KINDS.find((k) => k.kind === draft!.value.kind)?.label} connection`}</h2>
       <ConnectionForm bind:value={draft.value} hooks={hookStore()} />
       {#if draft.id}
         {@const v = viewOf(draft.id)}
@@ -325,8 +320,7 @@
   .kind { display: grid; gap: 4px; text-align: left; padding: 10px 12px; }
   .kind .quiet { font-size: 12.5px; }
   .editor { display: grid; gap: 14px; }
-  .heading { display: flex; gap: 12px; align-items: baseline; justify-content: space-between; }
-  .heading h2 { margin: 0; }
+  .editor h2 { margin: 0; }
   .buttons { display: flex; gap: 8px; }
   .error { color: var(--err); font-size: 13px; }
   .danger { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }

@@ -32,7 +32,7 @@ describe('Export', () => {
     render(TransferSection);
     expect(await screen.findByText('Layouts')).toBeTruthy();
     expect(screen.getByText('Data from files')).toBeTruthy();
-    expect(screen.getByText('Destination fields')).toBeTruthy();
+    expect(screen.getByText('Extra fields')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Export 3 items…' }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
     expect(spy.mock.calls[0]![0]).toEqual([
@@ -55,7 +55,7 @@ describe('Export', () => {
     expect(spy.mock.calls[0]![0].map((s) => s.group)).toEqual(['layouts', 'infotypes']);
 
     await fireEvent.click(screen.getByRole('checkbox', { name: 'All layouts' }));
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'All destination fields' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'All extra fields' }));
     const none = screen.getByRole('button', { name: 'Export 0 items…' }) as HTMLButtonElement;
     expect(none.disabled).toBe(true);
   });

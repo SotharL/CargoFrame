@@ -145,7 +145,7 @@ export const TOURS: Tour[] = [
       { target: 'rules.name', say: 'Its name. Write {{rule.name}} in a text block to use it.' },
       { target: 'rules.file', say: 'The file, from the project folder: package.json, say.' },
       { target: 'rules.format', say: 'How to read it: JSON, text, a pattern.' },
-      { target: 'rules.query', say: 'What to look for: for JSON, the key, like version.' },
+      { target: 'rules.query', say: 'Where the value is: a JSON key, or the text around it.' },
       { target: 'rules.save', say: 'Save. The preview shows what it finds.' },
     ],
   },
@@ -153,7 +153,7 @@ export const TOURS: Tour[] = [
     id: 'destination-fields',
     title: 'Fill a field on the service (like Priority)',
     steps: [
-      { target: 'infotypes.add', say: 'A destination field is a box on the service, like Jira Priority.', page: 'infotypes', click: true },
+      { target: 'infotypes.add', say: 'An extra field is a box on the service beyond where to post, like Jira Priority.', page: 'infotypes', click: true },
       { target: 'infotypes.name', say: 'What you call it.' },
       { target: 'infotypes.connection', say: 'The connection it belongs to.' },
       { target: 'infotypes.key', say: "Its key on the service. Search the ones it offers." },
@@ -164,12 +164,6 @@ export const TOURS: Tour[] = [
 ];
 
 export const tourById = (id: string): Tour | undefined => TOURS.find((t) => t.id === id);
-
-/** The guide for connecting a service, if there is one. */
-export const connectTour = (kind: string): string | null => {
-  const id = `connect-${kind}`;
-  return tourById(id) ? id : null;
-};
 
 /** The CSS selector for a step's target. */
 export const selectorOf = (target: string): string => `[data-tour="${target}"]`;

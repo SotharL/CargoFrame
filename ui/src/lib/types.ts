@@ -8,6 +8,38 @@ export interface General {
   check_updates: boolean;
   /** `#rrggbb`: buttons, focus rings, links and the arrow of the logo. */
   accent: string;
+  /** Which notices CargoFrame may show. */
+  notifications: Notifications;
+}
+
+/** A notice can show up inside a recording of the screen, so each kind can be switched off. */
+export interface Notifications {
+  /** "CargoFrame is running", "CargoFrame is recording…", "Shared", "Saved locally". */
+  routine: boolean;
+  /** Something went wrong: a capture or recording that failed, a share that did not go. */
+  problems: boolean;
+}
+
+/** One kind of data CargoFrame keeps on this computer. */
+export interface DataArea {
+  id: string;
+  label: string;
+  what: string;
+  files: number;
+  bytes: number;
+}
+
+export interface DataReport {
+  areas: DataArea[];
+  config_dir: string;
+  data_dir: string;
+}
+
+/** What a clean-up did: `left` files were in use and are still there. */
+export interface Cleaned {
+  files: number;
+  bytes: number;
+  left: number;
 }
 
 /** One line of the last timings (Settings, General). */
@@ -171,8 +203,16 @@ export type BlockContent =
       optional?: boolean;
       /** A text block whose words narrow the list while it is shown. */
       narrow_by?: string | null;
+      /** After the choice, go on to a second list inside it (the threads of a channel). */
+      deeper?: Deeper | null;
     }
   | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
+
+/** The second step of a path: a list of what is inside the first choice, and the field it fills. */
+export interface Deeper {
+  list: string;
+  field: string;
+}
 
 /** What happens to the ticked files: sent as files, written into the message, or left out. */
 export type FilesHow = 'attach' | 'inline' | 'none';
@@ -570,6 +610,8 @@ export interface ListSpec {
   label: string;
   /** The list needs a value after a colon, for example a project key. */
   param: string | null;
+  /** What can be chosen inside each choice of this list (the threads of a channel). */
+  inside?: { list: string; field: string; label: string } | null;
 }
 
 export interface Describe {
@@ -683,6 +725,8 @@ export type ShareResult =
       url: string | null;
       notes: string[];
       close: boolean;
+      /** A place the share made that the service cannot list: offered first next time. */
+      place?: DropdownOption | null;
     }
   | { status: 'saved_locally'; path: string; notes: string[]; close: boolean }
   | { status: 'blocked'; reasons: string[] }
@@ -706,6 +750,8 @@ export interface ShareRequest {
   prompt: string | null;
   texts: Record<string, string>;
   dropdowns: Record<string, string | null>;
+  /** For a dropdown that goes deeper: the second choice (empty is none: start something new). */
+  deeper?: Record<string, string | null>;
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;

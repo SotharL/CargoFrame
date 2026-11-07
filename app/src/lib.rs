@@ -5,6 +5,7 @@
 
 mod audio;
 mod chats;
+mod cleanup;
 mod cli;
 mod commands;
 mod connections;
@@ -78,6 +79,9 @@ pub fn run() {
             commands::set_general,
             commands::get_autostart,
             commands::set_autostart,
+            commands::get_data_report,
+            commands::clean_data,
+            commands::reset_everything,
             commands::open_config_folder,
             commands::get_session,
             commands::get_session_image,

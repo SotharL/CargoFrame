@@ -4,11 +4,14 @@
   import { onDestroy, onMount } from 'svelte';
   import Section from '../../lib/components/Section.svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import Spinner from '../../lib/components/Spinner.svelte';
   import { getApi } from '../../lib/ipc';
   import { setupState } from '../setupState.svelte';
   import type { SetupItem, SetupReport } from '../../lib/types';
 
-  let { pollMs = 2500 }: { pollMs?: number } = $props();
+  // `minCheckMs`: a look at the computer is shown for at least this long, so the turning ring is
+  // seen and the check mark that follows reads as an answer (and not as a flash).
+  let { pollMs = 2500, minCheckMs = 350 }: { pollMs?: number; minCheckMs?: number } = $props();
 
   let report = $state<SetupReport | null>(null);
   let error = $state('');
@@ -32,7 +35,11 @@
   async function refresh(showSpinner = true) {
     if (showSpinner) checking = true;
     try {
-      take(await (await getApi()).getSetup());
+      const [next] = await Promise.all([
+        (await getApi()).getSetup(),
+        showSpinner ? new Promise((r) => setTimeout(r, minCheckMs)) : undefined,
+      ]);
+      take(next);
       error = '';
     } catch (e) {
       error = String(e);
@@ -88,37 +95,53 @@
   switch on video, its sound, and pasting into a Claude chat.
 </p>
 
-{#if report}
-  <Section title="This computer">
-    <div class="summary">
-      {#if report.missing === 0}
-        <Chip kind="ok" label="Everything CargoFrame can use is here" />
-      {:else}
-        <Chip kind="warn" label={report.missing === 1 ? '1 app is missing' : `${report.missing} apps are missing`} />
-      {/if}
-      <button type="button" class="again" onclick={() => refresh()} disabled={checking || report.install.type === 'running'}>
-        {checking ? 'Checking…' : 'Check again'}
-      </button>
-    </div>
+<Section title="This computer">
+  <div class="summary">
+    {#if checking}
+      <Spinner label="Checking this computer" />
+      <span class="quiet">Checking this computer…</span>
+    {:else if report && report.missing === 0}
+      <Chip kind="ok" label="Everything CargoFrame can use is here" />
+    {:else if report}
+      <Chip kind="warn" label={report.missing === 1 ? '1 app is missing' : `${report.missing} apps are missing`} />
+    {/if}
+    <button type="button" class="again" onclick={() => refresh()} disabled={checking || report?.install.type === 'running'}>
+      Check again
+    </button>
+  </div>
 
-    <ul class="items">
+  <!-- Every line shows its name and whether it was found; the rest opens by itself only when
+       something needs attention. -->
+  <ul class="items">
+    {#if !report}
+      <li class="item"><div class="head"><strong>Looking at this computer…</strong><span class="state"><Spinner label="Checking" /></span></div></li>
+    {:else}
       {#each report.items as i (i.id)}
         {@const c = chip(i)}
         <li class="item">
-          <div class="head">
-            <strong>{i.name}</strong>
-            <Chip kind={c.kind} label={c.label} />
-          </div>
-          <p class="quiet what">{i.what_for}</p>
-          <p class="detail selectable">{i.detail}</p>
-          {#if i.action === 'sound_settings'}
-            <button type="button" onclick={openSound}>Open the Windows sound settings</button>
-          {/if}
+          <details open={i.status !== 'ok'}>
+            <summary>
+              <span class="caret" aria-hidden="true">▸</span>
+              <strong>{i.name}</strong>
+              <span class="state">
+                {#if checking}<Spinner label={`Checking ${i.name}`} />{:else}<Chip kind={c.kind} label={c.label} />{/if}
+              </span>
+            </summary>
+            <div class="body">
+              <p class="quiet what">{i.what_for}</p>
+              <p class="detail selectable">{i.detail}</p>
+              {#if i.action === 'sound_settings'}
+                <button type="button" onclick={openSound}>Open the Windows sound settings</button>
+              {/if}
+            </div>
+          </details>
         </li>
       {/each}
-    </ul>
-  </Section>
+    {/if}
+  </ul>
+</Section>
 
+{#if report}
   {@const step = report.install}
   {#if step.type !== 'none'}
     <Section title="Install what is missing">
@@ -155,8 +178,6 @@
       {/if}
     </Section>
   {/if}
-{:else if !error}
-  <p class="quiet" role="status">Looking at this computer…</p>
 {/if}
 
 {#if error}
@@ -169,10 +190,17 @@
   .items { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
   .item { display: grid; gap: 4px; padding-top: 12px; border-top: 1px solid var(--border); }
   .item:first-child { border-top: 0; padding-top: 0; }
-  .head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .head { display: flex; align-items: center; gap: 8px; }
+  .state { margin-left: auto; display: inline-flex; align-items: center; min-height: 22px; }
+  summary { display: flex; align-items: center; gap: 8px; cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  .caret { display: inline-block; width: 12px; color: var(--quiet); transition: transform 0.15s; }
+  details[open] > summary .caret { transform: rotate(90deg); }
+  .body { display: grid; gap: 4px; padding: 6px 0 0 20px; }
   .what, .detail { margin: 0; }
   .detail { font-size: 13px; }
-  .item button { justify-self: start; margin-top: 4px; }
+  .body button { justify-self: start; margin-top: 4px; }
+  @media (prefers-reduced-motion: reduce) { .caret { transition: none; } }
   .command {
     display: block; padding: 8px 10px; border: 1px solid var(--border);
     border-radius: var(--radius-sm); background: var(--surface-2); overflow-x: auto; white-space: pre;

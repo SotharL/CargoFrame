@@ -61,6 +61,32 @@ describe('Properties: a dropdown fed by a service', () => {
     expect(screen.queryByLabelText('Narrow the list by')).toBeNull();
   });
 
+  it('can go on to what is inside the choice, when the service has something inside it', async () => {
+    const discord = {
+      ...jira, id: 'chat', kind: 'discord',
+      describe: {
+        summary: '', fields: [],
+        lists: [{ id: 'channels', label: 'Channels', param: null, inside: { list: 'threads', field: 'thread', label: 'Thread or post' } }],
+      },
+    } as unknown as ConnectionView;
+    const block = dropdown({ source: { type: 'web_api', connection_id: 'chat', options_id: 'channels' } }) as Block & { deeper?: unknown };
+    render(Properties, {
+      block, blocks: [block], rules: [], infoTypes: [], connections: [discord], variables: [], issues: [],
+      onrect: () => true, onremove: () => {},
+    });
+    const box = screen.getByRole('switch', { name: 'Go on to the thread or post' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(block.deeper).toEqual({ list: 'threads', field: 'thread' });
+    await fireEvent.click(box);
+    expect(block.deeper).toBeNull();
+  });
+
+  it('offers no second step for a list with nothing inside its choices', () => {
+    open(dropdown());
+    expect(screen.queryByRole('switch', { name: /Go on to/ })).toBeNull();
+  });
+
   it('keeps these options off a list of Claude chats, which have their own order', () => {
     open(dropdown({ source: { type: 'claude_chats' } }));
     expect(screen.queryByRole('switch', { name: 'Remember the last choices' })).toBeNull();

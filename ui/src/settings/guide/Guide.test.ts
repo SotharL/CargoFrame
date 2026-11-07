@@ -83,13 +83,4 @@ describe('Guide', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Next' }));
     expect(await screen.findByText('Last thing.')).toBeTruthy();
   });
-
-  it('starts a guide from the screen at the step that is already showing', async () => {
-    render(Harness);
-    go('rules');
-    startTour('connect-jira', true);
-    // step one opens what step two points at, and that is already there
-    expect(guide.index).toBe(1);
-    expect(await screen.findByText('Second thing.')).toBeTruthy();
-  });
 });

@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import DropdownBlock from './DropdownBlock.svelte';
+import { memoryApi, setApiForTests } from '../../lib/ipc';
 import type { Block, DropdownState } from '../../lib/types';
 
 type Dropdown = Extract<Block, { type: 'dropdown' }>;
@@ -151,5 +152,82 @@ describe('an optional list (a thread to reply in)', () => {
   it('says so when no thread has the title in its name', () => {
     render(DropdownBlock, { block: thread, info: threads, value: '', narrowText: 'zzz' });
     expect(screen.getByText(/None has “zzz” in the name, so all are shown/)).toBeTruthy();
+  });
+});
+
+describe('the server and category the person picked', () => {
+  afterEach(cleanup);
+  const acme = discord([
+    o('1', '#general', 'Acme'),
+    o('2', '#bugs', 'Acme', 'Support'),
+    o('3', '#help', 'Acme', 'Support'),
+    o('4', '#ideas', 'Acme', 'Product'),
+    o('5', '#lounge', 'Friends'),
+  ]);
+  const box = () => screen.getByRole('combobox', { name: 'Channel' });
+
+  it('stay where they are while a channel is chosen inside them', async () => {
+    render(DropdownBlock, { block: channel, info: acme, value: '2' });
+    await fireEvent.change(select('Category')!, { target: { value: 'Support' } });
+    await fireEvent.focus(box());
+    await fireEvent.pointerDown(screen.getByRole('option', { name: /#help/ }));
+    expect(shown()).toBe('#help');
+    expect(select('Category')!.value).toBe('Support');
+    expect(select('Server')!.value).toBe('Acme');
+    // and again: choosing never resets what is above it
+    await fireEvent.focus(box());
+    await fireEvent.pointerDown(screen.getByRole('option', { name: /#bugs/ }));
+    expect(select('Category')!.value).toBe('Support');
+  });
+
+  it('move to a category only when the channel found by searching is in another one', async () => {
+    render(DropdownBlock, { block: channel, info: acme, value: '2' });
+    await fireEvent.change(select('Category')!, { target: { value: 'Support' } });
+    await fireEvent.focus(box());
+    await fireEvent.input(box(), { target: { value: 'ideas' } });
+    await fireEvent.pointerDown(screen.getByRole('option', { name: /#ideas/ }));
+    expect(shown()).toBe('#ideas');
+    expect(select('Category')!.value).toBe('Product');
+  });
+
+  it('move to a server only when the channel found by searching is in another one', async () => {
+    render(DropdownBlock, { block: channel, info: acme, value: '2' });
+    await fireEvent.change(select('Category')!, { target: { value: 'Support' } });
+    await fireEvent.focus(box());
+    await fireEvent.input(box(), { target: { value: 'lounge' } });
+    await fireEvent.pointerDown(screen.getByRole('option', { name: /#lounge/ }));
+    expect(select('Server')!.value).toBe('Friends');
+    // the other server has no categories to choose between
+    expect(select('Category')).toBeNull();
+  });
+});
+
+describe('a path that goes on to the threads inside the channel', () => {
+  afterEach(() => {
+    cleanup();
+    setApiForTests(undefined);
+    localStorage.clear();
+  });
+  const path: Dropdown = { ...channel, id: 'where', title: 'Where to post', deeper: { list: 'threads', field: 'thread' } };
+
+  it('shows the second step once a channel is chosen, and none before', async () => {
+    setApiForTests(memoryApi({ options: () => [{ value: 't1', label: 'Slow start', group: null }] }));
+    render(DropdownBlock, { block: path, info: twoServers, value: null, sessionId: 4, layoutId: 'lay' });
+    expect(screen.queryByRole('combobox', { name: 'Thread or post' })).toBeNull();
+    cleanup();
+    render(DropdownBlock, { block: path, info: twoServers, value: '2', sessionId: 4, layoutId: 'lay' });
+    await waitFor(() => expect((screen.getByRole('combobox', { name: 'Thread or post' }) as HTMLInputElement).disabled).toBe(false));
+  });
+
+  it('shows no second step for a block that does not go deeper', () => {
+    render(DropdownBlock, { block: channel, info: twoServers, value: '2' });
+    expect(screen.queryByRole('combobox', { name: 'Thread or post' })).toBeNull();
+  });
+
+  it('leaves the channel list alone: the title narrows the threads, not the channels', async () => {
+    setApiForTests(memoryApi({ options: () => [] }));
+    render(DropdownBlock, { block: { ...path, narrow_by: 'title' }, info: twoServers, value: '2', narrowText: 'bugs', sessionId: 4, layoutId: 'lay' });
+    await waitFor(() => expect(screen.queryByText(/with “bugs” in the name/)).toBeNull());
+    expect(select('Server')).toBeTruthy();
   });
 });

@@ -3,6 +3,8 @@
   import Combobox from '../../lib/components/Combobox.svelte';
   import type { Block, DropdownState } from '../../lib/types';
   import type { Recent } from '../../lib/recent';
+  import type { DeeperPick } from '../values';
+  import DeeperStep from './DeeperStep.svelte';
   import {
     ALL, NO_CATEGORY, categoriesIn, comboOptions, hasLevels, narrow, needsCategoryStep, recentIn, scope, serversOf,
   } from './cascade';
@@ -17,6 +19,9 @@
     value = $bindable(null),
     recent = [],
     narrowText = '',
+    sessionId = 0,
+    layoutId = null,
+    deeper = $bindable({ value: '', label: '' }),
   }: {
     block: DropdownBlock;
     info: DropdownState;
@@ -25,6 +30,11 @@
     recent?: Recent[];
     /** The words of the text block that narrows this list (a thread named like the title). */
     narrowText?: string;
+    /** For a block that goes deeper: the capture and layout the second list is asked for and kept under. */
+    sessionId?: number;
+    layoutId?: string | null;
+    /** The second step (a thread inside the channel); only used when the block goes deeper. */
+    deeper?: DeeperPick;
   } = $props();
   const id = $derived(`dd-${block.id}`);
   const optional = $derived(block.optional === true);
@@ -32,7 +42,10 @@
   const remembers = $derived(block.remember !== false && block.source.type === 'web_api');
 
   let showAll = $state(false);
-  const narrowed = $derived(showAll ? { options: info.options, applied: false, matched: true } : narrow(info.options, narrowText));
+  // A block that goes deeper narrows the second list by the title (a post named like it), not the first.
+  const narrowed = $derived(
+    showAll || block.deeper ? { options: info.options, applied: false, matched: true } : narrow(info.options, narrowText),
+  );
   const options = $derived(narrowed.options);
 
   // Server and category: followed from the choice made, until the person changes them.
@@ -73,10 +86,19 @@
     return out;
   });
 
+  // What is shown above the choice (server, category) stays where the person put it. It only
+  // moves when the choice is made from somewhere else: a search or a recent choice that lies
+  // outside the server or the category being shown.
   function choose(next: string) {
-    pickedServer = null;
-    pickedCategory = null;
     value = next === '' && !optional ? value : next;
+    const to = options.find((o) => o.value === next);
+    if (!levels || !to?.server) return;
+    if (to.server !== server) {
+      pickedServer = to.server;
+      pickedCategory = ALL;
+    } else if (category !== ALL && !scope(options, server, category).some((o) => o.value === next)) {
+      pickedCategory = to.category ?? NO_CATEGORY;
+    }
   }
   function pickServer(s: string) {
     pickedServer = s;
@@ -139,7 +161,17 @@
       {/if}
     </select>
   {/if}
-  {#if narrowText.trim() && !showAll && info.status === 'ready' && info.options.length > 0}
+  {#if block.deeper && info.status === 'ready' && value}
+    <DeeperStep
+      {sessionId}
+      blockId={block.id}
+      {layoutId}
+      parent={value}
+      {remembers}
+      bind:pick={deeper}
+      {narrowText}
+    />
+  {:else if narrowText.trim() && !showAll && info.status === 'ready' && info.options.length > 0}
     <p class="quiet note">
       {#if narrowed.applied}
         Showing the {options.length} with “{narrowText.trim()}” in the name.

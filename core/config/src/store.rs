@@ -309,6 +309,33 @@ mod tests {
         assert_eq!(g.theme, Theme::System);
         assert_eq!(g.memory_mode, MemoryMode::Balanced);
         assert!(!g.check_updates);
+        // every notice is on until the person switches it off
+        assert!(g.notifications.routine && g.notifications.problems);
+    }
+
+    #[test]
+    fn a_general_file_from_before_notifications_keeps_them_on() {
+        let (d, s) = store();
+        fs::create_dir_all(d.path().join("config")).unwrap();
+        fs::write(
+            d.path().join("config/general.json"),
+            "{\"schema_version\": 1, \"theme\": \"dark\"}",
+        )
+        .unwrap();
+        let g: General = s.load_or_default().unwrap();
+        assert_eq!(g.theme, Theme::Dark);
+        assert!(g.notifications.routine && g.notifications.problems);
+        // and a choice is kept
+        let off = General {
+            notifications: crate::Notifications {
+                routine: false,
+                problems: true,
+            },
+            ..g
+        };
+        s.save(&off).unwrap();
+        let back: General = s.load_or_default().unwrap();
+        assert!(!back.notifications.routine && back.notifications.problems);
     }
 
     #[test]
