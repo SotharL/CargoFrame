@@ -267,6 +267,7 @@ impl Connector for ClaudeConnector {
             summary,
             url: None,
             notes,
+            place: None,
         })
     }
 }

@@ -174,6 +174,7 @@ impl Connector for CustomConnector {
                     l.label.clone()
                 },
                 param: None,
+                inside: None,
             })
             .collect();
         Describe {
@@ -340,6 +341,7 @@ impl Connector for CustomConnector {
             summary: format!("Sent (the server answered {})", resp.status),
             url,
             notes,
+            place: None,
         })
     }
 }

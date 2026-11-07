@@ -444,6 +444,7 @@ impl Connector for SlackConnector {
                 id: "channels".into(),
                 label: "Channels the app can see".into(),
                 param: None,
+                inside: None,
             }],
             summary: "Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached. The app has to be a member of the channel.".into(),
         }
@@ -614,6 +615,7 @@ impl Connector for SlackConnector {
             },
             url,
             notes: Vec::new(),
+            place: None,
         })
     }
 }

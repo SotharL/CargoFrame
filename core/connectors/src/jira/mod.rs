@@ -259,6 +259,7 @@ impl Connector for JiraConnector {
             id: id.into(),
             label: label.into(),
             param,
+            inside: None,
         };
         Describe {
             fields: vec![
@@ -568,6 +569,7 @@ impl Connector for JiraConnector {
             },
             url: Some(format!("{base}/browse/{key}")),
             notes,
+            place: None,
         })
     }
 }

@@ -151,6 +151,9 @@ pub struct SendOutcome {
     pub url: Option<String>,
     /// Things that did not go as asked but did not stop the share ("files were skipped").
     pub notes: Vec<String>,
+    /// A place the share made or used that can be picked again next time (a Discord forum post
+    /// the service cannot list). The window keeps it with the recent choices.
+    pub place: Option<OptionItem>,
 }
 
 /// What an earlier attempt of the same share already did, so a retry continues instead of

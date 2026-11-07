@@ -15,9 +15,7 @@ use crate::video;
 use crate::windowing;
 use cargoframe_config::{General, Safe, Video};
 use cargoframe_connectors::{Describe, OptionItem};
-use cargoframe_layout::{
-    templates, validate, BlockKind, ConnectionKind, DropdownSource, FilesBlock, Layout,
-};
+use cargoframe_layout::{templates, validate, ConnectionKind, FilesBlock, Layout};
 use cargoframe_rules::Rule;
 use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
@@ -943,27 +941,19 @@ pub fn remove_chat(state: State<'_, AppState>, id: String) -> Result<(), String>
 // ----- sharing (the CargoFrame window) -----
 
 /// A dropdown list for a block of the open capture. Only the lists the layout itself asks for
-/// can be fetched from here.
+/// can be fetched from here. `parent` asks for the second step of a dropdown that goes deeper:
+/// what is inside the first choice (the threads of a channel).
 #[tauri::command]
 pub async fn fetch_options(
     app: AppHandle,
     session_id: u64,
     block_id: String,
+    parent: Option<String>,
 ) -> Result<Vec<OptionItem>, OptionsError> {
     let asked = {
         let state = app.state::<AppState>();
         state.sessions.by_id(session_id).and_then(|s| {
-            let layout = s.view.layout.as_ref()?;
-            match &layout.block(&block_id)?.kind {
-                BlockKind::Dropdown(d) => match &d.source {
-                    DropdownSource::WebApi {
-                        connection_id,
-                        options_id,
-                    } => Some((connection_id.clone(), options_id.clone())),
-                    DropdownSource::ClaudeChats => None,
-                },
-                _ => None,
-            }
+            crate::share::options_asked(s.view.layout.as_ref()?, &block_id, parent.as_deref())
         })
     };
     let Some((connection_id, options_id)) = asked else {
@@ -1206,6 +1196,7 @@ pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
 mod template_tests {
     use super::*;
     use cargoframe_connectors::{build, Connection};
+    use cargoframe_layout::{BlockKind, DropdownSource};
     use serde_json::json;
 
     /// A connection of each kind with nothing filled in, as the connectors describe themselves.

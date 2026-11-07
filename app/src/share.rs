@@ -24,8 +24,9 @@ use cargoframe_connectors::{
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
-    select, sharing_mode, sharing_state, validate, BlockKind, DropdownSource, FilesHow, Layout,
-    OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole, ValueSource,
+    select, sharing_mode, sharing_state, validate, BlockKind, DropdownBlock, DropdownSource,
+    FilesHow, Layout, OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole,
+    ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
@@ -51,6 +52,9 @@ pub struct Request {
     pub texts: BTreeMap<String, String>,
     /// The chosen option of each dropdown (its value), by block id.
     pub dropdowns: BTreeMap<String, Option<String>>,
+    /// For a dropdown that goes deeper (a channel, then a thread in it): the second choice, by
+    /// block id. Empty or missing is "nothing inside it".
+    pub deeper: BTreeMap<String, Option<String>>,
     /// The ticked files of each files block, relative to the project folder.
     pub files: BTreeMap<String, Vec<String>>,
     /// The picture was edited: send the edited one the window uploaded.
@@ -88,6 +92,9 @@ pub enum ShareResult {
         notes: Vec<String>,
         /// The layout asks to close the window after a successful share.
         close: bool,
+        /// A place the share made or used that the service cannot list (a Discord forum post made
+        /// through a webhook): the window offers it next time.
+        place: Option<cargoframe_connectors::OptionItem>,
     },
     /// There was no active connection: a zip was saved in the folder for saved zips.
     SavedLocally {
@@ -187,6 +194,34 @@ struct Prepared {
     send: SendRules,
     close: bool,
     notes: Vec<String>,
+}
+
+/// The connection and list a dropdown of the layout may be filled from, and nothing else: the
+/// window cannot ask for a list the layout does not name. With `parent`, the second list of a
+/// dropdown that goes deeper, asked for as `<list>:<parent>`.
+pub fn options_asked(
+    layout: &Layout,
+    block_id: &str,
+    parent: Option<&str>,
+) -> Option<(String, String)> {
+    let BlockKind::Dropdown(d) = &layout.block(block_id)?.kind else {
+        return None;
+    };
+    let DropdownSource::WebApi {
+        connection_id,
+        options_id,
+    } = &d.source
+    else {
+        return None;
+    };
+    match (parent, &d.deeper) {
+        (None, _) => Some((connection_id.clone(), options_id.clone())),
+        (Some(parent), Some(deeper)) if !parent.trim().is_empty() => Some((
+            connection_id.clone(),
+            format!("{}:{}", deeper.list, parent.trim()),
+        )),
+        _ => None,
+    }
 }
 
 fn field_kind(k: InfoKind) -> FieldKind {
@@ -364,6 +399,28 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             kind,
             from_list,
         });
+    }
+    // The second step of a dropdown that goes deeper fills a field of its own, by itself.
+    for mapping in &mappings {
+        let ValueSource::Block(id) = &mapping.source else {
+            continue;
+        };
+        let Some(BlockKind::Dropdown(DropdownBlock {
+            deeper: Some(deeper),
+            ..
+        })) = layout.block(id).map(|b| &b.kind)
+        else {
+            continue;
+        };
+        let value = req.deeper.get(id).cloned().flatten().unwrap_or_default();
+        if !value.trim().is_empty() && !fields.iter().any(|f| f.key == deeper.field) {
+            fields.push(Field {
+                key: deeper.field.clone(),
+                value,
+                kind: FieldKind::Choice,
+                from_list: true,
+            });
+        }
     }
     // A required field that no mapping fills can never be satisfied: say so.
     for t in infos
@@ -1112,6 +1169,7 @@ pub fn run(
                 url: outcome.url,
                 notes,
                 close: prepared.close,
+                place: outcome.place,
             }
         }
         Err(err) => {
@@ -1307,6 +1365,7 @@ mod tests {
             ]
             .into(),
             dropdowns: BTreeMap::new(),
+            deeper: BTreeMap::new(),
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
             still: false,
@@ -1821,6 +1880,121 @@ mod tests {
             "{}",
             seen[0].url
         );
+    }
+
+    /// The layout of `world`, with a dropdown that goes on to a second list mapped to `where`.
+    fn with_a_path(w: &mut World) {
+        // the connection's body names the two fields
+        save(
+            &w.f.store,
+            "api",
+            json!({
+                "name": "Hook", "kind": "custom", "base_url": w.server.base(),
+                "auth": {"type": "bearer"},
+                "send": {"method": "POST", "path": "/hook", "body": {"type": "json",
+                    "template": "{\"where\":\"{{where}}\",\"inside_field\":\"{{inside_field}}\"}"}},
+                "result_url_path": "url"
+            }),
+        );
+        let layout = w.session.view.layout.as_mut().unwrap();
+        let mut path = cargoframe_layout::DropdownBlock::new(
+            "Where to post",
+            DropdownSource::WebApi {
+                connection_id: "api".into(),
+                options_id: "places".into(),
+            },
+        );
+        path.deeper = Some(cargoframe_layout::Deeper {
+            list: "inside".into(),
+            field: "inside_field".into(),
+        });
+        layout.blocks.push(cargoframe_layout::Block {
+            id: "where".into(),
+            rect: cargoframe_layout::Rect::new(0, 4, 6, 2),
+            kind: BlockKind::Dropdown(path),
+        });
+        let button = layout
+            .blocks
+            .iter_mut()
+            .find_map(|b| match &mut b.kind {
+                BlockKind::SharingButton(s) => Some(s),
+                _ => None,
+            })
+            .unwrap();
+        button.mappings.push(cargoframe_layout::InfoMapping {
+            field: "where".into(),
+            source: ValueSource::Block("where".into()),
+        });
+    }
+
+    #[test]
+    fn the_second_step_of_a_path_dropdown_fills_its_own_field_without_a_mapping() {
+        let mut w = world(|_| MockResponse::json(201, json!({"url": "https://x.test/p/9"})));
+        with_a_path(&mut w);
+        set_safe(&w, None, 0);
+        let mut req = request();
+        req.dropdowns.insert("where".into(), Some("A".into()));
+        req.deeper.insert("where".into(), Some("B".into()));
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let body = w.server.requests_to("/hook")[0].json();
+        assert_eq!(body["where"], "A");
+        assert_eq!(body["inside_field"], "B");
+    }
+
+    #[test]
+    fn a_path_dropdown_with_nothing_chosen_inside_sends_no_second_field() {
+        let mut w = world(|_| MockResponse::json(201, json!({"url": "https://x.test/p/9"})));
+        with_a_path(&mut w);
+        set_safe(&w, None, 0);
+        // This connection's body needs `inside_field`, so a share with nothing inside the first
+        // choice is refused by the connection itself ("nothing fills it"): the field is not
+        // sent empty, and nothing reaches the server.
+        for inside in [None, Some(String::new()), Some("  ".to_string())] {
+            let mut req = request();
+            req.dropdowns.insert("where".into(), Some("A".into()));
+            req.deeper.insert("where".into(), inside);
+            let (r, _) = go(&w, &req, vec![]);
+            let ShareResult::Failed { message, .. } = r else {
+                panic!("{r:?}");
+            };
+            assert!(message.contains("nothing fills it"), "{message}");
+        }
+        assert!(w.server.requests_to("/hook").is_empty());
+    }
+
+    #[test]
+    fn the_window_may_only_ask_for_lists_the_layout_names() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        with_a_path(&mut w);
+        let layout = w.session.view.layout.as_ref().unwrap();
+        // the dropdown's own list, and the one inside it for a given choice
+        assert_eq!(
+            options_asked(layout, "where", None),
+            Some(("api".into(), "places".into()))
+        );
+        assert_eq!(
+            options_asked(layout, "where", Some(" 123 ")),
+            Some(("api".into(), "inside:123".into()))
+        );
+        // nothing inside an empty choice, a block that is not a dropdown, or one that goes nowhere
+        assert_eq!(options_asked(layout, "where", Some("")), None);
+        assert_eq!(options_asked(layout, "note", None), None);
+        assert_eq!(options_asked(layout, "missing", None), None);
+        let plain = cargoframe_layout::DropdownBlock::new(
+            "P",
+            DropdownSource::WebApi {
+                connection_id: "api".into(),
+                options_id: "places".into(),
+            },
+        );
+        let mut layout = layout.clone();
+        layout.blocks.push(cargoframe_layout::Block {
+            id: "plain".into(),
+            rect: cargoframe_layout::Rect::new(0, 6, 6, 1),
+            kind: BlockKind::Dropdown(plain),
+        });
+        assert_eq!(options_asked(&layout, "plain", Some("123")), None);
     }
 
     #[test]

@@ -7,8 +7,8 @@
 //! dropdowns that fetch lists and the sharing button name it.
 
 use crate::model::{
-    Block, BlockKind, DropdownBlock, DropdownSource, FilesBlock, InfoMapping, Layout, OnSuccess,
-    Rect, SharingButton, TextBlock, TextRole, TitlePlacement, ValueSource,
+    Block, BlockKind, Deeper, DropdownBlock, DropdownSource, FilesBlock, InfoMapping, Layout,
+    OnSuccess, Rect, SharingButton, TextBlock, TextRole, TitlePlacement, ValueSource,
 };
 use crate::validate::ConnectionKind;
 
@@ -161,18 +161,24 @@ fn web_list(title: &str, connection_id: &str, options_id: &str) -> BlockKind {
     ))
 }
 
-/// A list that may stay empty or hold something pasted, narrowed by the words of a text block.
-fn optional_list(
+/// One dropdown for a whole path: a list, then what is inside the choice (`inside_list`), which
+/// fills `inside_field` by itself. `narrow_by` narrows the second list.
+fn path_list(
     title: &str,
     connection_id: &str,
     options_id: &str,
+    inside_list: &str,
+    inside_field: &str,
     narrow_by: Option<&str>,
 ) -> BlockKind {
     let BlockKind::Dropdown(mut d) = web_list(title, connection_id, options_id) else {
         unreachable!("web_list makes a dropdown")
     };
-    d.optional = true;
     d.narrow_by = narrow_by.map(String::from);
+    d.deeper = Some(Deeper {
+        list: inside_list.to_string(),
+        field: inside_field.to_string(),
+    });
     BlockKind::Dropdown(d)
 }
 
@@ -445,27 +451,29 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         ("discord-message", Some(c)) => vec![
             shot(10),
+            // The whole path in one dropdown: the channel, then (when there is one to choose) the
+            // thread or forum post inside it. The title narrows the second list.
             block(
                 "channel",
-                rect(7, 0, 5, 1),
-                web_list("Channel or forum", c, "channels"),
+                rect(7, 0, 5, 2),
+                path_list(
+                    "Where to post",
+                    c,
+                    "channels",
+                    "threads",
+                    "thread",
+                    Some("title"),
+                ),
             ),
             block(
                 "title",
-                rect(7, 1, 5, 1),
+                rect(7, 2, 5, 1),
                 text("Title (a forum post's name)", TextRole::Plain, WHERE),
             ),
             block(
                 "message",
-                rect(7, 2, 5, 3),
+                rect(7, 3, 5, 3),
                 text("Message", TextRole::Plain, SEEN_IN),
-            ),
-            // A thread or forum post to reply in; with a webhook there is no list, so it is a box
-            // to paste a link in. The title narrows the list: a thread named like it comes first.
-            block(
-                "thread",
-                rect(7, 5, 5, 1),
-                optional_list("Reply in a thread (optional)", c, "threads", Some("title")),
             ),
             block("files", rect(7, 6, 5, 3), files("Attach files")),
             button(
@@ -476,7 +484,6 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 vec![
                     from_block("channel", "channel"),
                     from_block("title", "title"),
-                    from_block("thread", "thread"),
                 ],
             ),
         ],

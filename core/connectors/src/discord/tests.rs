@@ -980,3 +980,282 @@ fn connections_saved_before_webhooks_stay_bots() {
     assert_eq!(old.mode, DiscordMode::Bot);
     assert!(old.hooks.is_empty());
 }
+
+// ----- going deeper: the threads of a channel, and finding the channel of a thread -----
+
+const OLD_THREAD: &str = "666666666666666000";
+
+/// Like `discord`, with older posts too: the forum has one active post and two older ones.
+fn discord_with_archive(req: &Recorded) -> MockResponse {
+    let p = req.path().trim_start_matches("/api/v10");
+    if p == format!("/guilds/{GUILD}/threads/active") {
+        return MockResponse::json(
+            200,
+            json!({ "threads": [
+                { "id": THREAD, "name": "Crash on save", "parent_id": FORUM },
+                { "id": "666666666666666001", "name": "Not mine", "parent_id": TEXT },
+            ] }),
+        );
+    }
+    if p == format!("/channels/{FORUM}/threads/archived/public") {
+        return MockResponse::json(
+            200,
+            json!({ "threads": [
+                { "id": OLD_THREAD, "name": "Crash on save", "parent_id": FORUM },
+                { "id": THREAD, "name": "Crash on save", "parent_id": FORUM },
+                { "id": "666666666666666500", "name": "Slow start", "parent_id": FORUM },
+            ] }),
+        );
+    }
+    discord(req)
+}
+
+#[test]
+fn a_channel_says_it_has_threads_inside_and_which_field_they_fill() {
+    let c = connector(&MockServer::start(discord));
+    let d = c.describe();
+    let channels = d.lists.iter().find(|l| l.id == "channels").unwrap();
+    let inside = channels.inside.as_ref().unwrap();
+    assert_eq!((inside.list, inside.field), ("threads", "thread"));
+    assert!(d.fields.iter().any(|f| f.key == inside.field));
+    // the same for webhooks, where the window offers the posts it made itself
+    let hooked = hooks("");
+    let d = hooked.describe();
+    assert!(d
+        .lists
+        .iter()
+        .any(|l| l.id == "channels" && l.inside.is_some()));
+}
+
+#[test]
+fn the_threads_of_one_channel_are_its_active_ones_then_older_ones_newest_first() {
+    let server = MockServer::start(discord_with_archive);
+    let c = connector(&server);
+    let w = world();
+    let items = w
+        .with("dc", |ctx| c.options(ctx, &format!("threads:{FORUM}")))
+        .unwrap();
+    let shown: Vec<_> = items
+        .iter()
+        .map(|i| (i.value.as_str(), i.group.as_deref().unwrap_or("")))
+        .collect();
+    // another channel's thread is not offered; a thread that is in both lists is offered once;
+    // each group has the newest first
+    assert_eq!(
+        shown,
+        [
+            (THREAD, "Active"),
+            ("666666666666666500", "Older"),
+            (OLD_THREAD, "Older"),
+        ]
+    );
+    // a link to the channel does as well as its id
+    let again = w
+        .with("dc", |ctx| {
+            c.options(
+                ctx,
+                &format!("threads:https://discord.com/channels/{GUILD}/{FORUM}"),
+            )
+        })
+        .unwrap();
+    assert_eq!(again.len(), 3);
+    // a text channel's threads: the older ones are not there (the mock has none), no error
+    let text = w
+        .with("dc", |ctx| c.options(ctx, &format!("threads:{TEXT}")))
+        .unwrap();
+    assert!(text.iter().all(|i| i.value != THREAD));
+}
+
+#[test]
+fn a_very_long_forum_is_cut_to_what_the_dropdown_can_search() {
+    let server = MockServer::start(|req| {
+        let p = req.path().trim_start_matches("/api/v10").to_string();
+        if p == format!("/channels/{FORUM}/threads/archived/public") {
+            let threads: Vec<Value> = (0..300)
+                .map(|n| json!({ "id": format!("{}", 700_000_000_000_000_000u64 + n), "name": format!("Post {n}") }))
+                .collect();
+            return MockResponse::json(200, json!({ "threads": threads }));
+        }
+        discord(req)
+    });
+    let c = connector(&server);
+    let items = world()
+        .with("dc", |ctx| c.options(ctx, &format!("threads:{FORUM}")))
+        .unwrap();
+    assert_eq!(items.len(), MAX_THREADS);
+    // the newest are the ones kept
+    assert_eq!(items[0].label, "Post 299");
+}
+
+#[test]
+fn a_thread_list_for_a_channel_that_is_not_one_is_refused_in_words() {
+    let c = connector(&MockServer::start(discord));
+    let e = world()
+        .with("dc", |ctx| c.options(ctx, "threads:not-a-channel"))
+        .unwrap_err();
+    assert!(e.message.contains("not a Discord channel"), "{}", e.message);
+}
+
+/// Two webhooks, in two channels; a thread of the second channel is refused by the first.
+fn two_channels_world() -> (World, DiscordConnector) {
+    let w = World::new()
+        .secret(
+            "dc",
+            "hook0",
+            &format!("https://discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+        )
+        .secret(
+            "dc",
+            "hook1",
+            "https://discord.com/api/webhooks/999000999000999111/other-Token9",
+        );
+    let c = DiscordConnector::new(model::Discord {
+        mode: DiscordMode::Webhook,
+        shown_as: String::new(),
+        hooks: vec![
+            model::Hook {
+                slot: 0,
+                name: "bugs".into(),
+                server: String::new(),
+            },
+            model::Hook {
+                slot: 1,
+                name: "chat".into(),
+                server: String::new(),
+            },
+        ],
+    });
+    (w, c)
+}
+
+/// Channel A (hook 0) does not know the thread; channel B (hook 1) does.
+fn channel_b_has_the_thread(req: &Recorded) -> MockResponse {
+    let first = req.path().contains(HOOK);
+    match (req.method.as_str(), first) {
+        ("GET", true) => MockResponse::json(200, json!({ "channel_id": TEXT, "guild_id": GUILD })),
+        ("GET", false) => {
+            MockResponse::json(200, json!({ "channel_id": FORUM, "guild_id": GUILD }))
+        }
+        ("POST", true) => {
+            MockResponse::json(404, json!({ "code": 10003, "message": "Unknown Channel" }))
+        }
+        ("POST", false) => MockResponse::json(200, json!({ "id": MESSAGE, "channel_id": THREAD })),
+        _ => MockResponse::new(404),
+    }
+}
+
+#[test]
+fn a_thread_alone_finds_the_webhook_of_its_own_channel() {
+    let server = MockServer::start(channel_b_has_the_thread);
+    let (w, c) = two_channels_world();
+    let c = c.with_endpoints(Endpoints {
+        api: server.url("/api/v10"),
+    });
+    // no channel is picked: the thread is tried in each channel until one knows it
+    let mut p = payload(&[("thread", THREAD)]);
+    p.prompt = Some("again".into());
+    let out = w.with("dc", |ctx| c.send(ctx, &p)).unwrap();
+    assert_eq!(out.summary, "Posted to Discord");
+    let posts: Vec<_> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.method == "POST")
+        .collect();
+    assert_eq!(
+        posts.len(),
+        2,
+        "the refusal posted nothing, so the next channel was tried"
+    );
+    assert_eq!(posts[1].query_param("thread_id").as_deref(), Some(THREAD));
+    // what was posted in is handed back, to be offered next time
+    let place = out.place.unwrap();
+    assert_eq!(place.value, THREAD);
+    assert!(place.label.starts_with("Thread …"), "{}", place.label);
+}
+
+#[test]
+fn a_thread_in_none_of_the_channels_is_explained_and_posted_nowhere() {
+    let server = MockServer::start(|req| {
+        if req.method == "POST" {
+            MockResponse::json(404, json!({ "code": 10003, "message": "Unknown Channel" }))
+        } else {
+            MockResponse::json(200, json!({ "channel_id": TEXT, "guild_id": GUILD }))
+        }
+    });
+    let (w, c) = two_channels_world();
+    let c = c.with_endpoints(Endpoints {
+        api: server.url("/api/v10"),
+    });
+    let mut p = payload(&[("channel", "hook0"), ("thread", THREAD)]);
+    p.prompt = Some("hi".into());
+    let e = w.with("dc", |ctx| c.send(ctx, &p)).unwrap_err();
+    assert!(
+        e.message
+            .contains("not in any channel you added a webhook for"),
+        "{}",
+        e.message
+    );
+    assert!(!e.kind.is_retryable());
+    // one webhook only: the sentence is about that channel
+    let one = DiscordConnector::new(model::Discord {
+        mode: DiscordMode::Webhook,
+        shown_as: String::new(),
+        hooks: vec![model::Hook {
+            slot: 0,
+            name: "bugs".into(),
+            server: String::new(),
+        }],
+    })
+    .with_endpoints(Endpoints {
+        api: server.url("/api/v10"),
+    });
+    let e = w.with("dc", |ctx| one.send(ctx, &p)).unwrap_err();
+    assert!(
+        e.message.contains("not in the channel of this webhook"),
+        "{}",
+        e.message
+    );
+}
+
+#[test]
+fn a_post_started_in_a_forum_is_handed_back_by_its_name_for_next_time() {
+    let server = MockServer::start(|req| {
+        if req.path() == hook_path() && req.method == "GET" {
+            return MockResponse::json(200, json!({ "channel_id": FORUM, "guild_id": GUILD }));
+        }
+        if req.path() == hook_path() && req.method == "POST" {
+            return if req.json().get("thread_name").is_some() {
+                MockResponse::json(200, json!({ "id": MESSAGE, "channel_id": THREAD }))
+            } else {
+                MockResponse::json(400, json!({ "code": 220003, "message": "needs a name" }))
+            };
+        }
+        MockResponse::new(404)
+    });
+    let w = hook_world();
+    let mut p = payload(&[("channel", "hook0"), ("title", "[PROJ-1] Crash on save")]);
+    p.prompt = Some("details".into());
+    let out = w
+        .with("dc", |ctx| hooked(&server, "").send(ctx, &p))
+        .unwrap();
+    let place = out.place.unwrap();
+    assert_eq!(place.value, THREAD);
+    assert_eq!(place.label, "[PROJ-1] Crash on save");
+}
+
+#[test]
+fn several_channels_and_nothing_picked_asks_for_the_channel() {
+    let server = MockServer::start(webhook_text);
+    let w = hook_world();
+    let mut p = payload(&[]);
+    p.prompt = Some("hi".into());
+    let e = w
+        .with("dc", |ctx| hooked(&server, "").send(ctx, &p))
+        .unwrap_err();
+    assert!(
+        e.message.contains("Pick the channel to post in"),
+        "{}",
+        e.message
+    );
+    assert!(server.requests().is_empty());
+}

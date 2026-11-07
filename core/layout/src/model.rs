@@ -291,9 +291,23 @@ pub struct DropdownBlock {
     #[serde(default, skip_serializing_if = "is_false")]
     pub optional: bool,
     /// The text block whose words narrow the list while it is shown, so a thread named like the
-    /// title is found at once. Empty: no narrowing.
+    /// title is found at once. Empty: no narrowing. With `deeper`, it narrows that second list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narrow_by: Option<String>,
+    /// Go on after the choice: choose what is inside it (the threads of a Discord channel, the
+    /// posts of a forum). One dropdown then holds the whole path to post in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deeper: Option<Deeper>,
+}
+
+/// The second step of a dropdown's path: a list of what is inside the first choice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Deeper {
+    /// The service's list, asked for as `<list>:<the first choice>`.
+    pub list: String,
+    /// The field of the destination the second choice fills. It is filled by itself: the button
+    /// needs no mapping for it.
+    pub field: String,
 }
 
 impl DropdownBlock {
@@ -305,6 +319,7 @@ impl DropdownBlock {
             remember: true,
             optional: false,
             narrow_by: None,
+            deeper: None,
         }
     }
 }
@@ -592,6 +607,34 @@ mod serde_tests {
         let json = serde_json::to_value(&one).unwrap();
         assert_eq!(json["desktop_from"], "focused_program");
         assert_eq!(serde_json::from_value::<VideoAudio>(json).unwrap(), one);
+    }
+
+    #[test]
+    fn a_dropdown_that_goes_deeper_is_written_with_its_second_list_and_old_files_have_none() {
+        let mut d = DropdownBlock::new(
+            "Where to post",
+            DropdownSource::WebApi {
+                connection_id: "d".into(),
+                options_id: "channels".into(),
+            },
+        );
+        d.deeper = Some(Deeper {
+            list: "threads".into(),
+            field: "thread".into(),
+        });
+        let json = serde_json::to_value(&d).unwrap();
+        assert_eq!(
+            json["deeper"],
+            serde_json::json!({"list": "threads", "field": "thread"})
+        );
+        assert_eq!(serde_json::from_value::<DropdownBlock>(json).unwrap(), d);
+        // a dropdown saved before has no second step, and a plain one writes nothing for it
+        let old: DropdownBlock = serde_json::from_str(
+            r#"{"title":"Channel","source":{"type":"web_api","connection_id":"d","options_id":"channels"}}"#,
+        )
+        .unwrap();
+        assert_eq!(old.deeper, None);
+        assert!(serde_json::to_value(&old).unwrap().get("deeper").is_none());
     }
 
     #[test]
