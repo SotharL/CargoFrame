@@ -279,9 +279,9 @@ async function tauriApi(): Promise<Api> {
 /** Options for the in-memory stand-in: what a share and a list request should do. */
 export type SetupScenario =
   | 'ready'
+  | 'windows_ready'
   | 'windows_missing'
   | 'windows_no_winget'
-  | 'windows_no_loopback'
   | 'windows_no_output'
   | 'linux_missing';
 
@@ -293,8 +293,8 @@ export interface MemoryOptions {
   noFfmpeg?: boolean;
   /** The stand-in's test recording fails. */
   recordingFails?: boolean;
-  /** The stand-in is a Windows PC with no loopback device, so it cannot record the computer's sound. */
-  noLoopback?: boolean;
+  /** The stand-in is a Windows PC (it can record one program's sound, and has no "Stereo Mix"). */
+  windows?: boolean;
   /** The stand-in finds no sound devices at all. */
   noAudio?: boolean;
   /** What the Setup page finds: everything there (the default), or one of the ways it is not. */
@@ -375,7 +375,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   // the Setup page's stand-in: what is installed changes only when the install button is pressed
   let scenario: SetupScenario = opts.setup ?? 'ready';
   let setupChecks = 0;
-  const hasFfmpeg = (s: SetupScenario) => s === 'ready' || s === 'windows_no_loopback' || s === 'windows_no_output';
+  const hasFfmpeg = (s: SetupScenario) => s === 'ready' || s === 'windows_ready' || s === 'windows_no_output';
   let installed = hasFfmpeg(scenario);
   let claudeInstalled = opts.claudeApp !== 'missing';
   let installLeft = 0;
@@ -390,16 +390,14 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     let install: SetupInstall = { type: 'none' };
     const output = (status: SetupItem['status'], detail: string, action: SetupItem['action'] = null): SetupItem => ({
       id: 'sound_output', name: 'Sound output',
-      what_for: "The speakers or headphones this computer plays on. A video takes the computer's sound from it.",
+      what_for: 'The speakers or headphones this computer plays on. A video records what it plays.',
       status, detail, action,
     });
     if (windows) {
       if (scenario === 'windows_no_output') {
         items.push(output('missing', 'Windows has no default playback device: no speakers or headphones are set, or none is plugged in. Plug one in, or choose one in the Windows sound settings (the button).', 'sound_settings'));
-      } else if (scenario === 'windows_no_loopback') {
-        items.push(output('ok', 'Speakers (Realtek(R) Audio). Videos cannot include its sound yet: Windows needs "Stereo Mix" (or a similar loopback device) switched on. Its settings open with the button.', 'sound_settings'));
       } else {
-        items.push(output('ok', installed ? 'Speakers (Realtek(R) Audio). Videos can include its sound.' : 'Speakers (Realtek(R) Audio). Install ffmpeg to check whether videos can include its sound.'));
+        items.push(output('ok', 'Speakers (Realtek(R) Audio). Videos record this sound.', 'sound_settings'));
       }
       // a Claude connection that opens the desktop app makes the app a line of its own
       const opensApp = [...store.connection.values()].some(
@@ -419,7 +417,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           : { type: 'run', label: !installed && claudeMissing ? 'Install what is missing' : installed ? 'Install the Claude app' : 'Install ffmpeg' };
       }
     } else {
-      items.push(output('ok', 'Built-in Audio Analog Stereo. Videos can include its sound.'));
+      items.push(output('ok', 'Built-in Audio Analog Stereo. Videos record this sound.'));
       items.push({ id: 'xdotool', name: 'xdotool', what_for: 'Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).', status: installed ? 'ok' : 'missing', detail: installed ? 'Installed.' : 'Not installed.', action: null });
       if (!installed) install = { type: 'copy', command: 'sudo apt install ffmpeg xdotool' };
     }
@@ -788,11 +786,10 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       if (opts.noAudio) {
         return { os: 'linux', desktop: [], microphone: [], listed: false, note: 'No sound system answered (PulseAudio or PipeWire). Recordings will have no sound.' };
       }
-      if (opts.noLoopback) {
+      if (opts.windows) {
         return {
-          os: 'windows', desktop: [], listed: true,
+          os: 'windows', desktop: [], listed: true, note: null,
           microphone: [{ name: 'Microphone (Realtek(R) Audio)', label: 'Microphone (Realtek(R) Audio)', default: false }],
-          note: 'Windows does not let ffmpeg record the sound of the computer by itself. Turn on "Stereo Mix" in the Windows sound settings (Recording tab, right-click, Show disabled devices) or install a loopback device such as virtual-audio-capturer; until then the sound of the computer is left out.',
         };
       }
       return {

@@ -231,15 +231,18 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
     }
 }
 
-/// Where the window in focus is, as a part of the desktop to record.
-fn focused_area() -> Option<cargoframe_video::recorder::Area> {
+/// The window in focus: where it is, as a part of the desktop to record, and which program it is.
+fn focus() -> Option<video::Focus> {
     let app = cargoframe_capture::focused_app().ok().flatten()?;
     let b = app.bounds;
-    Some(cargoframe_video::recorder::Area {
-        x: b.x,
-        y: b.y,
-        w: b.w,
-        h: b.h,
+    Some(video::Focus {
+        area: cargoframe_video::recorder::Area {
+            x: b.x,
+            y: b.y,
+            w: b.w,
+            h: b.h,
+        },
+        program: app.pid,
     })
 }
 
@@ -265,7 +268,7 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
                 .ok()
                 .flatten()
         });
-    let (wish, mut notes) = video::wish_for(layout.as_ref(), &focused_area);
+    let (wish, mut notes) = video::wish_for(layout.as_ref(), &focus);
     let window = wish.area.is_some();
     let started = state.recording.start_for_trigger(
         &settings,

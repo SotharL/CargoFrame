@@ -219,6 +219,49 @@ fn a_windows_sound_goes_in_by_directshow_by_name() {
 }
 
 #[test]
+fn a_sound_that_cargoframe_listens_to_comes_in_as_raw_samples_over_a_local_connection() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(Capture::Gdigrab, dir.path());
+    cfg.audio = vec![AudioSource {
+        backend: AudioBackend::Pcm {
+            port: 41234,
+            rate: 48_000,
+            channels: 2,
+        },
+        device: String::new(),
+    }];
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    assert!(a.windows(2).any(|w| w == ["-f", "f32le"]));
+    assert_eq!(after(&a, "-ar"), "48000");
+    assert!(a.windows(2).any(|w| w == ["-ac", "2"]));
+    assert!(a.iter().any(|x| x == "tcp://127.0.0.1:41234"));
+    assert!(a.windows(2).any(|w| w == ["-map", "1:a"]));
+}
+
+#[test]
+fn a_loopback_that_has_not_been_set_up_is_left_out_of_the_command() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut cfg = config(Capture::Gdigrab, dir.path());
+    cfg.audio = vec![AudioSource {
+        backend: AudioBackend::Loopback { program: None },
+        device: String::new(),
+    }];
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    for flag in ["-c:a", "-map", "-filter_complex"] {
+        assert!(!a.iter().any(|x| x == flag), "{flag}");
+    }
+    // and it does not use up one of the two places for sounds
+    cfg.audio.push(pulse("a"));
+    cfg.audio.push(pulse("b"));
+    let a = strings(&args(&cfg, &ring));
+    assert!(
+        a.iter().any(|x| x == "amix=inputs=2") || a.iter().any(|x| x.contains("amix=inputs=2"))
+    );
+}
+
+#[test]
 fn two_sounds_are_mixed_into_one_track() {
     let dir = tempfile::tempdir().unwrap();
     let mut cfg = config(
@@ -408,6 +451,111 @@ fn recording_the_screen_for_a_while_gives_a_clip_of_the_last_seconds() {
         })
         .count();
     assert_eq!(left, 0);
+}
+
+/// How long the picture and the sound of a clip are, in seconds.
+fn stream_lengths(ffprobe: &Path, clip: &Path) -> (f64, Option<f64>) {
+    let out = Command::new(ffprobe)
+        .args([
+            "-v",
+            "error",
+            "-show_entries",
+            "stream=codec_type,duration",
+            "-of",
+            "csv=p=0",
+        ])
+        .arg(clip)
+        .output()
+        .unwrap();
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let (mut video, mut audio) = (0.0, None);
+    for line in text.lines() {
+        // "video,3.000000" (the order of the two fields is the order asked for)
+        let mut parts = line.trim().split(',');
+        let a = parts.next().unwrap_or("");
+        let b = parts.next().unwrap_or("");
+        let (kind, secs) = if a == "audio" || a == "video" {
+            (a, b)
+        } else {
+            (b, a)
+        };
+        let secs: f64 = secs.parse().unwrap_or(0.0);
+        match kind {
+            "video" => video = secs,
+            "audio" => audio = Some(secs),
+            _ => {}
+        }
+    }
+    (video, audio)
+}
+
+fn record_with_heard_sound(quiet: bool) -> Option<(f64, Option<f64>)> {
+    use crate::pcm::{tests::Tone, Feed, PcmSource};
+    let (ffmpeg, ffprobe) = find_tools(&[])?;
+    let _one = one_at_a_time();
+    let screen = Screen::start(96)?;
+    let dir = tempfile::tempdir().unwrap();
+    let ring_dir = dir.path().join("ring");
+    fs::create_dir(&ring_dir).unwrap();
+    let feed = Feed::open(move || Ok(Box::new(Tone::new(quiet)) as Box<dyn PcmSource>)).unwrap();
+    let mut cfg = Config::new(
+        ffmpeg.clone(),
+        Capture::X11 {
+            display: screen.display.clone(),
+            size: Some((640, 480)),
+        },
+        ring_dir,
+    );
+    cfg.window = Window::seconds(30);
+    cfg.fps = 15;
+    cfg.audio = vec![AudioSource {
+        backend: AudioBackend::Pcm {
+            port: feed.port(),
+            rate: feed.format().rate,
+            channels: feed.format().channels,
+        },
+        device: String::new(),
+    }];
+    let mut rec = Recorder::start(&cfg).unwrap();
+    rec.keep(Box::new(feed));
+    assert_eq!(rec.early_failure(Duration::from_millis(1500)), None);
+    let began = Instant::now();
+    while began.elapsed() < Duration::from_secs(5) {
+        rec.poll().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let segments = rec.stop(Duration::from_secs(10)).unwrap();
+    let clip = dir.path().join("clip.mp4");
+    assemble(&ffmpeg, &segments, dir.path(), &clip, &|| false).unwrap();
+    drop(segments);
+    Some(stream_lengths(&ffprobe, &clip))
+}
+
+#[test]
+fn a_recording_with_sound_cargoframe_heard_has_a_sound_track_as_long_as_the_picture() {
+    let Some((video, audio)) = record_with_heard_sound(false) else {
+        eprintln!("skipped: ffmpeg or a virtual X screen is missing");
+        return;
+    };
+    let audio = audio.expect("the clip has no sound");
+    assert!(video > 3.0, "{video}");
+    assert!(
+        (audio - video).abs() < 0.6,
+        "picture {video} s, sound {audio} s"
+    );
+}
+
+#[test]
+fn a_computer_that_plays_nothing_still_gives_a_recording_with_a_sound_track() {
+    let Some((video, audio)) = record_with_heard_sound(true) else {
+        eprintln!("skipped: ffmpeg or a virtual X screen is missing");
+        return;
+    };
+    let audio = audio.expect("the clip has no sound");
+    assert!(
+        (audio - video).abs() < 0.6,
+        "picture {video} s, sound {audio} s"
+    );
 }
 
 #[test]

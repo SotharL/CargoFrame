@@ -652,7 +652,7 @@ pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, Str
     .await?
 }
 
-/// Open the Windows sound settings, where Stereo Mix is switched on.
+/// Open the Windows sound settings (the Playback tab).
 #[tauri::command]
 pub fn open_sound_settings() -> Result<(), String> {
     crate::setup::open_sound_settings()

@@ -12,9 +12,9 @@
 //! * **A sound output**: the speakers or headphones the computer plays on, which is where a video's
 //!   computer sound comes from. It is looked up fresh at every check (Windows: the default
 //!   playback device; Linux: PulseAudio's or PipeWire's default sink), and when there is none the
-//!   page says so. On Windows ffmpeg can only record that sound through a loopback device such as
-//!   *Stereo Mix*; CargoFrame cannot add one by a click, so the line says whether there is one and
-//!   opens the Windows sound settings where it is switched on.
+//!   page says so. CargoFrame listens to what that output plays itself (Windows: the sound system's
+//!   loopback; Linux: the monitor of the default sink), so no extra device is needed. On Windows
+//!   the line has a button that opens the sound settings, on the Playback tab, to change it.
 //! * **The Claude desktop app** (Windows): where a Claude connection opens a chat when it is set
 //!   to use the app. It is listed only while such a connection exists, and the same button
 //!   installs it with `winget` (the catalogue's package `Anthropic.Claude`, hash-checked).
@@ -177,8 +177,6 @@ pub struct Probes {
     pub ffmpeg: Result<(PathBuf, String), String>,
     /// Windows' package manager is there.
     pub winget: bool,
-    /// Windows: a loopback device is listed (`None`: could not be asked).
-    pub loopback: Option<bool>,
     /// The default sound output.
     pub output: Output,
     /// Windows: whether the Claude desktop app is installed. `None`: no Claude connection opens
@@ -198,7 +196,7 @@ fn first_sentence(text: &str) -> String {
 }
 
 const SOUND_WHAT_FOR: &str =
-    "The speakers or headphones this computer plays on. A video takes the computer's sound from it.";
+    "The speakers or headphones this computer plays on. A video records what it plays.";
 
 /// The line about the sound output: which device is the default, and what that means for videos.
 fn sound_output_item(os: Os, p: &Probes) -> Item {
@@ -211,19 +209,12 @@ fn sound_output_item(os: Os, p: &Probes) -> Item {
         action,
     };
     match &p.output {
-        Output::Found(name) => {
-            // Windows records the computer's sound through a loopback device only
-            let (note, action) = match (os, p.loopback) {
-                (Os::Windows, Some(true)) => (" Videos can include its sound.", None),
-                (Os::Windows, Some(false)) => (
-                    " Videos cannot include its sound yet: Windows needs \"Stereo Mix\" (or a similar loopback device) switched on. Its settings open with the button.",
-                    Some("sound_settings"),
-                ),
-                (Os::Windows, None) => (" Install ffmpeg to check whether videos can include its sound.", None),
-                _ => (" Videos can include its sound.", None),
-            };
-            line(Status::Ok, format!("{name}.{note}"), action)
-        }
+        Output::Found(name) => line(
+            Status::Ok,
+            format!("{name}. Videos record this sound."),
+            // Windows keeps the choice of output in its own settings
+            (os == Os::Windows).then_some("sound_settings"),
+        ),
         Output::None(why) => line(
             Status::Missing,
             why.clone(),
@@ -548,16 +539,8 @@ fn sound_output(os: Os) -> Output {
 pub fn probe(os: Os, video: &cargoframe_config::Video, wants_claude_app: bool) -> Probes {
     let ffmpeg = crate::video::find(video, crate::video::program_beside_app().as_deref())
         .map(|f| (f.ffmpeg, f.version));
-    let loopback = match (&ffmpeg, os) {
-        (Ok((program, _)), Os::Windows) => {
-            let devices = crate::audio::list(program, os);
-            devices.listed.then_some(!devices.desktop.is_empty())
-        }
-        _ => None,
-    };
     Probes {
         winget: os == Os::Windows && on_path("winget"),
-        loopback,
         output: sound_output(os),
         claude_app: if os == Os::Windows && wants_claude_app {
             claude_app_installed()
@@ -576,13 +559,14 @@ pub fn probe(os: Os, video: &cargoframe_config::Video, wants_claude_app: bool) -
     }
 }
 
-/// Open the Windows sound settings on the Recording tab, where Stereo Mix is switched on.
+/// Open the Windows sound settings on the Playback tab, where the output the computer plays on is
+/// chosen.
 pub fn open_sound_settings() -> Result<(), String> {
     if !cfg!(windows) {
         return Err("This is a Windows setting.".into());
     }
     let mut command = Command::new("control.exe");
-    command.args(["mmsys.cpl,,1"]);
+    command.args(["mmsys.cpl,,0"]);
     command
         .spawn()
         .map(|_| ())

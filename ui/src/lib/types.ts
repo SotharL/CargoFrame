@@ -106,9 +106,14 @@ export type VideoSubject = 'screen' | 'focused_window';
 /** Where one sound comes from: off, the system's own choice, or one device by name. */
 export type AudioChoice = 'off' | 'default' | { device: string };
 
+/** Whose sound "the sound of the computer" is: everything it plays, or the program in focus. */
+export type DesktopSound = 'everything' | 'focused_program';
+
 /** The sounds in a recording: what the computer plays, and what a microphone hears. */
 export interface VideoAudio {
   desktop: AudioChoice;
+  /** With the system's own choice for `desktop`. Left out, it is everything. */
+  desktop_from?: DesktopSound;
   microphone: AudioChoice;
 }
 

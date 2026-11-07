@@ -7,7 +7,7 @@
   import Toggle from '../../lib/components/Toggle.svelte';
   import { getApi } from '../../lib/ipc';
   import { DEFAULT_VIDEO_AUDIO } from '../../lib/types';
-  import type { AudioChoice, AudioDevice, AudioDevices, Block, VideoSubject } from '../../lib/types';
+  import type { AudioChoice, AudioDevice, AudioDevices, Block, DesktopSound, VideoSubject } from '../../lib/types';
 
   let { block }: { block: Extract<Block, { type: 'video' }> } = $props();
 
@@ -37,6 +37,9 @@
     typeof choice !== 'string' && !list.some((d) => d.name === choice.device) ? choice.device : null;
 
   const note = $derived(failed || devices?.note || '');
+  const from = $derived<DesktopSound>(audio.desktop_from ?? 'everything');
+  // one program's sound is only possible on Windows, and only for the system's own choice
+  const canPickProgram = $derived(devices?.os === 'windows' && audio.desktop === 'default');
 </script>
 
 <Field label="Record" hint={subject === 'focused_window' ? 'The window that has the focus when you press the shortcut, as it is placed and sized then. If it cannot be found, the whole screen is recorded.' : ''}>
@@ -59,6 +62,15 @@
     {/if}
   </select>
 </Field>
+
+{#if canPickProgram}
+  <Field label="Sound from" hint={from === 'focused_program' ? 'The program that has the focus when you press the shortcut. If it cannot be found, everything the computer plays is recorded.' : ''}>
+    <select value={from} onchange={(e) => (block.audio = { ...audio, desktop_from: e.currentTarget.value as DesktopSound })}>
+      <option value="everything">Everything the computer plays</option>
+      <option value="focused_program">Only the program in focus</option>
+    </select>
+  </Field>
+{/if}
 
 <Field label="Microphone">
   <select value={toValue(audio.microphone)} onchange={(e) => setAudio('microphone', e.currentTarget.value)}>

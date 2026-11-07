@@ -11,6 +11,8 @@
 pub mod buffer;
 pub mod edit;
 pub mod export;
+pub mod loopback;
+pub mod pcm;
 pub mod recorder;
 pub mod segments;
 

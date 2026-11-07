@@ -96,12 +96,25 @@ pub enum AudioChoice {
     Device(String),
 }
 
+/// Whose sound "the sound of the computer" is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DesktopSound {
+    /// Everything the computer plays.
+    #[default]
+    Everything,
+    /// Only the program that has the focus when the recording starts (Windows only for now).
+    FocusedProgram,
+}
+
 /// The sounds that go into a recording: what the computer plays, and what a microphone hears.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VideoAudio {
     /// The sound of the computer. On by default.
     pub desktop: AudioChoice,
+    /// With the system's own choice for `desktop`: all of it, or one program's.
+    pub desktop_from: DesktopSound,
     /// A microphone. Off by default.
     pub microphone: AudioChoice,
 }
@@ -110,6 +123,7 @@ impl Default for VideoAudio {
     fn default() -> Self {
         Self {
             desktop: AudioChoice::Default,
+            desktop_from: DesktopSound::Everything,
             microphone: AudioChoice::Off,
         }
     }
@@ -542,6 +556,7 @@ mod serde_tests {
                 audio: VideoAudio {
                     desktop: AudioChoice::Off,
                     microphone: AudioChoice::Device("USB Mic".into()),
+                    ..VideoAudio::default()
                 },
                 screenshot_at_end: true,
             }),
@@ -567,6 +582,16 @@ mod serde_tests {
         assert_eq!(v.audio.desktop, AudioChoice::Default);
         assert_eq!(v.audio.microphone, AudioChoice::Default);
         assert_eq!(v.subject, VideoSubject::Screen);
+        // a file from before "whose sound" was asked is the sound of the whole computer
+        assert_eq!(v.audio.desktop_from, DesktopSound::Everything);
+        // and one program's sound is written with a plain name
+        let one = VideoAudio {
+            desktop_from: DesktopSound::FocusedProgram,
+            ..VideoAudio::default()
+        };
+        let json = serde_json::to_value(&one).unwrap();
+        assert_eq!(json["desktop_from"], "focused_program");
+        assert_eq!(serde_json::from_value::<VideoAudio>(json).unwrap(), one);
     }
 
     #[test]

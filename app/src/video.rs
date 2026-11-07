@@ -7,9 +7,10 @@
 //! at once whether another choice works on their PC.
 
 use cargoframe_config::{Video, VideoCapture, VideoEncoder};
-use cargoframe_layout::{BlockKind, Layout, VideoAudio, VideoSubject};
+use cargoframe_layout::{BlockKind, DesktopSound, Layout, VideoAudio, VideoSubject};
+use cargoframe_video::pcm::Feed;
 use cargoframe_video::recorder::{
-    self, Area, AudioSource, Capture, Config, Encoder, Recorder, X264Preset,
+    self, Area, AudioBackend, AudioSource, Capture, Config, Encoder, Recorder, X264Preset,
 };
 use cargoframe_video::{ask, locate_in, plan, probe, run, Crop, Edit, Overlay, Window};
 use serde::{Deserialize, Serialize};
@@ -354,14 +355,25 @@ pub struct Wish {
     pub area: Option<Area>,
     /// The sounds, in the layout's words. `None` records no sound (a test recording has none).
     pub audio: Option<VideoAudio>,
+    /// The program in focus (its process id), when the layout asks for that program's sound.
+    pub program: Option<u32>,
 }
 
-/// What the layout a video trigger opens asks the recording to be. `focused` says where the
-/// window in focus is, when it is asked for. The second part is what the person should be told
-/// about anything that could not be done.
+/// The window that has the focus when a shortcut is pressed.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Focus {
+    pub area: Area,
+    /// The program it belongs to, when the system says.
+    pub program: Option<u32>,
+}
+
+/// What the layout a video trigger opens asks the recording to be. `focused` says which window
+/// is in focus, and is only asked when the layout needs it (the window to record, or the program
+/// whose sound to record). The second part is what the person should be told about anything that
+/// could not be done.
 pub fn wish_for(
     layout: Option<&Layout>,
-    focused: &dyn Fn() -> Option<Area>,
+    focused: &dyn Fn() -> Option<Focus>,
 ) -> (Wish, Vec<String>) {
     let block = layout
         .and_then(|l| {
@@ -372,10 +384,14 @@ pub fn wish_for(
         })
         .unwrap_or_default();
     let mut notes = Vec::new();
+    let wants_program = block.audio.desktop == cargoframe_layout::AudioChoice::Default
+        && block.audio.desktop_from == DesktopSound::FocusedProgram;
+    let wants_window = block.subject == VideoSubject::FocusedWindow;
+    let focus = (wants_window || wants_program).then(focused).flatten();
     let area = match block.subject {
         VideoSubject::Screen => None,
         VideoSubject::FocusedWindow => {
-            match focused() {
+            match focus.map(|f| f.area) {
                 Some(a) if a.even().is_some() => Some(a),
                 Some(_) => {
                     notes.push("The window in focus is too small to record, so the whole screen is recorded.".into());
@@ -392,18 +408,70 @@ pub fn wish_for(
         Wish {
             area,
             audio: Some(block.audio),
+            program: focus.and_then(|f| f.program).filter(|_| wants_program),
         },
         notes,
     )
 }
 
 /// A wish after the computer has been asked what it has.
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[derive(Debug, Clone, Default)]
 pub struct Extras {
     pub area: Option<Area>,
     pub sources: Vec<AudioSource>,
     /// How long to wait to hear that ffmpeg could not open a sound device.
     pub patience: Duration,
+    /// How a sound CargoFrame listens to itself is opened. `None` is the real one (the Windows
+    /// sound system); a test gives a stand-in.
+    pub listen: Option<Listen>,
+}
+
+/// Open a sound CargoFrame listens to itself: the computer's (`None`), or one program's.
+pub type Listen = fn(Option<u32>) -> Result<Feed, String>;
+
+fn listen_to_the_computer(program: Option<u32>) -> Result<Feed, String> {
+    Feed::open(move || cargoframe_video::loopback::open(program))
+}
+
+/// Make ffmpeg inputs of the sounds. The ones CargoFrame listens to itself are opened and come
+/// back as their feeds, to be kept as long as the recording runs; one that cannot be opened is
+/// left out and said, so the picture (and any other sound) still gets recorded.
+fn open_sounds(
+    sources: &[AudioSource],
+    listen: Listen,
+    notes: &mut Vec<String>,
+) -> (Vec<AudioSource>, Vec<Feed>) {
+    let mut inputs = Vec::new();
+    let mut feeds = Vec::new();
+    for source in sources {
+        let AudioBackend::Loopback { program } = source.backend else {
+            inputs.push(source.clone());
+            continue;
+        };
+        match listen(program) {
+            Ok(feed) => {
+                let format = feed.format();
+                inputs.push(AudioSource {
+                    backend: AudioBackend::Pcm {
+                        port: feed.port(),
+                        rate: format.rate,
+                        channels: format.channels,
+                    },
+                    device: source.device.clone(),
+                });
+                feeds.push(feed);
+            }
+            Err(why) => notes.push(format!(
+                "The sound of {} could not be recorded ({why}), so this recording has none of it.",
+                if program.is_some() {
+                    "the program in focus"
+                } else {
+                    "the computer"
+                }
+            )),
+        }
+    }
+    (inputs, feeds)
 }
 
 /// How a recording began: whether it has sound, and what the person should be told about what
@@ -712,9 +780,13 @@ impl Recording {
         let mut notes = Vec::new();
         let sources = match &wish.audio {
             Some(audio) => {
-                let plan = crate::audio::plan(audio, os, crate::audio::pulse_running(), &|| {
-                    crate::audio::list(&found.ffmpeg, os)
-                });
+                let plan = crate::audio::plan(
+                    audio,
+                    os,
+                    crate::audio::pulse_running(),
+                    wish.program,
+                    &|| crate::audio::list(&found.ffmpeg, os),
+                );
                 notes.extend(plan.notes);
                 plan.sources
             }
@@ -724,6 +796,7 @@ impl Recording {
             area: wish.area,
             sources,
             patience: SOUND_PATIENCE,
+            listen: None,
         };
         let mut started =
             self.start_with_extras(found, choice, video, session, work, keep_secs, &extras)?;
@@ -787,9 +860,17 @@ impl Recording {
         let mut cfg = recorder_config(&found, &choice, video, session, &ring);
         cfg.window = Window::seconds(keep_secs);
         cfg.area = extras.area;
-        cfg.audio = extras.sources.clone();
-        let mut recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
         let mut notes = Vec::new();
+        let (inputs, feeds) = open_sounds(
+            &extras.sources,
+            extras.listen.unwrap_or(listen_to_the_computer),
+            &mut notes,
+        );
+        cfg.audio = inputs;
+        let mut recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
+        for feed in feeds {
+            recorder.keep(Box::new(feed));
+        }
         if !cfg.audio.is_empty() {
             // A sound device that is not there ends ffmpeg at once. The picture matters more than
             // the sound, so go on without it, and say so.

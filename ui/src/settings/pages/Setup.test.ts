@@ -55,11 +55,9 @@ describe('Setup', () => {
     expect(screen.queryByRole('button', { name: 'Install ffmpeg' })).toBeNull();
   });
 
-  it('names the default sound output, and is calm when there is no loopback device', async () => {
-    open({ setup: 'windows_no_loopback' });
-    await screen.findByText(/Speakers \(Realtek\(R\) Audio\)\. Videos cannot include its sound yet/, { selector: 'p.detail' });
-    // it is not called missing: the output is there
-    expect(screen.getAllByText('Found').length).toBe(2);
+  it('names the default sound output, says videos record it, and opens the sound settings', async () => {
+    open({ setup: 'windows_ready' });
+    await screen.findByText(/Speakers \(Realtek\(R\) Audio\)\. Videos record this sound\./, { selector: 'p.detail' });
     expect(screen.queryByText(/is missing|are missing/)).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Open the Windows sound settings' }));
     expect(screen.queryByRole('alert')).toBeNull();

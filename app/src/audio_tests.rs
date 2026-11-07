@@ -35,6 +35,7 @@ fn off() -> VideoAudio {
     VideoAudio {
         desktop: AudioChoice::Off,
         microphone: AudioChoice::Off,
+        ..VideoAudio::default()
     }
 }
 
@@ -96,7 +97,7 @@ fn directshow_lists_are_read_in_both_forms_and_loopbacks_are_told_apart() {
 
 #[test]
 fn the_default_sound_on_linux_is_the_monitor_and_no_microphone_unless_asked() {
-    let p = plan(&VideoAudio::default(), Os::Linux, true, &no_listing);
+    let p = plan(&VideoAudio::default(), Os::Linux, true, None, &no_listing);
     assert_eq!(
         p.sources,
         [AudioSource {
@@ -110,9 +111,11 @@ fn the_default_sound_on_linux_is_the_monitor_and_no_microphone_unless_asked() {
         &VideoAudio {
             desktop: AudioChoice::Default,
             microphone: AudioChoice::Default,
+            ..VideoAudio::default()
         },
         Os::Linux,
         true,
+        None,
         &no_listing,
     );
     assert_eq!(
@@ -123,7 +126,7 @@ fn the_default_sound_on_linux_is_the_monitor_and_no_microphone_unless_asked() {
         [DEFAULT_MONITOR, DEFAULT_SOURCE]
     );
 
-    assert!(plan(&off(), Os::Linux, true, &no_listing)
+    assert!(plan(&off(), Os::Linux, true, None, &no_listing)
         .sources
         .is_empty());
 }
@@ -134,9 +137,11 @@ fn a_named_device_is_used_as_it_is_without_asking_the_system() {
         &VideoAudio {
             desktop: AudioChoice::Device("alsa_output.usb.monitor".into()),
             microphone: AudioChoice::Device("USB Mic".into()),
+            ..VideoAudio::default()
         },
         Os::Windows,
         true,
+        None,
         &no_listing,
     );
     assert_eq!(
@@ -154,64 +159,125 @@ fn a_named_device_is_used_as_it_is_without_asking_the_system() {
         &VideoAudio {
             desktop: AudioChoice::Device("X".into()),
             microphone: AudioChoice::Device("X".into()),
+            ..VideoAudio::default()
         },
         Os::Linux,
         true,
+        None,
         &no_listing,
     );
     assert_eq!(p.sources.len(), 1);
 }
 
+fn the_computer() -> AudioSource {
+    AudioSource {
+        backend: AudioBackend::Loopback { program: None },
+        device: "computer".into(),
+    }
+}
+
 #[test]
-fn on_windows_the_default_sound_is_the_loopback_device_and_its_absence_is_said() {
+fn on_windows_the_default_sound_is_what_the_computer_plays_and_needs_no_device() {
+    let p = plan(&VideoAudio::default(), Os::Windows, true, None, &no_listing);
+    assert_eq!(p.sources, [the_computer()]);
+    assert!(p.notes.is_empty());
+
+    // a PC with no "Stereo Mix" gets the same: CargoFrame listens to the sound output itself
+    let none = || parse_dshow("[dshow @ 1] \"Microphone (USB)\" (audio)\n");
+    let p = plan(&VideoAudio::default(), Os::Windows, true, None, &none);
+    assert_eq!(p.sources, [the_computer()]);
+    assert!(p.notes.is_empty());
+}
+
+#[test]
+fn on_windows_the_default_microphone_is_the_first_one_listed_and_its_absence_is_said() {
     let with = || parse_dshow(DSHOW_OLD);
-    let p = plan(&VideoAudio::default(), Os::Windows, true, &with);
+    let ask = VideoAudio {
+        desktop: AudioChoice::Off,
+        microphone: AudioChoice::Default,
+        ..VideoAudio::default()
+    };
+    let p = plan(&ask, Os::Windows, true, None, &with);
+    assert_eq!(p.sources[0].device, "Microphone (Realtek(R) Audio)");
+
+    let p = plan(&ask, Os::Windows, true, None, &|| parse_dshow(""));
+    assert!(p.sources.is_empty());
+    assert_eq!(p.notes, ["No microphone was found."]);
+
+    // both: the computer first, then the microphone
+    let both = VideoAudio {
+        microphone: AudioChoice::Default,
+        ..VideoAudio::default()
+    };
+    let p = plan(&both, Os::Windows, true, None, &with);
+    assert_eq!(p.sources.len(), 2);
+    assert_eq!(p.sources[0], the_computer());
+    assert_eq!(p.sources[1].device, "Microphone (Realtek(R) Audio)");
+}
+
+#[test]
+fn one_programs_sound_is_asked_for_by_the_program_in_focus() {
+    let one = VideoAudio {
+        desktop_from: DesktopSound::FocusedProgram,
+        ..VideoAudio::default()
+    };
+    let p = plan(&one, Os::Windows, true, Some(4242), &no_listing);
     assert_eq!(
         p.sources,
         [AudioSource {
-            backend: AudioBackend::Dshow,
-            device: "Stereo Mix (Realtek(R) Audio)".into()
+            backend: AudioBackend::Loopback {
+                program: Some(4242)
+            },
+            device: "program 4242".into()
         }]
     );
     assert!(p.notes.is_empty());
 
+    // the program in focus is not known: the whole computer is recorded, and the person is told
+    let p = plan(&one, Os::Windows, true, None, &no_listing);
+    assert_eq!(p.sources, [the_computer()]);
+    assert_eq!(p.notes, [PROGRAM_NOT_FOUND]);
+
+    // "everything" ignores the program in focus
     let p = plan(
-        &VideoAudio {
-            desktop: AudioChoice::Off,
-            microphone: AudioChoice::Default,
-        },
+        &VideoAudio::default(),
         Os::Windows,
         true,
-        &with,
+        Some(4242),
+        &no_listing,
     );
-    assert_eq!(p.sources[0].device, "Microphone (Realtek(R) Audio)");
+    assert_eq!(p.sources, [the_computer()]);
 
-    // a PC with no loopback device records without the computer's sound, and says why
-    let none = || parse_dshow("[dshow @ 1] \"Microphone (USB)\" (audio)\n");
-    let p = plan(&VideoAudio::default(), Os::Windows, true, &none);
-    assert!(p.sources.is_empty());
-    assert_eq!(p.notes, [LOOPBACK_MISSING]);
-    assert!(LOOPBACK_MISSING.contains("Stereo Mix"));
+    // a device picked by name is never replaced by a program
+    let named = VideoAudio {
+        desktop: AudioChoice::Device("Stereo Mix".into()),
+        desktop_from: DesktopSound::FocusedProgram,
+        ..VideoAudio::default()
+    };
+    let p = plan(&named, Os::Windows, true, Some(4242), &no_listing);
+    assert_eq!(p.sources[0].backend, AudioBackend::Dshow);
+}
 
-    // and no microphone is said too
-    let p = plan(
-        &VideoAudio {
-            desktop: AudioChoice::Off,
-            microphone: AudioChoice::Default,
-        },
-        Os::Windows,
-        true,
-        &|| parse_dshow(""),
-    );
-    assert_eq!(p.notes, ["No microphone was found."]);
+#[test]
+fn linux_cannot_record_one_program_and_says_so() {
+    let one = VideoAudio {
+        desktop_from: DesktopSound::FocusedProgram,
+        ..VideoAudio::default()
+    };
+    let p = plan(&one, Os::Linux, true, Some(4242), &no_listing);
+    assert_eq!(p.sources.len(), 1);
+    assert_eq!(p.sources[0].device, DEFAULT_MONITOR);
+    assert_eq!(p.notes, [ONE_PROGRAM_ONLY_ON_WINDOWS]);
 }
 
 #[test]
 fn on_an_unsupported_system_sound_is_left_out_with_a_word() {
-    let p = plan(&VideoAudio::default(), Os::Other, true, &no_listing);
+    let p = plan(&VideoAudio::default(), Os::Other, true, None, &no_listing);
     assert!(p.sources.is_empty());
     assert_eq!(p.notes.len(), 1);
-    assert!(plan(&off(), Os::Other, true, &no_listing).notes.is_empty());
+    assert!(plan(&off(), Os::Other, true, None, &no_listing)
+        .notes
+        .is_empty());
 }
 
 #[test]
@@ -226,14 +292,14 @@ fn listing_with_no_ffmpeg_says_so_and_never_panics() {
 
 #[test]
 fn without_a_sound_system_on_linux_nothing_is_asked_of_ffmpeg() {
-    let p = plan(&VideoAudio::default(), Os::Linux, false, &no_listing);
+    let p = plan(&VideoAudio::default(), Os::Linux, false, None, &no_listing);
     assert!(p.sources.is_empty());
     assert_eq!(p.notes, [NO_SOUND_SYSTEM]);
     // a layout that wants no sound has nothing to be told
-    let p = plan(&off(), Os::Linux, false, &no_listing);
+    let p = plan(&off(), Os::Linux, false, None, &no_listing);
     assert!(p.sources.is_empty() && p.notes.is_empty());
     // the check is for Linux only
-    let p = plan(&VideoAudio::default(), Os::Windows, false, &|| {
+    let p = plan(&VideoAudio::default(), Os::Windows, false, None, &|| {
         parse_dshow(DSHOW_OLD)
     });
     assert_eq!(p.sources.len(), 1);
