@@ -920,7 +920,7 @@ single button. Decisions (taken for them, the safest option each time, while the
   window click test), and makes a *draft* release that points at that commit; GitHub creates the tag `v<version>`
   when the owner publishes it. Publishing starts the workflow again through the new tag, which now sees the release
   is already published and does nothing. This was added because the tool that prepared the work was not allowed to
-  push tags.
+  push tags. Running it again refreshes the same draft: the files are replaced and the draft is re-pointed at the commit just built, so publishing it never puts the tag on an older commit than the files.
 
 ### Feedback round, 7 Nov 2026: twelve changes (made while the owner was away; the safest option each time)
 
