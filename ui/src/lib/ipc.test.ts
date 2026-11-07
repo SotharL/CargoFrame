@@ -5,12 +5,14 @@ describe('in-memory backend', () => {
   it('stores settings between calls', async () => {
     const api = memoryApi();
     expect((await api.getGeneral()).theme).toBe('system');
-    await api.setGeneral({ theme: 'dark', memory_mode: 'low_memory', check_updates: false, accent: '#e8590c' });
+    const notifications = { routine: false, problems: true };
+    await api.setGeneral({ theme: 'dark', memory_mode: 'low_memory', check_updates: false, accent: '#e8590c', notifications });
     expect(await api.getGeneral()).toEqual({
       theme: 'dark',
       memory_mode: 'low_memory',
       check_updates: false,
       accent: '#e8590c',
+      notifications,
     });
   });
 

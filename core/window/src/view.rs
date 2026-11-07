@@ -443,6 +443,7 @@ mod tests {
                         placement: TitlePlacement::Above,
                         role: TextRole::Plain,
                         default_text: "{{app.exe}} in {{project.name}} {{rule.missing}}".into(),
+                        formatting: true,
                     }),
                 },
                 Block {

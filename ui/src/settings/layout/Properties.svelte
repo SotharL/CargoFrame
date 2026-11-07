@@ -100,6 +100,15 @@
         <option value="zip_name">Zip name</option>
       </select>
     </Field>
+    {#if block.role === 'plain'}
+      <div class="toggles">
+        <Toggle label="Formatting buttons" checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
+        <p class="quiet hint">
+          Bold, italic, underline, code, quotes and lists above the box, only the ones the service it is sent to can show.
+          They need a button that sends this box as the message of Jira, Slack, Discord, Reddit or Teams.
+        </p>
+      </div>
+    {/if}
     <div class="auto-field">
       <span class="auto-title">Text automation</span>
       <TextAutomation bind:value={block.default_text} {variables} {rules} />
@@ -125,7 +134,7 @@
       {@const [listId, listParam] = splitList(src.options_id)}
       {@const spec = conn?.describe.lists.find((l) => l.id === listId)}
       <Field label="Connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
-        <select bind:value={src.connection_id} onchange={() => (src.options_id = '')}>
+        <select bind:value={src.connection_id} onchange={() => { src.options_id = ''; block.deeper = null; }}>
           <option value="">Choose…</option>
           {#if src.connection_id && !conn}<option value={src.connection_id}>{src.connection_id} (missing)</option>{/if}
           {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
@@ -135,7 +144,7 @@
         <Field label="List" hint={conn.describe.lists.length === 0 ? 'This connection offers no lists.' : ''}>
           <select
             value={listId}
-            onchange={(e) => (src.options_id = e.currentTarget.value)}
+            onchange={(e) => { src.options_id = e.currentTarget.value; block.deeper = null; }}
           >
             <option value="">Choose…</option>
             {#if listId && !spec}<option value={listId}>{listId}</option>{/if}
@@ -152,6 +161,20 @@
           </Field>
         {/if}
       {/if}
+      {#if spec?.inside}
+        {@const inside = spec.inside}
+        <div class="toggles">
+          <Toggle
+            label={`Go on to the ${inside.label.toLowerCase()}`}
+            checked={!!block.deeper}
+            onchange={(v) => (block.deeper = v ? { list: inside.list, field: inside.field } : null)}
+          />
+          <p class="quiet hint">
+            A second box lists what is inside the choice, with “New message or post” first. This is the one place to choose
+            where to post: give the block two rows of height, and no other box is needed for it.
+          </p>
+        </div>
+      {/if}
       <div class="toggles">
         <Toggle label="Remember the last choices" checked={block.remember !== false} onchange={(v) => (block.remember = v)} />
         <p class="quiet hint">The last five go to the top of the list, and it starts on the last one used.</p>
@@ -159,7 +182,12 @@
         <p class="quiet hint">The box can stay empty, or hold something typed or pasted that is not in the list.</p>
       </div>
       {#if textBlocks.length > 0}
-        <Field label="Narrow the list by" hint="Only the choices with this text in their name are shown, for example a thread named like the title.">
+        <Field
+          label="Narrow the list by"
+          hint={block.deeper
+            ? 'Only the threads with this text in their name are shown, so one named like the title is easy to find.'
+            : 'Only the choices with this text in their name are shown, for example a thread named like the title.'}
+        >
           <select
             value={block.narrow_by ?? ''}
             onchange={(e) => (block.narrow_by = e.currentTarget.value || null)}

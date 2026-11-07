@@ -82,4 +82,20 @@ describe('collectShare', () => {
     const req = collectShare(view, { ...button, prompt_block_id: 'prompt' }, values, false);
     expect(promptIsEmpty(req)).toBe(true);
   });
+
+  it('sends the second step of a path that goes deeper, only once its first choice is made', async () => {
+    const view = await demoSession();
+    const button = view.layout!.blocks.find((b) => b.id === 'send') as Sharing;
+    const where = view.layout!.blocks.find((b) => b.id === 'proj')!;
+    Object.assign(where, { deeper: { list: 'threads', field: 'thread' } });
+    const values = initialValues(view);
+    values.dropdowns['proj'] = 'C1';
+    // nothing picked inside the channel: an explicit "none", a new post
+    expect(collectShare(view, button, values, false).deeper).toEqual({ proj: null });
+    values.deeper['proj'] = { value: ' 987 ', label: 'Slow start' };
+    expect(collectShare(view, button, values, false).deeper).toEqual({ proj: '987' });
+    // no channel, no thread
+    values.dropdowns['proj'] = null;
+    expect(collectShare(view, button, values, false).deeper).toEqual({});
+  });
 });

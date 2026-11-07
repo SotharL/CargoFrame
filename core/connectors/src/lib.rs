@@ -15,6 +15,7 @@ pub mod model;
 pub mod oauth;
 pub mod payload;
 pub mod reddit;
+pub mod richtext;
 pub mod secrets;
 pub mod slack;
 pub mod teams;
@@ -51,6 +52,20 @@ pub struct ListSpec {
     pub label: String,
     /// The list needs a value after the colon (`components:PROJ`), such as a project key.
     pub param: Option<&'static str>,
+    /// What can be chosen *inside* each choice of this list (the threads of a Discord channel),
+    /// so one dropdown can go as deep as the person wants.
+    pub inside: Option<InsideSpec>,
+}
+
+/// A list of what is inside a choice of another list, and the field that takes the choice.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct InsideSpec {
+    /// The list, asked for as `<list>:<the choice it is inside>`.
+    pub list: &'static str,
+    /// The field of the destination the choice fills.
+    pub field: &'static str,
+    /// What the person calls it ("Thread or post").
+    pub label: &'static str,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq, Default)]

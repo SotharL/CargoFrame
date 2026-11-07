@@ -226,6 +226,7 @@ mod tests {
                         placement: Default::default(),
                         role: Default::default(),
                         default_text: "{{rule.build}} {{project.name}} {{rule.build}}".into(),
+                        formatting: true,
                     }),
                 },
                 Block {

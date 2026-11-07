@@ -78,7 +78,13 @@ sleep 0.5
 kill -0 "$app_pid" 2>/dev/null || fail "CargoFrame exited at start-up"
 
 # Keep the focus on the fake program, then press the shortcut as a person would.
-fake_win="$(xdotool search --pid "$fake_pid" | head -n1)"
+# The program says "ready" a moment before its window is on the screen, so wait for the window.
+fake_win=""
+for _ in $(seq 50); do
+  fake_win="$(xdotool search --pid "$fake_pid" 2>/dev/null | head -n1 || true)"
+  [ -n "$fake_win" ] && break
+  sleep 0.1
+done
 [ -n "$fake_win" ] || fail "no window for the fake program"
 # There is no window manager here, so nothing composites the screen: raise the program above
 # the Settings window that opens at launch when there is no tray, or the capture would show it.

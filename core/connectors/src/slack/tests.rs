@@ -573,3 +573,16 @@ fn it_describes_what_a_button_can_fill() {
     assert_eq!(d.fields[0].list, Some("channels"));
     assert_eq!(d.lists[0].id, "channels");
 }
+
+#[test]
+fn the_message_is_written_in_slacks_own_marks_and_stays_escaped() {
+    let mut p = Payload::default();
+    p.fields.push(Field::text(
+        "message",
+        "**Crash** on _save_? *twice* with `x < y` <!channel>\n- one\n1. first\n__no underline__",
+    ));
+    assert_eq!(
+        compose(&p),
+        "*Crash* on _save_? _twice_ with `x < y` &lt;!channel&gt;\n• one\n1. first\nno underline"
+    );
+}

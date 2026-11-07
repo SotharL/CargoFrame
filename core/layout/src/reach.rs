@@ -467,6 +467,7 @@ mod tests {
                 placement: TitlePlacement::Above,
                 role,
                 default_text: String::new(),
+                formatting: true,
             }),
         )
     }

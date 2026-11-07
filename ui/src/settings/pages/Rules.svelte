@@ -1,16 +1,20 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
-  import GuideLink from '../guide/GuideLink.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import { layoutsUsingRule, usedIn } from '../usage';
+  import { isTextQuery, readBetween } from '../between';
+  import TextBetween from './TextBetween.svelte';
   import type { Layout, Rule, RuleFormat, RuleTest } from '../../lib/types';
 
   const rules = createItems<Rule>('rule');
   const layouts = createItems<Layout>('layout');
-  let draft = $state<{ id: string | null; value: Rule; useFallback: boolean } | null>(null);
+  /** `between` is the text before and after the value; `lines` is the reader's other instructions. */
+  type TextMode = 'between' | 'lines';
+  let draft = $state<{ id: string | null; value: Rule; useFallback: boolean; textMode: TextMode; key: number } | null>(null);
+  let drafts = 0;
   let formError = $state('');
   let confirming = $state<string | null>(null);
   let busy = $state(false);
@@ -18,16 +22,16 @@
   let test = $state<RuleTest | null>(null);
   let testing = $state(false);
 
-  const FORMATS: { value: RuleFormat; label: string; query: string; help: string }[] = [
-    { value: 'json', label: 'JSON', query: 'version', help: 'A path: version, build.number, items[0].name, items[*].id' },
-    { value: 'yaml', label: 'YAML', query: 'app.version', help: 'A path, like JSON: app.version, services[0].image' },
-    { value: 'toml', label: 'TOML', query: 'package.version', help: 'A path, like JSON: package.version, tool.poetry.name' },
-    { value: 'ini', label: 'INI', query: 'build.number', help: 'section.key, or just key for lines before the first section' },
-    { value: 'csv', label: 'CSV', query: 'name', help: 'A column name from the header row, or a column number (1 is the first)' },
-    { value: 'xml', label: 'XML', query: 'project/version', help: 'Element names separated by /, ending in @attribute if you want one. //name finds it at any depth' },
-    { value: 'text', label: 'Text or log file (.txt, .log)', query: 'tail: 20', help: 'One instruction: line: 3, line: -1 (the last line), lines: 5-9, head: 20, tail: 20, contains: timeout, after: Version:, between: build= | ; (what sits between two texts), or level: error, warn' },
-    { value: 'regex', label: 'Text pattern (regex)', query: 'version = "(.+?)"', help: 'A regular expression. The value is the first (group), or the whole match when there is none. Use “Build the value from groups” for more' },
-    { value: 'file', label: 'Any file: size, date, lines, fingerprint', query: 'size', help: 'name, size, size: human, modified, modified: date, lines, or sha256 (sha256: short for 12 characters). Works on any file, not only text' },
+  const FORMATS: { value: RuleFormat; label: string; ask: string; query: string; help: string }[] = [
+    { value: 'json', ask: 'Path to the value', label: 'JSON', query: 'version', help: 'A path: version, build.number, items[0].name, items[*].id' },
+    { value: 'yaml', ask: 'Path to the value', label: 'YAML', query: 'app.version', help: 'A path, like JSON: app.version, services[0].image' },
+    { value: 'toml', ask: 'Path to the value', label: 'TOML', query: 'package.version', help: 'A path, like JSON: package.version, tool.poetry.name' },
+    { value: 'ini', ask: 'Section and key', label: 'INI', query: 'build.number', help: 'section.key, or just key for lines before the first section' },
+    { value: 'csv', ask: 'Column', label: 'CSV', query: 'name', help: 'A column name from the header row, or a column number (1 is the first)' },
+    { value: 'xml', ask: 'Element', label: 'XML', query: 'project/version', help: 'Element names separated by /, ending in @attribute if you want one. //name finds it at any depth' },
+    { value: 'text', ask: 'Instruction', label: 'Text or log file (.txt, .log)', query: 'tail: 20', help: 'One instruction: line: 3, line: -1 (the last line), lines: 5-9, head: 20, tail: 20, contains: timeout, or level: error, warn' },
+    { value: 'regex', ask: 'Pattern', label: 'Text pattern (regex)', query: 'version = "(.+?)"', help: 'A regular expression. The value is the first (group), or the whole match when there is none. Use “Build the value from groups” for more' },
+    { value: 'file', ask: 'Detail of the file', label: 'Any file: size, date, lines, fingerprint', query: 'size', help: 'name, size, size: human, modified, modified: date, lines, or sha256 (sha256: short for 12 characters). Works on any file, not only text' },
   ];
   const format = (f: RuleFormat) => FORMATS.find((x) => x.value === f)!;
 
@@ -40,12 +44,15 @@
   function add() {
     formError = '';
     test = null;
-    draft = { id: null, value: blank(), useFallback: false };
+    draft = { id: null, value: blank(), useFallback: false, textMode: 'between', key: ++drafts };
   }
   function edit(id: string, r: Rule) {
     formError = '';
     test = null;
-    draft = { id, value: { ...r }, useFallback: r.fallback !== null };
+    draft = {
+      id, value: { ...r }, useFallback: r.fallback !== null,
+      textMode: readBetween(r.query) ? 'between' : 'lines', key: ++drafts,
+    };
   }
 
   async function save() {
@@ -99,6 +106,13 @@
     if (picked) testFolder = picked;
   }
 
+  /** A new format: a path from another format means nothing to the text reader, so it starts over. */
+  function formatChanged() {
+    if (!draft || draft.value.format !== 'text') return;
+    if (!isTextQuery(draft.value.query)) draft.value.query = '';
+    draft.textMode = readBetween(draft.value.query) ? 'between' : 'lines';
+  }
+
   async function remove(id: string) {
     await rules.remove(id);
     confirming = null;
@@ -106,7 +120,6 @@
 </script>
 
 <div class="page">
-  <div class="guide-link"><GuideLink tour="data-from-files" /></div>
   {#if rules.failure}<Chip kind="err" label={rules.failure} />{/if}
   {#each rules.problems as p (p)}<Chip kind="warn" label={`Could not read a file-value file: ${p}`} />{/each}
 
@@ -116,7 +129,7 @@
       <p class="quiet">
         CargoFrame can read one value out of a file in the project folder, such as the version in
         package.json or the last line of a log, and give it a name. You then use that name in a text
-        block, or pick it as the source for a destination field.
+        block, or pick it as the source for an extra field.
       </p>
       <p class="example">
         Example: read <code>version</code> from <code>package.json</code>, call it “version”, and write
@@ -163,13 +176,25 @@
         <input type="text" bind:value={draft.value.file} placeholder={draft.value.format === 'text' ? 'logs/*.log' : 'package.json'} />
       </Field>
       <Field label="Format" tour="rules.format">
-        <select bind:value={draft.value.format}>
+        <select bind:value={draft.value.format} onchange={formatChanged}>
           {#each FORMATS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
         </select>
       </Field>
-      <Field label="Look for" tour="rules.query" hint={format(draft.value.format).help}>
-        <input type="text" bind:value={draft.value.query} placeholder={format(draft.value.format).query} />
-      </Field>
+      {#if draft.value.format === 'text'}
+        <Field label="Find it" hint="Between two pieces of text covers most files. The other way reads lines by position, or the ones with a word or a log level.">
+          <select bind:value={draft.textMode} onchange={() => (draft!.value.query = '')}>
+            <option value="between">Between two pieces of text</option>
+            <option value="lines">By line, word or log level</option>
+          </select>
+        </Field>
+      {/if}
+      {#if draft.value.format === 'text' && draft.textMode === 'between'}
+        {#key draft.key}<TextBetween bind:query={draft.value.query} name={draft.value.name} />{/key}
+      {:else}
+        <Field label={format(draft.value.format).ask} tour="rules.query" hint={format(draft.value.format).help}>
+          <input type="text" bind:value={draft.value.query} placeholder={format(draft.value.format).query} />
+        </Field>
+      {/if}
       {#if draft.value.format === 'regex'}
         <Field label="Build the value from groups" hint="Optional. $1 and $2 are the pattern's (groups), ${'{'}name{'}'} a named one, $0 the whole match: for example $1.$2. Empty gives the first group.">
           <input type="text" bind:value={draft.value.output} placeholder="$1.$2" />
@@ -195,10 +220,10 @@
           </Field>
         {/if}
       {/if}
-      {#if draft.value.format === 'text'}
+      {#if draft.value.format === 'text' && draft.textMode === 'lines'}
         <p class="quiet small">
           Several lines at once: choose “Join them all” (for example tail: 20, joined with \n). A file
-          larger than the limit is read from its end for tail:, line: -1, contains:, after: and level:,
+          larger than the limit is read from its end for tail:, line: -1, contains: and level:,
           and from its start for head:, line: 3 and lines:.
         </p>
       {/if}
@@ -250,7 +275,6 @@
 </div>
 
 <style>
-  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; }
   .empty, .card, .editor {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;

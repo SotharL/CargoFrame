@@ -716,3 +716,16 @@ fn the_settings_are_checked_before_they_are_saved() {
     assert_eq!(model::Kind::Teams.secret_names(), &["oauth"]);
     assert!(model::Kind::Teams.typed_secrets().is_empty());
 }
+
+#[test]
+fn the_message_is_written_as_teams_html_and_stays_escaped() {
+    let p = payload(&[(
+        "message",
+        "**Crash** on *save* <b>x</b>\n- one\n- two\n> seen\n__urgent__ `a&b`",
+    )]);
+    assert_eq!(
+        compose(&p, false, false).html,
+        "<p><b>Crash</b> on <i>save</i> &lt;b&gt;x&lt;/b&gt;</p><ul><li>one</li><li>two</li></ul>\
+         <blockquote>seen</blockquote><p><u>urgent</u> <code>a&amp;b</code></p>"
+    );
+}

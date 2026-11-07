@@ -1,11 +1,19 @@
 import type { SessionView } from '../lib/types';
 
+/** The second step of a path: empty `value` is "start something new", else a post's id or link. */
+export interface DeeperPick {
+  value: string;
+  label: string;
+}
+
 /** What the person has typed or chosen in the window so far. */
 export interface FormValues {
   /** Text block id to its current text. */
   texts: Record<string, string>;
   /** Dropdown block id to the chosen option value. */
   dropdowns: Record<string, string | null>;
+  /** Dropdown block id to its second step, for a dropdown that goes deeper. */
+  deeper: Record<string, DeeperPick>;
   /** Files block id to the ticked file paths. */
   files: Record<string, string[]>;
 }
@@ -20,7 +28,7 @@ export function initialValues(view: SessionView): FormValues {
   for (const [id, f] of Object.entries(view.files)) {
     files[id] = f.entries.filter((e) => e.selected).map((e) => e.path);
   }
-  return { texts, dropdowns, files };
+  return { texts, dropdowns, deeper: {}, files };
 }
 
 export function formatSize(bytes: number): string {

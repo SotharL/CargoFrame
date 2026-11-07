@@ -20,7 +20,7 @@ describe('General settings', () => {
     await screen.findByRole('heading', { name: 'Safety' });
     await screen.findByRole('heading', { name: 'Export and import' });
     const titles = [...document.querySelectorAll('section > h2')].map((h) => h.textContent);
-    expect(titles).toEqual(['Appearance', 'Startup', 'Safety', 'Export and import', 'Files', 'Performance', 'Updates']);
+    expect(titles).toEqual(['Appearance', 'Startup', 'Notifications', 'Safety', 'Export and import', 'Your data', 'Performance', 'Updates']);
   });
 
   it('shows what the memory setting is doing to each window', async () => {

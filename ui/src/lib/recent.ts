@@ -2,13 +2,17 @@
 // last one used and show the recent ones first. Only values and labels are kept, never secrets.
 
 export const KEEP = 5;
+const PREFIX = 'cargoframe.recent.';
 
 export interface Recent {
   value: string;
   label: string;
 }
 
-const key = (layoutId: string, blockId: string) => `cargoframe.recent.${layoutId}.${blockId}`;
+/** Where the posts used inside one choice are kept: a channel has its own, not shared with others. */
+export const deeperKey = (blockId: string, parent: string) => `${blockId}@${parent}`;
+
+const key = (layoutId: string, blockId: string) => `${PREFIX}${layoutId}.${blockId}`;
 
 export function recentChoices(layoutId: string | null | undefined, blockId: string): Recent[] {
   if (!layoutId) return [];
@@ -31,5 +35,32 @@ export function remember(layoutId: string | null | undefined, blockId: string, c
     localStorage.setItem(key(layoutId, blockId), JSON.stringify(next));
   } catch {
     /* storage can be unavailable: the list simply starts on its first entry */
+  }
+}
+
+
+/** Forget every remembered choice (Settings, General, Your data). Returns how many lists went. */
+export function forgetRecent(): number {
+  try {
+    const mine: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(PREFIX)) mine.push(k);
+    }
+    for (const k of mine) localStorage.removeItem(k);
+    return mine.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** How many dropdowns have remembered choices. */
+export function remembered(): number {
+  try {
+    let n = 0;
+    for (let i = 0; i < localStorage.length; i++) if (localStorage.key(i)?.startsWith(PREFIX)) n++;
+    return n;
+  } catch {
+    return 0;
   }
 }

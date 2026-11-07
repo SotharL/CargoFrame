@@ -96,12 +96,25 @@ pub enum AudioChoice {
     Device(String),
 }
 
+/// Whose sound "the sound of the computer" is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DesktopSound {
+    /// Everything the computer plays.
+    #[default]
+    Everything,
+    /// Only the program that has the focus when the recording starts (Windows only for now).
+    FocusedProgram,
+}
+
 /// The sounds that go into a recording: what the computer plays, and what a microphone hears.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct VideoAudio {
     /// The sound of the computer. On by default.
     pub desktop: AudioChoice,
+    /// With the system's own choice for `desktop`: all of it, or one program's.
+    pub desktop_from: DesktopSound,
     /// A microphone. Off by default.
     pub microphone: AudioChoice,
 }
@@ -110,6 +123,7 @@ impl Default for VideoAudio {
     fn default() -> Self {
         Self {
             desktop: AudioChoice::Default,
+            desktop_from: DesktopSound::Everything,
             microphone: AudioChoice::Off,
         }
     }
@@ -146,6 +160,10 @@ pub struct TextBlock {
     /// Initial content; may use `{{variables}}`.
     #[serde(default)]
     pub default_text: String,
+    /// Offer bold, italic, code, lists and the like above a plain text box, for the services that
+    /// can show them. A block that is not plain text never has them.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub formatting: bool,
 }
 
 /// Where a value for an info-type field comes from.
@@ -277,9 +295,23 @@ pub struct DropdownBlock {
     #[serde(default, skip_serializing_if = "is_false")]
     pub optional: bool,
     /// The text block whose words narrow the list while it is shown, so a thread named like the
-    /// title is found at once. Empty: no narrowing.
+    /// title is found at once. Empty: no narrowing. With `deeper`, it narrows that second list.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub narrow_by: Option<String>,
+    /// Go on after the choice: choose what is inside it (the threads of a Discord channel, the
+    /// posts of a forum). One dropdown then holds the whole path to post in.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub deeper: Option<Deeper>,
+}
+
+/// The second step of a dropdown's path: a list of what is inside the first choice.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Deeper {
+    /// The service's list, asked for as `<list>:<the first choice>`.
+    pub list: String,
+    /// The field of the destination the second choice fills. It is filled by itself: the button
+    /// needs no mapping for it.
+    pub field: String,
 }
 
 impl DropdownBlock {
@@ -291,6 +323,7 @@ impl DropdownBlock {
             remember: true,
             optional: false,
             narrow_by: None,
+            deeper: None,
         }
     }
 }
@@ -455,6 +488,7 @@ mod serde_tests {
                         placement: TitlePlacement::Inside,
                         role: TextRole::Prompt,
                         default_text: "Look at {{app.title}}".into(),
+                        formatting: true,
                     }),
                 },
                 Block {
@@ -542,6 +576,7 @@ mod serde_tests {
                 audio: VideoAudio {
                     desktop: AudioChoice::Off,
                     microphone: AudioChoice::Device("USB Mic".into()),
+                    ..VideoAudio::default()
                 },
                 screenshot_at_end: true,
             }),
@@ -567,6 +602,44 @@ mod serde_tests {
         assert_eq!(v.audio.desktop, AudioChoice::Default);
         assert_eq!(v.audio.microphone, AudioChoice::Default);
         assert_eq!(v.subject, VideoSubject::Screen);
+        // a file from before "whose sound" was asked is the sound of the whole computer
+        assert_eq!(v.audio.desktop_from, DesktopSound::Everything);
+        // and one program's sound is written with a plain name
+        let one = VideoAudio {
+            desktop_from: DesktopSound::FocusedProgram,
+            ..VideoAudio::default()
+        };
+        let json = serde_json::to_value(&one).unwrap();
+        assert_eq!(json["desktop_from"], "focused_program");
+        assert_eq!(serde_json::from_value::<VideoAudio>(json).unwrap(), one);
+    }
+
+    #[test]
+    fn a_dropdown_that_goes_deeper_is_written_with_its_second_list_and_old_files_have_none() {
+        let mut d = DropdownBlock::new(
+            "Where to post",
+            DropdownSource::WebApi {
+                connection_id: "d".into(),
+                options_id: "channels".into(),
+            },
+        );
+        d.deeper = Some(Deeper {
+            list: "threads".into(),
+            field: "thread".into(),
+        });
+        let json = serde_json::to_value(&d).unwrap();
+        assert_eq!(
+            json["deeper"],
+            serde_json::json!({"list": "threads", "field": "thread"})
+        );
+        assert_eq!(serde_json::from_value::<DropdownBlock>(json).unwrap(), d);
+        // a dropdown saved before has no second step, and a plain one writes nothing for it
+        let old: DropdownBlock = serde_json::from_str(
+            r#"{"title":"Channel","source":{"type":"web_api","connection_id":"d","options_id":"channels"}}"#,
+        )
+        .unwrap();
+        assert_eq!(old.deeper, None);
+        assert!(serde_json::to_value(&old).unwrap().get("deeper").is_none());
     }
 
     #[test]
@@ -672,5 +745,20 @@ mod serde_tests {
     fn an_unknown_block_type_is_an_error_not_a_silent_drop() {
         let text = r#"{"blocks":[{"id":"x","type":"hologram","rect":{"x":0,"y":0,"w":1,"h":1}}]}"#;
         assert!(serde_json::from_str::<Layout>(text).is_err());
+    }
+    #[test]
+    fn a_text_block_offers_formatting_unless_it_is_switched_off() {
+        let plain: TextBlock = serde_json::from_str(r#"{"title": "Note"}"#).unwrap();
+        assert!(plain.formatting);
+        // the default is not written, so older files stay as they were
+        assert!(!serde_json::to_string(&plain)
+            .unwrap()
+            .contains("formatting"));
+        let off: TextBlock =
+            serde_json::from_str(r#"{"title": "Note", "formatting": false}"#).unwrap();
+        assert!(!off.formatting);
+        assert!(serde_json::to_string(&off)
+            .unwrap()
+            .contains("\"formatting\":false"));
     }
 }

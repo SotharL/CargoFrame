@@ -1,6 +1,6 @@
 # Design
 
-How CargoFrame is built today (7 Nov 2026). It is a short map, not a manual: for why a choice was
+How CargoFrame is built today (7 Nov 2026, after the second feedback round). It is a short map, not a manual: for why a choice was
 made read [decisions.md](decisions.md), for what has been tried on real machines read [status.md](status.md).
 
 ## What it is
@@ -32,7 +32,8 @@ shortcut ─▶ which window is in focus? ─▶ capture (picture, or start/stop
 - **Project folder** (`core/context`): climb the path to a folder with the same name as the program, else one
   folder above. Only files a data rule allows are read, and never outside that folder.
 - **Data rules** (`core/rules`): read a value from JSON, YAML, TOML, INI, CSV, XML, a regular expression, or a line
-  of a text or log file. The value fills `{{variables}}` in text boxes and dropdowns.
+  of a text or log file. The value fills `{{variables}}` in text boxes and dropdowns. In Settings a text value is
+  described as *Text before it, The value, Text after it*; the pattern is built from those two texts.
 - **Sharing** (`app/src/share.rs`, `core/connectors`): builds one `Payload` (picture, optional still screenshot,
   video, files zip, texts, dropdown choices) from what each button's blocks are ticked to send, then hands it to the connector.
 - **Safe fallback** (`core/safe`, `core/bundle`): a failed send is retried with backoff; if it still fails, a zip of
@@ -61,6 +62,10 @@ a backup. Secrets (tokens, passwords, webhook links) are **not** in these files;
 **Last choices** in a dropdown (the last five, the newest first) are kept in the window's own local storage,
 per layout and block: values and labels only, never secrets.
 
+**Your data** (Settings, General) lists what the program keeps in its two folders (settings; work in progress, kept zips,
+logs, updates), clears each kind, or resets everything (settings, connections, sign-ins, data; never the program or the
+person's own folder for saved zips). `app/src/cleanup.rs` is the only code that deletes, and only inside those folders.
+
 ## The CargoFrame window and layouts
 
 A **layout** is a grid of blocks: Screenshot, Video, Text, Dropdown, Files, and up to five sharing buttons. Ready-made
@@ -72,9 +77,15 @@ until you press *Save as my layout*.
   Services that take both (Jira, Slack, Discord, Google, and the local zip) get the video and the still; Teams, Reddit,
   Claude and Custom take pictures only, so there the screenshot is sent if the video box is unticked.
 - **Tick boxes** on each block say which buttons send it. Dashed = this destination cannot take it; ring = required.
-- **Dropdowns** can come from a destination (Jira projects, Discord servers, ...). A dropdown can **narrow by**
-  another one (server, then category, then channel or forum), be **optional** (skipped level), and **remember**
-  its last choices. A dropdown on a destination with no list takes a typed or pasted value.
+- **Where to post is one dropdown per connection.** It is a path: server, then category (optional), then channel or
+  forum, and then, inside that, a **thread or post** (`deeper`: *New* first, the ones used before, the listed ones, a
+  pasted link; long lists are searched and narrowed to titles like the Title text). The window starts on the last path
+  used. Other dropdowns (Jira priority, ...) come from a destination too, can be **optional** and **remember** their
+  last choices. A destination with no list takes a typed or pasted value. The builder refuses a second path dropdown for
+  the same connection.
+- **Text blocks** (plain text) have formatting buttons: bold, italic, underline, code, quote, bullets, numbers. The text
+  is kept in one neutral markup and each connector converts it (`core/connectors/src/richtext.rs`); a box sent to
+  several services offers only the buttons all of them can show, and a layout can switch the buttons off.
 
 ## Connections
 
@@ -87,15 +98,16 @@ names a service.
 | Jira Cloud / Server | E-mail and API token / personal access token | An issue or a comment, with the picture, still, video and files | Yes |
 | Google | OAuth, the person's own Desktop client | Drive upload, optional Sheets row | Yes |
 | Slack | Bot token (`xoxb-`) | A message with files, in a channel | Yes |
-| Discord | **A webhook link per channel (no bot)**, or a bot token as a last resort | A message with files; a forum post by title; a reply in a thread | Yes (size limit of the server) |
+| Discord | **A webhook link per channel (no bot)**, or a bot token as a last resort | A message with files; a new forum post; a reply in a thread (sent through the webhook of the thread's own channel) | Yes (size limit of the server) |
 | Reddit | OAuth, the person's own app | A post with the picture | No |
 | Teams | OAuth through the person's own Entra app (work or school) | A message | No |
 | Claude | None: opens a chat by link and pastes | The picture, files and prompt, into the Claude desktop app or the browser | No |
 | Custom API | Header or token | Any HTTPS endpoint, with the fields you define | No |
 
 - **Discord without a bot.** A webhook is made in the channel's settings and pasted once. It cannot list servers,
-  channels or threads, so those are typed, or pasted as a link (*Copy Link* in Discord). A forum is posted to by
-  *thread name* (a title convention such as `[PROJ-123] short title`), and an existing thread by its link.
+  channels or threads, so the channels are the links added, and threads are the ones posted to before or a pasted link
+  (*Copy Link* in Discord). A forum is posted to by *thread name* (a title convention such as `[PROJ-123] short title`).
+  A bot token lists servers, categories, channels and threads.
   Posting through the person's own Discord account is **not** built: it breaks Discord's terms and risks the account.
 - **Get the token.** Next to each sign-in field a button opens the service's own page (`ui/src/lib/connectorHelp.ts`
   is the only place those addresses live).
@@ -110,24 +122,28 @@ names a service.
 `core/video` runs **ffmpeg** (the one optional program) to keep a ring of short segments, so a press of the shortcut
 keeps the last seconds (10 by default). The window plays the clip, trims it (timeline handles), crops it and puts
 one ring with a text on it; the export is cut by ffmpeg. Sound of the computer and a microphone are optional; if
-a sound device is missing the recording goes on without it and says why. Windows' computer sound needs a loopback
-device (Stereo Mix).
+a sound device is missing the recording goes on without it and says why. On Linux ffmpeg reads PulseAudio's monitor of
+the default output. On Windows ffmpeg cannot hear what the computer plays, so `core/video/src/loopback.rs` does (WASAPI
+loopback): everything the computer plays, or only the program in focus, and passes the samples to ffmpeg through a local
+feed (`pcm.rs`). No device has to be switched on.
 
 ## Setup, installer and updates
 
 - **Installer:** a window with one button (*Install*, or *Update*), per user, no administrator password, and it
   opens CargoFrame on the Setup page.
 - **Settings, Setup** (top half): what CargoFrame uses on this computer (ffmpeg, the sound output, the Claude
-  app, `xdotool` on Linux), with one install button on Windows (winget, fixed arguments, one at a time). The
-  **default sound output** is read from Windows when the page opens. **Connections** are the lower half of the
-  same page.
+  app, `xdotool` on Linux), with one install button on Windows (winget, fixed arguments, one at a time). The checks
+  run each time the page opens: a spinner on each row, then a tick or a warning; the details fold away until the row is
+  opened. The **default sound output** is named from Windows. **Connections** are the lower half of the same page.
+- **Notifications:** two switches in General (routine, problems), because a notice can end up inside a recording.
 - **Updates:** a manual "check for updates" against GitHub (a read-only token while the repository is private); a
   daily check is off by default.
 
 ## The in-app guide
 
-`ui/src/settings/guide/` is a small data-driven tour: `tours.ts` lists, for each connector and for *first capture*,
-*Data from files* and *Destination fields*, a few steps of `{page, field, one short sentence}`. The guide opens the
+`ui/src/settings/guide/` is a small data-driven tour, opened from **Guides** in the Settings menu (there are no "show me
+how" links on the pages): `tours.ts` lists, for each connector and for *first capture*,
+*Data from files* and *Extra fields*, a few steps of `{page, field, one short sentence}`. The guide opens the
 right page, scrolls to the field (found by its `data-tour` attribute), draws a box in the accent colour around it and
 shows the sentence. A test fails if a step names a field that no longer exists, so the guides cannot silently go stale.
 
@@ -153,13 +169,17 @@ The gate (`scripts/dev/check.sh all`) checks the size budgets and runs a real ca
 | Whole program | A fake program on a virtual X11 screen is captured by the real binary (`scripts/e2e/`) |
 | Installers | Windows: silent install, upgrade, uninstall, and a click test of the real window |
 | Guides | `tours.test.ts` (fields exist) and `walk.test.ts` (every step can be walked) |
+| Commands | `shipped_config_tests` (every command is registered, listed in `build.rs` and given to a window) |
 
 One command runs the local gate: `scripts/dev/check.sh quick|rust|all`. GitHub minutes are used in batches,
 not on every change.
 
 ## Known limits
 
-- Not yet run on a real Windows or Linux desktop, nor against real accounts; see [status.md](status.md).
+- Not yet run on a real Windows or Linux desktop, nor against real accounts; see [status.md](status.md). In
+  particular the Windows sound capture (compiled on CI, tested on Linux with a fake source) and Discord threads
+  (tested against a mock) need one run on a real PC.
+- Text colour is not offered: only Jira and Teams could show it.
 - Wayland "active window" may not be possible on some compositors (the fallback is the screen under the cursor).
 - The installer and the program inside it are not signed yet.
 - Twitter/X, BlueSky and Instagram are planned for a later version.

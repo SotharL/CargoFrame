@@ -38,6 +38,7 @@ export function collectShare(
     prompt,
     texts,
     dropdowns: keep(values.dropdowns),
+    deeper: deeperOf(view, values),
     files: keep(values.files),
     image_edited: imageEdited,
     still,
@@ -45,6 +46,16 @@ export function collectShare(
     send_blocks: sendBlocks,
     save_here: nowhereToPost(view, button, values) || undefined,
   };
+}
+
+/** The second step of each dropdown that goes deeper and has a first choice: "" is a new post. */
+function deeperOf(view: SessionView, values: FormValues): Record<string, string | null> {
+  const out: Record<string, string | null> = {};
+  for (const b of view.layout?.blocks ?? []) {
+    if (b.type !== 'dropdown' || !b.deeper || !values.dropdowns[b.id]) continue;
+    out[b.id] = values.deeper[b.id]?.value.trim() || null;
+  }
+  return out;
 }
 
 /**

@@ -11,6 +11,7 @@ use crate::error::{from_net, from_response, invalid};
 use crate::model;
 use crate::oauth::{self, ClientAuth, OAuthClient};
 use crate::payload::{OptionItem, Payload, SendOutcome};
+use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use cargoframe_net::{check_url, Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
@@ -171,8 +172,8 @@ impl Connector for RedditConnector {
                 f("spoiler", "Spoiler", "true to mark it", None),
             ],
             lists: vec![
-                ListSpec { id: "subscribed".into(), label: "My subscribed subreddits".into(), param: None },
-                ListSpec { id: "flairs".into(), label: "Flairs of a subreddit".into(), param: Some("subreddit") },
+                ListSpec { id: "subscribed".into(), label: "My subscribed subreddits".into(), param: None, inside: None },
+                ListSpec { id: "flairs".into(), label: "Flairs of a subreddit".into(), param: Some("subreddit"), inside: None },
             ],
             summary: "Posts the screenshot as an image post, or the text as a self post, or a link. Files cannot be attached on Reddit.".into(),
         }
@@ -295,7 +296,9 @@ impl Connector for RedditConnector {
         let text = payload
             .value("text")
             .map(str::to_string)
-            .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()));
+            .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
+            // bold, italic, code, quotes and lists in Reddit's markdown (see `richtext`)
+            .map(|t| render(&t, Style::Reddit));
 
         let mut notes = Vec::new();
         if payload.files_zip.is_some() {
@@ -484,6 +487,7 @@ impl Connector for RedditConnector {
             summary,
             url,
             notes,
+            place: None,
         })
     }
 }

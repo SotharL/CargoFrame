@@ -1,12 +1,15 @@
-//! The one notification shown when CargoFrame starts. Clicking it opens Settings.
+//! The notifications CargoFrame shows (a Windows toast, a Linux notification). Settings, General
+//! can switch off the routine ones and the ones about problems, since a notice can show up inside
+//! a recording of the screen.
 
-use tauri::AppHandle;
+use cargoframe_config::{General, Notifications};
+use tauri::{AppHandle, Manager};
 
 const TITLE: &str = "CargoFrame is running";
 const BODY: &str = "Click here to edit settings.";
 
 #[cfg(windows)]
-pub fn launched(app: &AppHandle) {
+fn show_launched(app: &AppHandle) {
     use tauri_winrt_notification::{Duration, Toast};
 
     // An installed build shows the toast under its own identity. A debug build has no Start
@@ -32,7 +35,7 @@ pub fn launched(app: &AppHandle) {
 }
 
 #[cfg(target_os = "linux")]
-pub fn launched(app: &AppHandle) {
+fn show_launched(app: &AppHandle) {
     use notify_rust::{Notification, Timeout};
 
     let handle = app.clone();
@@ -58,11 +61,55 @@ pub fn launched(app: &AppHandle) {
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-pub fn launched(_app: &AppHandle) {}
+fn show_launched(_app: &AppHandle) {}
+
+#[derive(Clone, Copy)]
+enum Kind {
+    Routine,
+    Problem,
+}
+
+/// Whether a kind of notice is on in `choice`.
+fn permits(choice: &Notifications, kind: Kind) -> bool {
+    match kind {
+        Kind::Routine => choice.routine,
+        Kind::Problem => choice.problems,
+    }
+}
+
+/// The settings are read each time: a switch changed a moment ago already counts.
+fn allowed(app: &AppHandle, kind: Kind) -> bool {
+    let choice = app
+        .try_state::<crate::state::AppState>()
+        .and_then(|state| state.store.load_or_default::<General>().ok())
+        .map(|general| general.notifications)
+        .unwrap_or_default();
+    permits(&choice, kind)
+}
+
+/// "CargoFrame is running", shown when it starts. Clicking it opens Settings.
+pub fn launched(app: &AppHandle) {
+    if allowed(app, Kind::Routine) {
+        show_launched(app);
+    }
+}
 
 /// A short notice that something went wrong (a capture failed). No click action.
-#[cfg(windows)]
 pub fn problem(app: &AppHandle, title: &str, body: &str) {
+    if allowed(app, Kind::Problem) {
+        show(app, title, body);
+    }
+}
+
+/// A short notice that is not a problem (a recording has started, a share went through).
+pub fn info(app: &AppHandle, title: &str, body: &str) {
+    if allowed(app, Kind::Routine) {
+        show(app, title, body);
+    }
+}
+
+#[cfg(windows)]
+fn show(app: &AppHandle, title: &str, body: &str) {
     use tauri_winrt_notification::{Duration, Toast};
     let app_id = if cfg!(debug_assertions) {
         Toast::POWERSHELL_APP_ID.to_string()
@@ -80,7 +127,7 @@ pub fn problem(app: &AppHandle, title: &str, body: &str) {
 }
 
 #[cfg(target_os = "linux")]
-pub fn problem(_app: &AppHandle, title: &str, body: &str) {
+fn show(_app: &AppHandle, title: &str, body: &str) {
     use notify_rust::{Notification, Timeout};
     let (title, body) = (title.to_string(), body.to_string());
     std::thread::spawn(move || {
@@ -98,12 +145,7 @@ pub fn problem(_app: &AppHandle, title: &str, body: &str) {
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
-pub fn problem(_app: &AppHandle, _title: &str, _body: &str) {}
-
-/// A short notice that is not a problem (a recording has started). Shown like `problem`.
-pub fn info(app: &AppHandle, title: &str, body: &str) {
-    problem(app, title, body);
-}
+fn show(_app: &AppHandle, _title: &str, _body: &str) {}
 
 /// "A newer version is available". Clicking it opens Settings, General, where Updates is.
 #[cfg(windows)]
@@ -159,3 +201,25 @@ pub fn update_available(app: &AppHandle, version: &str) {
 
 #[cfg(not(any(windows, target_os = "linux")))]
 pub fn update_available(_app: &AppHandle, _version: &str) {}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn each_kind_of_notice_follows_its_own_switch() {
+        let all = Notifications::default();
+        assert!(permits(&all, Kind::Routine) && permits(&all, Kind::Problem));
+        let quiet = Notifications {
+            routine: false,
+            problems: true,
+        };
+        assert!(!permits(&quiet, Kind::Routine));
+        assert!(permits(&quiet, Kind::Problem));
+        let none = Notifications {
+            routine: false,
+            problems: false,
+        };
+        assert!(!permits(&none, Kind::Routine) && !permits(&none, Kind::Problem));
+    }
+}

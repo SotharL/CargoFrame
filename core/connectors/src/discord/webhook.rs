@@ -14,6 +14,16 @@ use cargoframe_net::{Body, Method, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
 
+/// What came of one post through a webhook.
+enum Posted {
+    /// Discord took it.
+    Done(Value),
+    /// The channel is a forum and wants a post name.
+    NeedsName,
+    /// Discord does not know that thread in this webhook's channel.
+    WrongChannel,
+}
+
 /// What Discord says about a webhook: the server and channel it posts in.
 struct HookInfo {
     guild: Option<String>,
@@ -35,21 +45,47 @@ impl DiscordConnector {
         parse_webhook(&raw).map_err(invalid)
     }
 
-    /// The channel a share is for: the one picked (`hook3`), else the only one there is.
-    fn hook_for(&self, chosen: Option<&str>) -> Result<&model::Hook, SendError> {
+    /// The channels a share may go to, the likeliest first: the one picked (`hook3`), else the
+    /// only one there is. A thread is not told which channel it is in, so when one is given the
+    /// other channels come after, and the first that knows the thread is the one used.
+    fn hooks_for(
+        &self,
+        chosen: Option<&str>,
+        thread: bool,
+    ) -> Result<Vec<&model::Hook>, SendError> {
         let hooks = &self.settings.hooks;
-        match chosen {
-            Some(c) => c
-                .strip_prefix("hook")
-                .and_then(|n| n.parse::<u8>().ok())
-                .and_then(|slot| hooks.iter().find(|h| h.slot == slot))
-                .ok_or_else(|| invalid("Pick one of the channels you added a webhook for")),
+        let first = match chosen {
+            Some(c) => Some(
+                c.strip_prefix("hook")
+                    .and_then(|n| n.parse::<u8>().ok())
+                    .and_then(|slot| hooks.iter().find(|h| h.slot == slot))
+                    .ok_or_else(|| invalid("Pick one of the channels you added a webhook for"))?,
+            ),
             None => match hooks.as_slice() {
-                [one] => Ok(one),
-                [] => Err(not_set_up("Discord has no channel yet: open Connections and add a webhook")),
-                _ => Err(invalid("Pick the channel to post in: map one to the field \"channel\" on the sharing button")),
+                [] => {
+                    return Err(not_set_up(
+                        "Discord has no channel yet: open Connections and add a webhook",
+                    ))
+                }
+                [one] => Some(one),
+                // several channels and nothing picked: only a thread can say where to post
+                _ if thread => None,
+                _ => {
+                    return Err(invalid(
+                        "Pick the channel to post in with the \"Where to post\" dropdown",
+                    ))
+                }
             },
+        };
+        let mut out: Vec<&model::Hook> = first.into_iter().collect();
+        if thread {
+            out.extend(
+                hooks
+                    .iter()
+                    .filter(|h| Some(h.slot) != first.map(|f| f.slot)),
+            );
         }
+        Ok(out)
     }
 
     fn hook_request(&self, ctx: &Ctx, method: Method, path: &str) -> Request {
@@ -70,7 +106,8 @@ impl DiscordConnector {
     }
 
     /// One post through a webhook. A forum channel answers a plain post with "a forum needs a
-    /// post name"; that is a clean refusal, so the caller may try again with a name. Once Discord
+    /// post name", and a thread of another channel with "unknown channel"; both are clean
+    /// refusals, so the caller may try again (with a name, in another channel). Once Discord
     /// might have taken the post, it is never sent again.
     fn hook_post(
         &self,
@@ -80,7 +117,7 @@ impl DiscordConnector {
         post_name: Option<&str>,
         content: &str,
         files: &[&Attachment],
-    ) -> Result<Option<Value>, SendError> {
+    ) -> Result<Posted, SendError> {
         let mut path = format!("/webhooks/{}/{}?wait=true", link.0, link.1);
         if let Some(t) = thread {
             path.push_str(&format!("&thread_id={t}"));
@@ -112,13 +149,16 @@ impl DiscordConnector {
         };
         let resp = ctx.http.send(&req).map_err(|e| unknown(from_net(&e)))?;
         if resp.is_success() {
-            return Ok(Some(resp.json().unwrap_or(Value::Null)));
+            return Ok(Posted::Done(resp.json().unwrap_or(Value::Null)));
         }
         let code = resp
             .json()
             .and_then(|v| v.get("code").and_then(Value::as_i64));
         if code == Some(220003) && post_name.is_none() && thread.is_none() {
-            return Ok(None);
+            return Ok(Posted::NeedsName);
+        }
+        if code == Some(10003) && thread.is_some() {
+            return Ok(Posted::WrongChannel);
         }
         let err = discord_error(&resp, "post the message");
         Err(match err.kind {
@@ -133,41 +173,59 @@ impl DiscordConnector {
         payload: &Payload,
         files: &[&Attachment],
     ) -> Result<SendOutcome, SendError> {
-        let hook = self.hook_for(payload.value("channel"))?;
-        let link = self.hook_link(ctx, hook.slot)?;
         let thread = payload
             .value("thread")
             .map(|t| parse_place(t).map_err(invalid))
             .transpose()?;
+        let candidates = self.hooks_for(payload.value("channel"), thread.is_some())?;
         let (content, cut) = compose(payload, true);
         if content.is_empty() && files.is_empty() {
             return Err(invalid(
                 "There is nothing to send to Discord: no text, no screenshot and no files",
             ));
         }
-        // Asks Discord where the webhook posts (for the link back), and finds out early when the
-        // webhook has been deleted.
-        let info = self.hook_info(ctx, &link.0, &link.1)?;
-
         let mut notes = Vec::new();
         if cut {
             notes.push(format!(
                 "The message was cut to Discord's {MAX_CONTENT} characters"
             ));
         }
-        let (posted, started) =
+        // The first channel that takes the post. Only a thread is ever tried in more than one:
+        // a refusal for it ("unknown channel") means the thread is somewhere else, and nothing
+        // was posted.
+        let mut taken = None;
+        for hook in &candidates {
+            let link = self.hook_link(ctx, hook.slot)?;
+            // Asks Discord where the webhook posts (for the link back), and finds out early when
+            // the webhook has been deleted.
+            let info = self.hook_info(ctx, &link.0, &link.1)?;
             match self.hook_post(ctx, &link, thread.as_deref(), None, &content, files)? {
-                Some(v) => (v, false),
-                None => {
+                Posted::Done(v) => {
+                    taken = Some((v, false, link, info));
+                    break;
+                }
+                Posted::NeedsName => {
                     // A forum: the first message of a new post has no bold title line; its name does that.
                     let (body, _) = compose(payload, false);
                     let name = post_name(payload);
-                    let v = self
-                        .hook_post(ctx, &link, None, Some(&name), &body, files)?
-                        .ok_or_else(|| invalid("Discord would not start a post in that channel"))?;
-                    (v, true)
+                    let Posted::Done(v) =
+                        self.hook_post(ctx, &link, None, Some(&name), &body, files)?
+                    else {
+                        return Err(invalid("Discord would not start a post in that channel"));
+                    };
+                    taken = Some((v, true, link, info));
+                    break;
                 }
-            };
+                Posted::WrongChannel => {}
+            }
+        }
+        let Some((posted, started, _link, info)) = taken else {
+            return Err(invalid(if candidates.len() > 1 {
+                "That thread is not in any channel you added a webhook for. A webhook can only post in threads of its own channel: add a webhook for the thread's channel in Connections, or pick another thread"
+            } else {
+                "That thread is not in the channel of this webhook. A webhook can only post in threads of its own channel: pick that channel, or another thread"
+            }));
+        };
         let place = posted
             .get("channel_id")
             .and_then(Value::as_str)
@@ -187,12 +245,30 @@ impl DiscordConnector {
             "Posted to Discord"
         }
         .to_string();
+        // A webhook cannot list threads, so the ones it posted in are handed back to be offered
+        // next time. A post it started is known by its name; a thread that was pasted, by its end.
+        let remembered = if started {
+            Some(OptionItem::new(&place, post_name(payload)))
+        } else {
+            thread.as_deref().map(|t| {
+                let end: String = t
+                    .chars()
+                    .rev()
+                    .take(4)
+                    .collect::<Vec<_>>()
+                    .into_iter()
+                    .rev()
+                    .collect();
+                OptionItem::new(t, format!("Thread …{end}"))
+            })
+        };
         ctx.progress.set("discord.summary", &summary);
         ctx.progress.set("discord.url", &url);
         Ok(SendOutcome {
             summary,
             url: Some(url),
             notes,
+            place: remembered,
         })
     }
 }

@@ -12,7 +12,6 @@ fn probes() -> Probes {
     Probes {
         ffmpeg: found(),
         winget: true,
-        loopback: Some(true),
         output: Output::Found("Speakers (Realtek(R) Audio)".into()),
         claude_app: None,
         xdotool: true,
@@ -37,7 +36,6 @@ fn a_ready_windows_pc_has_nothing_to_install() {
 fn without_ffmpeg_windows_offers_one_button_that_installs_it() {
     let p = Probes {
         ffmpeg: missing(),
-        loopback: None,
         ..probes()
     };
     let r = report(Os::Windows, &p, false, None);
@@ -54,7 +52,8 @@ fn without_ffmpeg_windows_offers_one_button_that_installs_it() {
     // the sound output does not depend on ffmpeg; only whether videos can use it does
     let sound = item(&r, "sound_output");
     assert_eq!(sound.status, Status::Ok);
-    assert!(sound.detail.contains("Install ffmpeg"));
+    // videos need ffmpeg, which has its own line: this one is only about the output
+    assert!(!sound.detail.contains("ffmpeg"));
 }
 
 #[test]
@@ -62,7 +61,6 @@ fn without_winget_the_button_says_what_to_do_instead() {
     let p = Probes {
         ffmpeg: missing(),
         winget: false,
-        loopback: None,
         ..probes()
     };
     let Install::Manual { text } = report(Os::Windows, &p, false, None).install else {
@@ -75,34 +73,19 @@ fn without_winget_the_button_says_what_to_do_instead() {
 }
 
 #[test]
-fn a_pc_with_no_loopback_device_still_has_a_sound_output_and_offers_the_sound_settings() {
-    let p = Probes {
-        loopback: Some(false),
-        ..probes()
-    };
-    let r = report(Os::Windows, &p, false, None);
-    let sound = item(&r, "sound_output");
-    // the output is there: that is what was asked, and it is not "missing"
-    assert_eq!(sound.status, Status::Ok);
-    assert!(sound.detail.starts_with("Speakers (Realtek(R) Audio)."));
-    // what videos can do with it is said, with the way to fix it
-    assert!(sound.detail.contains("Stereo Mix"));
-    assert_eq!(sound.action, Some("sound_settings"));
-    assert_eq!(r.missing, 0);
-    // nothing winget can fix: the button does not claim to
-    assert_eq!(r.install, Install::None);
-}
-
-#[test]
 fn the_default_sound_output_is_named_and_videos_are_told_they_can_use_it() {
     let r = report(Os::Windows, &probes(), false, None);
     let sound = item(&r, "sound_output");
     assert_eq!(sound.status, Status::Ok);
     assert_eq!(
         sound.detail,
-        "Speakers (Realtek(R) Audio). Videos can include its sound."
+        "Speakers (Realtek(R) Audio). Videos record this sound."
     );
-    assert_eq!(sound.action, None);
+    // Windows keeps the choice of output in its own settings: one button to change it
+    assert_eq!(sound.action, Some("sound_settings"));
+    // Linux has no window to open from here
+    let r = report(Os::Linux, &probes(), false, None);
+    assert_eq!(item(&r, "sound_output").action, None);
 }
 
 #[test]
@@ -199,7 +182,6 @@ fn every_check_asks_the_computer_again() {
 fn an_install_in_progress_or_failed_is_shown_and_a_stale_failure_is_not() {
     let p = Probes {
         ffmpeg: missing(),
-        loopback: None,
         ..probes()
     };
     assert_eq!(
@@ -231,7 +213,6 @@ fn linux_gets_one_command_for_everything_missing() {
         ffmpeg: missing(),
         xdotool: false,
         winget: false,
-        loopback: None,
         ..probes()
     };
     let r = report(Os::Linux, &all, false, None);

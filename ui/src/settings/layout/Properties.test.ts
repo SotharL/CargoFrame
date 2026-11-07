@@ -61,8 +61,53 @@ describe('Properties: a dropdown fed by a service', () => {
     expect(screen.queryByLabelText('Narrow the list by')).toBeNull();
   });
 
+  it('can go on to what is inside the choice, when the service has something inside it', async () => {
+    const discord = {
+      ...jira, id: 'chat', kind: 'discord',
+      describe: {
+        summary: '', fields: [],
+        lists: [{ id: 'channels', label: 'Channels', param: null, inside: { list: 'threads', field: 'thread', label: 'Thread or post' } }],
+      },
+    } as unknown as ConnectionView;
+    const block = dropdown({ source: { type: 'web_api', connection_id: 'chat', options_id: 'channels' } }) as Block & { deeper?: unknown };
+    render(Properties, {
+      block, blocks: [block], rules: [], infoTypes: [], connections: [discord], variables: [], issues: [],
+      onrect: () => true, onremove: () => {},
+    });
+    const box = screen.getByRole('switch', { name: 'Go on to the thread or post' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(block.deeper).toEqual({ list: 'threads', field: 'thread' });
+    await fireEvent.click(box);
+    expect(block.deeper).toBeNull();
+  });
+
+  it('offers no second step for a list with nothing inside its choices', () => {
+    open(dropdown());
+    expect(screen.queryByRole('switch', { name: /Go on to/ })).toBeNull();
+  });
+
   it('keeps these options off a list of Claude chats, which have their own order', () => {
     open(dropdown({ source: { type: 'claude_chats' } }));
     expect(screen.queryByRole('switch', { name: 'Remember the last choices' })).toBeNull();
   });
 });
+
+describe('Properties: a text block', () => {
+  it('offers the formatting buttons for plain text, on unless switched off', async () => {
+    const block = { ...title, role: 'plain' } as Block & { formatting?: boolean };
+    open(block);
+    const box = screen.getByRole('switch', { name: 'Formatting buttons' }) as HTMLInputElement;
+    expect(box.checked).toBe(true);
+    await fireEvent.click(box);
+    expect(block.formatting).toBe(false);
+    await fireEvent.click(box);
+    expect(block.formatting).toBe(true);
+  });
+
+  it('has no formatting for a prompt or a zip name', () => {
+    open({ ...title, role: 'prompt' } as Block);
+    expect(screen.queryByRole('switch', { name: 'Formatting buttons' })).toBeNull();
+  });
+});
+

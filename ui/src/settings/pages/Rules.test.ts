@@ -62,7 +62,7 @@ describe('Rules: live preview', () => {
     await openForm();
     await type(fileInput(), 'package.json');
     await screen.findByText('Found', {}, WAIT);
-    await type(screen.getByLabelText('Look for'), 'version');
+    await type(screen.getByLabelText('Path to the value'), 'version');
     await waitFor(() => expect(calls.length).toBe(2), WAIT);
     await fireEvent.change(screen.getByLabelText('Format'), { target: { value: 'file' } });
     await waitFor(() => expect(calls.length).toBe(3), WAIT);
@@ -144,7 +144,7 @@ describe('Rules: the new choices', () => {
     await type(screen.getByLabelText('Name'), 'Build');
     await type(fileInput(), 'build.log');
     await fireEvent.change(screen.getByLabelText('Format'), { target: { value: 'regex' } });
-    await type(screen.getByLabelText('Look for'), 'v(\\d+)\\.(\\d+)');
+    await type(screen.getByLabelText('Pattern'), 'v(\\d+)\\.(\\d+)');
     await type(screen.getByLabelText('Build the value from groups'), '$1.$2');
     await fireEvent.change(screen.getByLabelText('If there are several values'), { target: { value: 'nth' } });
     await type(screen.getByLabelText('Which one'), '-1');
@@ -155,3 +155,85 @@ describe('Rules: the new choices', () => {
     expect(Number(saved.nth)).toBe(-1);
   });
 });
+
+describe('Rules: a value between two pieces of text', () => {
+  async function textForm() {
+    await openForm();
+    await type(screen.getByLabelText('Name'), 'Build number');
+    await type(fileInput(), 'build.log');
+    await fireEvent.change(screen.getByLabelText('Format'), { target: { value: 'text' } });
+  }
+  const saved = async () => (await api.listItems<Rule>('rule')).items[0]!.item;
+  const save = () => fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+
+  it('asks for the text before and the text after, with the name of the value in between', async () => {
+    await textForm();
+    expect(screen.getByLabelText('Text before it')).toBeTruthy();
+    expect(screen.getByLabelText('Text after it')).toBeTruthy();
+    expect(screen.getByText('Build number', { selector: '.chip' })).toBeTruthy();
+    // the instruction box of the other formats is not there
+    expect(screen.queryByLabelText('Instruction')).toBeNull();
+  });
+
+  it('reads to the end of the line when nothing is written after', async () => {
+    await textForm();
+    await type(screen.getByLabelText('Text before it'), 'Version:');
+    await save();
+    await waitFor(async () => expect((await api.listItems<Rule>('rule')).items.length).toBe(1), WAIT);
+    expect(await saved()).toMatchObject({ format: 'text', query: 'after: Version:' });
+  });
+
+  it('reads up to the text after, which can be several lines on', async () => {
+    await textForm();
+    await type(screen.getByLabelText('Text before it'), 'BEGIN');
+    await type(screen.getByLabelText('Text after it'), 'END');
+    expect(screen.getByText(/the value can then run\s+over several lines/)).toBeTruthy();
+    await save();
+    await waitFor(async () => expect((await api.listItems<Rule>('rule')).items.length).toBe(1), WAIT);
+    expect((await saved()).query).toBe('between: BEGIN | END');
+  });
+
+  it('tries the rule as the boxes change', async () => {
+    await textForm();
+    await type(screen.getByLabelText('Text before it'), 'Version:');
+    await waitFor(() => expect(calls.at(-1)?.query).toBe('after: Version:'), WAIT);
+  });
+
+  it('asks for the text before first, and refuses a bar, which tells the two texts apart', async () => {
+    await textForm();
+    expect(screen.getByText(/Write the text that comes just before the value/)).toBeTruthy();
+    await type(screen.getByLabelText('Text before it'), 'a|b');
+    expect(screen.getByRole('alert').textContent).toContain('bar');
+  });
+
+  it('shows a saved rule in the boxes, and leaves the other instructions to the line reader', async () => {
+    await api.saveItem('rule', 'build', { name: 'Build', file: 'build.log', format: 'text', query: 'between: build= | ;', multiple: 'first', separator: ', ', nth: 1, output: '', fallback: null, max_bytes: 1048576 });
+    await api.saveItem('rule', 'tail', { name: 'Tail', file: 'a.log', format: 'text', query: 'tail: 20', multiple: 'join', separator: '\\n', nth: 1, output: '', fallback: null, max_bytes: 1048576 });
+    render(Rules);
+    const edits = await screen.findAllByRole('button', { name: 'Edit' });
+    await fireEvent.click(edits[0]!);
+    expect((screen.getByLabelText('Text before it') as HTMLInputElement).value).toBe('build=');
+    expect((screen.getByLabelText('Text after it') as HTMLInputElement).value).toBe(';');
+    await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    await fireEvent.click((await screen.findAllByRole('button', { name: 'Edit' }))[1]!);
+    expect((screen.getByLabelText('Instruction') as HTMLInputElement).value).toBe('tail: 20');
+    expect(screen.queryByLabelText('Text before it')).toBeNull();
+  });
+
+  it('can switch to the other ways to find a line, and back', async () => {
+    await textForm();
+    await fireEvent.change(screen.getByLabelText('Find it'), { target: { value: 'lines' } });
+    await type(screen.getByLabelText('Instruction'), 'tail: 5');
+    await waitFor(() => expect(calls.at(-1)?.query).toBe('tail: 5'), WAIT);
+    await fireEvent.change(screen.getByLabelText('Find it'), { target: { value: 'between' } });
+    expect((screen.getByLabelText('Text before it') as HTMLInputElement).value).toBe('');
+  });
+
+  it('drops a path left over from another format instead of treating it as an instruction', async () => {
+    await openForm();
+    await type(screen.getByLabelText('Path to the value'), 'build.number');
+    await fireEvent.change(screen.getByLabelText('Format'), { target: { value: 'text' } });
+    expect((screen.getByLabelText('Text before it') as HTMLInputElement).value).toBe('');
+  });
+});
+

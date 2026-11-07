@@ -67,12 +67,24 @@ describe('VideoOptions', () => {
     expect(seen.now.audio).toEqual({ desktop: 'default', microphone: { device: 'Studio mic' } });
   });
 
-  it('says why the computer\'s sound is missing on a Windows PC with no loopback device', async () => {
-    open(fresh(), { noLoopback: true });
-    await waitFor(() => expect(screen.getByRole('note').textContent).toContain('Stereo Mix'));
-    expect(screen.queryByRole('option', { name: /Monitor of/ })).toBeNull();
-    // the microphone is still there to pick
-    expect(screen.getByRole('option', { name: 'Microphone (Realtek(R) Audio)' })).toBeTruthy();
+  it('on Windows the computer\'s sound needs no device, and one program\'s can be asked for', async () => {
+    const seen = open(fresh(), { windows: true });
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Microphone (Realtek(R) Audio)' })).toBeTruthy());
+    // nothing is said to be missing: "Stereo Mix" is not needed
+    expect(screen.queryByRole('note')).toBeNull();
+    expect(select('Sound from').value).toBe('everything');
+    await fireEvent.change(select('Sound from'), { target: { value: 'focused_program' } });
+    expect(seen.now.audio).toEqual({ desktop: 'default', desktop_from: 'focused_program', microphone: 'off' });
+    expect(screen.getByText(/If it cannot be found, everything the computer plays is recorded/)).toBeTruthy();
+    // a device picked by name is that device's sound, so there is no program to choose
+    await fireEvent.change(select('Sound of the computer'), { target: { value: 'off' } });
+    expect(screen.queryByLabelText('Sound from')).toBeNull();
+  });
+
+  it('does not offer one program\'s sound where it cannot be recorded', async () => {
+    open(fresh());
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Monitor of Built-in Audio Analog Stereo' })).toBeTruthy());
+    expect(screen.queryByLabelText('Sound from')).toBeNull();
   });
 
   it('says so when no sound system answers, and the choices still work', async () => {

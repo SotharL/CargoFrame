@@ -1,4 +1,5 @@
 use super::*;
+use cargoframe_video::pcm::{PcmFormat, PcmSource};
 use cargoframe_video::{locate, Crop};
 use std::fs;
 use std::process::{Child, Command, Stdio};
@@ -911,7 +912,7 @@ fn layout_with(video: cargoframe_layout::VideoBlock) -> Layout {
 #[test]
 fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
     use cargoframe_layout::{AudioChoice, VideoBlock, VideoSubject};
-    let never = || -> Option<Area> { panic!("the window in focus was looked for when not asked") };
+    let never = || -> Option<Focus> { panic!("the window in focus was looked for when not asked") };
     // no layout, or no video block: the whole screen, with the computer's sound
     let (wish, notes) = wish_for(None, &never);
     assert_eq!(wish.area, None);
@@ -927,6 +928,7 @@ fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
         audio: VideoAudio {
             desktop: AudioChoice::Off,
             microphone: AudioChoice::Default,
+            ..VideoAudio::default()
         },
         ..VideoBlock::default()
     });
@@ -936,8 +938,14 @@ fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
         w: 800,
         h: 600,
     };
-    let (wish, notes) = wish_for(Some(&window), &|| Some(place));
+    let focus = |area: Area| Focus {
+        area,
+        program: Some(77),
+    };
+    let (wish, notes) = wish_for(Some(&window), &|| Some(focus(place)));
     assert_eq!(wish.area, Some(place));
+    // the program is only passed on when its sound is asked for
+    assert_eq!(wish.program, None);
     assert_eq!(wish.audio.unwrap().microphone, AudioChoice::Default);
     assert!(notes.is_empty());
 
@@ -954,9 +962,183 @@ fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
         w: 10,
         h: 10,
     };
-    let (wish, notes) = wish_for(Some(&window), &|| Some(stub));
+    let (wish, notes) = wish_for(Some(&window), &|| Some(focus(stub)));
     assert_eq!(wish.area, None);
     assert!(notes[0].contains("too small"), "{notes:?}");
+}
+
+#[test]
+fn a_layout_that_asks_for_one_programs_sound_gets_the_program_in_focus() {
+    use cargoframe_layout::{DesktopSound, VideoBlock};
+    let one = layout_with(VideoBlock {
+        audio: VideoAudio {
+            desktop_from: DesktopSound::FocusedProgram,
+            ..VideoAudio::default()
+        },
+        ..VideoBlock::default()
+    });
+    let place = Area {
+        x: 0,
+        y: 0,
+        w: 800,
+        h: 600,
+    };
+    let focus = |program| Focus {
+        area: place,
+        program,
+    };
+    // the screen is recorded, but the focus is still looked at: for the program
+    let (wish, notes) = wish_for(Some(&one), &|| Some(focus(Some(4242))));
+    assert_eq!(wish.area, None);
+    assert_eq!(wish.program, Some(4242));
+    assert!(notes.is_empty());
+    // not found: nothing to pass on (the sound plan says what happens then)
+    assert_eq!(wish_for(Some(&one), &|| Some(focus(None))).0.program, None);
+    assert_eq!(wish_for(Some(&one), &|| None).0.program, None);
+    // a desktop sound that is off has no program to look for
+    let off = layout_with(VideoBlock {
+        audio: VideoAudio {
+            desktop: cargoframe_layout::AudioChoice::Off,
+            desktop_from: DesktopSound::FocusedProgram,
+            ..VideoAudio::default()
+        },
+        ..VideoBlock::default()
+    });
+    let never = || -> Option<Focus> { panic!("the focus was looked for when nothing needed it") };
+    assert_eq!(wish_for(Some(&off), &never).0.program, None);
+}
+
+/// A sound source that hears nothing, however long it waits: a computer that plays nothing.
+struct Quiet;
+
+impl PcmSource for Quiet {
+    fn format(&self) -> PcmFormat {
+        PcmFormat {
+            rate: 48_000,
+            channels: 2,
+        }
+    }
+
+    fn read(&mut self, _out: &mut Vec<u8>, wait: Duration) -> Result<(), String> {
+        std::thread::sleep(wait);
+        Ok(())
+    }
+}
+
+fn hears_nothing(_program: Option<u32>) -> Result<Feed, String> {
+    Feed::open(|| Ok(Box::new(Quiet)))
+}
+
+fn cannot_hear(_program: Option<u32>) -> Result<Feed, String> {
+    Err("no sound output was found".into())
+}
+
+fn computer() -> AudioSource {
+    AudioSource {
+        backend: AudioBackend::Loopback { program: None },
+        device: "computer".into(),
+    }
+}
+
+#[test]
+fn a_sound_cargoframe_listens_to_becomes_an_input_that_ffmpeg_reads_from_a_local_port() {
+    let microphone = AudioSource {
+        backend: AudioBackend::Dshow,
+        device: "USB Mic".into(),
+    };
+    let mut notes = Vec::new();
+    let (inputs, feeds) = open_sounds(&[computer(), microphone.clone()], hears_nothing, &mut notes);
+    assert!(notes.is_empty(), "{notes:?}");
+    assert_eq!(feeds.len(), 1);
+    // the computer's sound is now raw samples on a port; the microphone is untouched
+    assert_eq!(
+        inputs[0].backend,
+        AudioBackend::Pcm {
+            port: feeds[0].port(),
+            rate: 48_000,
+            channels: 2
+        }
+    );
+    assert_eq!(inputs[0].device, "computer");
+    assert_eq!(inputs[1], microphone);
+}
+
+#[test]
+fn a_sound_that_cannot_be_listened_to_is_left_out_and_said_and_the_rest_stays() {
+    let microphone = AudioSource {
+        backend: AudioBackend::Dshow,
+        device: "USB Mic".into(),
+    };
+    let mut notes = Vec::new();
+    let (inputs, feeds) = open_sounds(&[computer(), microphone.clone()], cannot_hear, &mut notes);
+    assert!(feeds.is_empty());
+    assert_eq!(inputs, [microphone]);
+    assert_eq!(notes.len(), 1);
+    assert!(notes[0].contains("sound of the computer"), "{notes:?}");
+    assert!(notes[0].contains("no sound output was found"), "{notes:?}");
+
+    // one program's sound is named as that
+    let mut notes = Vec::new();
+    let one = AudioSource {
+        backend: AudioBackend::Loopback {
+            program: Some(4242),
+        },
+        device: "program 4242".into(),
+    };
+    open_sounds(&[one], cannot_hear, &mut notes);
+    assert!(notes[0].contains("program in focus"), "{notes:?}");
+}
+
+#[test]
+fn a_recording_with_a_sound_cargoframe_listens_to_has_a_sound_track() {
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    let Some(ffprobe) = locate("ffprobe", &[]) else {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    };
+    let _one = one_at_a_time();
+    let Some(screen) = Screen::start(89) else {
+        eprintln!("skipped: no virtual X screen (Xvfb) to record");
+        return;
+    };
+    let work = tempfile::tempdir().unwrap();
+    let work = work.path().join("video-test");
+    let f = Found {
+        ffmpeg,
+        ffprobe,
+        ..found(&[VideoEncoder::Software], &[VideoCapture::X11])
+    };
+    let session = Session {
+        wayland: false,
+        display: Some(screen.display.clone()),
+    };
+    let choice = Choice {
+        capture: VideoCapture::X11,
+        encoder: VideoEncoder::Software,
+    };
+    let video = Video {
+        fps: 10,
+        ..Video::default()
+    };
+    let extras = Extras {
+        sources: vec![computer()],
+        patience: Duration::from_millis(600),
+        listen: Some(hears_nothing),
+        ..Extras::default()
+    };
+    let rec = Recording::new();
+    let started = rec
+        .start_with_extras(f, choice, &video, &session, &work, trial_window(3), &extras)
+        .unwrap();
+    // a computer that plays nothing still gives a recording with a sound track
+    assert!(started.sound);
+    assert!(started.notes.is_empty(), "{:?}", started.notes);
+    let t = rec.run_for(3);
+    assert!(t.ok, "{}", t.message);
+    assert!(t.clip_audio, "the clip has no sound track");
 }
 
 #[test]
@@ -1006,6 +1188,7 @@ fn a_window_is_recorded_on_its_own_and_a_missing_sound_device_costs_only_the_sou
         }],
         // a sound system that is not there is slow to say so
         patience: Duration::from_secs(8),
+        listen: None,
     };
     let rec = Recording::new();
     let started = rec

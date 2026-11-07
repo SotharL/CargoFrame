@@ -7,13 +7,17 @@
   import SafetySection from './SafetySection.svelte';
   import AccentControl from './AccentControl.svelte';
   import TransferSection from './TransferSection.svelte';
+  import YourData from './YourData.svelte';
   import UpdatesSection from './UpdatesSection.svelte';
   import { getApi } from '../../lib/ipc';
   import { applyAccent, applyTheme } from '../../lib/theme';
   import type { AppInfo, General, MemoryMode, MemoryStatus, ThemeChoice, TimingView } from '../../lib/types';
 
   let loaded = $state(false);
-  let general = $state<General>({ theme: 'system', memory_mode: 'balanced', check_updates: false, accent: '#4f8ee0' });
+  let general = $state<General>({
+    theme: 'system', memory_mode: 'balanced', check_updates: false, accent: '#4f8ee0',
+    notifications: { routine: true, problems: true },
+  });
   let autostart = $state(false);
   let info = $state<AppInfo | null>(null);
   let timings = $state<TimingView[]>([]);
@@ -94,6 +98,7 @@
   };
   const onMemory = () => save(async () => (await getApi()).setGeneral({ ...general }));
   const onAutoCheck = () => save(async () => (await getApi()).setGeneral({ ...general }));
+  const onNotices = () => save(async () => (await getApi()).setGeneral({ ...general }));
   const onAutostart = (v: boolean) => save(async () => (await getApi()).setAutostart(v));
 </script>
 
@@ -113,19 +118,21 @@
       <Toggle label="Run CargoFrame when I sign in" bind:checked={autostart} onchange={onAutostart} />
     </Section>
 
+    <Section
+      title="Notifications"
+      hint="A notice can show up inside a recording of the screen. Switch off the ones you do not want there."
+    >
+      <Toggle label="Say when something happens" bind:checked={general.notifications.routine} onchange={onNotices} />
+      <p class="quiet hint">CargoFrame started, a recording started, something was shared or saved.</p>
+      <Toggle label="Say when something goes wrong" bind:checked={general.notifications.problems} onchange={onNotices} />
+      <p class="quiet hint">A capture or a recording failed, or a share did not go through.</p>
+    </Section>
+
     <SafetySection onstatus={(kind, text) => { status = kind === 'ok' ? 'saved' : 'error'; errorText = kind === 'ok' ? '' : text; }} />
 
     <TransferSection />
 
-    <Section title="Files">
-      <p class="quiet">Settings: <span class="mono selectable">{info?.config_dir}</span></p>
-      <p class="quiet">Logs and kept zips: <span class="mono selectable">{info?.data_dir}</span></p>
-      <div>
-        <button type="button" onclick={async () => (await getApi()).openConfigFolder()}>
-          Open settings folder
-        </button>
-      </div>
-    </Section>
+    <YourData />
 
     <Section
       title="Performance"

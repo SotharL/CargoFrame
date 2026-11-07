@@ -14,7 +14,7 @@
 
 use crate::capabilities::Capabilities;
 use crate::model::{
-    Block, BlockKind, DropdownSource, Layout, SharingButton, TextRole, ValueSource,
+    Block, BlockKind, DropdownBlock, DropdownSource, Layout, SharingButton, TextRole, ValueSource,
 };
 use crate::reach::{reach, Verdict};
 use crate::GRID_COLUMNS;
@@ -47,6 +47,10 @@ pub enum Code {
     BadSubfolder,
     /// A dropdown narrowed by a text block that is not in the layout.
     NarrowByMissing,
+    /// Two dropdowns choose where to post on the same connection.
+    TwoPaths,
+    /// A channel dropdown and a separate thread dropdown, where one dropdown can hold both.
+    SeparateThreads,
     /// A block the destination has no place for, so this button leaves it out.
     CannotSend,
     /// More than [`MAX_SHARING_BUTTONS`] sharing buttons: the window has room for five boxes.
@@ -176,6 +180,73 @@ fn issue(block: &Block, severity: Severity, code: Code, message: impl Into<Strin
 }
 
 /// All issues in a layout, most severe first.
+/// The service lists a dropdown chooses from: its own, and the one it goes on to.
+fn lists_of(d: &DropdownBlock) -> Vec<&str> {
+    let mut out = Vec::new();
+    if let DropdownSource::WebApi { options_id, .. } = &d.source {
+        out.push(options_id.as_str());
+    }
+    out.extend(d.deeper.iter().map(|x| x.list.as_str()));
+    out
+}
+
+/// One dropdown holds the path to post in. A second one for the same connection that chooses from
+/// a list the first one already covers is refused (the later of the two says so); and the old way
+/// of a channel dropdown with a thread dropdown beside it is pointed out.
+fn check_paths(
+    layout: &Layout,
+    block: &Block,
+    d: &DropdownBlock,
+    connection_id: &str,
+    reg: &dyn Registry,
+    out: &mut Vec<Issue>,
+) {
+    let mine = lists_of(d);
+    let earlier = layout.blocks.iter().take_while(|b| b.id != block.id);
+    for other in earlier {
+        let BlockKind::Dropdown(o) = &other.kind else {
+            continue;
+        };
+        let DropdownSource::WebApi {
+            connection_id: theirs,
+            ..
+        } = &o.source
+        else {
+            continue;
+        };
+        if theirs != connection_id || !lists_of(o).iter().any(|l| mine.contains(l)) {
+            continue;
+        }
+        out.push(issue(
+            block,
+            Severity::Error,
+            Code::TwoPaths,
+            format!(
+                "\u{201c}{}\u{201d} already chooses from the same list of this connection. One dropdown holds the whole path to post in: remove this one",
+                if o.title.trim().is_empty() { &other.id } else { &o.title }
+            ),
+        ));
+        return;
+    }
+    let is_discord = reg
+        .connection(connection_id)
+        .is_some_and(|c| c.kind == ConnectionKind::Discord);
+    if is_discord && d.deeper.is_none() {
+        let is = |b: &Block, list: &str| {
+            matches!(&b.kind, BlockKind::Dropdown(x) if matches!(&x.source,
+                DropdownSource::WebApi { connection_id: c, options_id } if c == connection_id && options_id == list))
+        };
+        if is(block, "threads") && layout.blocks.iter().any(|b| is(b, "channels")) {
+            out.push(issue(
+                block,
+                Severity::Warning,
+                Code::SeparateThreads,
+                "A channel dropdown and a thread dropdown for the same Discord connection: use one \u{201c}Where to post\u{201d} dropdown that goes on to the threads by itself",
+            ));
+        }
+    }
+}
+
 pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
     let mut out = Vec::new();
     check_geometry(layout, &mut out);
@@ -224,6 +295,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                     }
                 }
                 if let DropdownSource::WebApi { connection_id, .. } = &d.source {
+                    check_paths(layout, block, d, connection_id, reg, &mut out);
                     match reg.connection(connection_id) {
                         None => out.push(issue(
                             block,
@@ -575,6 +647,7 @@ mod tests {
             placement: TitlePlacement::Above,
             role,
             default_text: body.into(),
+            formatting: true,
         })
     }
 
@@ -857,6 +930,7 @@ mod tests {
                 placement: TitlePlacement::Above,
                 role: TextRole::Plain,
                 default_text: String::new(),
+                formatting: true,
             }),
         );
         assert!(validate(&layout(vec![list(Some("title")), title.clone()]), &reg).is_empty());
@@ -864,6 +938,71 @@ mod tests {
         let issues = validate(&layout(vec![list(Some("nope"))]), &reg);
         assert_eq!(codes(&issues), vec![Code::NarrowByMissing]);
         assert_eq!(issues[0].severity, Severity::Warning);
+    }
+
+    fn web(id: &str, title: &str, connection: &str, list: &str, y: u32) -> Block {
+        at(
+            id,
+            y,
+            BlockKind::Dropdown(DropdownBlock::new(
+                title,
+                DropdownSource::WebApi {
+                    connection_id: connection.into(),
+                    options_id: list.into(),
+                },
+            )),
+        )
+    }
+
+    fn deeper(mut b: Block, list: &str, field: &str) -> Block {
+        if let BlockKind::Dropdown(d) = &mut b.kind {
+            d.deeper = Some(crate::model::Deeper {
+                list: list.into(),
+                field: field.into(),
+            });
+        }
+        b
+    }
+
+    #[test]
+    fn one_dropdown_holds_the_path_and_a_second_for_the_same_list_is_refused() {
+        let reg = Reg::default()
+            .with("d", ConnectionKind::Discord, ConnectionState::Connected)
+            .with("e", ConnectionKind::Discord, ConnectionState::Connected);
+        let path = || {
+            deeper(
+                web("where", "Where to post", "d", "channels", 0),
+                "threads",
+                "thread",
+            )
+        };
+        // one path dropdown is fine
+        assert!(validate(&layout(vec![path()]), &reg).is_empty());
+        // the same list twice, for the same connection: the later one is refused
+        let twice = layout(vec![path(), web("again", "Channel", "d", "channels", 1)]);
+        let issues = validate(&twice, &reg);
+        assert_eq!(codes(&issues), vec![Code::TwoPaths]);
+        assert_eq!(issues[0].block_id.as_deref(), Some("again"));
+        assert_eq!(issues[0].severity, Severity::Error);
+        // a separate dropdown for the list the path already goes on to is refused as well
+        let inner = layout(vec![path(), web("t", "Thread", "d", "threads", 1)]);
+        assert_eq!(codes(&validate(&inner, &reg)), vec![Code::TwoPaths]);
+        // another connection has its own path
+        let other = layout(vec![path(), web("x", "Channel", "e", "channels", 1)]);
+        assert!(validate(&other, &reg).is_empty());
+    }
+
+    #[test]
+    fn the_old_channel_and_thread_dropdowns_still_work_but_are_pointed_out() {
+        let reg = Reg::default().with("d", ConnectionKind::Discord, ConnectionState::Connected);
+        let l = layout(vec![
+            web("c", "Channel", "d", "channels", 0),
+            web("t", "Thread", "d", "threads", 1),
+        ]);
+        let issues = validate(&l, &reg);
+        assert_eq!(codes(&issues), vec![Code::SeparateThreads]);
+        assert_eq!(issues[0].severity, Severity::Warning);
+        assert_eq!(issues[0].block_id.as_deref(), Some("t"));
     }
 
     #[test]

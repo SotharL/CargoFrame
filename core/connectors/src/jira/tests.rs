@@ -187,7 +187,8 @@ fn creating_needs_a_project_and_an_issue_type_and_defaults_the_rest() {
     p.prompt = Some("Steps:\n1. Click".into());
     let fields = build_fields(&p, true).unwrap();
     assert_eq!(fields["summary"], "Editor - main.rs");
-    assert_eq!(fields["description"], "Steps:\n1. Click");
+    // a numbered line is written as Jira's own numbered list
+    assert_eq!(fields["description"], "Steps:\n# Click");
 
     let mut p = payload();
     p.fields.retain(|f| f.key != "issuetype");
@@ -556,4 +557,27 @@ fn the_description_names_every_field_and_list() {
             assert!(d.lists.iter().any(|x| x.id == l), "{} -> {l}", f.key);
         }
     }
+}
+
+#[test]
+fn the_description_is_written_in_jiras_own_markup() {
+    let mut p = payload();
+    p.fields.retain(|f| f.key != "description");
+    p.fields.push(Field::text(
+        "description",
+        "**Crash** on _save_ with `NullPointer`\n- first\n- second\n> seen twice\n__urgent__",
+    ));
+    let fields = build_fields(&p, true).unwrap();
+    assert_eq!(
+        fields["description"],
+        "*Crash* on _save_ with {{NullPointer}}\n* first\n* second\n{quote}\nseen twice\n{quote}\n+urgent+"
+    );
+    // the summary stays one plain line, marks and all
+    let mut p = payload();
+    p.fields.retain(|f| f.key != "summary");
+    p.fields.push(Field::text("summary", "**not** formatted"));
+    assert_eq!(
+        build_fields(&p, true).unwrap()["summary"],
+        "**not** formatted"
+    );
 }

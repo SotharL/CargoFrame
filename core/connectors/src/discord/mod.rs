@@ -23,7 +23,8 @@ use crate::ctx::Ctx;
 use crate::error::{from_net, invalid, not_set_up};
 use crate::model::{self, DiscordMode};
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
-use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
+use crate::richtext::{render, Style};
+use crate::{Connector, Describe, FieldSpec, InsideSpec, ListSpec, Status};
 use cargoframe_net::{Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -34,6 +35,8 @@ const TOKEN: &str = "token";
 const MAX_GUILDS: usize = 25;
 /// Discord's limit for the text of one message.
 const MAX_CONTENT: usize = 2000;
+/// The most threads of one channel that are listed (a forum can have thousands).
+const MAX_THREADS: usize = 200;
 /// And for the name of a forum post.
 const MAX_POST_NAME: usize = 100;
 const USER_AGENT: &str = "DiscordBot (https://github.com/SotharL/CargoFrame, 0.1)";
@@ -276,6 +279,73 @@ impl DiscordConnector {
         Ok(out)
     }
 
+    /// The threads of one channel, or the posts of one forum: the active ones, then the latest
+    /// older ones, newest first. A long forum is cut at [`MAX_THREADS`]; the dropdown can be
+    /// searched, and an older post is reached by pasting its link.
+    fn threads_of(&self, ctx: &Ctx, channel: &str) -> Result<Vec<OptionItem>, SendError> {
+        let channel = parse_place(channel).map_err(invalid)?;
+        let info = self.get(ctx, &format!("/channels/{channel}"), "look at the channel")?;
+        let mut found: Vec<(u64, OptionItem)> = Vec::new();
+        let mut take = |threads: Option<&Value>, group: &str| {
+            for t in threads.and_then(Value::as_array).into_iter().flatten() {
+                let (Some(id), Some(name)) = (
+                    t.get("id").and_then(Value::as_str),
+                    t.get("name").and_then(Value::as_str),
+                ) else {
+                    continue;
+                };
+                if found.iter().any(|(_, o)| o.value == id) {
+                    continue;
+                }
+                let mut item = OptionItem::new(id, name);
+                item.group = Some(group.to_string());
+                // an id is a timestamp first: a bigger one is newer
+                found.push((id.parse().unwrap_or(0), item));
+            }
+        };
+        if let Some(guild) = info.get("guild_id").and_then(Value::as_str) {
+            match self.get(
+                ctx,
+                &format!("/guilds/{guild}/threads/active"),
+                "list the threads",
+            ) {
+                Ok(v) => {
+                    let mine: Vec<Value> = v
+                        .get("threads")
+                        .and_then(Value::as_array)
+                        .into_iter()
+                        .flatten()
+                        .filter(|t| t.get("parent_id").and_then(Value::as_str) == Some(&channel))
+                        .cloned()
+                        .collect();
+                    take(Some(&Value::Array(mine)), "Active");
+                }
+                Err(e) if Self::skippable(&e) => {}
+                Err(e) => return Err(e),
+            }
+        }
+        // older posts need "Read Message History"; without it only the active ones are offered
+        match self.get(
+            ctx,
+            &format!("/channels/{channel}/threads/archived/public?limit=50"),
+            "list the older threads",
+        ) {
+            Ok(v) => take(v.get("threads"), "Older"),
+            Err(e) if Self::skippable(&e) => {}
+            Err(e) => return Err(e),
+        }
+        // the active ones first (they carry their own heading), each group newest first
+        found.sort_by(|(a, x), (b, y)| {
+            (x.group.as_deref() != Some("Active"), std::cmp::Reverse(*a))
+                .cmp(&(y.group.as_deref() != Some("Active"), std::cmp::Reverse(*b)))
+        });
+        Ok(found
+            .into_iter()
+            .take(MAX_THREADS)
+            .map(|(_, item)| item)
+            .collect())
+    }
+
     fn post_message(
         &self,
         ctx: &Ctx,
@@ -443,7 +513,7 @@ pub fn compose(payload: &Payload, with_title: bool) -> (String, bool) {
         }
     }
     if let Some(b) = body {
-        parts.push(b);
+        parts.push(render(&b, Style::Discord));
     }
     let text = parts.join("\n");
     if text.chars().count() > MAX_CONTENT {
@@ -622,11 +692,18 @@ impl Connector for DiscordConnector {
                         "Channels and forums the bot can see".into()
                     },
                     param: None,
+                    // one dropdown goes on to the threads of the channel (the posts of a forum)
+                    inside: Some(InsideSpec {
+                        list: "threads",
+                        field: "thread",
+                        label: "Thread or post",
+                    }),
                 },
                 ListSpec {
                     id: "threads".into(),
                     label: "Active threads and forum posts".into(),
                     param: None,
+                    inside: None,
                 },
             ],
             summary: "Posts a message into a channel or thread, or starts a forum post, with the screenshot and a zip of the ticked files attached. Nobody is pinged.".into(),
@@ -682,10 +759,19 @@ impl Connector for DiscordConnector {
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
+        // `threads:<channel>`: what is inside one channel
+        if let Some(channel) = list.strip_prefix("threads:") {
+            // A webhook cannot look at the server: the window offers the posts it made itself,
+            // and a thread is pasted as a link.
+            return if self.webhooks() {
+                Ok(Vec::new())
+            } else {
+                self.threads_of(ctx, channel)
+            };
+        }
         if self.webhooks() {
             return match list {
                 "channels" => self.hook_options(ctx),
-                // A webhook cannot look at the server; a thread is pasted as a link instead.
                 "threads" => Ok(Vec::new()),
                 other => Err(invalid(format!("Discord has no list called \"{other}\""))),
             };
@@ -772,6 +858,7 @@ impl Connector for DiscordConnector {
                 summary: ctx.progress.get("discord.summary").unwrap_or_default(),
                 url: Some(done),
                 notes: Vec::new(),
+                place: None,
             });
         }
         if self.webhooks() {
@@ -835,6 +922,7 @@ impl Connector for DiscordConnector {
             summary,
             url: Some(url),
             notes,
+            place: None,
         })
     }
 }

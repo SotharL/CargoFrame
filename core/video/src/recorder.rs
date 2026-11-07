@@ -67,6 +67,13 @@ pub enum AudioBackend {
     Pulse,
     /// DirectShow: the Windows sound devices ffmpeg can list.
     Dshow,
+    /// What the computer plays, to be listened to by CargoFrame itself (`pcm::Feed`), because
+    /// ffmpeg cannot on Windows. `program` limits it to the sound of one program. The one who
+    /// starts the recording turns this into [`AudioBackend::Pcm`] before the recorder starts; a
+    /// recorder given this as it is leaves it out.
+    Loopback { program: Option<u32> },
+    /// Raw samples from a `pcm::Feed` waiting on `port` of this computer.
+    Pcm { port: u16, rate: u32, channels: u16 },
 }
 
 /// One sound that goes into the recording.
@@ -121,6 +128,16 @@ pub struct Config {
     pub area: Option<Area>,
     /// The sounds to record: none, one, or two (mixed together).
     pub audio: Vec<AudioSource>,
+}
+
+impl Config {
+    /// The sounds the recorder can take as inputs now: a loopback still to be set up is not one.
+    fn sounds(&self) -> impl Iterator<Item = &AudioSource> {
+        self.audio
+            .iter()
+            .filter(|s| !matches!(s.backend, AudioBackend::Loopback { .. }))
+            .take(2)
+    }
 }
 
 impl Config {
@@ -223,9 +240,27 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         .into(),
     );
     // the sounds: each is one more input, after the picture
-    for source in cfg.audio.iter().take(2) {
+    let sounds = cfg.sounds().count();
+    for source in cfg.sounds() {
         a.extend(["-thread_queue_size".into(), "1024".into()]);
         match source.backend {
+            AudioBackend::Loopback { .. } => {}
+            AudioBackend::Pcm {
+                port,
+                rate,
+                channels,
+            } => {
+                a.extend([
+                    "-f".into(),
+                    "f32le".into(),
+                    "-ar".into(),
+                    rate.to_string().into(),
+                    "-ac".into(),
+                    channels.to_string().into(),
+                    "-i".into(),
+                    format!("tcp://127.0.0.1:{port}").into(),
+                ]);
+            }
             AudioBackend::Pulse => {
                 a.extend([
                     "-f".into(),
@@ -244,7 +279,6 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
             }
         }
     }
-    let sounds = cfg.audio.len().min(2);
     if sounds == 2 {
         // two sounds are mixed into one (the mix is half as loud as each, so it is raised)
         let graph = format!(
@@ -311,6 +345,8 @@ pub struct Recorder {
     ring: Ring,
     said: Arc<Mutex<String>>,
     started: Instant,
+    /// Things that feed ffmpeg and are stopped with it (the sounds CargoFrame listens to).
+    feeds: Vec<Box<dyn Send>>,
 }
 
 impl Recorder {
@@ -342,7 +378,14 @@ impl Recorder {
             ring,
             said,
             started: Instant::now(),
+            feeds: Vec::new(),
         })
+    }
+
+    /// Keep `feed` for as long as the recorder runs. It is let go when the recording stops, is
+    /// cancelled, or the recorder is dropped.
+    pub fn keep(&mut self, feed: Box<dyn Send>) {
+        self.feeds.push(feed);
     }
 
     /// Wait up to `wait` to see whether ffmpeg gives up at once (a sound device that is not

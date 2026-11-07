@@ -234,7 +234,7 @@ impl Connector for GoogleConnector {
                 f("col4", "Column 4", "", None),
                 f("col5", "Column 5", "", None),
             ],
-            lists: vec![ListSpec { id: "folders".into(), label: "Drive folders".into(), param: None }],
+            lists: vec![ListSpec { id: "folders".into(), label: "Drive folders".into(), param: None, inside: None }],
             summary: "Uploads the screenshot and the zip of ticked files to Drive. A spreadsheet row holds the date, the columns you map, and the links.".into(),
         }
     }
@@ -431,6 +431,7 @@ impl Connector for GoogleConnector {
             summary,
             url,
             notes,
+            place: None,
         })
     }
 }

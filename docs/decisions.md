@@ -865,7 +865,8 @@ and for the video to have sound (the computer's by default, no microphone), chos
   has no way of its own to record the sound of the computer, only DirectShow devices, so the computer's sound is
   recorded when the PC has a loopback device (*Stereo Mix*, *What U Hear*, *virtual-audio-capturer*, found by name)
   and the notification says what to turn on when it has not; the microphone is the first DirectShow microphone. A
-  native Windows loopback capture is a later step and is **not** built.
+  native Windows loopback capture is a later step and is **not** built. _(Built in the second 7 November round: see
+  "What the computer plays" below. Stereo Mix is no longer needed.)_
 - **Sound never costs the picture.** No sound system on Linux (checked by looking for the PulseAudio socket, because
   asking ffmpeg takes seconds), a device that is not there, or any other reason ffmpeg gives up in the first
   moments: the recording goes on without sound and the notification says why. Two sounds are mixed into one track
@@ -910,9 +911,8 @@ single button. Decisions (taken for them, the safest option each time, while the
 - **Why winget and not a download of our own.** A download we do ourselves would mean choosing a build of ffmpeg,
   checking it ourselves and keeping the link alive; winget does that with Microsoft's catalogue, its hash check and
   its own record of what is installed, and removes it with the usual "Uninstall".
-- **Computer sound on Windows** needs a loopback device (Stereo Mix); the Setup page says whether there is one and
-  has a button that opens the Windows sound settings. CargoFrame does not turn it on by itself (it changes a system
-  setting).
+- **Computer sound on Windows** _(superseded: CargoFrame now listens to the output itself, see "What the computer
+  plays" below)_. The Setup page names the default output and has a button that opens the Windows sound settings.
 - **ffmpeg is found without a new PATH.** After winget installs it, the app looks in winget's links folder as well,
   so no sign-out is needed; if it still cannot find it, the message says what to do.
 - **A release can be made without pushing a tag.** The release workflow can be run by hand with the tag left
@@ -962,3 +962,59 @@ decided with those two rules.
 - **Discord is two files.** The bot way stays in `discord/mod.rs`; the webhook way (about 300 lines) is in `discord/webhook.rs`, so
   a change to one cannot disturb the other.
 - **Kept simple on purpose:** no new settings file, no new background process, no new dependency for any of the twelve.
+
+### Second 7 Nov 2026 round: one path to post, what the computer plays, clean-up, formatting
+
+The owner tested the installer ("works well") and sent twelve more points plus "there is no way to reset what the
+install stores". The same two rules applied: as friendly as possible, as little to maintain as possible.
+
+- **What the computer plays (bug).** ffmpeg on Windows can only record sound *inputs* (microphones, Stereo Mix), which
+  is why videos had no sound and the Windows sound settings opened on the Recording tab. Fixed at the root:
+  `core/video/src/loopback.rs` asks the Windows sound system for what the speakers play (WASAPI loopback, crate
+  `wasapi`) and hands the samples to ffmpeg through a local TCP feed (`pcm.rs`). The video block has **Sound from**:
+  everything the computer plays (default), or the program in focus (its process and the programs it started; if it
+  cannot be found, everything is recorded). No device has to be switched on. The sound button opens the **Playback**
+  tab. Linux still uses PulseAudio's monitor. *Only compiled on Windows CI and tested on Linux with a fake source; it
+  needs one run on a real PC.*
+- **One path to post (Discord and the rest).** A layout has **one** "where to post" dropdown per connection (validation
+  refuses a second). It is a path: server, then category (optional), then channel or forum. Choosing a lower level no
+  longer resets a higher one; a higher one resets only what is below it.
+- **Threads are the second step of the path.** After a channel or forum, a **thread or post** box offers *New message or
+  post* first, the threads *used before*, and the listed ones. It is searched (lists can be long), narrowed to titles
+  that contain the Title text being typed (with *Show all* to undo it), and accepts a pasted link or id. The layout
+  stores this as `deeper` on the dropdown, so a connector with something "inside" a choice can use it without new UI.
+- **Why thread posts failed, and what changed.** A Discord webhook posts to *its own channel*; a thread belongs to that
+  channel, so a thread sent through another channel's webhook is answered "unknown channel". Thread posts now go through
+  the webhook of the thread's own channel (`thread_id` on the call), and a thread link is read for both ids. This could
+  not be run against real Discord here; the unit tests use a mock that behaves as the documentation says.
+- **Webhooks cannot list threads.** In webhook mode the list is what was posted to before (remembered) plus a pasted
+  link. A bot token lists the threads. Said on the page instead of failing quietly.
+- **The last path is the default.** The last choice at every level of the path (channel and thread included) is the
+  starting point of the next capture, with the last five in the list.
+- **Layouts saved before still work.** A layout with a separate Channel dropdown and Thread dropdown keeps working (the
+  builder shows a warning on the thread box). A second dropdown for the same list is refused when saved. Nothing is
+  rewritten behind the owner's back.
+- **"Show me how" links are gone; Guides stay.** One way in, in the Settings menu.
+- **Data from files is a sentence.** For a text file, *Between two pieces of text* shows **Text before it, The value,
+  Text after it** (empty = to the end of the line; a filled one lets the value run over lines). The search pattern is
+  built from the two texts (`settings/between.ts`); the regular-expression format stays for people who want a pattern.
+- **"Destination fields" became "Extra fields".** The path to post is now chosen in the layout; what is left on that page
+  is boxes beyond it (Jira Priority, labels). The page, its files and its guide are kept so nothing saved breaks; only
+  the words changed.
+- **Setup checks show a spinner, then a tick.** The page runs the checks every time it opens; each row shows a small
+  spinner on the right, then a check or a warning. Details are folded away until the row is opened.
+- **Notifications can be turned off.** General has two switches: *Say when something happens* (started, recording,
+  shared or saved) and *Say when something goes wrong*. Both default to on. Settings: `General.notifications`.
+- **Your data.** General, *Your data* lists what CargoFrame keeps on this computer with its size: work in progress,
+  kept zips, logs, downloaded updates. Each kind has a clear button. *Reset CargoFrame* deletes settings, connections,
+  sign-ins and data, and keeps the program and the folder the person chose for saved zips. It only touches the two
+  folders CargoFrame owns (`core` path checks in `app/src/cleanup.rs`, tested with temporary folders).
+- **Text formatting, per service.** A plain-text box in the window has buttons for bold, italic, underline, code, quote,
+  bulleted and numbered lists (and Ctrl+B, I, U). The text is stored in one neutral markup; each connector converts it
+  when it sends (`core/connectors/src/richtext.rs`: Slack `*bold*` and `_italic_`, Jira `+underline+` and `{{code}}`,
+  Teams HTML, Discord and Reddit Markdown). Only the buttons that every service the box is sent to can show are offered
+  (Slack and Reddit have no underline), and a box sent only to a title gets none. A layout can switch the buttons off per
+  block. **Colour is not offered**: only Jira and Teams could show it, so most services would silently drop it.
+- **Kept simple on purpose:** no new settings file, no new dependency apart from `wasapi` (Windows only), no new
+  background process.
+

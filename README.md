@@ -15,8 +15,12 @@ Nothing leaves your computer until you press that button.
 
 For Windows 11 and Linux. It waits in the tray and costs almost nothing while it waits.
 
-> **Status: private beta.** Everything is built and tested, but it has not yet run on a real Windows or Linux
-> desktop or with real accounts, and the installer is not signed. [What is and is not verified](docs/status.md).
+> **Status: private beta.** The Windows installer has been tried and works. Everything is built and tested, but it has
+> not yet been used with every real account, and the installer is not signed. [What is and is not verified](docs/status.md).
+
+**In this page:** [Install](#install) · [First capture](#your-first-capture-in-five-steps) · [Connect a service](#connect-a-service) ·
+[What the window can do](#what-the-window-can-do) · [Templates and clean-up](#ready-made-layouts-and-cleaning-up) ·
+[Problems](#problems) · [For developers](#for-developers)
 
 ---
 
@@ -85,14 +89,14 @@ Do these once. The app starts empty: no connections, shortcuts or layouts.
 
 > **Stuck? Use the guides.** At the bottom of the Settings menu, **Guides** walks you through a setup: it opens the
 > right page, draws a box around the field and says in one sentence what goes in it. There is one for each service,
-> and for your first capture, *Data from files* and *Destination fields*.
+> and for your first capture, *Data from files* and *Extra fields*.
 
 ---
 
 ## Connect a service
 
-Add only the services you use. Each form has a **Guide** link, and a button next to each token field opens the page
-where you get it.
+Add only the services you use. A button next to each token field opens the page where you get it, and **Guides** in the
+Settings menu walks you through each service.
 
 | Service | What you need | Good to know |
 |---------|---------------|--------------|
@@ -112,23 +116,26 @@ Passwords and tokens go to your system's password store, never to a file.
 
 - **The easy way:** in Discord open the channel's settings, **Integrations, Webhooks, New Webhook, Copy Webhook URL**,
   and paste it into CargoFrame. One link per channel you post to. No bot, no developer portal.
-- A webhook cannot list servers, channels or threads, so the channel is one of the links you added. For a **forum**
-  channel, CargoFrame posts a new thread by its **title**; a short convention such as `[PROJ-123] short title`
-  makes threads easy to find. To reply in an existing thread, paste its link (**Copy Link** in Discord).
+- **One "Where to post" box.** In the window you pick the channel, and then, if you want, a **thread or post** inside it
+  (*New message or post* is always the first choice). A webhook cannot list threads, so the box shows the ones you posted
+  to before; to use another thread paste its link (**Copy Link** in Discord). The window starts on the last place you used.
+- For a **forum** channel, a new post is made from the **title** you type; a short convention such as
+  `[PROJ-123] short title` makes posts easy to find, and the list narrows to posts with that title.
+- The bot way (a bot token) lets CargoFrame list servers, categories, channels and threads in the box. Use it only if you need that.
 - Posting as your own Discord account is not offered: Discord does not allow it and it can get the account closed.
-- The bot way (a bot token) lets CargoFrame list servers, categories and channels in dropdowns. Use it only if you need that.
 
 </details>
 
 <details>
-<summary><b>Dropdowns that depend on each other, and last choices</b></summary>
+<summary><b>The "Where to post" box, and last choices</b></summary>
 
-In the layout editor a dropdown can be **narrowed by** another one: server, then category (optional), then channel or
-forum. A level you leave empty is skipped. Where a service gives no list, you type or paste the value and the box
-searches what it knows. With no destination at all, the window saves a zip on your computer instead.
+For services with places to choose (Jira projects, Discord servers and channels) a layout has **one** "where to post"
+box, which can go several levels deep: server, then category (optional), then channel or forum, then thread. A level you
+leave empty is skipped. Where a service gives no list, you type or paste the value and the box searches what it knows.
+With no destination at all, the window saves a zip on your computer instead.
 
-Each dropdown remembers its **last five choices** on this computer (only the values, never secrets), shows the last one
-used first, and starts on it.
+Each box remembers the places you used last on this computer (only the values, never secrets), starts on the last one
+and lists the last five.
 
 </details>
 
@@ -162,18 +169,38 @@ Click the Video block in the layout builder to choose what is recorded: the whol
   *Take screenshot* while you look at the clip. The screenshot block stays empty until then.
 - **Where a recording can go:** Slack, Google Drive, Jira and Discord (up to 100 MB; the service may allow less).
   Reddit, Teams, Claude and Custom API take pictures only, and the window says so.
-- **Sound on Windows:** ffmpeg can record the computer's sound only through a loopback device. In the Windows sound
-  settings (Recording tab, right-click, Show disabled devices) turn on **Stereo Mix**. **Setup** shows the current
-  sound output and says whether videos can include it.
+- **Sound:** the video block's **Sound from** records everything the computer plays (the default) or only the program
+  in focus; a microphone is a separate choice. Nothing has to be switched on in Windows. **Setup** shows the current
+  sound output, and its button opens the Windows sound settings on the Playback tab.
+
+</details>
+
+<details>
+<summary><b>Formatting your note</b></summary>
+
+A text box that holds plain text has small buttons for **bold, italic, underline, code, quote, bullets and numbers**
+(and Ctrl+B, Ctrl+I, Ctrl+U). CargoFrame turns your formatting into what each service understands when it sends. If the
+box goes to several services, only the buttons they all understand are shown (Slack and Reddit have no underline), and a box
+that is only a title has none. Colour is not offered because most services would drop it. In the layout builder you can
+switch the buttons off for a box.
 
 </details>
 
 <details>
 <summary><b>Pulling values from files (optional)</b></summary>
 
-Under **Data from files** you describe a value to read from a file in the program's project folder (JSON, YAML, TOML,
-INI, CSV, XML, a regular expression, or a line of a text or log file) and use it in your text boxes and dropdowns as
-`{{name}}`. CargoFrame only reads files that your rules allow, and only inside that folder.
+Under **Data from files** you describe a value to read from a file in the program's project folder and use it in your text
+boxes and dropdowns as `{{name}}`. For a text file you fill three boxes: **the text before the value** (like
+`Version:`), the name of the value, and **the text after it** (leave it empty to read to the end of the line). JSON, YAML,
+TOML, INI, CSV, XML and regular expressions are there too. CargoFrame only reads files that your rules allow, and only inside that folder.
+
+</details>
+
+<details>
+<summary><b>Extra fields (Jira priority, labels...)</b></summary>
+
+Where to post is chosen in the layout. **Extra fields** is for boxes on the service beyond that, like a Jira priority:
+name it, choose the connection, search the field it offers, and map it to a block in your layout.
 
 </details>
 
@@ -189,7 +216,7 @@ INI, CSV, XML, a regular expression, or a line of a text or log file) and use it
 
 ---
 
-## Ready-made layouts, and keeping only a few
+## Ready-made layouts, and cleaning up
 
 Nothing is pre-installed: no ready-made connections, triggers or layouts sit in your settings. CargoFrame ships
 **templates** you can start a layout from, offered only for the services you added.
@@ -214,18 +241,21 @@ A template is never stored or changed. Opening one shows an unsaved layout; **Sa
 </details>
 
 <details>
-<summary><b>Removing things</b></summary>
+<summary><b>Removing things, and starting over</b></summary>
 
 | What | How | Gentler option |
 |------|-----|----------------|
 | A layout | *Layouts*, pick it, **Delete**, then **Delete for good** | none needed |
 | A trigger | *Triggers*, **Delete**, then **Delete for good** | switch off **Enabled** |
 | A connection | *Setup, Connections*, **Delete**, then **Delete for good** (its tokens leave the password store too) | **Sign out**, or switch off **Enabled** |
-| A data rule or destination field | **Delete**, then **Delete for good** | none needed |
+| A data rule or extra field | **Delete**, then **Delete for good** | none needed |
 
-Before a big clean-up use *General, Export and import*: tick what to keep, press **Export**, and **Import** puts it back
-later. To start completely fresh, quit CargoFrame and delete its settings folder (`%AppData%\CargoFrame` on Windows,
-`~/.config/CargoFrame` on Linux).
+**What CargoFrame keeps on your computer** is listed in *General, Your data* with its size: captures and recordings in
+progress, zips kept here, log files and downloaded updates. Each has a **Clear** button. Under it, **Reset CargoFrame**
+removes your settings, connections, sign-ins and all of that data, and leaves the program (and the folder you chose for
+saved zips) alone. Uninstalling in Windows **Settings, Apps** can delete the settings too.
+
+Before a big clean-up use *General, Export and import*: tick what to keep, press **Export**, and **Import** puts it back later.
 
 </details>
 
@@ -250,8 +280,17 @@ The installer is not signed yet. Choose **More info**, then **Run anyway**.
 <details>
 <summary><b>The video has no sound, or no video at all</b></summary>
 
-No video: open **Settings, Setup** and install ffmpeg. No computer sound on Windows: turn on **Stereo Mix** (see Video above).
-The notification after a recording says why a sound was left out.
+No video: open **Settings, Setup** and install ffmpeg. No sound: click the Video block in your layout and check **Sound of
+the computer** is not off (and **Sound from**, if you chose one program). A program that was closed or not found
+falls back to everything the computer plays. The notification after a recording says why a sound was left out.
+
+</details>
+
+<details>
+<summary><b>CargoFrame's notifications show up in my recording</b></summary>
+
+In **Settings, General, Notifications** switch off *Say when something happens* (and, if you want, *Say when something
+goes wrong*).
 
 </details>
 

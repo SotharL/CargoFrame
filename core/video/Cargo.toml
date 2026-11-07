@@ -14,5 +14,10 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+# Windows only: the sound a computer plays (and one program's sound) can only be heard through the
+# Windows sound system, ffmpeg cannot do it.
+[target.'cfg(windows)'.dependencies]
+wasapi = "0.27"
+
 [dev-dependencies]
 tempfile.workspace = true

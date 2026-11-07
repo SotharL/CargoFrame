@@ -3,15 +3,15 @@
 //!
 //! * Linux: ffmpeg speaks to PulseAudio (PipeWire answers the same way). What the computer plays
 //!   is the *monitor* of an output; `@DEFAULT_MONITOR@` is the one of whatever is the default.
-//! * Windows: ffmpeg speaks DirectShow, which has microphones and, on some PCs, a loopback
-//!   device ("Stereo Mix") that carries what the computer plays. ffmpeg has no way of its own to
-//!   record the sound of the computer, so without such a device the recording is silent and says
-//!   why. (A native loopback capture is a later step.)
+//! * Windows: ffmpeg speaks DirectShow, which has microphones but no way to record what the
+//!   computer plays. CargoFrame listens to that itself, through the Windows sound system (see
+//!   `cargoframe_video::loopback`), for the whole computer or for the one program in focus, and
+//!   hands it to ffmpeg. A loopback device such as "Stereo Mix" can still be picked by name.
 //!
 //! Nothing here starts a recording; [`plan`] only turns the layout's words into inputs.
 
 use crate::video::Os;
-use cargoframe_layout::{AudioChoice, VideoAudio};
+use cargoframe_layout::{AudioChoice, DesktopSound, VideoAudio};
 use cargoframe_video::recorder::{AudioBackend, AudioSource};
 use serde::Serialize;
 use std::path::Path;
@@ -183,20 +183,17 @@ pub fn parse_dshow(text: &str) -> Devices {
 
 /// Ask ffmpeg which sound devices there are.
 pub fn list(ffmpeg: &Path, os: Os) -> Devices {
-    let (args, backend): (&[&str], _) = match os {
-        Os::Linux => (&["-hide_banner", "-sources", "pulse"], AudioBackend::Pulse),
-        Os::Windows => (
-            &[
-                "-hide_banner",
-                "-list_devices",
-                "true",
-                "-f",
-                "dshow",
-                "-i",
-                "dummy",
-            ],
-            AudioBackend::Dshow,
-        ),
+    let args: &[&str] = match os {
+        Os::Linux => &["-hide_banner", "-sources", "pulse"],
+        Os::Windows => &[
+            "-hide_banner",
+            "-list_devices",
+            "true",
+            "-f",
+            "dshow",
+            "-i",
+            "dummy",
+        ],
         Os::Other => {
             return Devices {
                 os: "other".into(),
@@ -213,19 +210,17 @@ pub fn list(ffmpeg: &Path, os: Os) -> Devices {
         .stderr(Stdio::piped());
     // this listing ends with an error on Windows: the text is what counts, not the exit code
     let output = cargoframe_video::quiet(&mut command).output();
-    let mut found = match output {
+    let found = match output {
         Ok(o) => {
             let text = format!(
                 "{}\n{}",
                 String::from_utf8_lossy(&o.stdout),
                 String::from_utf8_lossy(&o.stderr)
             );
-            match backend {
-                AudioBackend::Pulse if o.status.success() && !text.contains("Cannot list") => {
-                    parse_pulse(&text)
-                }
-                AudioBackend::Dshow => parse_dshow(&text),
-                AudioBackend::Pulse => Devices {
+            match os {
+                Os::Windows => parse_dshow(&text),
+                _ if o.status.success() && !text.contains("Cannot list") => parse_pulse(&text),
+                _ => Devices {
                     os: "linux".into(),
                     note: Some(
                         "No sound system answered (PulseAudio or PipeWire). Recordings will have no sound."
@@ -246,9 +241,6 @@ pub fn list(ffmpeg: &Path, os: Os) -> Devices {
             ..Devices::default()
         },
     };
-    if found.note.is_none() && os == Os::Windows && found.desktop.is_empty() {
-        found.note = Some(LOOPBACK_MISSING.into());
-    }
     found
 }
 
@@ -267,9 +259,6 @@ pub fn pulse_running() -> bool {
         .is_some_and(|p| p.exists())
 }
 
-/// Said when Windows has nothing that carries what the computer plays.
-pub const LOOPBACK_MISSING: &str = "Windows does not let ffmpeg record the sound of the computer by itself. Turn on \"Stereo Mix\" in the Windows sound settings (Recording tab, right-click, Show disabled devices) or install a loopback device such as virtual-audio-capturer; until then the sound of the computer is left out.";
-
 /// The inputs a layout's video block asks for, and what to tell the person about the ones left
 /// out.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -278,12 +267,32 @@ pub struct Plan {
     pub notes: Vec<String>,
 }
 
+/// What the computer plays, as an input: CargoFrame listens to it itself (see
+/// [`AudioBackend::Loopback`]). `device` only names it, to tell it from another.
+fn loopback(program: Option<u32>) -> AudioSource {
+    AudioSource {
+        backend: AudioBackend::Loopback { program },
+        device: match program {
+            Some(pid) => format!("program {pid}"),
+            None => "computer".into(),
+        },
+    }
+}
+
 /// Turn the layout's choices into inputs. `devices` is only looked at for what the system must be
-/// asked for (Windows, where nothing is "default"); a named device is trusted as it is.
+/// asked for (the default microphone on Windows, where nothing is "default"); a named device is
+/// trusted as it is.
 ///
 /// `sound_system` is whether Linux has a sound system to ask (see [`pulse_running`]); ffmpeg
-/// takes seconds to find out that it has not, so it is not asked.
-pub fn plan(audio: &VideoAudio, os: Os, sound_system: bool, devices: &dyn Fn() -> Devices) -> Plan {
+/// takes seconds to find out that it has not, so it is not asked. `program` is the program that
+/// has the focus, when the layout asks for its sound and the system could say which it is.
+pub fn plan(
+    audio: &VideoAudio,
+    os: Os,
+    sound_system: bool,
+    program: Option<u32>,
+    devices: &dyn Fn() -> Devices,
+) -> Plan {
     let mut plan = Plan::default();
     let backend = match os {
         Os::Linux => AudioBackend::Pulse,
@@ -303,41 +312,60 @@ pub fn plan(audio: &VideoAudio, os: Os, sound_system: bool, devices: &dyn Fn() -
         plan.notes.push(NO_SOUND_SYSTEM.into());
         return plan;
     }
-    let asked_for_default =
-        audio.desktop == AudioChoice::Default || audio.microphone == AudioChoice::Default;
-    // Linux names its defaults itself; Windows has to be asked
-    let listing = (os == Os::Windows && asked_for_default).then(devices);
+    // only the microphone has to be looked up, and only on Windows (Linux names its defaults)
+    let listing = (os == Os::Windows && audio.microphone == AudioChoice::Default).then(devices);
 
-    let push = |plan: &mut Plan, device: String| {
-        if !plan.sources.iter().any(|s| s.device == device) {
-            plan.sources.push(AudioSource { backend, device });
+    let push = |plan: &mut Plan, source: AudioSource| {
+        if !plan.sources.iter().any(|s| s.device == source.device) {
+            plan.sources.push(source);
         }
     };
+    let named = |device: String| AudioSource { backend, device };
 
     match &audio.desktop {
         AudioChoice::Off => {}
-        AudioChoice::Device(name) => push(&mut plan, name.clone()),
+        AudioChoice::Device(name) => push(&mut plan, named(name.clone())),
         AudioChoice::Default => match os {
-            Os::Linux => push(&mut plan, DEFAULT_MONITOR.into()),
-            _ => match listing.as_ref().and_then(|l| l.desktop.first()) {
-                Some(d) => push(&mut plan, d.name.clone()),
-                None => plan.notes.push(LOOPBACK_MISSING.into()),
-            },
+            Os::Linux => {
+                if audio.desktop_from == DesktopSound::FocusedProgram {
+                    plan.notes.push(ONE_PROGRAM_ONLY_ON_WINDOWS.into());
+                }
+                push(&mut plan, named(DEFAULT_MONITOR.into()));
+            }
+            _ => {
+                let one = match (audio.desktop_from, program) {
+                    (DesktopSound::Everything, _) => None,
+                    (DesktopSound::FocusedProgram, Some(pid)) => Some(pid),
+                    (DesktopSound::FocusedProgram, None) => {
+                        plan.notes.push(PROGRAM_NOT_FOUND.into());
+                        None
+                    }
+                };
+                push(&mut plan, loopback(one));
+            }
         },
     }
     match &audio.microphone {
         AudioChoice::Off => {}
-        AudioChoice::Device(name) => push(&mut plan, name.clone()),
+        AudioChoice::Device(name) => push(&mut plan, named(name.clone())),
         AudioChoice::Default => match os {
-            Os::Linux => push(&mut plan, DEFAULT_SOURCE.into()),
+            Os::Linux => push(&mut plan, named(DEFAULT_SOURCE.into())),
             _ => match listing.as_ref().and_then(|l| l.microphone.first()) {
-                Some(d) => push(&mut plan, d.name.clone()),
+                Some(d) => push(&mut plan, named(d.name.clone())),
                 None => plan.notes.push("No microphone was found.".into()),
             },
         },
     }
     plan
 }
+
+/// Said when the layout asks for one program's sound and the system cannot say which has the focus.
+pub const PROGRAM_NOT_FOUND: &str =
+    "CargoFrame could not tell which program has the focus, so the sound of the whole computer is recorded.";
+
+/// Said on Linux, which can only record the sound of the whole computer.
+pub const ONE_PROGRAM_ONLY_ON_WINDOWS: &str =
+    "The sound of one program can only be recorded on Windows for now, so the sound of the whole computer is recorded.";
 
 #[cfg(test)]
 #[path = "audio_tests.rs"]

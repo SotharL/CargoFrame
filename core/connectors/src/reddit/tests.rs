@@ -456,3 +456,27 @@ fn connecting_signs_in_through_the_browser_and_names_the_account() {
     assert_eq!(w.with("reddit", |ctx| c.status(ctx)), Status::Disconnected);
     assert_eq!(server.requests_to("/revoke").len(), 1);
 }
+
+#[test]
+fn a_text_post_is_written_in_reddits_markdown() {
+    let server = MockServer::start(|req| {
+        if req.path() == "/api/submit" {
+            ok_post()
+        } else {
+            MockResponse::new(404)
+        }
+    });
+    let w = signed_in();
+    let mut p = base_payload();
+    p.fields.push(Field::text(
+        "text",
+        "**Crash** on *save*, __urgent__\nSteps:\n1. open\n2. save",
+    ));
+    w.with("reddit", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    // no underline on Reddit, and a list needs an empty line before it
+    assert_eq!(
+        server.requests()[0].form_value("text").as_deref(),
+        Some("**Crash** on *save*, urgent\nSteps:\n\n1. open\n2. save")
+    );
+}

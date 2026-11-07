@@ -15,6 +15,7 @@ use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model;
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
+use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use cargoframe_net::{encode_component, Body, Method, Request};
 use cargoframe_safe::{FailureKind, SendError};
@@ -354,7 +355,8 @@ pub fn compose(payload: &Payload) -> String {
         }
     }
     if let Some(b) = body {
-        parts.push(escape(&b));
+        // the text may carry bold, italic, code, quotes and lists (see `richtext`); it is escaped too
+        parts.push(render(&b, Style::Slack));
     }
     parts.join("\n")
 }
@@ -444,6 +446,7 @@ impl Connector for SlackConnector {
                 id: "channels".into(),
                 label: "Channels the app can see".into(),
                 param: None,
+                inside: None,
             }],
             summary: "Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached. The app has to be a member of the channel.".into(),
         }
@@ -614,6 +617,7 @@ impl Connector for SlackConnector {
             },
             url,
             notes: Vec::new(),
+            place: None,
         })
     }
 }

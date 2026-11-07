@@ -43,3 +43,51 @@ describe('TextBlock title', () => {
     expect(screen.getByRole('textbox', { name: 'Description' })).toBeTruthy();
   });
 });
+
+describe('TextBlock formatting buttons', () => {
+  afterEach(cleanup);
+  const tools = ['bold', 'italic', 'underline', 'code', 'quote', 'bullets', 'numbers'] as const;
+  const names = { bold: 'Bold', italic: 'Italic', underline: 'Underline', code: 'Code', quote: 'Quote', bullets: 'Bulleted list', numbers: 'Numbered list' };
+
+  it('has none unless there is something to format for', () => {
+    render(TextBlock, { block: block('above'), value: '' });
+    expect(screen.queryByRole('toolbar')).toBeNull();
+  });
+
+  it('shows the buttons it is given, and says which services they are for', () => {
+    render(TextBlock, { block: block('above'), value: '', marks: ['bold', 'code'], services: ['jira', 'slack'] });
+    expect(screen.getByRole('toolbar', { name: 'Formatting for Jira, Slack' })).toBeTruthy();
+    expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Bold', 'Code']);
+  });
+
+  it('a button marks the selected words and keeps them selected', async () => {
+    render(TextBlock, { block: block('above'), value: 'it crashes on save', marks: [...tools], services: ['jira'] });
+    const box = screen.getByRole('textbox') as HTMLTextAreaElement;
+    box.setSelectionRange(3, 10);
+    await fireEvent.click(screen.getByRole('button', { name: names.bold }));
+    expect(box.value).toBe('it **crashes** on save');
+    await new Promise((r) => setTimeout(r, 0));
+    expect([box.selectionStart, box.selectionEnd]).toEqual([5, 12]);
+  });
+
+  it('a list button works on the line the cursor is in', async () => {
+    render(TextBlock, { block: block('above'), value: 'Steps:\nopen\nsave', marks: [...tools], services: ['jira'] });
+    const box = screen.getByRole('textbox') as HTMLTextAreaElement;
+    box.setSelectionRange(8, 16);
+    await fireEvent.click(screen.getByRole('button', { name: names.numbers }));
+    expect(box.value).toBe('Steps:\n1. open\n2. save');
+  });
+
+  it('Ctrl+B, Ctrl+I and Ctrl+U do the same, but only for marks on offer', async () => {
+    render(TextBlock, { block: block('above'), value: 'word', marks: ['bold', 'italic'], services: ['slack'] });
+    const box = screen.getByRole('textbox') as HTMLTextAreaElement;
+    box.setSelectionRange(0, 4);
+    await fireEvent.keyDown(box, { key: 'b', ctrlKey: true });
+    expect(box.value).toBe('**word**');
+    box.setSelectionRange(0, 8);
+    await fireEvent.keyDown(box, { key: 'u', ctrlKey: true });
+    // no underline on offer: the keys are left to the box
+    expect(box.value).toBe('**word**');
+  });
+});
+

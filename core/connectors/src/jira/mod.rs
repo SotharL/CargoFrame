@@ -9,6 +9,7 @@ use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model::{self, JiraAuth};
 use crate::payload::{Field, FieldKind, OptionItem, Payload, SendOutcome};
+use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
@@ -148,7 +149,10 @@ fn shape(f: &Field, cloud: bool) -> Result<Value, String> {
         }
         "issuetype" | "priority" => id_or_name(v),
         "summary" => Value::String(clean_summary(v)),
-        "description" | "environment" | "duedate" => Value::String(f.value.trim_end().to_string()),
+        // the description is Jira's wiki markup: the text's bold, italic, code, quotes and lists
+        // are written that way (see `richtext`)
+        "description" => Value::String(render(&f.value, Style::Jira)),
+        "environment" | "duedate" => Value::String(f.value.trim_end().to_string()),
         "labels" => Value::Array(
             split_list(v)
                 .into_iter()
@@ -230,10 +234,7 @@ pub fn build_fields(payload: &Payload, cloud: bool) -> Result<Map<String, Value>
     }
     if !out.contains_key("description") {
         if let Some(p) = payload.prompt.as_deref().filter(|p| !p.trim().is_empty()) {
-            out.insert(
-                "description".into(),
-                Value::String(p.trim_end().to_string()),
-            );
+            out.insert("description".into(), Value::String(render(p, Style::Jira)));
         }
     }
     Ok(out)
@@ -259,6 +260,7 @@ impl Connector for JiraConnector {
             id: id.into(),
             label: label.into(),
             param,
+            inside: None,
         };
         Describe {
             fields: vec![
@@ -568,6 +570,7 @@ impl Connector for JiraConnector {
             },
             url: Some(format!("{base}/browse/{key}")),
             notes,
+            place: None,
         })
     }
 }

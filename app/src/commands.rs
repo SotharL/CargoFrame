@@ -15,9 +15,7 @@ use crate::video;
 use crate::windowing;
 use cargoframe_config::{General, Safe, Video};
 use cargoframe_connectors::{Describe, OptionItem};
-use cargoframe_layout::{
-    templates, validate, BlockKind, ConnectionKind, DropdownSource, FilesBlock, Layout,
-};
+use cargoframe_layout::{templates, validate, ConnectionKind, FilesBlock, Layout};
 use cargoframe_rules::Rule;
 use cargoframe_safe::ladder::PickedFolder;
 use cargoframe_window::view::{issue_views, IssueView, SessionView};
@@ -81,6 +79,80 @@ pub fn set_general(
     // the arrow of the tray icon follows the accent
     crate::tray::refresh_icon(&app);
     Ok(())
+}
+
+// ----- your data (Settings, General) -----
+
+/// What CargoFrame keeps on this computer, by kind, and where.
+#[derive(Serialize)]
+pub struct DataReport {
+    pub areas: Vec<crate::cleanup::Area>,
+    pub config_dir: String,
+    pub data_dir: String,
+}
+
+#[tauri::command]
+pub fn get_data_report(state: State<'_, AppState>) -> DataReport {
+    let dirs = state.store.dirs();
+    DataReport {
+        areas: crate::cleanup::report(dirs.data()),
+        config_dir: dirs.config().display().to_string(),
+        data_dir: dirs.data().display().to_string(),
+    }
+}
+
+/// Clearing data in use would break a window that is open or a recording that is running.
+fn busy(state: &AppState) -> Result<(), String> {
+    if state.sessions.count() > 0 {
+        return Err("Close the capture windows first: they are using some of it.".into());
+    }
+    if !matches!(
+        state.recording.view(),
+        crate::video::RecordingView::Idle | crate::video::RecordingView::Failed { .. }
+    ) {
+        return Err("A recording is running: stop it first.".into());
+    }
+    Ok(())
+}
+
+/// Remove the kinds of data named (`work`, `kept`, `logs`, `updates`).
+#[tauri::command]
+pub fn clean_data(
+    state: State<'_, AppState>,
+    areas: Vec<String>,
+) -> Result<crate::cleanup::Cleaned, String> {
+    busy(&state)?;
+    Ok(crate::cleanup::clean(state.store.dirs().data(), &areas))
+}
+
+/// Put CargoFrame back as a new install is: sign-ins forgotten, settings, layouts, triggers and
+/// everything it kept removed. The program itself stays.
+#[tauri::command]
+pub fn reset_everything(
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<crate::cleanup::Cleaned, String> {
+    busy(&state)?;
+    // Passwords and tokens live in the credential store, not in a settings file.
+    for id in state
+        .store
+        .list_ids(cargoframe_config::Kind::Connections)
+        .unwrap_or_default()
+    {
+        if let Ok(c) = state.connections.load(&state.store, &id) {
+            state.connections.forget_secrets(&id, c.settings.kind());
+        }
+    }
+    let dirs = state.store.dirs();
+    let mut done = crate::cleanup::clean_all(dirs.data());
+    let settings = crate::cleanup::reset_settings(dirs.config());
+    done.files += settings.files;
+    done.bytes += settings.bytes;
+    done.left += settings.left;
+    crate::triggers::reload(&app);
+    crate::tray::refresh_menu(&app);
+    crate::tray::refresh_icon(&app);
+    Ok(done)
 }
 
 #[tauri::command]
@@ -652,7 +724,7 @@ pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, Str
     .await?
 }
 
-/// Open the Windows sound settings, where Stereo Mix is switched on.
+/// Open the Windows sound settings (the Playback tab).
 #[tauri::command]
 pub fn open_sound_settings() -> Result<(), String> {
     crate::setup::open_sound_settings()
@@ -943,27 +1015,19 @@ pub fn remove_chat(state: State<'_, AppState>, id: String) -> Result<(), String>
 // ----- sharing (the CargoFrame window) -----
 
 /// A dropdown list for a block of the open capture. Only the lists the layout itself asks for
-/// can be fetched from here.
+/// can be fetched from here. `parent` asks for the second step of a dropdown that goes deeper:
+/// what is inside the first choice (the threads of a channel).
 #[tauri::command]
 pub async fn fetch_options(
     app: AppHandle,
     session_id: u64,
     block_id: String,
+    parent: Option<String>,
 ) -> Result<Vec<OptionItem>, OptionsError> {
     let asked = {
         let state = app.state::<AppState>();
         state.sessions.by_id(session_id).and_then(|s| {
-            let layout = s.view.layout.as_ref()?;
-            match &layout.block(&block_id)?.kind {
-                BlockKind::Dropdown(d) => match &d.source {
-                    DropdownSource::WebApi {
-                        connection_id,
-                        options_id,
-                    } => Some((connection_id.clone(), options_id.clone())),
-                    DropdownSource::ClaudeChats => None,
-                },
-                _ => None,
-            }
+            crate::share::options_asked(s.view.layout.as_ref()?, &block_id, parent.as_deref())
         })
     };
     let Some((connection_id, options_id)) = asked else {
@@ -1170,9 +1234,9 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     // The window was closed while sending: nobody is watching, so say how it ended.
     if cancelled_while_sending {
         match &result {
-            ShareResult::Sent { summary, .. } => crate::notify::problem(&app, "Shared", summary),
+            ShareResult::Sent { summary, .. } => crate::notify::info(&app, "Shared", summary),
             ShareResult::SavedLocally { path, .. } => {
-                crate::notify::problem(&app, "Saved locally", &format!("A zip is in {path}"));
+                crate::notify::info(&app, "Saved locally", &format!("A zip is in {path}"));
             }
             ShareResult::Failed { label, saved, .. } => {
                 let kept = saved
@@ -1206,6 +1270,7 @@ pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
 mod template_tests {
     use super::*;
     use cargoframe_connectors::{build, Connection};
+    use cargoframe_layout::{BlockKind, DropdownSource};
     use serde_json::json;
 
     /// A connection of each kind with nothing filled in, as the connectors describe themselves.

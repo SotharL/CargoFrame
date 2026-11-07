@@ -41,25 +41,21 @@ export async function demoSession(): Promise<SessionView> {
       },
     ],
   };
-  // `?demo=discord` swaps the two dropdowns for a Discord channel list (server > category >
-  // channel) and an optional thread list narrowed by the prompt, to look at the cascade.
+  // `?demo=discord` swaps the two dropdowns for one Discord path: server > category > channel,
+  // then a thread inside it narrowed by the prompt, to look at the cascade.
   const discord = params.get('demo') === 'discord';
   if (discord) {
-    layout.blocks = layout.blocks.map((b) => {
-      if (b.id === 'chat') {
-        return {
-          id: 'thread', type: 'dropdown', rect: b.rect, title: 'Thread (optional)', optional: true, narrow_by: 'prompt',
-          source: { type: 'web_api', connection_id: 'jira', options_id: 'threads' },
-        } as typeof b;
-      }
-      if (b.id === 'proj') {
-        return {
-          id: 'proj', type: 'dropdown', rect: b.rect, title: 'Channel',
-          source: { type: 'web_api', connection_id: 'jira', options_id: 'channels' },
-        } as typeof b;
-      }
-      return b;
-    });
+    layout.blocks = layout.blocks
+      .filter((b) => b.id !== 'chat')
+      .map((b) =>
+        b.id === 'proj'
+          ? ({
+              id: 'proj', type: 'dropdown', rect: { x: 8, y: 5, w: 4, h: 4 }, title: 'Where to post', narrow_by: 'prompt',
+              source: { type: 'web_api', connection_id: 'jira', options_id: 'channels' },
+              deeper: { list: 'threads', field: 'thread' },
+            } as typeof b)
+          : b,
+      );
   }
   // `?buttons=3` adds buttons to Claude, Slack and Reddit (up to 5 with Google and a zip), to look at the boxes.
   const extra: [string, ServiceKind | null][] = [['claude', 'claude'], ['slack', 'slack'], ['reddit', 'reddit'], ['google', 'google']];
@@ -116,7 +112,6 @@ export async function demoSession(): Promise<SessionView> {
     dropdowns: discord
       ? {
           proj: { status: 'loading', selected: null, options: [], message: null },
-          thread: { status: 'loading', selected: null, options: [], message: null },
         }
       : {
       chat: {

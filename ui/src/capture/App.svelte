@@ -13,7 +13,9 @@
   import { initialValues, type FormValues } from './values';
   import { loadDropdowns, type Memory } from './options';
   import { nowhereToPost } from './destination';
-  import { recentChoices, remember, type Recent } from '../lib/recent';
+  import { recentChoices, type Recent } from '../lib/recent';
+  import { rememberChoices, remembers } from './remembering';
+  import { marksFor } from './blocks/formatting';
   import ResultPanel from './ResultPanel.svelte';
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
@@ -25,7 +27,7 @@
   let api = $state<Api>();
   let view = $state<SessionView | null>(null);
   let image = $state<Blob | null>(null);
-  let values = $state<FormValues>({ texts: {}, dropdowns: {}, files: {} });
+  let values = $state<FormValues>({ texts: {}, dropdowns: {}, deeper: {}, files: {} });
   let imageEdited = $state(false);
   /** The part of the recording to send; `null` sends all of it. */
   let clipEdit = $state<ClipEdit | null>(null);
@@ -114,23 +116,10 @@
     const b = view?.layout?.blocks.find((x) => x.id === id);
     return b?.type === 'dropdown' ? b : null;
   };
-  /** Lists a service sends start on the last choice used; chats keep their own order. */
-  const remembers = (b: Extract<Block, { type: 'dropdown' }>) => b.remember !== false && b.source.type === 'web_api';
   function memoryOf(blockId: string): Memory {
     const b = dropdownBlock(blockId);
     return { prefer: b && remembers(b) ? (recents[blockId] ?? []).map((r) => r.value) : [], optional: b?.optional === true };
   }
-  /** After a share that went somewhere, the choices made become the recent ones. */
-  function rememberChoices() {
-    if (!view) return;
-    for (const b of view.layout?.blocks ?? []) {
-      if (b.type !== 'dropdown' || !remembers(b)) continue;
-      const value = values.dropdowns[b.id];
-      const label = view.dropdowns[b.id]?.options.find((o) => o.value === value)?.label;
-      if (value && label) remember(view.layout?.id, b.id, { value, label });
-    }
-  }
-
   onMount(() => {
     let stop: (() => void) | undefined;
     getApi().then(async (a) => {
@@ -183,7 +172,9 @@
       if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
       const chat = chatToOpen(view, button, values);
       result = await api.share(request);
-      if (result.status === 'sent' || result.status === 'saved_locally') rememberChoices();
+      if (result.status === 'sent' || result.status === 'saved_locally') {
+        if (view) rememberChoices(view, values, result.status === 'sent' ? (result.place ?? null) : null);
+      }
       if (result.status === 'sent' && chat) opened = chat;
       if (result.status === 'sent' && result.close && !result.url) {
         // Nothing left to use from the result: let the confirmation be read, then go.
@@ -272,7 +263,14 @@
                   <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
                 {/if}
               {:else if b.type === 'text'}
-                <TextBlock block={b} bind:value={values.texts[b.id]!} unresolved={view.texts[b.id]?.unresolved ?? []} />
+                {@const formats = marksFor(view, b)}
+                <TextBlock
+                  block={b}
+                  bind:value={values.texts[b.id]!}
+                  unresolved={view.texts[b.id]?.unresolved ?? []}
+                  marks={formats.marks}
+                  services={formats.services}
+                />
               {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
                 <DropdownBlock
                   block={b}
@@ -280,6 +278,9 @@
                   bind:value={values.dropdowns[b.id]!}
                   recent={recents[b.id] ?? []}
                   narrowText={b.narrow_by ? (values.texts[b.narrow_by] ?? '') : ''}
+                  sessionId={view.session_id}
+                  layoutId={view.layout?.id ?? null}
+                  bind:deeper={values.deeper[b.id]}
                 />
               {:else if b.type === 'files' && view.files[b.id]}
                 <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} />

@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
-  import GuideLink from '../guide/GuideLink.svelte';
   import Field from '../../lib/components/Field.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import ShortcutInput from '../../lib/components/ShortcutInput.svelte';
@@ -93,7 +92,6 @@
 </script>
 
 <div class="page">
-  <div class="guide-link"><GuideLink tour="first-capture" /></div>
   {#if triggers.failure}<Chip kind="err" label={triggers.failure} />{/if}
   {#each triggers.problems as p (p)}<Chip kind="warn" label={`Could not read a trigger file: ${p}`} />{/each}
 
@@ -190,7 +188,6 @@
 </div>
 
 <style>
-  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; }
   .empty, .card, .editor {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
