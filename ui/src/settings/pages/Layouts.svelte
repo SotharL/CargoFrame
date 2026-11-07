@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import GuideLink from '../guide/GuideLink.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Reach, Rule, Trigger, VariableInfo } from '../../lib/types';
@@ -215,6 +216,7 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="page">
+  <div class="guide-link"><GuideLink tour="first-capture" /></div>
   {#if layouts.failure}<Chip kind="err" label={layouts.failure} />{/if}
   {#each layouts.problems as p (p)}<Chip kind="warn" label={`Could not read a layout file: ${p}`} />{/each}
 
@@ -231,7 +233,7 @@
       </select>
     </label>
     <button onclick={create}>New layout</button>
-    <button onclick={() => (picking = !picking)} aria-expanded={picking}>
+    <button data-tour="layouts.templates" onclick={() => (picking = !picking)} aria-expanded={picking}>
       {picking ? 'Hide templates' : 'Start from a template'}
     </button>
   </div>
@@ -254,7 +256,7 @@
                 <strong>{o.name}</strong>
                 <p class="quiet small">{o.description}</p>
               </div>
-              <button onclick={() => useTemplate(o)} aria-label={`Use ${o.name}${o.connectionId ? ` for ${g.title}` : ''}`}>Use</button>
+              <button data-tour={`template-${o.key}`} onclick={() => useTemplate(o)} aria-label={`Use ${o.name}${o.connectionId ? ` for ${g.title}` : ''}`}>Use</button>
             </div>
           {/each}
         </div>
@@ -262,7 +264,7 @@
       {#if !connections.length}
         <p class="quiet small">
           Add a connection to see layouts for Jira, Google, Reddit, Claude, Slack, Discord, Teams or your own API.
-          <button class="link" onclick={() => go('connections')}>Go to Connections</button>
+          <button class="link" onclick={() => go('setup', 'connections')}>Go to Connections</button>
         </p>
       {/if}
     </section>
@@ -300,11 +302,11 @@
       <div class="actions">
         {#if fromTemplate}
           <Chip kind="dbg" label="Not saved yet" />
-          <button class="primary" onclick={save} disabled={busy}>Save as my layout</button>
+          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy}>Save as my layout</button>
           <button onclick={discardTemplate}>Discard</button>
         {:else}
           {#if dirty}<Chip kind="warn" label="Unsaved changes" />{/if}
-          <button class="primary" onclick={save} disabled={busy || !dirty}>Save</button>
+          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy || !dirty}>Save</button>
           <button onclick={saveAsCopy} disabled={busy}>Save as copy</button>
           <button onclick={revert} disabled={!dirty}>Revert</button>
           {#if confirmingDelete}
@@ -354,6 +356,7 @@
 </div>
 
 <style>
+  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; min-width: 0; }
   .bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .pick { display: grid; gap: 2px; }

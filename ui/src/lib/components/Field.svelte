@@ -1,9 +1,10 @@
 <script lang="ts">
   import type { Snippet } from 'svelte';
-  let { label, hint, error, children }: { label: string; hint?: string; error?: string; children: Snippet } = $props();
+  /** `tour` names this field for the guides (settings/guide/tours.ts). */
+  let { label, hint, error, tour, children }: { label: string; hint?: string; error?: string; tour?: string; children: Snippet } = $props();
 </script>
 
-<div class="field">
+<div class="field" data-tour={tour}>
   <label>
     <span class="label">{label}</span>
     {@render children()}

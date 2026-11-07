@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-03 (phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
+_Last updated 2026-11-07 (the twelve changes of the 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -8,8 +8,13 @@ those is true for each piece.
 
 ## What is verified
 
-- **Unit and integration tests:** 743 Rust tests and 272 UI tests pass. `cargo clippy -D warnings`,
+- **Unit and integration tests:** 832 Rust tests and 428 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
+- **The 7 November round** (Discord webhooks and bot, dependent dropdowns, last five choices, get-token buttons, the
+  Claude app line, screenshot with video, the guides): unit tests on each piece, connector tests against the mock
+  servers, and the guides are walked step by step in a browser test (`walk.test.ts`) and checked against the
+  fields that exist (`tours.test.ts`). The capture window with a recording and a screenshot, the Settings Setup page
+  with the Discord form, and a Jira guide were also looked at in a browser with demo data.
 - **Linux end to end** (virtual X11 display): the shortcut captures a fake program, the CargoFrame
   window opens with the capture, closing and reopening behaves as each of the three memory modes
   promises, and the real release binary stays at 19.6 MB of its own memory while idle
@@ -41,6 +46,11 @@ those is true for each piece.
 - **The settings update on a real desktop.** Save locally into a real folder, export and import
   through the system file dialogs, and the text and log rules on real log files have been tested
   by unit tests and the in-memory stand-in; the file dialogs themselves were not opened.
+- **The 7 November round on a real desktop.** The default sound output is read by a PowerShell probe that has only been
+  unit-tested and run on Windows CI; a real Discord webhook, the forum thread title convention, the Claude desktop
+  app install through winget, and the picture of a frame taken from a playing clip in WebView2 (the screenshot at the
+  end of a recording) have not been tried on real hardware or with real accounts. Slack has no webhook mode (a Slack
+  webhook cannot attach files). Google, Reddit and Teams still need an app ID you register yourself.
 - **A real desktop.** Windows 11 capture and tray, GNOME and KDE trays, Wayland capture and
   clipboard, notification clicks: spikes S1 to S5 in `docs/spikes.md` are all still "not run".
 - **Real accounts.** OAuth sign-in with Google and Reddit, Jira tokens, and a Claude chat opened
@@ -125,6 +135,15 @@ those is true for each piece.
    Settings, Video, *Test ffmpeg*. Turn off every sound device but the microphone and check the
    Stereo Mix line and the button that opens the sound settings. Run the installer again over the
    installed copy: the button says Update and your settings are kept.
+   The 7 November round, on a real PC: on the Setup page look at the *Sound output* line (does it name your
+   speakers; does it say videos can include the sound); add a Discord connection with one webhook link, make a
+   layout from the Discord template and send a message, then a forum thread by title; add a second channel and a
+   category in a bot-mode connection and check the dependent dropdowns narrow (server, category, channel); send twice
+   to different channels and check the dropdown starts on the last one and lists the last five; press the buttons
+   next to the token fields and check each opens the right page; from a Claude connection press *Install it* for the desktop
+   app; in a layout with both a Screenshot and a Video block, record, then press *Take screenshot* and send to
+   Jira or Slack and check both arrive; open **Guides** at the bottom of the Settings menu, run the Jira guide and one
+   other, and check the box lands on the right field and the sentence is short.
 7. Before making the repository public: the list at the end of `docs/signing.md` and in
    `docs/security.md`.
 

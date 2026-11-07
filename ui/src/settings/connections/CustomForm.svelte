@@ -36,11 +36,11 @@
   }
 </script>
 
-<Field label="Base address" hint="Every request goes under this address. It must start with https://.">
+<Field label="Base address" hint="Every request goes under this address. It must start with https://." tour="custom.url">
   <input type="text" bind:value={value.base_url} placeholder="https://api.example.com/v1" />
 </Field>
 
-<Field label="Sign-in">
+<Field label="Sign-in" tour="custom.auth">
   <select value={value.auth.type} onchange={(e) => setAuth(e.currentTarget.value as CustomAuth['type'])}>
     {#each AUTHS as a (a.value)}<option value={a.value}>{a.label}</option>{/each}
   </select>

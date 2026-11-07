@@ -18,7 +18,9 @@
 </label>
 
 <style>
-  .toggle { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+  /* relative: the hidden input below is absolute, and without a positioned parent it escapes the
+     scrolling page and gives the whole window a second scroll bar */
+  .toggle { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
   input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .track {
     position: relative; width: 36px; height: 20px; flex: none;

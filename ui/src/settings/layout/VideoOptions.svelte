@@ -4,6 +4,7 @@
   // once when the block is opened.
   import { onMount } from 'svelte';
   import Field from '../../lib/components/Field.svelte';
+  import Toggle from '../../lib/components/Toggle.svelte';
   import { getApi } from '../../lib/ipc';
   import { DEFAULT_VIDEO_AUDIO } from '../../lib/types';
   import type { AudioChoice, AudioDevice, AudioDevices, Block, VideoSubject } from '../../lib/types';
@@ -73,8 +74,14 @@
   </select>
 </Field>
 
+<div class="end">
+  <Toggle label="Take a screenshot when the recording stops" checked={block.screenshot_at_end === true} onchange={(v) => (block.screenshot_at_end = v)} />
+  <p class="quiet small">For a layout with a screenshot block too. Off, that block starts empty, and “Take screenshot” under the recording keeps the frame on screen.</p>
+</div>
+
 {#if note}<p class="quiet small" role="note">{note}</p>{/if}
 
 <style>
   .small { font-size: 12.5px; margin: 0; }
+  .end { display: grid; gap: 4px; }
 </style>

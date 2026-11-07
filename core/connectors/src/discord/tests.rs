@@ -13,9 +13,12 @@ const FORUM: &str = "444444444444444444";
 const VOICE: &str = "555555555555555555";
 const THREAD: &str = "666666666666666666";
 const MESSAGE: &str = "777777777777777777";
+const CATEGORY: &str = "888888888888888888";
+const HOOK: &str = "999000999000999000";
+const HOOK_TOKEN: &str = "aB-cd_EF123";
 
 fn connector(server: &MockServer) -> DiscordConnector {
-    DiscordConnector::new(model::Discord {}).with_endpoints(Endpoints {
+    DiscordConnector::new(model::Discord::default()).with_endpoints(Endpoints {
         api: server.url("/api/v10"),
     })
 }
@@ -60,10 +63,10 @@ fn discord(req: &Recorded) -> MockResponse {
         p if p == format!("/guilds/{GUILD}/channels") => MockResponse::json(
             200,
             json!([
-                { "id": TEXT, "name": "Bugs", "type": 0 },
-                { "id": FORUM, "name": "feedback", "type": 15 },
+                { "id": TEXT, "name": "Bugs", "type": 0, "parent_id": CATEGORY, "position": 2 },
+                { "id": FORUM, "name": "feedback", "type": 15, "position": 5 },
                 { "id": VOICE, "name": "talk", "type": 2 },
-                { "id": "888888888888888888", "name": "Category", "type": 4 },
+                { "id": CATEGORY, "name": "Support", "type": 4, "position": 1 },
             ]),
         ),
         p if p == format!("/guilds/{GUILD}/threads/active") => MockResponse::json(
@@ -228,9 +231,12 @@ fn channels_forums_and_threads_are_listed_by_server() {
         .iter()
         .map(|i| (i.value.as_str(), i.label.as_str()))
         .collect();
-    // Voice channels and categories are not places to post.
-    assert_eq!(shown, [(TEXT, "#bugs"), (FORUM, "#feedback (forum)")]);
-    assert!(items.iter().all(|i| i.group.as_deref() == Some("Acme")));
+    // Voice channels and categories are not places to post. Channels outside any category come
+    // first, like in Discord.
+    assert_eq!(shown, [(FORUM, "#feedback (forum)"), (TEXT, "#bugs")]);
+    assert!(items.iter().all(|i| i.server.as_deref() == Some("Acme")));
+    assert_eq!(items[0].category, None);
+    assert_eq!(items[1].category.as_deref(), Some("Support"));
 
     let threads = w.with("dc", |ctx| c.options(ctx, "threads")).unwrap();
     assert_eq!(threads.len(), 1);
@@ -238,6 +244,9 @@ fn channels_forums_and_threads_are_listed_by_server() {
         (threads[0].value.as_str(), threads[0].label.as_str()),
         (THREAD, "Crash on save")
     );
+    // A thread is filed under the channel it belongs to.
+    assert_eq!(threads[0].server.as_deref(), Some("Acme"));
+    assert_eq!(threads[0].category.as_deref(), Some("#bugs"));
     assert!(w.with("dc", |ctx| c.options(ctx, "emoji")).is_err());
 }
 
@@ -336,6 +345,30 @@ fn the_screenshot_and_the_zip_ride_along_as_attachments() {
         .body
         .windows(png().data.len())
         .any(|w| w == png().data.as_slice()));
+}
+
+#[test]
+fn a_picture_taken_from_a_recording_rides_along_beside_it() {
+    let server = MockServer::start(discord);
+    let w = world();
+    let mut p = payload(&[("channel", TEXT)]);
+    p.image = Some(Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0, 0, 24],
+    });
+    p.still = Some(png());
+    w.with("dc", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.method == "POST")
+        .unwrap();
+    assert_eq!(
+        payload_json(&post)["attachments"],
+        json!([{ "id": 0, "filename": "recording.mp4" }, { "id": 1, "filename": "screenshot.png" }])
+    );
 }
 
 #[test]
@@ -618,10 +651,332 @@ fn refusals_are_explained_and_classified() {
 
 #[test]
 fn it_describes_what_a_button_can_fill() {
-    let d = DiscordConnector::new(model::Discord {}).describe();
+    let d = DiscordConnector::new(model::Discord::default()).describe();
     let keys: Vec<_> = d.fields.iter().map(|f| f.key).collect();
     assert_eq!(keys, ["channel", "thread", "message", "title"]);
     assert_eq!(d.fields[0].list, Some("channels"));
     assert_eq!(d.fields[1].list, Some("threads"));
     assert_eq!(d.lists.len(), 2);
+}
+
+// ----- webhooks: no bot -----
+
+fn hook_world() -> World {
+    World::new()
+        .secret(
+            "dc",
+            "hook0",
+            &format!("https://discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+        )
+        .secret(
+            "dc",
+            "hook1",
+            &format!("https://discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}?wait=true"),
+        )
+}
+
+fn hooks(shown_as: &str) -> DiscordConnector {
+    DiscordConnector::new(model::Discord {
+        mode: DiscordMode::Webhook,
+        shown_as: shown_as.into(),
+        hooks: vec![
+            model::Hook {
+                slot: 0,
+                name: "bugs".into(),
+                server: "Acme".into(),
+            },
+            model::Hook {
+                slot: 1,
+                name: "chat".into(),
+                server: String::new(),
+            },
+            model::Hook {
+                slot: 2,
+                name: "later".into(),
+                server: String::new(),
+            },
+        ],
+    })
+}
+
+fn hooked(server: &MockServer, shown_as: &str) -> DiscordConnector {
+    hooks(shown_as).with_endpoints(Endpoints {
+        api: server.url("/api/v10"),
+    })
+}
+
+fn hook_path() -> String {
+    format!("/api/v10/webhooks/{HOOK}/{HOOK_TOKEN}")
+}
+
+/// A webhook that posts in a text channel.
+fn webhook_text(req: &Recorded) -> MockResponse {
+    if req.path() == hook_path() && req.method == "GET" {
+        return MockResponse::json(
+            200,
+            json!({ "channel_id": TEXT, "guild_id": GUILD, "name": "Hook" }),
+        );
+    }
+    if req.path() == hook_path() && req.method == "POST" {
+        return MockResponse::json(200, json!({ "id": MESSAGE, "channel_id": TEXT }));
+    }
+    MockResponse::new(404)
+}
+
+#[test]
+fn only_discords_own_webhook_links_are_taken() {
+    let ok = format!("https://discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}");
+    assert_eq!(
+        parse_webhook(&ok).unwrap(),
+        (HOOK.to_string(), HOOK_TOKEN.to_string())
+    );
+    assert!(parse_webhook(&format!("  {ok}?wait=true ")).is_ok());
+    assert!(parse_webhook(&format!(
+        "https://ptb.discord.com/api/v10/webhooks/{HOOK}/{HOOK_TOKEN}"
+    ))
+    .is_ok());
+    for bad in [
+        "",
+        "not a link",
+        &format!("http://discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+        &format!("https://evil.example/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+        &format!("https://discord.com.evil.example/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+        &format!("https://evil.example#.discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+        &format!("https://discord.com/api/webhooks/12/{HOOK_TOKEN}"),
+        &format!("https://discord.com/api/webhooks/{HOOK}/"),
+        &format!("https://discord.com/channels/{GUILD}/{TEXT}"),
+    ] {
+        let e = parse_webhook(bad).unwrap_err();
+        assert!(e.contains("Copy Webhook URL"), "{bad}: {e}");
+    }
+}
+
+#[test]
+fn a_webhook_posts_without_a_bot_and_under_any_name() {
+    let server = MockServer::start(webhook_text);
+    let w = hook_world();
+    let mut p = payload(&[("channel", "hook0"), ("title", "Crash")]);
+    p.prompt = Some("@everyone look".into());
+    let out = w
+        .with("dc", |ctx| hooked(&server, "Louis").send(ctx, &p))
+        .unwrap();
+    assert_eq!(out.summary, "Posted to Discord");
+    assert_eq!(
+        out.url.as_deref(),
+        Some(format!("https://discord.com/channels/{GUILD}/{TEXT}/{MESSAGE}").as_str())
+    );
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.method == "POST")
+        .unwrap();
+    assert_eq!(
+        post.header("authorization"),
+        None,
+        "a webhook needs no bot token"
+    );
+    assert_eq!(post.query_param("wait").as_deref(), Some("true"));
+    assert_eq!(post.query_param("thread_id"), None);
+    let body = post.json();
+    assert_eq!(body["content"], "**Crash**\n@everyone look");
+    assert_eq!(body["allowed_mentions"], json!({ "parse": [] }));
+    assert_eq!(body["username"], "Louis");
+    assert!(body.get("thread_name").is_none());
+}
+
+#[test]
+fn a_webhook_with_one_channel_needs_no_choice_and_a_thread_link_is_used() {
+    let server = MockServer::start(webhook_text);
+    let w = World::new().secret(
+        "dc",
+        "hook0",
+        &format!("https://discord.com/api/webhooks/{HOOK}/{HOOK_TOKEN}"),
+    );
+    let only = DiscordConnector::new(model::Discord {
+        mode: DiscordMode::Webhook,
+        shown_as: String::new(),
+        hooks: vec![model::Hook {
+            slot: 0,
+            name: "bugs".into(),
+            server: String::new(),
+        }],
+    })
+    .with_endpoints(Endpoints {
+        api: server.url("/api/v10"),
+    });
+    let mut p = payload(&[(
+        "thread",
+        &format!("https://discord.com/channels/{GUILD}/{THREAD}/{MESSAGE}"),
+    )]);
+    p.prompt = Some("hi".into());
+    w.with("dc", |ctx| only.send(ctx, &p)).unwrap();
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.method == "POST")
+        .unwrap();
+    assert_eq!(post.query_param("thread_id").as_deref(), Some(THREAD));
+    assert!(
+        post.json().get("username").is_none(),
+        "no name given keeps the webhook's own"
+    );
+}
+
+#[test]
+fn a_webhook_into_a_forum_starts_a_post_named_from_the_title() {
+    let server = MockServer::start(|req| {
+        if req.path() == hook_path() && req.method == "GET" {
+            return MockResponse::json(200, json!({ "channel_id": FORUM, "guild_id": GUILD }));
+        }
+        if req.path() == hook_path() && req.method == "POST" {
+            // Discord refuses a plain message in a forum, and takes one with a post name.
+            return if req.json().get("thread_name").is_some() {
+                MockResponse::json(200, json!({ "id": MESSAGE, "channel_id": THREAD }))
+            } else {
+                MockResponse::json(
+                    400,
+                    json!({ "code": 220003, "message": "Webhooks posted to forum channels must have a thread_name or thread_id" }),
+                )
+            };
+        }
+        MockResponse::new(404)
+    });
+    let w = hook_world();
+    let mut p = payload(&[("channel", "hook0"), ("title", "Crash on save")]);
+    p.prompt = Some("details".into());
+    let out = w
+        .with("dc", |ctx| hooked(&server, "").send(ctx, &p))
+        .unwrap();
+    assert_eq!(out.summary, "Started a post in the Discord forum");
+    assert_eq!(
+        out.url.as_deref(),
+        Some(format!("https://discord.com/channels/{GUILD}/{THREAD}").as_str())
+    );
+    let posts: Vec<_> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.method == "POST")
+        .collect();
+    assert_eq!(posts.len(), 2);
+    let started = posts[1].json();
+    assert_eq!(started["thread_name"], "Crash on save");
+    assert_eq!(
+        started["content"], "details",
+        "the title is the post's name, not a bold line"
+    );
+}
+
+#[test]
+fn a_webhook_post_whose_outcome_is_unknown_is_not_tried_again() {
+    let server = MockServer::start(|req| {
+        if req.method == "POST" {
+            MockResponse::json(502, json!({ "message": "bad gateway" }))
+        } else {
+            webhook_text(req)
+        }
+    });
+    let w = hook_world();
+    let mut p = payload(&[("channel", "hook0")]);
+    p.prompt = Some("hi".into());
+    let e = w
+        .with("dc", |ctx| hooked(&server, "").send(ctx, &p))
+        .unwrap_err();
+    assert!(!e.kind.is_retryable());
+    assert!(
+        e.message.contains("may or may not have posted"),
+        "{}",
+        e.message
+    );
+    assert_eq!(
+        server
+            .requests()
+            .iter()
+            .filter(|r| r.method == "POST")
+            .count(),
+        1
+    );
+}
+
+#[test]
+fn a_deleted_webhook_says_to_make_a_new_one() {
+    let server = MockServer::start(|_| {
+        MockResponse::json(404, json!({ "code": 10015, "message": "Unknown Webhook" }))
+    });
+    let w = hook_world();
+    let mut p = payload(&[("channel", "hook0")]);
+    p.prompt = Some("hi".into());
+    let e = w
+        .with("dc", |ctx| hooked(&server, "").send(ctx, &p))
+        .unwrap_err();
+    assert_eq!(e.kind, FailureKind::AuthExpired);
+    assert!(e.message.contains("make a new one"), "{}", e.message);
+}
+
+#[test]
+fn webhook_channels_are_listed_by_name_and_only_when_a_link_is_stored() {
+    let server = MockServer::start(webhook_text);
+    let w = hook_world();
+    let c = hooked(&server, "");
+    let items = w.with("dc", |ctx| c.options(ctx, "channels")).unwrap();
+    // Slot 2 has no link yet, so it is not offered.
+    let shown: Vec<_> = items
+        .iter()
+        .map(|i| (i.value.as_str(), i.label.as_str(), i.server.as_deref()))
+        .collect();
+    assert_eq!(
+        shown,
+        [("hook0", "bugs", Some("Acme")), ("hook1", "chat", None)]
+    );
+    // A webhook cannot look at the server, so there is no thread list to show.
+    assert!(w
+        .with("dc", |ctx| c.options(ctx, "threads"))
+        .unwrap()
+        .is_empty());
+    assert!(
+        server.requests().is_empty(),
+        "listing channels asks Discord nothing"
+    );
+}
+
+#[test]
+fn testing_webhooks_checks_each_link() {
+    let server = MockServer::start(webhook_text);
+    let w = hook_world();
+    let said = w.with("dc", |ctx| hooked(&server, "").test(ctx)).unwrap();
+    assert!(said.contains("Works: bugs, chat"), "{said}");
+    assert!(
+        said.contains("later") && said.contains("no webhook link yet"),
+        "{said}"
+    );
+
+    let none = World::new();
+    let e = none
+        .with("dc", |ctx| hooked(&server, "").test(ctx))
+        .unwrap_err();
+    assert!(e.message.contains("no webhook link yet"), "{}", e.message);
+}
+
+#[test]
+fn a_webhook_connection_is_connected_by_a_link_and_forgets_all_of_them() {
+    let c = hooks("");
+    let w = hook_world();
+    assert_eq!(w.with("dc", |ctx| c.status(ctx)), Status::Connected);
+    assert_eq!(
+        World::new().with("dc", |ctx| c.status(ctx)),
+        Status::Disconnected
+    );
+    // A bot token alone does not make a webhook connection connected.
+    assert_eq!(
+        world().with("dc", |ctx| c.status(ctx)),
+        Status::Disconnected
+    );
+    w.with("dc", |ctx| c.disconnect(ctx));
+    assert_eq!(w.with("dc", |ctx| c.status(ctx)), Status::Disconnected);
+}
+
+#[test]
+fn connections_saved_before_webhooks_stay_bots() {
+    let old: model::Discord = serde_json::from_value(json!({})).unwrap();
+    assert_eq!(old.mode, DiscordMode::Bot);
+    assert!(old.hooks.is_empty());
 }

@@ -66,6 +66,9 @@ pub struct VideoBlock {
     pub subject: VideoSubject,
     /// Which sounds go into the recording.
     pub audio: VideoAudio,
+    /// With a screenshot block in the same layout: start it filled with the picture taken when
+    /// the recording stopped. Off, it starts empty and the person takes one from the recording.
+    pub screenshot_at_end: bool,
 }
 
 /// What a recording shows.
@@ -266,6 +269,38 @@ pub struct DropdownBlock {
     #[serde(default)]
     pub title: String,
     pub source: DropdownSource,
+    /// Keep the last five choices at the top of the list and start on the last one used.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub remember: bool,
+    /// The person may leave it empty, or type or paste something that is not in the list (a
+    /// thread's link). With no list at all it is just a text box.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub optional: bool,
+    /// The text block whose words narrow the list while it is shown, so a thread named like the
+    /// title is found at once. Empty: no narrowing.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub narrow_by: Option<String>,
+}
+
+impl DropdownBlock {
+    /// A dropdown with the usual behaviour: remembers its choices, must be answered, shows all.
+    pub fn new(title: &str, source: DropdownSource) -> Self {
+        Self {
+            title: title.to_string(),
+            source,
+            remember: true,
+            optional: false,
+            narrow_by: None,
+        }
+    }
+}
+
+fn is_true(b: &bool) -> bool {
+    *b
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -450,10 +485,10 @@ mod serde_tests {
                         w: 4,
                         h: 1,
                     },
-                    kind: BlockKind::Dropdown(DropdownBlock {
-                        title: "Chat".into(),
-                        source: DropdownSource::ClaudeChats,
-                    }),
+                    kind: BlockKind::Dropdown(DropdownBlock::new(
+                        "Chat",
+                        DropdownSource::ClaudeChats,
+                    )),
                 },
             ],
         };
@@ -508,11 +543,13 @@ mod serde_tests {
                     desktop: AudioChoice::Off,
                     microphone: AudioChoice::Device("USB Mic".into()),
                 },
+                screenshot_at_end: true,
             }),
         };
         let json = serde_json::to_value(&block).unwrap();
         assert_eq!(json["type"], "video");
         assert_eq!(json["subject"], "focused_window");
+        assert_eq!(json["screenshot_at_end"], true);
         assert_eq!(json["audio"]["desktop"], "off");
         assert_eq!(
             json["audio"]["microphone"],

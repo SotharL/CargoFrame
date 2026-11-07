@@ -45,8 +45,8 @@ pub enum Code {
     UnresolvedVariable,
     SeveralZipNames,
     BadSubfolder,
-    /// A screenshot block and a video block in one layout: a trigger makes one or the other.
-    ScreenshotAndVideo,
+    /// A dropdown narrowed by a text block that is not in the layout.
+    NarrowByMissing,
     /// A block the destination has no place for, so this button leaves it out.
     CannotSend,
     /// More than [`MAX_SHARING_BUTTONS`] sharing buttons: the window has room for five boxes.
@@ -180,10 +180,6 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
     let mut out = Vec::new();
     check_geometry(layout, &mut out);
     let mut zip_names = 0;
-    let has_screenshot = layout
-        .blocks
-        .iter()
-        .any(|b| matches!(b.kind, BlockKind::Screenshot));
     for block in &layout.blocks {
         match &block.kind {
             BlockKind::Text(t) => {
@@ -215,6 +211,18 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
             }
             BlockKind::Dropdown(d) => {
                 check_variables(block, &d.title, reg, &mut out);
+                if let Some(by) = d.narrow_by.as_deref().filter(|b| !b.is_empty()) {
+                    let is_text =
+                        matches!(layout.block(by).map(|b| &b.kind), Some(BlockKind::Text(_)));
+                    if !is_text {
+                        out.push(issue(
+                            block,
+                            Severity::Warning,
+                            Code::NarrowByMissing,
+                            format!("This list is narrowed by the text block \"{by}\", which is not in this layout: it shows everything"),
+                        ));
+                    }
+                }
                 if let DropdownSource::WebApi { connection_id, .. } = &d.source {
                     match reg.connection(connection_id) {
                         None => out.push(issue(
@@ -245,16 +253,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                 }
             }
             BlockKind::Screenshot => {}
-            BlockKind::Video(_) => {
-                if has_screenshot {
-                    out.push(issue(
-                        block,
-                        Severity::Warning,
-                        Code::ScreenshotAndVideo,
-                        "A trigger makes a screenshot or a video, not both: keep the video block in a layout of its own",
-                    ));
-                }
-            }
+            BlockKind::Video(_) => {}
         }
     }
     out.sort_by_key(|i| std::cmp::Reverse(i.severity));
@@ -319,7 +318,6 @@ fn is_blocking(code: Code) -> bool {
             | Code::MappingRuleMissing
             | Code::UnresolvedVariable
             | Code::CannotSend
-            | Code::ScreenshotAndVideo
     )
 }
 
@@ -593,7 +591,7 @@ mod tests {
     }
 
     #[test]
-    fn a_video_block_alone_is_fine_and_with_a_screenshot_it_is_warned_about() {
+    fn a_video_block_is_fine_alone_and_beside_a_screenshot() {
         let alone = layout(vec![at("clip", 0, BlockKind::Video(Default::default()))]);
         assert!(validate(&alone, &Reg::default()).is_empty());
 
@@ -601,12 +599,7 @@ mod tests {
             at("shot", 0, BlockKind::Screenshot),
             at("clip", 1, BlockKind::Video(Default::default())),
         ]);
-        let issues = validate(&both, &Reg::default());
-        assert_eq!(codes(&issues), vec![Code::ScreenshotAndVideo]);
-        assert_eq!(issues[0].severity, Severity::Warning);
-        assert_eq!(issues[0].block_id.as_deref(), Some("clip"));
-        // a warning does not stop a button from working
-        assert!(!is_blocking(Code::ScreenshotAndVideo));
+        assert!(validate(&both, &Reg::default()).is_empty());
     }
 
     #[test]
@@ -829,13 +822,13 @@ mod tests {
         let l = layout(vec![at(
             "d",
             0,
-            BlockKind::Dropdown(DropdownBlock {
-                title: "Project".into(),
-                source: DropdownSource::WebApi {
+            BlockKind::Dropdown(DropdownBlock::new(
+                "Project",
+                DropdownSource::WebApi {
                     connection_id: "jira".into(),
                     options_id: "projects".into(),
                 },
-            }),
+            )),
         )]);
         let issues = validate(&l, &reg);
         assert_eq!(codes(&issues), vec![Code::ConnectionDisconnected]);
@@ -843,14 +836,42 @@ mod tests {
     }
 
     #[test]
+    fn a_list_narrowed_by_a_missing_text_block_is_a_warning() {
+        let reg = Reg::default().with("d", ConnectionKind::Discord, ConnectionState::Connected);
+        let list = |narrow: Option<&str>| {
+            let mut d = DropdownBlock::new(
+                "Thread",
+                DropdownSource::WebApi {
+                    connection_id: "d".into(),
+                    options_id: "threads".into(),
+                },
+            );
+            d.narrow_by = narrow.map(String::from);
+            at("thread", 0, BlockKind::Dropdown(d))
+        };
+        let title = at(
+            "title",
+            1,
+            BlockKind::Text(TextBlock {
+                title: "Title".into(),
+                placement: TitlePlacement::Above,
+                role: TextRole::Plain,
+                default_text: String::new(),
+            }),
+        );
+        assert!(validate(&layout(vec![list(Some("title")), title.clone()]), &reg).is_empty());
+        assert!(validate(&layout(vec![list(None), title]), &reg).is_empty());
+        let issues = validate(&layout(vec![list(Some("nope"))]), &reg);
+        assert_eq!(codes(&issues), vec![Code::NarrowByMissing]);
+        assert_eq!(issues[0].severity, Severity::Warning);
+    }
+
+    #[test]
     fn claude_chat_dropdown_needs_no_connection() {
         let l = layout(vec![at(
             "d",
             0,
-            BlockKind::Dropdown(DropdownBlock {
-                title: "Chat".into(),
-                source: DropdownSource::ClaudeChats,
-            }),
+            BlockKind::Dropdown(DropdownBlock::new("Chat", DropdownSource::ClaudeChats)),
         )]);
         assert!(validate(&l, &Reg::default()).is_empty());
     }

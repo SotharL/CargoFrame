@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import GuideLink from '../guide/GuideLink.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
@@ -105,6 +106,7 @@
 </script>
 
 <div class="page">
+  <div class="guide-link"><GuideLink tour="data-from-files" /></div>
   {#if rules.failure}<Chip kind="err" label={rules.failure} />{/if}
   {#each rules.problems as p (p)}<Chip kind="warn" label={`Could not read a file-value file: ${p}`} />{/each}
 
@@ -120,7 +122,7 @@
         Example: read <code>version</code> from <code>package.json</code>, call it “version”, and write
         <code>{'{{rule.version}}'}</code> in a text block to have it filled in on every capture.
       </p>
-      <button class="primary" onclick={add}>Add a value from a file</button>
+      <button class="primary" data-tour="rules.add" onclick={add}>Add a value from a file</button>
     </div>
   {/if}
 
@@ -148,24 +150,24 @@
   {/each}
 
   {#if rules.items.length > 0 && !draft}
-    <div><button class="primary" onclick={add}>Add a value from a file</button></div>
+    <div><button class="primary" data-tour="rules.add" onclick={add}>Add a value from a file</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? 'Edit value from a file' : 'New value from a file'}</h2>
-      <Field label="Name" hint="Also the name you write in a text block, and shown when the value cannot be found.">
+      <Field label="Name" hint="Also the name you write in a text block, and shown when the value cannot be found." tour="rules.name">
         <input type="text" bind:value={draft.value.name} placeholder="App version" />
       </Field>
-      <Field label="File" hint="Relative to the project folder. Use * or ** to match several; the first match is read.">
+      <Field label="File" tour="rules.file" hint="Relative to the project folder. Use * or ** to match several; the first match is read.">
         <input type="text" bind:value={draft.value.file} placeholder={draft.value.format === 'text' ? 'logs/*.log' : 'package.json'} />
       </Field>
-      <Field label="Format">
+      <Field label="Format" tour="rules.format">
         <select bind:value={draft.value.format}>
           {#each FORMATS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
         </select>
       </Field>
-      <Field label="Look for" hint={format(draft.value.format).help}>
+      <Field label="Look for" tour="rules.query" hint={format(draft.value.format).help}>
         <input type="text" bind:value={draft.value.query} placeholder={format(draft.value.format).query} />
       </Field>
       {#if draft.value.format === 'regex'}
@@ -240,7 +242,7 @@
 
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" disabled={busy}>Save</button>
+        <button class="primary" type="submit" data-tour="rules.save" disabled={busy}>Save</button>
         <button type="button" onclick={() => (draft = null)}>Cancel</button>
       </div>
     </form>
@@ -248,6 +250,7 @@
 </div>
 
 <style>
+  .guide-link { justify-self: end; }
   .page { display: grid; gap: 12px; }
   .empty, .card, .editor {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;

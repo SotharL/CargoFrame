@@ -12,6 +12,12 @@ function titleOf(b: Block): string {
   return b.id;
 }
 
+/** A recording whose layout also has a screenshot block: that block starts empty. */
+export function pairedWithRecording(view: SessionView): boolean {
+  const blocks = view.layout?.blocks ?? [];
+  return view.video != null && blocks.some((b) => b.type === 'video') && blocks.some((b) => b.type === 'screenshot');
+}
+
 function reachOf(view: SessionView, button: SharingBlock, blockId: string): BlockReach | undefined {
   return view.sharing[button.id]?.reach?.blocks.find((r) => r.block_id === blockId);
 }
@@ -29,6 +35,8 @@ export function willSend(
   imageEdited: boolean,
   clipEdit: ClipEdit | null = null,
   ticks: Ticks = initialTicks(view),
+  /** With a recording and a screenshot block: the block holds a picture (it starts empty). */
+  stillTaken = true,
 ): string[] {
   const blocks = view.layout?.blocks ?? [];
   // A ticked block goes when the destination can take it. A ticked block the button had switched
@@ -43,7 +51,7 @@ export function willSend(
 
   for (const b of blocks) {
     const r = sent(b);
-    if (b.type === 'screenshot' && r) {
+    if (b.type === 'screenshot' && r && (stillTaken || !pairedWithRecording(view))) {
       parts.push(imageEdited ? 'Screenshot (edited)' : 'Screenshot');
     }
     if (b.type === 'video' && r && view.video) {

@@ -277,6 +277,14 @@ async function tauriApi(): Promise<Api> {
 }
 
 /** Options for the in-memory stand-in: what a share and a list request should do. */
+export type SetupScenario =
+  | 'ready'
+  | 'windows_missing'
+  | 'windows_no_winget'
+  | 'windows_no_loopback'
+  | 'windows_no_output'
+  | 'linux_missing';
+
 export interface MemoryOptions {
   general?: Partial<General>;
   /** Starting video settings. */
@@ -290,9 +298,13 @@ export interface MemoryOptions {
   /** The stand-in finds no sound devices at all. */
   noAudio?: boolean;
   /** What the Setup page finds: everything there (the default), or one of the ways it is not. */
-  setup?: 'ready' | 'windows_missing' | 'windows_no_winget' | 'windows_no_loopback' | 'linux_missing';
+  setup?: SetupScenario;
+  /** What the computer looks like from the second check on (a device was plugged in, say). */
+  setupThen?: SetupScenario;
   /** The stand-in's install does not work. */
   installFails?: boolean;
+  /** Windows stand-in: whether the Claude desktop app is installed (default: it is). */
+  claudeApp?: 'installed' | 'missing';
   /** How many times the stand-in's install is asked about before it is done. */
   installPolls?: number;
   /** Called by `share`; the default answers with a made-up success. */
@@ -361,8 +373,11 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
   let trialRan = false;
   // the Setup page's stand-in: what is installed changes only when the install button is pressed
-  const scenario = opts.setup ?? 'ready';
-  let installed = scenario === 'ready' || scenario === 'windows_no_loopback';
+  let scenario: SetupScenario = opts.setup ?? 'ready';
+  let setupChecks = 0;
+  const hasFfmpeg = (s: SetupScenario) => s === 'ready' || s === 'windows_no_loopback' || s === 'windows_no_output';
+  let installed = hasFfmpeg(scenario);
+  let claudeInstalled = opts.claudeApp !== 'missing';
   let installLeft = 0;
   let installFailed = false;
   let soundSettingsOpened = 0;
@@ -373,27 +388,43 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       : { id: 'ffmpeg', name: 'ffmpeg', what_for: 'Recording video, and the sound in it. Screenshots and sharing do not need it.', status: 'missing', detail: 'ffmpeg was not found.', action: null };
     const items: SetupItem[] = [ffmpeg];
     let install: SetupInstall = { type: 'none' };
+    const output = (status: SetupItem['status'], detail: string, action: SetupItem['action'] = null): SetupItem => ({
+      id: 'sound_output', name: 'Sound output',
+      what_for: "The speakers or headphones this computer plays on. A video takes the computer's sound from it.",
+      status, detail, action,
+    });
     if (windows) {
-      const loop = scenario === 'windows_no_loopback' ? 'missing' : installed ? 'ok' : 'unknown';
-      items.push({
-        id: 'computer_sound', name: 'Sound of the computer',
-        what_for: 'Lets a video include what this PC plays. Needs a loopback device such as Stereo Mix.',
-        status: loop,
-        detail: loop === 'ok' ? 'A loopback device is available.' : loop === 'unknown' ? 'Install ffmpeg first; then this can be checked.' : 'No loopback device found. Turn on "Stereo Mix" in the Windows sound settings (Recording tab, right-click, Show disabled devices). Without it, videos have no computer sound.',
-        action: loop === 'missing' ? 'sound_settings' : null,
-      });
-      if (!installed) {
+      if (scenario === 'windows_no_output') {
+        items.push(output('missing', 'Windows has no default playback device: no speakers or headphones are set, or none is plugged in. Plug one in, or choose one in the Windows sound settings (the button).', 'sound_settings'));
+      } else if (scenario === 'windows_no_loopback') {
+        items.push(output('ok', 'Speakers (Realtek(R) Audio). Videos cannot include its sound yet: Windows needs "Stereo Mix" (or a similar loopback device) switched on. Its settings open with the button.', 'sound_settings'));
+      } else {
+        items.push(output('ok', installed ? 'Speakers (Realtek(R) Audio). Videos can include its sound.' : 'Speakers (Realtek(R) Audio). Install ffmpeg to check whether videos can include its sound.'));
+      }
+      // a Claude connection that opens the desktop app makes the app a line of its own
+      const opensApp = [...store.connection.values()].some(
+        (c) => (c as Connection).kind === 'claude' && (c as Connection & { open_with: string }).open_with !== 'browser',
+      );
+      if (opensApp) {
+        items.push({
+          id: 'claude_app', name: 'Claude desktop app',
+          what_for: 'Where a Claude connection opens your chat. Without it, set that connection to open in the browser.',
+          status: claudeInstalled ? 'ok' : 'missing', detail: claudeInstalled ? 'Installed.' : 'Not installed.', action: null,
+        });
+      }
+      const claudeMissing = opensApp && !claudeInstalled;
+      if (!installed || claudeMissing) {
         install = scenario === 'windows_no_winget'
           ? { type: 'manual', text: 'Windows\' package manager (winget) was not found. Install "App Installer" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Video.' }
-          : { type: 'run', label: 'Install ffmpeg' };
+          : { type: 'run', label: !installed && claudeMissing ? 'Install what is missing' : installed ? 'Install the Claude app' : 'Install ffmpeg' };
       }
     } else {
-      items.push({ id: 'sound_system', name: 'Sound system (PulseAudio or PipeWire)', what_for: "Records the computer's sound and the microphone in videos.", status: 'ok', detail: 'Running.', action: null });
+      items.push(output('ok', 'Built-in Audio Analog Stereo. Videos can include its sound.'));
       items.push({ id: 'xdotool', name: 'xdotool', what_for: 'Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).', status: installed ? 'ok' : 'missing', detail: installed ? 'Installed.' : 'Not installed.', action: null });
       if (!installed) install = { type: 'copy', command: 'sudo apt install ffmpeg xdotool' };
     }
     if (installLeft > 0) install = { type: 'running' };
-    else if (installFailed && !installed) install = { type: 'failed', message: 'winget said: No network connection.' };
+    else if (installFailed && !(installed && claudeInstalled)) install = { type: 'failed', message: 'winget said: No network connection.' };
     return { os: windows ? 'windows' : 'linux', items, missing: items.filter((i) => i.status === 'missing').length, install };
   };
   let copyMade = false;
@@ -425,7 +456,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     phase: updatePhase,
   });
   const TYPED: Record<string, string[]> = {
-    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], discord: ['token'], teams: [], custom: ['secret'],
+    jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], teams: [], custom: ['secret'],
+    discord: ['token', ...Array.from({ length: 10 }, (_, i) => `hook${i}`)],
   };
   const OAUTH = new Set(['google', 'reddit', 'teams']);
   const describeFor = (c: Connection): Describe => {
@@ -501,6 +533,9 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     if (c.kind === 'claude') return 'connected';
     if (c.kind === 'custom' && c.auth.type === 'none') return 'connected';
     if (OAUTH.has(c.kind)) return signedIn.has(id) ? 'connected' : 'disconnected';
+    if (c.kind === 'discord' && c.mode === 'webhook') {
+      return c.hooks.some((h) => secretsSet.has(`${id}/hook${h.slot}`)) ? 'connected' : 'disconnected';
+    }
     return secretsSet.has(`${id}/${TYPED[c.kind]![0]}`) ? 'connected' : 'disconnected';
   };
   const BUILTINS: VariableInfo[] = [
@@ -725,9 +760,17 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       };
     },
     getSetup: async () => {
+      // every check looks at the machine again; a test can change the machine between two checks
+      if (setupChecks++ > 0 && opts.setupThen && opts.setupThen !== scenario) {
+        scenario = opts.setupThen;
+        installed = hasFfmpeg(scenario);
+      }
       if (installLeft > 0) {
         installLeft -= 1;
-        if (installLeft === 0 && !opts.installFails) installed = true;
+        if (installLeft === 0 && !opts.installFails) {
+          installed = true;
+          claudeInstalled = true;
+        }
         else if (installLeft === 0) installFailed = true;
       }
       return setupReport();
@@ -898,6 +941,21 @@ let cached: Promise<Api> | undefined;
 /** A copy that is safe to keep: the real backend gets JSON too, and a Svelte proxy cannot be structured-cloned. */
 const plain = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;
 
+const channel = (server: string, category: string | null, name: string): DropdownOption => ({
+  value: `${server}/${name}`, label: `#${name}`, group: server, server, category,
+});
+const DEMO_CHANNELS: DropdownOption[] = [
+  channel('Team Foo', 'Development', 'bugs'), channel('Team Foo', 'Development', 'builds'), channel('Team Foo', 'Development', 'general-dev'),
+  channel('Team Foo', 'Support', 'help'), channel('Team Foo', 'Support', 'feedback'), channel('Team Foo', null, 'announcements'),
+  channel('Friends', null, 'chat'), channel('Friends', null, 'screenshots'),
+];
+const thread = (parent: string, name: string): DropdownOption => ({
+  value: `thread-${name}`, label: name, group: 'Team Foo', server: 'Team Foo', category: parent,
+});
+const DEMO_THREADS: DropdownOption[] = [
+  thread('bugs', 'What is wrong in Foo? (crash)'), thread('bugs', 'Slow start on Windows'), thread('builds', 'Nightly 2026-11-06'),
+];
+
 /** Outside the app: the in-memory backend, with the demo's answers to a share. */
 async function demoApi(): Promise<Api> {
   const { demoShare } = await import('../capture/demo');
@@ -910,7 +968,17 @@ async function demoApi(): Promise<Api> {
       : query.get('update') === 'fails'
         ? { fails: { message: 'GitHub says the CargoFrame repository was not found. It may be private: add a token below.', needs_token: true } }
         : undefined;
-  return memoryApi({ share: () => demoShare(kind), update });
+  // `?demo=discord`: a bot's lists, to look at the server > category > channel steps
+  const options =
+    query.get('demo') === 'discord'
+      ? (_c: string, block: string) => (block === 'thread' ? DEMO_THREADS : DEMO_CHANNELS)
+      : undefined;
+  const api = memoryApi({ share: () => demoShare(kind), update, options });
+  // `?media=both` plays a real clip, so "Take screenshot" has a frame to take
+  if (query.get('media') === 'both' && typeof MediaRecorder !== 'undefined') {
+    api.getSessionClip = async () => (await import('../capture/demo')).demoClip();
+  }
+  return api;
 }
 
 /** The backend for this page: Tauri when running in the app, an in-memory one otherwise. */

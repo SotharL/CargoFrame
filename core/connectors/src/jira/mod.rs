@@ -535,6 +535,7 @@ impl Connector for JiraConnector {
         let mut notes = Vec::new();
         let uploads = [
             ("jira.att.image", payload.image.as_ref()),
+            ("jira.att.still", payload.still.as_ref()),
             ("jira.att.zip", payload.files_zip.as_ref()),
         ];
         for (step, att) in uploads {

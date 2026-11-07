@@ -31,6 +31,9 @@ jobs:
           node-version: 22
           cache: npm
           cache-dependency-path: ui/package-lock.json
+      - name: File names that clash on Windows
+        working-directory: .
+        run: node scripts/ci/check-names.mjs
       - run: npm ci
       - run: npm run check
       - run: npm test

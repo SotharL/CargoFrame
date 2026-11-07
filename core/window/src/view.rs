@@ -458,21 +458,21 @@ mod tests {
                 Block {
                     id: "chat".into(),
                     rect: rect(3),
-                    kind: BlockKind::Dropdown(DropdownBlock {
-                        title: "Chat".into(),
-                        source: DropdownSource::ClaudeChats,
-                    }),
+                    kind: BlockKind::Dropdown(DropdownBlock::new(
+                        "Chat",
+                        DropdownSource::ClaudeChats,
+                    )),
                 },
                 Block {
                     id: "jira".into(),
                     rect: rect(4),
-                    kind: BlockKind::Dropdown(DropdownBlock {
-                        title: "Project".into(),
-                        source: DropdownSource::WebApi {
+                    kind: BlockKind::Dropdown(DropdownBlock::new(
+                        "Project",
+                        DropdownSource::WebApi {
                             connection_id: "jira".into(),
                             options_id: "projects".into(),
                         },
-                    }),
+                    )),
                 },
                 Block {
                     id: "send".into(),

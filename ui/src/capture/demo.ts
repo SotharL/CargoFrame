@@ -41,6 +41,26 @@ export async function demoSession(): Promise<SessionView> {
       },
     ],
   };
+  // `?demo=discord` swaps the two dropdowns for a Discord channel list (server > category >
+  // channel) and an optional thread list narrowed by the prompt, to look at the cascade.
+  const discord = params.get('demo') === 'discord';
+  if (discord) {
+    layout.blocks = layout.blocks.map((b) => {
+      if (b.id === 'chat') {
+        return {
+          id: 'thread', type: 'dropdown', rect: b.rect, title: 'Thread (optional)', optional: true, narrow_by: 'prompt',
+          source: { type: 'web_api', connection_id: 'jira', options_id: 'threads' },
+        } as typeof b;
+      }
+      if (b.id === 'proj') {
+        return {
+          id: 'proj', type: 'dropdown', rect: b.rect, title: 'Channel',
+          source: { type: 'web_api', connection_id: 'jira', options_id: 'channels' },
+        } as typeof b;
+      }
+      return b;
+    });
+  }
   // `?buttons=3` adds buttons to Claude, Slack and Reddit (up to 5 with Google and a zip), to look at the boxes.
   const extra: [string, ServiceKind | null][] = [['claude', 'claude'], ['slack', 'slack'], ['reddit', 'reddit'], ['google', 'google']];
   const more = Math.max(1, Math.min(5, Number(params.get('buttons')) || 1)) - 1;
@@ -52,9 +72,17 @@ export async function demoSession(): Promise<SessionView> {
     });
     kinds.set(`send_${id}`, k);
   });
-  // `?media=video` shows a recording where the picture would be.
-  const video = params.get('media') === 'video';
-  if (video) layout.blocks[0] = { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 9 } };
+  // `?media=video` shows a recording where the picture would be; `?media=both` keeps the
+  // screenshot block beside it (`&end=1` fills it with the picture taken when the recording stopped).
+  const both = params.get('media') === 'both';
+  const video = params.get('media') === 'video' || both;
+  if (video && !both) layout.blocks[0] = { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 9 } };
+  if (both) {
+    layout.blocks[0] = { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 8, h: 4 } };
+    layout.blocks.push({
+      id: 'clip', type: 'video', rect: { x: 0, y: 4, w: 8, h: 5 }, screenshot_at_end: params.get('end') === '1',
+    });
+  }
   const button = layout.blocks.find((b) => b.type === 'sharing_button')!;
   const reach = demoReach(layout, button as Extract<typeof button, { type: 'sharing_button' }>, local ? LOCAL_CAPABILITIES : demoCapabilities(kind), local ? null : kind);
   return {
@@ -85,7 +113,12 @@ export async function demoSession(): Promise<SessionView> {
         ],
       },
     },
-    dropdowns: {
+    dropdowns: discord
+      ? {
+          proj: { status: 'loading', selected: null, options: [], message: null },
+          thread: { status: 'loading', selected: null, options: [], message: null },
+        }
+      : {
       chat: {
         status: 'ready',
         selected: '01a168ea-ad83-718c-a341-75a44c6984ec',
@@ -98,7 +131,7 @@ export async function demoSession(): Promise<SessionView> {
       },
       proj: { status: 'loading', selected: null, options: [], message: null },
     },
-    ...(video ? { video: { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true } } : {}),
+    ...(video ? { video: both ? { width: 640, height: 400, duration_ms: 1_300, bytes: 40_000, audio: false } : { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true } } : {}),
     issues: [],
     sharing: {
       ...(local
@@ -112,6 +145,33 @@ export async function demoSession(): Promise<SessionView> {
       ),
     },
   };
+}
+
+/** A short real recording (a moving bar over the fake window), so the player has a frame to show. */
+export async function demoClip(): Promise<Blob> {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 400;
+  const g = canvas.getContext('2d')!;
+  const stream = canvas.captureStream(15);
+  const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+  const parts: Blob[] = [];
+  recorder.ondataavailable = (e) => parts.push(e.data);
+  const done = new Promise<void>((resolve) => (recorder.onstop = () => resolve()));
+  recorder.start();
+  for (let i = 0; i < 20; i++) {
+    g.fillStyle = '#1e2330';
+    g.fillRect(0, 0, 640, 400);
+    g.fillStyle = '#62e04f';
+    g.fillRect(20 + i * 28, 160, 80, 80);
+    g.fillStyle = '#cfd6e6';
+    g.font = '20px system-ui, sans-serif';
+    g.fillText(`frame ${i + 1}`, 24, 40);
+    await new Promise((r) => setTimeout(r, 66));
+  }
+  recorder.stop();
+  await done;
+  return new Blob(parts, { type: 'video/mp4' });
 }
 
 /** A fake application window as the "screenshot". */

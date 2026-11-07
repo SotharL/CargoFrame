@@ -173,8 +173,9 @@ pub fn edit_layout(app: AppHandle, layout_id: Option<String>) {
 /// Open Settings on one of its pages (for example `connections`, to reconnect).
 #[tauri::command]
 pub fn open_settings(app: AppHandle, page: String) {
-    const PAGES: [&str; 6] = [
+    const PAGES: [&str; 7] = [
         "general",
+        "setup",
         "connections",
         "triggers",
         "rules",
@@ -548,6 +549,22 @@ pub async fn detect_video_tools(video: Video) -> Result<video::ToolsView, String
         .await
 }
 
+/// Does a Claude connection open the Claude desktop app? Then Setup checks that it is installed.
+fn wants_claude_app(state: &AppState, os: video::Os) -> bool {
+    state
+        .store
+        .load_all::<cargoframe_connectors::Connection>(cargoframe_config::Kind::Connections)
+        .map(|loaded| {
+            loaded.items.iter().any(|(_, c)| {
+                c.enabled
+                    && matches!(&c.settings,
+                        cargoframe_connectors::Settings::Claude(cl)
+                            if cl.opens_desktop_app(os == video::Os::Windows))
+            })
+        })
+        .unwrap_or(false)
+}
+
 /// What the Setup page shows: the apps CargoFrame leans on, and what the one button does.
 fn current_setup(app: &AppHandle) -> crate::setup::Report {
     let state = app.state::<AppState>();
@@ -558,8 +575,9 @@ fn current_setup(app: &AppHandle) -> crate::setup::Report {
         .map(video::normalized)
         .unwrap_or_default();
     let os = video::Os::current();
-    let probes = crate::setup::probe(os, &video);
-    if probes.ffmpeg.is_ok() {
+    let probes = crate::setup::probe(os, &video, wants_claude_app(&state, os));
+    let found_all = probes.ffmpeg.is_ok() && probes.claude_app != Some(false);
+    if found_all {
         installer.clear_failure();
     }
     crate::setup::report(
@@ -594,19 +612,40 @@ pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, Str
             .load_or_default::<Video>()
             .map(video::normalized)
             .unwrap_or_default();
+        let ffmpeg_missing = report
+            .items
+            .iter()
+            .any(|i| i.id == "ffmpeg" && i.status == crate::setup::Status::Missing);
+        let claude_missing = report
+            .items
+            .iter()
+            .any(|i| i.id == "claude_app" && i.status == crate::setup::Status::Missing);
         let installer = app.state::<crate::setup::Installer>();
         installer.start(move || {
-            let ran = crate::setup::install_ffmpeg_with_winget();
-            // whether it worked is decided by looking for ffmpeg, not by winget's exit code
-            match video::find(&video, video::program_beside_app().as_deref()) {
-                Ok(_) => Ok(()),
-                Err(why) => Err(match ran {
-                    Err(said) => said,
-                    Ok(()) => format!(
-                        "winget finished, but ffmpeg was not found afterwards. {why} Sign out and in again, or choose its folder under Video."
-                    ),
-                }),
+            // Each app is installed on its own, so one that fails does not stop the other. Whether
+            // it worked is decided by looking for it afterwards, not by winget's exit code.
+            let mut problems: Vec<String> = Vec::new();
+            if ffmpeg_missing {
+                let ran = crate::setup::install_with_winget(crate::setup::FFMPEG_PACKAGE);
+                if let Err(why) = video::find(&video, video::program_beside_app().as_deref()) {
+                    problems.push(match ran {
+                        Err(said) => said,
+                        Ok(()) => format!(
+                            "winget finished, but ffmpeg was not found afterwards. {why} Sign out and in again, or choose its folder under Video."
+                        ),
+                    });
+                }
             }
+            if claude_missing {
+                let ran = crate::setup::install_with_winget(crate::setup::CLAUDE_PACKAGE);
+                if crate::setup::claude_app_installed() != Some(true) {
+                    problems.push(match ran {
+                        Err(said) => said,
+                        Ok(()) => "winget finished, but the Claude app was not found afterwards. Open it once from the Start menu, then check again.".to_string(),
+                    });
+                }
+            }
+            if problems.is_empty() { Ok(()) } else { Err(problems.join(" ")) }
         })?;
         Ok(current_setup(&app))
     })

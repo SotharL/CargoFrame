@@ -338,6 +338,7 @@ impl Connector for GoogleConnector {
             let folder = self.folder(ctx, payload)?;
             for (step, att) in [
                 ("google.image", payload.image.as_ref()),
+                ("google.still", payload.still.as_ref()),
                 ("google.zip", payload.files_zip.as_ref()),
             ] {
                 let Some(att) = att else { continue };
@@ -356,14 +357,7 @@ impl Connector for GoogleConnector {
                         l
                     }
                 };
-                links.push((
-                    if step == "google.image" {
-                        "image"
-                    } else {
-                        "zip"
-                    },
-                    link,
-                ));
+                links.push((if step == "google.zip" { "zip" } else { "image" }, link));
             }
         }
 

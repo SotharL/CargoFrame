@@ -15,7 +15,16 @@
    * `edit` is what the person chose: the part to keep and perhaps an area to crop to. It is
    * `null` while nothing is changed, which is what the share sends along as "send it as it is".
    */
-  let { info, edit = $bindable(null) }: { info: VideoClipInfo; edit?: ClipEdit | null } = $props();
+  let {
+    info,
+    edit = $bindable(null),
+    onshot,
+  }: {
+    info: VideoClipInfo;
+    edit?: ClipEdit | null;
+    /** Given when the layout has a screenshot block: the button takes the frame on screen for it. */
+    onshot?: (frame: Blob) => void;
+  } = $props();
 
   type Box = { x: number; y: number; w: number; h: number };
 
@@ -37,6 +46,7 @@
   let muted = $state(false);
   let fullscreen = $state(false);
   let hot = $state(false);
+  let shotProblem = $state('');
 
   /**
    * One tool has the mouse at a time. Crop shows the whole picture with its box; the other
@@ -198,6 +208,23 @@
     e.preventDefault();
   }
 
+  /** The frame on screen, whole (not cropped), at the recording's own size. */
+  async function takeShot() {
+    if (!player || !onshot) return;
+    shotProblem = '';
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = info.width;
+      canvas.height = info.height;
+      canvas.getContext('2d')!.drawImage(player, 0, 0, info.width, info.height);
+      const frame = await new Promise<Blob | null>((done) => canvas.toBlob(done, 'image/png'));
+      if (!frame) throw new Error('empty');
+      onshot(frame);
+    } catch {
+      shotProblem = 'This window could not take a picture from the recording.';
+    }
+  }
+
   function resetEdits() {
     start = 0;
     end = total;
@@ -305,7 +332,11 @@
           {#if markOn}<button type="button" class="small" onclick={removeMark}>Remove mark</button>{/if}
           {#if markOn && markText}<span class="quiet hint selectable">“{markText}”</span>{/if}
         {/if}
+        {#if onshot}
+          <button type="button" class="small" onclick={takeShot} disabled={!url || cannotPlay}>Take screenshot</button>
+        {/if}
         <button type="button" class="small" onclick={resetEdits} disabled={wholeClip}>Reset edits</button>
+        {#if shotProblem}<span class="error" role="alert">{shotProblem}</span>{/if}
         <span class="quiet meta" aria-live="polite">
           {#if wholeClip}
             {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
@@ -331,6 +362,7 @@
   .problem { color: var(--err); }
   .meta { margin: 0; font-size: 12px; }
   .hint { font-size: 12px; }
+  .error { color: var(--err); font-size: 12px; }
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .small { padding: 2px 8px; font-size: 12px; }
   .small[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }

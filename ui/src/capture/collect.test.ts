@@ -34,6 +34,14 @@ describe('collectShare', () => {
     expect(collectShare(view, button, initialValues(view), false).clip_edit).toBeNull();
   });
 
+  it('says when the screenshot block holds a picture taken from the recording', async () => {
+    const view = await demoSession();
+    const button = view.layout!.blocks.find((b) => b.id === 'send') as Sharing;
+    const values = initialValues(view);
+    expect(collectShare(view, button, values, false).still).toBe(false);
+    expect(collectShare(view, button, values, false, null, null, true).still).toBe(true);
+  });
+
   it('sends the boxes that are ticked for the button, and only blocks that exist', async () => {
     const view = await demoSession();
     const button = view.layout!.blocks.find((b) => b.id === 'send') as Sharing;

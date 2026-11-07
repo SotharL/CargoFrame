@@ -486,10 +486,7 @@ mod tests {
     fn chats(id: &str) -> Block {
         block(
             id,
-            BlockKind::Dropdown(DropdownBlock {
-                title: id.into(),
-                source: DropdownSource::ClaudeChats,
-            }),
+            BlockKind::Dropdown(DropdownBlock::new(id, DropdownSource::ClaudeChats)),
         )
     }
 

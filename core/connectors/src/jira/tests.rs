@@ -36,6 +36,7 @@ fn payload() -> Payload {
             mime: "image/png".into(),
             data: vec![0x89, b'P', b'N', b'G', 1, 2, 3],
         }),
+        still: None,
         files_zip: Some(Attachment {
             name: "files.zip".into(),
             mime: "application/zip".into(),
@@ -293,6 +294,28 @@ fn a_share_creates_the_issue_then_attaches_the_screenshot_and_the_zip() {
         .windows(7)
         .any(|w| w == [0x89, b'P', b'N', b'G', 1, 2, 3]));
     assert!(attach[1].text().contains("filename=\"files.zip\""));
+}
+
+#[test]
+fn a_picture_taken_from_a_recording_is_attached_beside_it() {
+    let server = happy();
+    let w = world();
+    let mut p = payload();
+    p.still = p.image.take();
+    p.image = Some(Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0, 0, 24],
+    });
+    w.with("jira", |ctx| cloud(&server).send(ctx, &p)).unwrap();
+    let attach = server.requests_to("/rest/api/2/issue/PROJ-1/attachments");
+    let names: Vec<bool> = ["recording.mp4", "screenshot.png", "files.zip"]
+        .iter()
+        .enumerate()
+        .map(|(i, n)| attach[i].text().contains(&format!("filename=\"{n}\"")))
+        .collect();
+    assert_eq!(attach.len(), 3);
+    assert_eq!(names, [true, true, true]);
 }
 
 #[test]

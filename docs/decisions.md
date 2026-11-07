@@ -921,3 +921,44 @@ single button. Decisions (taken for them, the safest option each time, while the
   when the owner publishes it. Publishing starts the workflow again through the new tag, which now sees the release
   is already published and does nothing. This was added because the tool that prepared the work was not allowed to
   push tags.
+
+### Feedback round, 7 Nov 2026: twelve changes (made while the owner was away; the safest option each time)
+
+The owner asked for the app to be as friendly as possible **and** to need the least maintenance. Every item below was
+decided with those two rules.
+
+- **Two scroll bars on General, and the "inside" bubble.** Fixed (the page scrolls in one place); the title bubble was
+  cut off and said nothing, so it is gone.
+- **Setup reads the default sound output.** On Windows the page asks for the current default output device by name and
+  says whether videos can include its sound (Stereo Mix or a similar loopback device must be on). It is read when the
+  page opens and by *Check again*; nothing is changed on the PC. Only unit-tested and run on Windows CI; not yet seen on a real PC.
+- **Connections moved under Setup.** One page, "what CargoFrame uses, then where you share to". The old address
+  `connections` still lands there and scrolls to it; the tab and the guide use the same page.
+- **Discord without a bot (webhooks).** The easy way is a webhook link per channel (made in the channel's settings,
+  pasted once). A bot token stays as the last resort for people who want the lists. Posting **through the person's own
+  Discord account** was declined: automating a user account breaks Discord's terms and can get the account closed. A
+  webhook cannot list servers, channels or threads, so: the channel is one of the links the person added, a forum is
+  posted to by *thread name*, an existing thread by pasting its link. Slack has no webhook mode here because a Slack
+  webhook cannot attach files; Slack stays a bot token.
+- **Dependent dropdowns.** A dropdown can *narrow by* another (server, then category, then channel or forum). Each level
+  can be *optional* and is skipped when empty; with no server the share is saved locally. Where a service gives no list,
+  the person types, searches or pastes. Set in the layout editor, per dropdown.
+- **Last choices are remembered.** The last five per dropdown, newest first, the list starting on the last one used.
+  Kept on this computer in the window's local storage, per layout and block: values and labels only.
+- **Forum and thread names as a search.** Titles can follow a convention (`[PROJ-123] short title`), and the typed text
+  searches the known threads. The Discord guide proposes the convention in one sentence.
+- **A button to get the token.** Beside each sign-in field a button opens the service's own page. All the addresses are
+  in one file (`ui/src/lib/connectorHelp.ts`): the one place to change when a service moves a page.
+- **A local program a connector needs.** The Claude desktop app is listed on Setup and on the connection's form; on Windows
+  one button installs it with winget (the same fixed command shape as ffmpeg), and the download page is always one click away.
+- **Screenshot and video in one layout.** The video block has *Also take a screenshot when the recording ends*; the
+  screenshot block is empty until then; the video block has a *Take screenshot* button. A still goes to Jira, Slack,
+  Discord, Google and the local zip. Teams, Reddit, Claude and Custom take pictures only: there the screenshot is sent
+  when the video box is unticked, and the window says so.
+- **In-app guides.** A guide for each connector and for the first capture, *Data from files* and *Destination fields*,
+  opened from Settings only. It goes to the right page, boxes the field in the accent colour and says one short
+  sentence. The steps are data (`tours.ts`), so a guide is edited by changing text; tests fail when a step points at a
+  field that no longer exists, so the guides stay true without anyone remembering to check them.
+- **Discord is two files.** The bot way stays in `discord/mod.rs`; the webhook way (about 300 lines) is in `discord/webhook.rs`, so
+  a change to one cannot disturb the other.
+- **Kept simple on purpose:** no new settings file, no new background process, no new dependency for any of the twelve.

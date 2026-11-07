@@ -26,6 +26,8 @@ export interface ComboOption {
   label: string;
   /** Shown small, after the label: a group name or the field key. */
   note?: string | null;
+  /** A heading the entry is listed under; the list shows it where the heading changes. */
+  group?: string | null;
 }
 
 /** What the memory setting is doing to one window right now (Settings, General, Performance). */
@@ -136,7 +138,7 @@ export interface AudioDevices {
 
 export type BlockContent =
   | { type: 'screenshot' }
-  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio }
+  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio; screenshot_at_end?: boolean }
   | {
       type: 'text';
       title: string;
@@ -154,7 +156,17 @@ export type BlockContent =
       /** What goes with the text. Absent while it is the default (picture, files attached). */
       send?: SendRules;
     }
-  | { type: 'dropdown'; title: string; source: DropdownSource }
+  | {
+      type: 'dropdown';
+      title: string;
+      source: DropdownSource;
+      /** Keep the last five choices at the top and start on the last used. Absent: on. */
+      remember?: boolean;
+      /** May stay empty, or hold something typed or pasted that is not in the list. */
+      optional?: boolean;
+      /** A text block whose words narrow the list while it is shown. */
+      narrow_by?: string | null;
+    }
   | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
 
 /** What happens to the ticked files: sent as files, written into the message, or left out. */
@@ -236,6 +248,10 @@ export interface DropdownOption {
   value: string;
   label: string;
   group: string | null;
+  /** Where the choice lives, for a list the window narrows step by step: the server... */
+  server?: string | null;
+  /** ...and, inside it, the category (or the channel a thread is in). */
+  category?: string | null;
 }
 
 export interface DropdownState {
@@ -518,7 +534,13 @@ export type Connection = ConnectionCommon &
     | { kind: 'reddit'; client_id: string; redirect_port: number }
     | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; send_automatically: boolean; extra_wait_seconds: number }
     | { kind: 'slack' }
-    | { kind: 'discord' }
+    | {
+        kind: 'discord';
+        /** `bot` is what connections saved before webhooks were. */
+        mode: 'webhook' | 'bot';
+        shown_as: string;
+        hooks: { slot: number; name: string; server: string }[];
+      }
     | { kind: 'teams'; client_id: string; tenant: string }
     | {
         kind: 'custom';
@@ -682,6 +704,8 @@ export interface ShareRequest {
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;
+  /** A recording with a screenshot block: the block holds a picture taken from it (uploaded first). */
+  still?: boolean;
   /** For a recording: what was cut or cropped. Left out (or `null`) sends it as it is. */
   clip_edit?: ClipEdit | null;
   /**
@@ -689,6 +713,8 @@ export interface ShareRequest {
    * says; a list sends exactly those blocks.
    */
   send_blocks?: string[] | null;
+  /** The window found nowhere to post (an empty list): keep a zip here instead of sending. */
+  save_here?: boolean;
 }
 
 /**

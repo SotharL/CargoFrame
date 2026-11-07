@@ -17,7 +17,9 @@ export function parseTarget(target: string | null | undefined): { page: PageId; 
   const [name, ...rest] = target.split('/');
   const page = resolvePage(name);
   if (!page) return null;
-  return { page, arg: rest.join('/') || null };
+  // Connections is the lower half of Setup now; its old address scrolls there
+  const arg = rest.join('/') || (name === 'connections' ? 'connections' : null);
+  return { page, arg };
 }
 
 /** The page to start on: the address (`?page=`), else the last page used, else General. */
