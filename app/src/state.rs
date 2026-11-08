@@ -44,7 +44,8 @@ pub struct AppState {
     share_cancelled: Mutex<BTreeSet<u64>>,
     /// How the shortcuts work here, and the ones that could not be set, by trigger id.
     shortcut_status: Mutex<cargoframe_shortcuts::Status>,
-    /// What was handed to a Wayland desktop.
+    /// What was handed to a Wayland desktop (Linux only).
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub desktop_keys: crate::desktop_keys::DesktopKeys,
     /// The settings file the person opened to import, read and checked, waiting for their
     /// choice of what to bring in. The window never names a file: it only ever sees this.
@@ -168,6 +169,8 @@ impl AppState {
             .unwrap_or_else(|e| e.into_inner()) = status;
     }
 
+    /// Change the status after the fact (a desktop that answers later). Linux only.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn update_shortcut_status(&self, f: impl FnOnce(&mut cargoframe_shortcuts::Status)) {
         f(&mut self
             .shortcut_status

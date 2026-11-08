@@ -519,6 +519,7 @@ fn open_sounds(
 }
 
 /// Where the desktop's "remember this screen" answer is kept, beside the recording's folder.
+#[cfg(target_os = "linux")]
 fn screen_sharing_token(work: &Path) -> PathBuf {
     work.parent().unwrap_or(work).join("screen-sharing.token")
 }
