@@ -269,12 +269,10 @@ pub fn open_settings(app: AppHandle, page: String) {
 
 // ----- triggers -----
 
-/// Shortcuts that could not be registered, by trigger id, with the reason.
+/// How shortcuts work on this desktop, and the ones that could not be set, by trigger id.
 #[tauri::command]
-pub fn get_shortcut_errors(
-    state: State<'_, AppState>,
-) -> std::collections::BTreeMap<String, String> {
-    state.shortcut_errors()
+pub fn get_shortcut_status(state: State<'_, AppState>) -> cargoframe_shortcuts::Status {
+    state.shortcut_status()
 }
 
 // ----- items: triggers, layouts, data rules, info types -----

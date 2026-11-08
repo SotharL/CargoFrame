@@ -82,6 +82,10 @@ administrator password is needed. Windows may say the publisher is unknown (the 
 - **Linux (x64):** download the **linux-appimage** file from the **Bundle** run on GitHub (Actions), unzip it and run
   `./install.sh` (`--no-startup` to keep it from starting at sign-in). The tray needs a system tray: KDE has one, GNOME
   needs the AppIndicator extension. Uninstall with `./uninstall.sh` (`--delete-data` also removes your settings).
+- **Wayland** (GNOME, KDE, sway, Hyprland) works too: CargoFrame hands each shortcut to the desktop (on GNOME it
+  appears in *Settings, Keyboard, Custom Shortcuts*). *Settings, Setup* lists what Wayland needs: the desktop portal
+  (or `grim`), GStreamer with its PipeWire plugin for video, `wtype` on sway and Hyprland. How each desktop is handled:
+  [design](docs/design.md#2-what-it-does).
 - **Silent install (Windows):** `CargoFrame-Setup.exe /S`, add `/NOSTARTUP` to leave "start when I sign in" off.
 - **Uninstall (Windows):** *Settings, Apps*. It asks whether to delete your settings too.
 - **Video needs ffmpeg** (screenshots do not). *Settings, Setup* installs it on Windows with one button; on Linux it
@@ -214,10 +218,12 @@ other service.
 |--------------|------------|
 | No tray icon (Linux) | GNOME needs the AppIndicator extension. Meanwhile, start CargoFrame again to open Settings |
 | "Unknown publisher" (Windows) | The installer is not signed yet: **More info**, **Run anyway** |
-| No video | *Settings, Setup*: install ffmpeg |
+| No video | *Settings, Setup*: install ffmpeg (and, on Wayland, GStreamer's PipeWire plugin) |
+| A shortcut does nothing (Wayland) | *Settings, Triggers* says how this desktop takes shortcuts; where it cannot, it shows the command to add to your desktop's keyboard shortcuts, with a **Copy** button |
+| The whole screen was captured, not the program (Wayland) | GNOME does not tell programs which window is in focus (except older X11 programs). The window's note says so |
 | A video without sound | Click the Video block in your layout and check **Sound of the computer**. The notification after a recording says why a sound was left out |
 | Notifications appear in recordings | *Settings, General, Notifications*: switch off *Say when something happens* |
-| Claude opened but nothing was pasted | Leave Claude in front a few seconds; raise **Extra seconds to wait** in the Claude connection |
+| Claude opened but nothing was pasted | Leave Claude in front a few seconds; raise **Extra seconds to wait** in the Claude connection. On GNOME and KDE Wayland, programs cannot paste for you: the message is on the clipboard, press Ctrl+V |
 | A send failed | Nothing is lost: CargoFrame retried, kept a zip and said where. The message says what the service answered |
 
 ---

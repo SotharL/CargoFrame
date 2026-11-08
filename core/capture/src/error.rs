@@ -14,6 +14,10 @@ pub enum CaptureError {
     /// A picture was malformed.
     #[error("invalid picture: {0}")]
     Image(String),
+    /// The desktop does not tell other programs which window is in focus. The text says so in
+    /// the person's words and becomes the window's note.
+    #[error("{0}")]
+    FocusUnknown(String),
     /// The person (or the desktop's privacy settings) said no.
     #[error("the screenshot was cancelled or not allowed")]
     Refused,

@@ -6,7 +6,7 @@ use crate::updates::Updates;
 use crate::warm::Warm;
 use cargoframe_bundle::{Sweep, Workspace};
 use cargoframe_config::Store;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::BTreeSet;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use std::time::Duration;
@@ -42,8 +42,10 @@ pub struct AppState {
     sharing: Mutex<BTreeSet<u64>>,
     /// The captures whose window was closed during a share: stop retrying and say how it ended.
     share_cancelled: Mutex<BTreeSet<u64>>,
-    /// Shortcuts that could not be registered, by trigger id, with the reason.
-    shortcut_errors: Mutex<BTreeMap<String, String>>,
+    /// How the shortcuts work here, and the ones that could not be set, by trigger id.
+    shortcut_status: Mutex<cargoframe_shortcuts::Status>,
+    /// What was handed to a Wayland desktop.
+    pub desktop_keys: crate::desktop_keys::DesktopKeys,
     /// The settings file the person opened to import, read and checked, waiting for their
     /// choice of what to bring in. The window never names a file: it only ever sees this.
     pending_import: Mutex<Option<Vec<Entry>>>,
@@ -70,7 +72,8 @@ impl AppState {
             busy: AtomicBool::new(false),
             sharing: Mutex::new(BTreeSet::new()),
             share_cancelled: Mutex::new(BTreeSet::new()),
-            shortcut_errors: Mutex::new(BTreeMap::new()),
+            shortcut_status: Mutex::new(cargoframe_shortcuts::Status::default()),
+            desktop_keys: crate::desktop_keys::DesktopKeys::default(),
             pending_import: Mutex::new(None),
         }
     }
@@ -158,15 +161,22 @@ impl AppState {
             .take()
     }
 
-    pub fn set_shortcut_errors(&self, errors: BTreeMap<String, String>) {
+    pub fn set_shortcut_status(&self, status: cargoframe_shortcuts::Status) {
         *self
-            .shortcut_errors
+            .shortcut_status
             .lock()
-            .unwrap_or_else(|e| e.into_inner()) = errors;
+            .unwrap_or_else(|e| e.into_inner()) = status;
     }
 
-    pub fn shortcut_errors(&self) -> BTreeMap<String, String> {
-        self.shortcut_errors
+    pub fn update_shortcut_status(&self, f: impl FnOnce(&mut cargoframe_shortcuts::Status)) {
+        f(&mut self
+            .shortcut_status
+            .lock()
+            .unwrap_or_else(|e| e.into_inner()));
+    }
+
+    pub fn shortcut_status(&self) -> cargoframe_shortcuts::Status {
+        self.shortcut_status
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .clone()

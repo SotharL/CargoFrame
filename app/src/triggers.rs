@@ -1,5 +1,5 @@
-//! Triggers: global shortcuts that start a capture, plus the tray entries that do the same
-//! (needed on Wayland, where programs cannot register global shortcuts).
+//! Triggers: global shortcuts that start a capture, plus the tray entries that do the same.
+//! On Wayland the desktop holds the shortcuts (see `desktop_keys`).
 
 use crate::state::AppState;
 use crate::video::{self, Step};
@@ -15,6 +15,7 @@ pub fn reload(app: &AppHandle) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
+    let wayland = crate::desktop_keys::wayland();
     let shortcuts = app.global_shortcut();
     let _ = shortcuts.unregister_all();
 
@@ -30,6 +31,7 @@ pub fn reload(app: &AppHandle) {
         tracing::warn!("skipping a damaged trigger file: {e}");
     }
     let mut claimed: BTreeMap<String, String> = BTreeMap::new();
+    let mut for_desktop = Vec::new();
     for (id, trigger) in &loaded.items {
         if !trigger.enabled || trigger.shortcut.trim().is_empty() {
             continue;
@@ -46,6 +48,16 @@ pub fn reload(app: &AppHandle) {
                 id.clone(),
                 format!("{canonical} is already used by \"{other}\""),
             );
+            continue;
+        }
+        if wayland {
+            // The plugin only hears keys pressed in X11 programs: the desktop takes them.
+            claimed.insert(canonical.clone(), id.clone());
+            for_desktop.push(cargoframe_shortcuts::Binding {
+                id: id.clone(),
+                name: trigger.name.clone(),
+                shortcut: canonical,
+            });
             continue;
         }
         let parsed: Shortcut = match canonical.parse() {
@@ -76,7 +88,15 @@ pub fn reload(app: &AppHandle) {
             }
         }
     }
-    state.set_shortcut_errors(errors);
+    if wayland {
+        crate::desktop_keys::apply(app, for_desktop, errors);
+    } else {
+        state.set_shortcut_status(cargoframe_shortcuts::Status {
+            route: Some(cargoframe_shortcuts::Route::System),
+            errors,
+            ..Default::default()
+        });
+    }
     tray::refresh_menu(app);
 }
 

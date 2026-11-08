@@ -25,7 +25,7 @@ pub const DEFAULT_FPS: u32 = 30;
 /// One hour.
 pub const DEFAULT_MAX_RUN_SECS: u32 = 3600;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Capture {
     /// X11 (`:0`, or the display of a virtual screen). `size` is the part of the screen taken;
     /// `None` takes the whole screen, whatever its size.
@@ -37,6 +37,56 @@ pub enum Capture {
     Gdigrab,
     /// Windows, Desktop Duplication: the picture stays on the graphics card until downloaded.
     Ddagrab { output: u32 },
+    /// A picture CargoFrame passes on over a local connection, as YUV4MPEG (Wayland: the
+    /// desktop's screen-sharing stream, read by GStreamer; see [`crate::screenfeed`]). `part` is
+    /// the window to keep, as fractions of the picture, because the picture's real size is only
+    /// known to ffmpeg.
+    Feed { port: u16, part: Option<Part> },
+}
+
+/// A part of a picture as fractions of its width and height (0 to 1).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct Part {
+    pub x: f64,
+    pub y: f64,
+    pub w: f64,
+    pub h: f64,
+}
+
+impl Part {
+    /// `area` (logical pixels) inside a picture that covers `whole`, or `None` when it is not
+    /// inside it or is the whole of it.
+    pub fn of(area: Area, whole: Area) -> Option<Self> {
+        if whole.w == 0 || whole.h == 0 {
+            return None;
+        }
+        let (fw, fh) = (f64::from(whole.w), f64::from(whole.h));
+        let x0 = (f64::from(area.x - whole.x) / fw).clamp(0.0, 1.0);
+        let y0 = (f64::from(area.y - whole.y) / fh).clamp(0.0, 1.0);
+        let x1 = ((f64::from(area.x - whole.x) + f64::from(area.w)) / fw).clamp(0.0, 1.0);
+        let y1 = ((f64::from(area.y - whole.y) + f64::from(area.h)) / fh).clamp(0.0, 1.0);
+        let part = Self {
+            x: x0,
+            y: y0,
+            w: x1 - x0,
+            h: y1 - y0,
+        };
+        let tiny =
+            part.w * fw < f64::from(Area::MIN_SIDE) || part.h * fh < f64::from(Area::MIN_SIDE);
+        let all = part.w > 0.999 && part.h > 0.999;
+        (!tiny && !all).then_some(part)
+    }
+
+    /// The ffmpeg filter that keeps this part, with even sides.
+    pub fn filter(self) -> String {
+        format!(
+            "crop=trunc(iw*{w:.5}/2)*2:trunc(ih*{h:.5}/2)*2:trunc(iw*{x:.5}):trunc(ih*{y:.5})",
+            w = self.w,
+            h = self.h,
+            x = self.x,
+            y = self.y
+        )
+    }
 }
 
 /// A part of the desktop, in pixels (`x` and `y` may be negative on Windows, where a screen can
@@ -225,6 +275,14 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
             ]);
             filters.push("hwdownload".into());
             filters.push("format=bgra".into());
+        }
+        Capture::Feed { port, part } => {
+            a.extend(["-thread_queue_size".into(), "64".into()]);
+            a.extend(["-f".into(), "yuv4mpegpipe".into()]);
+            a.extend(["-i".into(), format!("tcp://127.0.0.1:{port}").into()]);
+            if let Some(p) = part {
+                filters.push(p.filter());
+            }
         }
     }
     if let Some(h) = cfg.max_height {

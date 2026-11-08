@@ -155,6 +155,9 @@ pub enum VideoCapture {
     Ddagrab,
     /// Linux with an X11 session.
     X11,
+    /// Linux with a Wayland session: the desktop's screen sharing (portal and PipeWire), read
+    /// by GStreamer.
+    Wayland,
 }
 
 /// How a video is compressed.

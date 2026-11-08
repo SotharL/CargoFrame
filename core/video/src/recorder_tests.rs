@@ -307,6 +307,93 @@ fn vaapi_names_its_device_first_and_uploads_the_picture() {
 }
 
 #[test]
+fn a_fed_picture_comes_in_as_yuv4mpeg_over_a_local_connection_and_a_window_is_cut_from_it() {
+    let dir = tempfile::tempdir().unwrap();
+    let part = Part::of(
+        Area {
+            x: 640,
+            y: 0,
+            w: 640,
+            h: 800,
+        },
+        Area {
+            x: 0,
+            y: 0,
+            w: 1280,
+            h: 800,
+        },
+    );
+    let cfg = config(Capture::Feed { port: 4242, part }, dir.path());
+    let ring = Ring::new(dir.path(), cfg.window, cfg.max_bytes);
+    let a = strings(&args(&cfg, &ring));
+    assert_eq!(after(&a, "-f"), "yuv4mpegpipe");
+    assert_eq!(after(&a, "-i"), "tcp://127.0.0.1:4242");
+    assert!(
+        !a.contains(&"-framerate".to_string()),
+        "the stream says its own rate"
+    );
+    assert_eq!(
+        after(&a, "-vf"),
+        "crop=trunc(iw*0.50000/2)*2:trunc(ih*1.00000/2)*2:trunc(iw*0.50000):trunc(ih*0.00000),scale=-2:min(ih\\,1080),format=yuv420p"
+    );
+}
+
+#[test]
+fn a_part_is_only_kept_when_it_is_a_real_part_of_the_picture() {
+    let whole = Area {
+        x: 1280,
+        y: 0,
+        w: 1920,
+        h: 1080,
+    };
+    // the whole screen, or a window on another screen, or a sliver: no part
+    assert_eq!(Part::of(whole, whole), None);
+    assert_eq!(
+        Part::of(
+            Area {
+                x: 0,
+                y: 0,
+                w: 640,
+                h: 480
+            },
+            whole
+        ),
+        None
+    );
+    assert_eq!(
+        Part::of(
+            Area {
+                x: 1290,
+                y: 10,
+                w: 8,
+                h: 400
+            },
+            whole
+        ),
+        None
+    );
+    // a window half off its screen keeps what is on it
+    let p = Part::of(
+        Area {
+            x: 2880,
+            y: 540,
+            w: 640,
+            h: 1080,
+        },
+        whole,
+    )
+    .unwrap();
+    assert!(
+        (p.x - 0.8333).abs() < 0.001 && (p.w - 0.1667).abs() < 0.001,
+        "{p:?}"
+    );
+    assert!(
+        (p.y - 0.5).abs() < 0.001 && (p.h - 0.5).abs() < 0.001,
+        "{p:?}"
+    );
+}
+
+#[test]
 fn the_frame_rate_is_kept_sensible() {
     let dir = tempfile::tempdir().unwrap();
     let ring = Ring::new(dir.path(), Window::default(), 1);
@@ -654,4 +741,80 @@ fn a_recorder_that_is_let_go_while_running_stops_ffmpeg() {
         after_drop,
         "ffmpeg was still writing after the recorder was dropped"
     );
+}
+
+/// GStreamer's test picture, fed as a Wayland recording is, recorded and joined into a clip.
+#[test]
+fn a_picture_fed_by_gstreamer_is_recorded_like_a_screen() {
+    let Some((ffmpeg, ffprobe)) = find_tools(&[]) else {
+        eprintln!("skipped: ffmpeg and ffprobe are not installed");
+        return;
+    };
+    let gst = Path::new("/usr/bin/gst-launch-1.0");
+    if !gst.exists() {
+        eprintln!("skipped: GStreamer is not installed");
+        return;
+    }
+    let _one = one_at_a_time();
+    let args: Vec<String> = [
+        "-q",
+        "videotestsrc",
+        "is-live=true",
+        "!",
+        "video/x-raw,width=320,height=240,framerate=15/1",
+        "!",
+        "videoconvert",
+        "!",
+        "video/x-raw,format=I420",
+        "!",
+        "y4menc",
+        "!",
+        "fdsink",
+        "fd=1",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let feed = crate::screenfeed::PictureFeed::open(gst.into(), args, Box::new(())).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let ring_dir = dir.path().join("ring");
+    fs::create_dir(&ring_dir).unwrap();
+    let part = Part::of(
+        Area {
+            x: 0,
+            y: 0,
+            w: 160,
+            h: 240,
+        },
+        Area {
+            x: 0,
+            y: 0,
+            w: 320,
+            h: 240,
+        },
+    );
+    let mut cfg = Config::new(
+        ffmpeg.clone(),
+        Capture::Feed {
+            port: feed.port(),
+            part,
+        },
+        ring_dir.clone(),
+    );
+    cfg.window = Window::seconds(2);
+    cfg.fps = 15;
+    let mut rec = Recorder::start(&cfg).unwrap();
+    rec.keep(Box::new(feed));
+    let began = Instant::now();
+    while began.elapsed() < Duration::from_secs(4) {
+        rec.poll().unwrap();
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let segments = rec.stop(Duration::from_secs(10)).unwrap();
+    let clip = dir.path().join("clip.mp4");
+    assemble(&ffmpeg, &segments, dir.path(), &clip, &|| false).unwrap();
+    let info = probe(&ffprobe, &clip).unwrap();
+    // the left half of the picture
+    assert_eq!((info.width, info.height), (160, 240));
+    assert!(info.duration_ms >= 1_000, "{} ms", info.duration_ms);
 }

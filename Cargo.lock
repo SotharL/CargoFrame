@@ -507,6 +507,7 @@ dependencies = [
  "cargoframe-net",
  "cargoframe-rules",
  "cargoframe-safe",
+ "cargoframe-shortcuts",
  "cargoframe-update",
  "cargoframe-video",
  "cargoframe-window",
@@ -550,6 +551,7 @@ name = "cargoframe-capture"
 version = "0.2.0"
 dependencies = [
  "png",
+ "serde_json",
  "tempfile",
  "thiserror 2.0.21",
  "tracing",
@@ -659,6 +661,19 @@ dependencies = [
 [[package]]
 name = "cargoframe-safe"
 version = "0.2.0"
+
+[[package]]
+name = "cargoframe-shortcuts"
+version = "0.2.0"
+dependencies = [
+ "cargoframe-capture",
+ "cargoframe-config",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tracing",
+ "zbus 5.19.0",
+]
 
 [[package]]
 name = "cargoframe-update"

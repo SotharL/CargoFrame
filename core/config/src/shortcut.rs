@@ -151,6 +151,105 @@ pub fn normalize(input: &str) -> Result<String, ShortcutError> {
     Ok(out)
 }
 
+/// A canonical shortcut split into its modifiers and its key.
+fn parts(canonical: &str) -> (Vec<&str>, &str) {
+    let mut tokens: Vec<&str> = canonical.split('+').collect();
+    let key = tokens.pop().unwrap_or("");
+    (tokens, key)
+}
+
+/// The X keysym name of a canonical key (`F9`, `a`, `bracketleft`, `Return`), the name Wayland
+/// desktops use in their shortcut settings.
+pub fn keysym(key: &str) -> String {
+    let named = match key {
+        "Minus" => "minus",
+        "Equal" => "equal",
+        "BracketLeft" => "bracketleft",
+        "BracketRight" => "bracketright",
+        "Semicolon" => "semicolon",
+        "Quote" => "apostrophe",
+        "Comma" => "comma",
+        "Period" => "period",
+        "Slash" => "slash",
+        "Backslash" => "backslash",
+        "Backquote" => "grave",
+        "Space" => "space",
+        "Enter" => "Return",
+        "Tab" => "Tab",
+        "Backspace" => "BackSpace",
+        "Delete" => "Delete",
+        "Insert" => "Insert",
+        "Home" => "Home",
+        "End" => "End",
+        "PageUp" => "Page_Up",
+        "PageDown" => "Page_Down",
+        "ArrowUp" => "Up",
+        "ArrowDown" => "Down",
+        "ArrowLeft" => "Left",
+        "ArrowRight" => "Right",
+        "PrintScreen" => "Print",
+        "Pause" => "Pause",
+        "ScrollLock" => "Scroll_Lock",
+        // F1..F24 keep their name; a letter is lower case
+        other if other.len() == 1 => return other.to_ascii_lowercase(),
+        other => other,
+    };
+    named.to_string()
+}
+
+/// GNOME's spelling: `<Control><Shift>F9`.
+pub fn for_gnome(canonical: &str) -> String {
+    let (mods, key) = parts(canonical);
+    let mut out: String = mods
+        .iter()
+        .map(|m| match *m {
+            "Ctrl" => "<Control>",
+            "Alt" => "<Alt>",
+            "Shift" => "<Shift>",
+            _ => "<Super>",
+        })
+        .collect();
+    out.push_str(&keysym(key));
+    out
+}
+
+/// The desktop portal's spelling (XDG shortcuts): `CTRL+SHIFT+F9`.
+pub fn for_portal(canonical: &str) -> String {
+    let (mods, key) = parts(canonical);
+    let mut out: Vec<String> = mods
+        .iter()
+        .map(|m| {
+            match *m {
+                "Ctrl" => "CTRL",
+                "Alt" => "ALT",
+                "Shift" => "SHIFT",
+                _ => "LOGO",
+            }
+            .to_string()
+        })
+        .collect();
+    out.push(keysym(key));
+    out.join("+")
+}
+
+/// sway's spelling: `Ctrl+Shift+F9`, with `Mod4` for the Super key.
+pub fn for_sway(canonical: &str) -> String {
+    let (mods, key) = parts(canonical);
+    let mut out: Vec<String> = mods
+        .iter()
+        .map(|m| if *m == "Super" { "Mod4" } else { m }.to_string())
+        .collect();
+    out.push(keysym(key));
+    out.join("+")
+}
+
+/// Hyprland's spelling, the two first fields of a `bind`: `CTRL SHIFT, F9`.
+pub fn for_hyprland(canonical: &str) -> String {
+    let (mods, key) = parts(canonical);
+    let mods: Vec<String> = mods.iter().map(|m| m.to_ascii_uppercase()).collect();
+    format!("{}, {}", mods.join(" "), keysym(key))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -163,6 +262,20 @@ mod tests {
         assert_eq!(normalize("ctrl+prtsc").unwrap(), "Ctrl+PrintScreen");
         assert_eq!(normalize("Ctrl+Alt+/").unwrap(), "Ctrl+Alt+Slash");
         assert_eq!(normalize("Ctrl+1").unwrap(), "Ctrl+1");
+    }
+
+    #[test]
+    fn each_desktop_gets_its_own_spelling() {
+        assert_eq!(for_gnome("Ctrl+Shift+F9"), "<Control><Shift>F9");
+        assert_eq!(for_gnome("Alt+Super+C"), "<Alt><Super>c");
+        assert_eq!(for_portal("Ctrl+Shift+F9"), "CTRL+SHIFT+F9");
+        assert_eq!(for_portal("Super+PrintScreen"), "LOGO+Print");
+        assert_eq!(for_sway("Ctrl+Alt+Slash"), "Ctrl+Alt+slash");
+        assert_eq!(for_sway("Super+Quote"), "Mod4+apostrophe");
+        assert_eq!(for_hyprland("Ctrl+Shift+F9"), "CTRL SHIFT, F9");
+        assert_eq!(for_hyprland("F12"), ", F12");
+        assert_eq!(keysym("PageDown"), "Page_Down");
+        assert_eq!(keysym("1"), "1");
     }
 
     #[test]

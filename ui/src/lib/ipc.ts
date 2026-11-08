@@ -4,7 +4,7 @@ import type {
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
   VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
-  ServiceKind,
+  ServiceKind, ShortcutStatus,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
@@ -81,7 +81,8 @@ export interface Api {
   discardImport(): Promise<void>;
 
   // ----- triggers -----
-  getShortcutErrors(): Promise<Record<string, string>>;
+  /** How shortcuts work on this desktop, and the ones that could not be set. */
+  getShortcutStatus(): Promise<ShortcutStatus>;
 
   // ----- connections (Settings) -----
   listConnections(): Promise<ConnectionsView>;
@@ -206,7 +207,7 @@ async function tauriApi(): Promise<Api> {
     listVariables: () => invoke('list_variables'),
     testRule: (rule, folder) => invoke('test_rule', { rule, folder }),
     previewFiles: (block, program) => invoke('preview_files', { block, program }),
-    getShortcutErrors: () => invoke('get_shortcut_errors'),
+    getShortcutStatus: () => invoke('get_shortcut_status'),
     listConnections: () => invoke('list_connections'),
     setConnectionSecret: (id, name, value) => invoke('set_connection_secret', { id, name, value }),
     connectConnection: (id) => invoke('connect_connection', { id }),
@@ -713,7 +714,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         problem: null,
       };
     },
-    getShortcutErrors: async () => ({}),
+    getShortcutStatus: async () => ({ route: 'system', note: null, errors: {}, commands: {} }),
     listConnections: async () => ({
       items: [...store.connection.entries()].map(([id, raw]) => {
         const c = raw as Connection;

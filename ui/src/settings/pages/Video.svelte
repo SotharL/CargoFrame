@@ -15,6 +15,7 @@
     { id: 'gdigrab', label: 'GDI (Windows, works almost everywhere)' },
     { id: 'ddagrab', label: 'Desktop Duplication (Windows, lighter on the processor)' },
     { id: 'x11', label: 'X11 (Linux)' },
+    { id: 'wayland', label: 'Wayland screen sharing (Linux, needs GStreamer)' },
   ];
   const ENCODERS: { id: VideoEncoder; label: string }[] = [
     { id: 'auto', label: 'Automatic' },

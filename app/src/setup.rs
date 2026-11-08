@@ -19,6 +19,10 @@
 //!   to use the app. It is listed only while such a connection exists, and the same button
 //!   installs it with `winget` (the catalogue's package `Anthropic.Claude`, hash-checked).
 //! * **xdotool** (Linux, X11): lets CargoFrame press Ctrl+V and Enter in a Claude chat.
+//! * On a **Wayland** desktop, instead: a screenshot service (the desktop portal, or `grim` on
+//!   sway and Hyprland), GStreamer with its PipeWire plugin (recording), and `wtype` on sway and
+//!   Hyprland (pressing Ctrl+V in Claude; GNOME and KDE allow no program to do that, so the
+//!   message is left on the clipboard instead).
 //!
 //! [`report`] is plain data in, plain data out, so every sentence here is tested. Looking at the
 //! computer is [`probe`]; installing is [`Installer`].
@@ -185,6 +189,104 @@ pub struct Probes {
     /// Linux: xdotool is installed.
     pub xdotool: bool,
     pub packages: Packages,
+    /// Linux with a Wayland session: what it has.
+    pub wayland: Option<WaylandProbe>,
+}
+
+/// What a Wayland desktop has for CargoFrame.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct WaylandProbe {
+    /// GNOME, KDE Plasma, sway, Hyprland or "this desktop".
+    pub desktop: &'static str,
+    /// sway or Hyprland: `grim` and `wtype` work there.
+    pub wlroots: bool,
+    /// The portal's screenshot service is there.
+    pub portal_screenshot: bool,
+    /// `grim` is installed.
+    pub grim: bool,
+    /// GStreamer with `pipewiresrc`.
+    pub gstreamer: bool,
+    /// `wtype` is installed.
+    pub wtype: bool,
+}
+
+/// The packages that give `id` on this system.
+fn package_names(
+    id: &str,
+    packages: Packages,
+    wayland: Option<&WaylandProbe>,
+) -> Vec<&'static str> {
+    match id {
+        "ffmpeg" => vec!["ffmpeg"],
+        "xdotool" => vec!["xdotool"],
+        "wtype" => vec!["wtype"],
+        "wayland_recording" => match packages {
+            Packages::Dnf => vec!["gstreamer1", "pipewire-gstreamer"],
+            Packages::Pacman => vec!["gstreamer", "gst-plugin-pipewire"],
+            Packages::Zypper => vec!["gstreamer-utils", "gstreamer-plugin-pipewire"],
+            _ => vec!["gstreamer1.0-tools", "gstreamer1.0-pipewire"],
+        },
+        "wayland_screenshot" => match wayland.map(|w| (w.desktop, w.wlroots)) {
+            Some((_, true)) => vec!["grim"],
+            Some(("GNOME", _)) => vec!["xdg-desktop-portal", "xdg-desktop-portal-gnome"],
+            Some(("KDE Plasma", _)) => vec!["xdg-desktop-portal", "xdg-desktop-portal-kde"],
+            _ => vec!["xdg-desktop-portal", "xdg-desktop-portal-gtk"],
+        },
+        _ => Vec::new(),
+    }
+}
+
+fn found_or_missing(found: bool) -> Status {
+    if found {
+        Status::Ok
+    } else {
+        Status::Missing
+    }
+}
+
+/// The lines of a Wayland desktop: screenshots, recording, and pressing keys where allowed.
+fn wayland_items(w: &WaylandProbe) -> Vec<Item> {
+    let mut items = vec![
+        Item {
+            id: "wayland_screenshot",
+            name: "Screenshot service",
+            what_for: "Wayland lets programs see the screen only through the desktop. Without it, no capture works.",
+            status: found_or_missing(w.portal_screenshot || (w.wlroots && w.grim)),
+            detail: match (w.portal_screenshot, w.wlroots && w.grim) {
+                (_, true) => "grim takes the screenshots.".into(),
+                (true, false) => format!("{}'s screenshot portal takes them.", w.desktop),
+                (false, false) => "Neither the desktop portal's screenshot service nor grim was found.".into(),
+            },
+            action: None,
+        },
+        Item {
+            id: "wayland_recording",
+            name: "GStreamer (PipeWire)",
+            what_for: "Recording video on Wayland: it reads the screen the desktop shares. Screenshots do not need it.",
+            status: found_or_missing(w.gstreamer),
+            detail: if w.gstreamer {
+                "Installed, with its PipeWire plugin.".into()
+            } else {
+                "gst-launch-1.0 or its PipeWire plugin (pipewiresrc) is missing.".into()
+            },
+            action: None,
+        },
+    ];
+    if w.wlroots {
+        items.push(Item {
+            id: "wtype",
+            name: "wtype",
+            what_for: "Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you. Without it, the message is left on the clipboard.",
+            status: found_or_missing(w.wtype),
+            detail: if w.wtype {
+                "Installed.".into()
+            } else {
+                "Not installed.".into()
+            },
+            action: None,
+        });
+    }
+    items
 }
 
 fn first_sentence(text: &str) -> String {
@@ -256,7 +358,9 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
     if os != Os::Other {
         items.push(sound_output_item(os, p));
     }
-    if os == Os::Linux {
+    if let (Os::Linux, Some(w)) = (os, &p.wayland) {
+        items.extend(wayland_items(w));
+    } else if os == Os::Linux {
         items.push(Item {
             id: "xdotool",
             name: "xdotool",
@@ -335,15 +439,13 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
                 ) + ".",
             },
             Os::Linux => {
-                let mut wanted = Vec::new();
-                if ffmpeg_missing {
-                    wanted.push("ffmpeg");
-                }
-                if items
-                    .iter()
-                    .any(|i| i.id == "xdotool" && i.status == Status::Missing)
-                {
-                    wanted.push("xdotool");
+                let mut wanted: Vec<&str> = Vec::new();
+                for item in items.iter().filter(|i| i.status == Status::Missing) {
+                    for name in package_names(item.id, p.packages, p.wayland.as_ref()) {
+                        if !wanted.contains(&name) {
+                            wanted.push(name);
+                        }
+                    }
                 }
                 match (wanted.is_empty(), p.packages.command(&wanted)) {
                     (true, _) => Install::None,
@@ -548,6 +650,11 @@ pub fn probe(os: Os, video: &cargoframe_config::Video, wants_claude_app: bool) -
             None
         },
         xdotool: os == Os::Linux && on_path("xdotool"),
+        wayland: if os == Os::Linux {
+            wayland_probe()
+        } else {
+            None
+        },
         packages: if os == Os::Linux {
             std::fs::read_to_string("/etc/os-release")
                 .map(|t| Packages::from_os_release(&t))
@@ -556,6 +663,31 @@ pub fn probe(os: Os, video: &cargoframe_config::Video, wants_claude_app: bool) -
             Packages::Unknown
         },
         ffmpeg,
+    }
+}
+
+/// What this Wayland desktop has, or `None` outside a Wayland session.
+fn wayland_probe() -> Option<WaylandProbe> {
+    #[cfg(target_os = "linux")]
+    {
+        use cargoframe_capture::session::{detect_env, Session};
+        use cargoframe_capture::wayland::Compositor;
+        if detect_env() != Session::Wayland {
+            return None;
+        }
+        let desktop = Compositor::detect_env();
+        Some(WaylandProbe {
+            desktop: desktop.name(),
+            wlroots: desktop.is_wlroots(),
+            portal_screenshot: cargoframe_capture::portal::available(),
+            grim: on_path("grim"),
+            gstreamer: crate::video::wayland_reader().is_some(),
+            wtype: on_path("wtype"),
+        })
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
     }
 }
 

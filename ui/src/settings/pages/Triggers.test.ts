@@ -52,3 +52,41 @@ describe('Triggers: the layout says screenshot or recording', () => {
   });
 });
 
+
+describe('Triggers on a Wayland desktop', () => {
+  it('says how shortcuts work there, and gives the command to add by hand', async () => {
+    await api.saveItem('trigger', 'bug', trigger({ name: 'Bug report', shortcut: 'Ctrl+Shift+F9', layout_id: 'pic' }));
+    api.getShortcutStatus = async () => ({
+      route: 'manual',
+      note: 'This Wayland desktop does not let programs set shortcuts.',
+      errors: {},
+      commands: { bug: '/opt/CargoFrame.AppImage open --trigger bug' },
+    });
+    const written: string[] = [];
+    Object.defineProperty(navigator, 'clipboard', {
+      configurable: true,
+      value: { writeText: async (t: string) => void written.push(t) },
+    });
+    render(Triggers);
+    expect(await screen.findByRole('note')).toHaveProperty('textContent', 'This Wayland desktop does not let programs set shortcuts.');
+    expect(await screen.findByText('/opt/CargoFrame.AppImage open --trigger bug')).toBeTruthy();
+    await fireEvent.click(screen.getByRole('button', { name: 'Copy' }));
+    await waitFor(() => expect(written).toEqual(['/opt/CargoFrame.AppImage open --trigger bug']));
+    expect(await screen.findByRole('button', { name: 'Copied' })).toBeTruthy();
+  });
+
+  it('where the desktop took the shortcut, no command is shown unless it was refused', async () => {
+    await api.saveItem('trigger', 'bug', trigger({ name: 'Bug report', shortcut: 'Ctrl+Shift+F9' }));
+    await api.saveItem('trigger', 'chat', trigger({ name: 'Chat', shortcut: 'Ctrl+Shift+F10' }));
+    api.getShortcutStatus = async () => ({
+      route: 'gnome',
+      note: 'GNOME',
+      errors: { chat: 'GNOME did not take Ctrl+Shift+F10' },
+      commands: { bug: 'cf open --trigger bug', chat: 'cf open --trigger chat' },
+    });
+    render(Triggers);
+    expect(await screen.findByText('GNOME did not take Ctrl+Shift+F10')).toBeTruthy();
+    expect(screen.queryByText('cf open --trigger bug')).toBeNull();
+    expect(screen.getByText('cf open --trigger chat')).toBeTruthy();
+  });
+});

@@ -426,6 +426,19 @@ export interface Trigger {
   layout_id: string | null;
 }
 
+/** Where shortcuts live: CargoFrame itself (Windows, X11), or a Wayland desktop. */
+export type ShortcutRoute = 'system' | 'gnome' | 'sway' | 'hyprland' | 'portal' | 'manual';
+
+export interface ShortcutStatus {
+  route: ShortcutRoute | null;
+  /** One sentence about how shortcuts work on this desktop. */
+  note: string | null;
+  /** Per trigger id: why its shortcut does not work. */
+  errors: Record<string, string>;
+  /** Per trigger id, on Wayland: the command a desktop shortcut runs. */
+  commands: Record<string, string>;
+}
+
 export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text' | 'file';
 export type RuleMultiple = 'first' | 'last' | 'join' | 'nth';
 
@@ -479,7 +492,7 @@ export interface Safe {
 
 // ----- video (mirror core/config Video and app/src/video.rs) -----
 
-export type VideoCapture = 'auto' | 'gdigrab' | 'ddagrab' | 'x11';
+export type VideoCapture = 'auto' | 'gdigrab' | 'ddagrab' | 'x11' | 'wayland';
 export type VideoEncoder = 'auto' | 'software' | 'nvenc' | 'qsv' | 'amf' | 'media_foundation' | 'vaapi';
 
 export interface Video {

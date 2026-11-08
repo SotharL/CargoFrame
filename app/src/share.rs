@@ -1262,6 +1262,7 @@ mod tests {
                 skipped_files: 0,
                 text: true,
                 submitted: d.submit,
+                handed_over: false,
             })
         }
     }

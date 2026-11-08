@@ -7,12 +7,14 @@
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import { keycaps } from '../../lib/shortcut';
-  import type { CaptureMode, Layout, Trigger } from '../../lib/types';
+  import type { CaptureMode, Layout, ShortcutStatus, Trigger } from '../../lib/types';
   import { go } from '../route.svelte';
 
   const triggers = createItems<Trigger>('trigger');
   const layouts = createItems<Layout>('layout');
-  let errors = $state<Record<string, string>>({});
+  let status = $state<ShortcutStatus>({ route: null, note: null, errors: {}, commands: {} });
+  const errors = $derived(status.errors);
+  let copied = $state<string | null>(null);
   let draft = $state<{ id: string | null; value: Trigger } | null>(null);
   let formError = $state('');
   let confirming = $state<string | null>(null);
@@ -27,7 +29,7 @@
 
   async function refresh() {
     await Promise.all([triggers.reload(), layouts.reload()]);
-    errors = await (await getApi()).getShortcutErrors();
+    status = await (await getApi()).getShortcutStatus();
   }
   onMount(refresh);
 
@@ -54,7 +56,7 @@
     formError = '';
     try {
       await triggers.save(draft.id, draft.value);
-      errors = await (await getApi()).getShortcutErrors();
+      status = await (await getApi()).getShortcutStatus();
       draft = null;
     } catch (e) {
       formError = String(e);
@@ -65,15 +67,28 @@
   async function remove(id: string) {
     await triggers.remove(id);
     confirming = null;
-    errors = await (await getApi()).getShortcutErrors();
+    status = await (await getApi()).getShortcutStatus();
   }
 
   async function toggle(id: string, t: Trigger, enabled: boolean) {
     try {
       await triggers.save(id, { ...t, enabled });
-      errors = await (await getApi()).getShortcutErrors();
+      status = await (await getApi()).getShortcutStatus();
     } catch (e) {
       formError = String(e);
+    }
+  }
+
+  /** The command must be added by hand: on desktops without a way in, or when the desktop refused it. */
+  const showCommand = (id: string) => !!status.commands[id] && (status.route === 'manual' || !!status.errors[id]);
+
+  async function copy(id: string) {
+    try {
+      await navigator.clipboard.writeText(status.commands[id]!);
+      copied = id;
+      setTimeout(() => (copied = null), 2500);
+    } catch {
+      // the command is on the page to select by hand
     }
   }
 
@@ -83,6 +98,8 @@
 <div class="page">
   {#if triggers.failure}<Chip kind="err" label={triggers.failure} />{/if}
   {#each triggers.problems as p (p)}<Chip kind="warn" label={`Could not read a trigger file: ${p}`} />{/each}
+
+  {#if status.note}<p class="note" role="note" data-tour="triggers.desktop">{status.note}</p>{/if}
 
   {#if triggers.loaded && triggers.items.length === 0 && !draft}
     <div class="empty">
@@ -119,6 +136,13 @@
           {/if}
           {#if item.enabled && !item.layout_id}<Chip kind="dbg" label="No layout chosen" />{/if}
         </div>
+        {#if item.enabled && showCommand(id)}
+          <div class="command">
+            <span class="quiet">Command for your desktop's shortcut:</span>
+            <code>{status.commands[id]}</code>
+            <button type="button" onclick={() => copy(id)}>{copied === id ? 'Copied' : 'Copy'}</button>
+          </div>
+        {/if}
       </div>
       <div class="actions">
         <Toggle label="On" checked={item.enabled} onchange={(v) => toggle(id, item, v)} />
@@ -193,6 +217,9 @@
     background: var(--surface-2); border: 1px solid var(--border-strong); border-bottom-width: 2px;
   }
   .chips { display: flex; gap: 6px; flex-wrap: wrap; }
+  .note { margin: 0; padding: 10px 12px; border-radius: var(--radius); background: var(--surface-2); font-size: 13px; max-width: 80ch; }
+  .command { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; font-size: 12.5px; }
+  .command code { font: 12px var(--mono); padding: 2px 6px; border-radius: 4px; background: var(--surface-2); overflow-wrap: anywhere; }
   .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: start; }
   .editor { display: grid; gap: 14px; }
   .field { display: grid; gap: 4px; }

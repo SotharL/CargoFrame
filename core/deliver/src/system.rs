@@ -27,6 +27,42 @@ pub struct SystemDesk {
     clipboard: Mutex<Option<arboard::Clipboard>>,
 }
 
+/// On Linux the clipboard's content is served by the program that put it there. After a hand-over
+/// the person pastes later, so the last clipboard is kept until the next one replaces it.
+#[cfg(target_os = "linux")]
+static KEPT: Mutex<Option<arboard::Clipboard>> = Mutex::new(None);
+
+#[cfg(target_os = "linux")]
+impl Drop for SystemDesk {
+    fn drop(&mut self) {
+        let mine = self
+            .clipboard
+            .get_mut()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
+        if let Some(c) = mine {
+            *KEPT.lock().unwrap_or_else(|e| e.into_inner()) = Some(c);
+        }
+    }
+}
+
+/// The Wayland desktop this runs on, or `None` on X11 and elsewhere.
+#[cfg(target_os = "linux")]
+fn wayland() -> Option<cargoframe_capture::wayland::Compositor> {
+    use cargoframe_capture::session::{detect_env, Session};
+    (detect_env() == Session::Wayland).then(cargoframe_capture::wayland::Compositor::detect_env)
+}
+
+/// What presses keys on this Wayland desktop: `wtype` on wlroots desktops (sway, Hyprland).
+/// GNOME and KDE let no program press keys in another.
+#[cfg(target_os = "linux")]
+fn key_presser(desktop: &cargoframe_capture::wayland::Compositor) -> Option<PathBuf> {
+    desktop
+        .is_wlroots()
+        .then(|| cargoframe_capture::wayland::find_program("wtype"))
+        .flatten()
+}
+
 impl SystemDesk {
     fn with_clipboard<R>(
         &self,
@@ -86,6 +122,14 @@ impl Desk for SystemDesk {
     fn sleep(&self, d: Duration) {
         std::thread::sleep(d);
     }
+
+    #[cfg(target_os = "linux")]
+    fn can_drive(&self) -> bool {
+        match wayland() {
+            None => true,
+            Some(desktop) => desktop.knows_focus() && key_presser(&desktop).is_some(),
+        }
+    }
 }
 
 #[cfg(windows)]
@@ -93,9 +137,29 @@ fn press(key: Key) -> Result<(), String> {
     crate::win::press(key)
 }
 
-/// X11 only; there is no way to press keys in another program under Wayland.
+/// X11 with xdotool; Wayland with wtype where the desktop allows it (sway, Hyprland).
 #[cfg(target_os = "linux")]
 fn press(key: Key) -> Result<(), String> {
+    if let Some(desktop) = wayland() {
+        let program = key_presser(&desktop).ok_or_else(|| {
+            format!(
+                "{} does not let CargoFrame press keys: paste with Ctrl+V yourself",
+                desktop.name()
+            )
+        })?;
+        let args: &[&str] = match key {
+            Key::Paste => &["-M", "ctrl", "v", "-m", "ctrl"],
+            Key::Enter => &["-k", "Return"],
+        };
+        let status = std::process::Command::new(&program)
+            .args(args)
+            .status()
+            .map_err(|e| format!("wtype could not start: {e}"))?;
+        return status
+            .success()
+            .then_some(())
+            .ok_or_else(|| format!("wtype failed ({status})"));
+    }
     let keys = match key {
         Key::Paste => "ctrl+v",
         Key::Enter => "Return",
