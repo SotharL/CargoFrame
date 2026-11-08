@@ -13,6 +13,13 @@ describe('window values', () => {
     );
   });
 
+  it('gives every dropdown an empty second step from the start, so the window can bind it', async () => {
+    const view = await demoSession();
+    const v = initialValues(view);
+    expect(Object.keys(view.dropdowns).length).toBeGreaterThan(0);
+    for (const id of Object.keys(view.dropdowns)) expect(v.deeper[id]).toEqual({ value: '', label: '' });
+  });
+
   it('toggles files without duplicates', () => {
     expect(toggleFile(['a'], 'b', true)).toEqual(['a', 'b']);
     expect(toggleFile(['a', 'b'], 'b', true)).toEqual(['a', 'b']);
