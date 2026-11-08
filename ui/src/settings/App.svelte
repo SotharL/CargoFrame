@@ -134,7 +134,7 @@
     padding: 16px 12px;
     display: flex; flex-direction: column; gap: 2px;
   }
-  .brand { padding: 4px 10px 12px; }
+  .brand { padding: 4px 10px 16px; }
   .group {
     margin: 14px 10px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
     text-transform: uppercase; color: var(--quiet);
