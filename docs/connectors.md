@@ -1,6 +1,6 @@
 # Connectors: how each one flows, and what to improve
 
-_8 Nov 2026. Proposals for review. "Started" items are built on the branch `feat/connectors-x-bluesky-instagram`._
+_Version 0.2.0. Proposals for review; "Started" items are in 0.2.0._
 
 The goal for every service is the same: set up in a few clicks with a guide, pick *where to post* in one box that
 goes as deep as the service does, and send without surprises (sizes, required fields, formatting handled for you).
