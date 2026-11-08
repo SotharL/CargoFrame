@@ -23,12 +23,18 @@ export function initialValues(view: SessionView): FormValues {
   const texts: Record<string, string> = {};
   for (const [id, t] of Object.entries(view.texts)) texts[id] = t.value;
   const dropdowns: Record<string, string | null> = {};
-  for (const [id, d] of Object.entries(view.dropdowns)) dropdowns[id] = d.selected;
+  // every dropdown has a second step from the start (empty: "something new"), because the window
+  // binds it, and a bound value that is missing stops the window from drawing at all
+  const deeper: Record<string, DeeperPick> = {};
+  for (const [id, d] of Object.entries(view.dropdowns)) {
+    dropdowns[id] = d.selected;
+    deeper[id] = { value: '', label: '' };
+  }
   const files: Record<string, string[]> = {};
   for (const [id, f] of Object.entries(view.files)) {
     files[id] = f.entries.filter((e) => e.selected).map((e) => e.path);
   }
-  return { texts, dropdowns, deeper: {}, files };
+  return { texts, dropdowns, deeper, files };
 }
 
 export function formatSize(bytes: number): string {

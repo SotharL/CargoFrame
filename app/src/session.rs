@@ -466,6 +466,21 @@ pub fn apply_incoming(view: &mut SessionView, values: &[(String, String)]) {
     }
 }
 
+/// Does a press of this trigger record a video? Its layout decides: a layout with a Video block
+/// records (a press starts, the next one stops), any other takes a screenshot. A trigger with no
+/// layout, or one that cannot be read, takes a screenshot.
+pub fn records(store: &Store, trigger: &Trigger) -> bool {
+    trigger
+        .layout_id
+        .as_deref()
+        .and_then(|id| store.load_item::<Layout>(Kind::Layouts, id).ok().flatten())
+        .is_some_and(|l| {
+            l.blocks
+                .iter()
+                .any(|b| matches!(b.kind, cargoframe_layout::BlockKind::Video(_)))
+        })
+}
+
 /// Capture for real and prepare the session.
 pub fn capture_and_prepare(
     store: &Store,
@@ -1490,5 +1505,45 @@ pub(crate) mod tests {
         assert_eq!(s.view.texts["summary"].value, "It crashed");
         assert_eq!(s.view.dropdowns["chat"].selected.as_deref(), Some("new"));
         assert!(s.view.notes.iter().any(|n| n.contains("nope")));
+    }
+
+    #[test]
+    fn the_layout_says_whether_a_trigger_records() {
+        use cargoframe_layout::VideoBlock;
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(cargoframe_config::Dirs::under(dir.path()));
+        let rect = Rect {
+            x: 0,
+            y: 0,
+            w: 6,
+            h: 4,
+        };
+        let mut shot = Layout::empty("", "Shot");
+        shot.blocks = vec![Block {
+            id: "s".into(),
+            rect,
+            kind: BlockKind::Screenshot,
+        }];
+        let mut both = shot.clone();
+        both.blocks.push(Block {
+            id: "v".into(),
+            rect: Rect { y: 4, ..rect },
+            kind: BlockKind::Video(VideoBlock::default()),
+        });
+        store.save_item(Kind::Layouts, "shot", &shot).unwrap();
+        store.save_item(Kind::Layouts, "both", &both).unwrap();
+        let with = |id: Option<&str>, media| Trigger {
+            layout_id: id.map(String::from),
+            media,
+            ..Trigger::default()
+        };
+        use cargoframe_config::Media;
+        assert!(!records(&store, &with(Some("shot"), Media::Screenshot)));
+        // a screenshot and a video in one layout: a press records, and the screenshot is taken from it
+        assert!(records(&store, &with(Some("both"), Media::Screenshot)));
+        // the old "Makes" setting is no longer what decides
+        assert!(!records(&store, &with(Some("shot"), Media::Video)));
+        assert!(!records(&store, &with(None, Media::Video)));
+        assert!(!records(&store, &with(Some("gone"), Media::Video)));
     }
 }

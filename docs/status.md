@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-08 (on the connector branch, for review: X, Bluesky and Instagram against mock servers, one build switch per service, `cargoframe open`; merged: the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
+_Last updated 2026-11-08, version 0.2.0 (a shortcut records or takes a screenshot from its layout; fixed: a window whose layout had a dropdown stayed on Loading; X, Bluesky and Instagram against mock servers, one build switch per service, `cargoframe open`; the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -113,8 +113,8 @@ those is true for each piece.
    what a long recording costs, record a minute with a video trigger while Task Manager is open.
    Try Capture = Desktop Duplication and an NVIDIA/Intel/AMD encoder if you have one. Write
    what worked and what each cost into the S9 table in `docs/spikes.md`.
-   Video trigger: on the Triggers page make a trigger with Makes = Video (and a layout with a Video block and a
-   sharing button), press its shortcut, do something on the screen, press it again; the window should open
+   Recording: on the Triggers page make a trigger whose layout has a Video block and a sharing button (the form
+   says the press records), press its shortcut, do something on the screen, press it again; the window should open
    with the clip playing. Send it to Slack, Google Drive, Jira and Discord and write down which size limits
    you hit; try Reddit/Teams/Claude to see the reason shown. Press the shortcut once and use the tray's "Recording: stop and
    discard it". In the window, drag the two handles of the thin timeline under the clip (or use the arrow keys),

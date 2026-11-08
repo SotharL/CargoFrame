@@ -34,7 +34,7 @@ pub const TEMPLATES: [TemplateInfo; 18] = [
     TemplateInfo {
         key: "local-video",
         name: "Save a recording locally",
-        description: "The recording, a note and the files you tick, saved as a zip in your folder for saved zips. For a trigger that makes a video. No account needed.",
+        description: "The recording, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the screen. No account needed.",
         service: None,
     },
     TemplateInfo {
@@ -46,7 +46,7 @@ pub const TEMPLATES: [TemplateInfo; 18] = [
     TemplateInfo {
         key: "jira-video",
         name: "Jira bug report with a recording",
-        description: "Like the Jira bug report, with the recording of your screen attached to the new issue. For a trigger that makes a video.",
+        description: "Like the Jira bug report, with the recording of your screen attached to the new issue. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
@@ -64,7 +64,7 @@ pub const TEMPLATES: [TemplateInfo; 18] = [
     TemplateInfo {
         key: "google-drive-video",
         name: "Google Drive upload of a recording",
-        description: "Upload the recording and a zip of the ticked files to a Drive folder you pick. For a trigger that makes a video.",
+        description: "Upload the recording and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
@@ -94,7 +94,7 @@ pub const TEMPLATES: [TemplateInfo; 18] = [
     TemplateInfo {
         key: "slack-video",
         name: "Slack message with a recording",
-        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread. For a trigger that makes a video.",
+        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {

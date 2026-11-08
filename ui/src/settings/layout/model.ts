@@ -15,7 +15,7 @@ export type BlockType = BlockContent['type'];
 
 export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: [number, number] }[] = [
   { type: 'screenshot', label: 'Screenshot', hint: 'The capture, with crop, draw, shapes and text', size: [8, 8] },
-  { type: 'video', label: 'Video', hint: 'The recording of a video trigger, to play, trim, crop and mark', size: [8, 8] },
+  { type: 'video', label: 'Video', hint: 'A recording of the screen: a shortcut that opens this layout records, and the window plays, trims, crops and marks it', size: [8, 8] },
   { type: 'text', label: 'Text', hint: 'A text box with a title, for notes or a prompt', size: [4, 3] },
   { type: 'dropdown', label: 'Dropdown', hint: 'Choices from a service or from your Claude chats', size: [4, 2] },
   { type: 'files', label: 'Files', hint: 'Files from the project folder (or folders above the program) to tick and zip together', size: [6, 3] },

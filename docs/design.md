@@ -1,6 +1,6 @@
 # Design
 
-How CargoFrame is built today (8 Nov 2026, after the flow review). It is a short map, not a manual: for why a choice was
+How CargoFrame is built today (version 0.2.0, 8 Nov 2026). It is a short map, not a manual: for why a choice was
 made read [decisions.md](decisions.md), for what has been tried on real machines read [status.md](status.md).
 
 ## What it is
@@ -23,7 +23,7 @@ Four rules shape everything else:
 ## One press, from shortcut to sent
 
 ```
-shortcut ─▶ which window is in focus? ─▶ capture (picture, or start/stop a recording)
+shortcut ─▶ which window is in focus? ─▶ its layout has a Video block? record (press to start, press to stop) : take a picture
          ─▶ climb from the program's path to its project folder
          ─▶ run the data rules on the allowed files in that folder
          ─▶ open the CargoFrame window (a layout: picture, texts, dropdowns, files, video, buttons)
@@ -78,7 +78,7 @@ The sidebar is in three groups, in the order a new person sets things up. Each t
 |-------|------|---------------|
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with the one install button; then **Connections**, the services you share to |
 | Captures | **Layouts** | The window a capture opens, block by block, and what each sharing button sends |
-| | **Triggers** | Shortcuts, and the layout each opens |
+| | **Triggers** | Shortcuts, and the layout each opens. The layout says whether a press records (it has a Video block) or takes a screenshot |
 | | **Data from files** | Values read from files in the project folder |
 | | **Extra fields** | Boxes on a service beyond where to post (Jira priority) |
 | | **Recording** | Where ffmpeg is, capture and compression, a 5-second test |
@@ -183,7 +183,7 @@ shows the sentence. A test fails if a step names a field that no longer exists, 
 | General holding eight topics, from colours to updates | General, Your data and About, each about one thing | Done |
 | Memory setting and speed numbers in one "Performance" box | The setting in General, the numbers in About | Done |
 | **Extra fields** describe a service field, its list, a default and "required", which a Dropdown block and a button's route already do | The route in the layout gets *required* and *if empty, use*; the Extra fields page goes, its files are folded into the layouts that use them | Planned (connector round) |
-| What to capture is chosen in the trigger (*Makes*, *Capture*) **and** in the layout (Video block's *Record*) | The layout says what it captures; a trigger is a shortcut and a layout | Planned |
+| Screenshot or recording chosen in the trigger (*Makes*) **and** implied by the layout (a Video block) | The layout decides: a Video block records, otherwise a screenshot. The trigger keeps only *Screenshot of* (window, screen, all screens) | Done in 0.2.0 |
 | A Claude app install button on Setup **and** on the Claude form | Kept: one backend, two doors where people look for it | Kept on purpose |
 
 ## For companies
@@ -192,13 +192,56 @@ CargoFrame is meant to be used by companies of thousands of people. What that ne
 
 | Need | How | State |
 |------|-----|-------|
-| Leave out services a company does not use | One Cargo feature per connector (`jira`, `slack`, `x`, ...); `set CF_SERVICES=jira,teams` before `scripts\windows\build.cmd`. The service's code is not in the program; its form, templates and guide are hidden; a saved connection of a missing kind shows "not in this copy" | Built on the connector branch (the Settings forms stay in the window's code, hidden) |
+| Leave out services a company does not use | One Cargo feature per connector (`jira`, `slack`, `x`, ...); `set CF_SERVICES=jira,teams` before `scripts\windows\build.cmd`. The service's code is not in the program; its form, templates and guide are hidden; a saved connection of a missing kind shows "not in this copy" | Built in 0.2.0 (the Settings forms stay in the window's code, hidden) |
 | Set up for everyone at once | A read-only *managed* folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`) with the same JSON files as the settings folder plus `policy.json` (which services, update check on or off, settings that are locked). Managed items show a lock and cannot be edited; each person still signs in for themselves | Planned |
-| Other programs hand data to CargoFrame | `cargoframe open --trigger <id> --set <block>=<text>` reaches the running copy through the single-instance channel (same user only, no network port). It runs the trigger (so the calling program is captured), and fills text boxes and dropdowns. Only a layout with *Other programs can fill this* accepts values; nothing is sent until the person presses a button. At most 50 values of 20,000 characters; the log records how many, never what | Built on the connector branch (text and dropdowns; files and video triggers next) |
+| Other programs hand data to CargoFrame | `cargoframe open --trigger <id> --set <block>=<text>` reaches the running copy through the single-instance channel (same user only, no network port). It runs the trigger (so the calling program is captured), and fills text boxes and dropdowns. Only a layout with *Other programs can fill this* accepts values; nothing is sent until the person presses a button. At most 50 values of 20,000 characters; the log records how many, never what | Built in 0.2.0 (text and dropdowns; files and recording layouts next) |
 | The company's sign-in | OAuth with the company's identity provider where the service allows it (Teams with Entra today; Jira OAuth and a generic OAuth 2.0 for Custom API next). Tokens stay in each person's credential store | Partly built |
 | The company's network | The operating system's certificate store on Windows and Linux (a company root certificate just works); the Windows proxy setting, or the usual proxy variables on Linux | Built (Linux certificates since 8 Nov) |
 | Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`) for Intune or a login script; the update check can be turned off so IT pushes versions | Built; the policy switch is planned |
 | Accessible without thinking | Every control has a label, the keyboard reaches everything (arrow keys in the sidebar), focus is always visible, motion is reduced when the system asks, colours are checked for contrast, and each screen has one obvious button | Built; a screen reader pass on a real PC is open |
+
+## Branding
+
+The mark is **Convoy**: three frames moving right, the lead one carrying a forward arrow. The frames are the captures,
+the convoy is everything that travels with them, the arrow is the sharing.
+
+<p>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="../assets/brand/convoy-logo-dark.svg">
+    <img alt="CargoFrame logo" src="../assets/brand/convoy-logo-light.svg" height="56">
+  </picture>
+</p>
+
+| Icon | Small icon (under 48 px) | Program icon | Tray |
+|------|--------------------------|--------------|------|
+| <img alt="Icon" src="../assets/brand/convoy-icon-light.svg" height="56"> | <img alt="Small icon" src="../assets/brand/convoy-icon-small-light.svg" height="32"> | <img alt="Program icon" src="../app/icons/128x128.png" height="56"> | <img alt="Tray frames" src="../app/icons/tray-frames.png" height="24"> <img alt="Tray arrow" src="../app/icons/tray-arrow.png" height="24"> |
+
+**Rules.** Flat shape and colour only: no background tile, gradient or shadow. The light drawing on light surfaces,
+the dark one on dark surfaces; in the app the frames take the theme's text colour and the arrow the **accent colour**
+(Settings, General, Appearance), so the logo follows both. Below 48 px the small drawing is used, never the full one
+scaled down. Surfaces that cannot follow the theme (program icon, installer) use mid-grey frames and the default blue arrow.
+
+**The name.** *Cargo* in Manrope 800 and *Frame* in Manrope 500, one word, letter-spacing -0.02em. The SVGs have
+the text as outlines, so no font is needed.
+
+**Colours.** The accent is blue `#4F8EE0` by default and can be changed by the person (a warning appears when a colour
+is hard to read on either theme). Each destination has its own colour, used on its sharing button and its tick boxes,
+never as the only signal: the label always says where.
+
+<img alt="CargoFrame colours" src="images/palette.svg" width="720">
+
+**How it looks.** Light and dark follow the system unless the person picks one.
+
+| Settings (light) | Settings (dark) |
+|------------------|-----------------|
+| <img alt="Settings, General, light" src="images/settings-light.png" width="420"> | <img alt="Settings, Setup, dark" src="images/settings-dark.png" width="420"> |
+
+| The CargoFrame window (light) | The CargoFrame window (dark, a Discord path) |
+|-------------------------------|----------------------------------------------|
+| <img alt="Capture window, light" src="images/capture-light.png" width="420"> | <img alt="Capture window, dark" src="images/capture-dark.png" width="420"> |
+
+The files are in `assets/brand/` (SVG) and `app/icons/` (drawn from them by `scripts/dev/render-icons.mjs`); in the
+app the mark is the `Logo.svelte` component. The screenshots are made from the demo data (`npm run dev` in `ui/`).
 
 ## Safety
 
@@ -235,5 +278,5 @@ not on every change.
 - Text colour is not offered: only Jira and Teams could show it.
 - Wayland "active window" may not be possible on some compositors (the fallback is the screen under the cursor).
 - The installer and the program inside it are not signed yet.
-- X, Bluesky and Instagram are on the connector branch, under review. They send pictures, not videos, and plain text.
-  Instagram needs a picture server the person owns. Proposals for every connector: [connectors.md](connectors.md).
+- X, Bluesky and Instagram send pictures, not videos, and plain text. Instagram needs a picture server the person
+  owns. Proposals for every connector: [connectors.md](connectors.md).

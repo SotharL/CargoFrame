@@ -55,6 +55,7 @@ cat > "$cfg/layouts/bug.json" <<'JSON'
   { "id": "shot", "type": "screenshot", "rect": { "x": 0, "y": 0, "w": 8, "h": 9 } },
   { "id": "prompt", "type": "text", "rect": { "x": 8, "y": 0, "w": 4, "h": 3 },
     "title": "Prompt", "role": "prompt", "default_text": "What is wrong in {{project.name}}?" },
+  { "id": "chat", "type": "dropdown", "rect": { "x": 8, "y": 3, "w": 4, "h": 2 }, "title": "Chat", "source": { "type": "claude_chats" } },
   { "id": "logs", "type": "files", "rect": { "x": 0, "y": 9, "w": 8, "h": 3 },
     "title": "Logs", "include": ["**/*.log"], "preselect": ["app.log"] },
   { "id": "send", "type": "sharing_button", "rect": { "x": 8, "y": 9, "w": 4, "h": 2 }, "label": "Share" }
