@@ -117,7 +117,13 @@ fn lines_with(text: &str, needle: &str) -> Vec<String> {
 
 /// Every place `find` finds a value in `text`, the text of the file at `path`. `rule` is only
 /// read for [`Find::Advanced`].
-pub fn all(find: &Find, rule: &Rule, path: &str, text: &str, which: Which) -> Result<Vec<String>, RuleError> {
+pub fn all(
+    find: &Find,
+    rule: &Rule,
+    path: &str,
+    text: &str,
+    which: Which,
+) -> Result<Vec<String>, RuleError> {
     Ok(match find {
         Find::ValueOf { name } => {
             let structured = kind_of(path).and_then(|format| {
@@ -208,7 +214,13 @@ mod tests {
     #[test]
     fn a_name_gives_what_is_written_after_it_whatever_the_file() {
         assert_eq!(
-            run(&value_of("OS Name"), "system_info.txt", SYSTEM, Which::First).as_deref(),
+            run(
+                &value_of("OS Name"),
+                "system_info.txt",
+                SYSTEM,
+                Which::First
+            )
+            .as_deref(),
             Some("Microsoft Windows 11 Pro")
         );
         assert_eq!(
@@ -241,12 +253,24 @@ mod tests {
             Some("3.1.4")
         );
         assert_eq!(
-            run(&value_of("build.number"), "package.json", json, Which::First).as_deref(),
+            run(
+                &value_of("build.number"),
+                "package.json",
+                json,
+                Which::First
+            )
+            .as_deref(),
             Some("12")
         );
         let toml = "[package]\nname = \"foo\"\nversion = \"0.3.0\"\n";
         assert_eq!(
-            run(&value_of("package.version"), "Cargo.toml", toml, Which::First).as_deref(),
+            run(
+                &value_of("package.version"),
+                "Cargo.toml",
+                toml,
+                Which::First
+            )
+            .as_deref(),
             Some("0.3.0")
         );
         let yaml = "app:\n  version: 2.0\n";
@@ -285,12 +309,18 @@ mod tests {
         };
         assert_eq!(run(&b, "app.log", log, Which::First).as_deref(), Some("41"));
         assert_eq!(run(&b, "app.log", log, Which::Last).as_deref(), Some("42"));
-        assert_eq!(run(&b, "app.log", log, Which::All).as_deref(), Some("41, 42"));
+        assert_eq!(
+            run(&b, "app.log", log, Which::All).as_deref(),
+            Some("41, 42")
+        );
         let eol = Find::Between {
             start: "last line:".into(),
             end: None,
         };
-        assert_eq!(run(&eol, "app.log", log, Which::First).as_deref(), Some("done"));
+        assert_eq!(
+            run(&eol, "app.log", log, Which::First).as_deref(),
+            Some("done")
+        );
         // an end that is not on the line: up to its end
         let missing_end = Find::Between {
             start: "last line:".into(),

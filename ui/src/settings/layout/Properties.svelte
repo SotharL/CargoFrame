@@ -5,7 +5,8 @@
   import TextAutomation from './TextAutomation.svelte';
   import SharingPanel from './SharingPanel.svelte';
   import VideoOptions from './VideoOptions.svelte';
-  import { buttonKind, kindStyle } from '../../lib/connector';
+  import { KIND_NAME, buttonKind, kindStyle } from '../../lib/connector';
+  import { messageField } from '../../capture/blocks/formatting';
   import { blockName, lineFor } from './reach';
   import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Reach, Rect, Rule, VariableInfo } from '../../lib/types';
@@ -55,6 +56,25 @@
     blocks.filter((b): b is TextBlock | DropdownBlock => b.type === 'text' || b.type === 'dropdown'),
   );
   const connectionOf = (id: string | null | undefined) => connections.find((c) => c.id === id);
+
+  type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
+  /** The sharing buttons whose service takes a formatted message, with that message's field. */
+  const messageButtons = $derived(
+    blocks
+      .filter((b): b is SharingBlock => b.type === 'sharing_button')
+      .map((b) => {
+        const kind = connectionOf(b.connection_id)?.kind;
+        return { button: b, kind, field: messageField(kind) };
+      })
+      .filter((x): x is { button: SharingBlock; kind: NonNullable<typeof x.kind>; field: string } => !!x.field && !!x.kind),
+  );
+  const isMessageOf = (b: SharingBlock, field: string, textId: string) =>
+    b.mappings.some((m) => m.field === field && m.source.kind === 'block' && m.source.value === textId);
+  /** Make this box the message of a button, or not: a button has one message. */
+  function setMessageOf(b: SharingBlock, field: string, textId: string, on: boolean) {
+    const rest = b.mappings.filter((m) => m.field !== field || (!on && !(m.source.kind === 'block' && m.source.value === textId)));
+    b.mappings = on ? [...rest, { field, source: { kind: 'block', value: textId } }] : rest;
+  }
   /** Fields to suggest for a connection: what the service offers, then the person's info types. */
   const fieldsFor = (connection: string | null) => {
     const known = connectionOf(connection)?.describe.fields ?? [];
@@ -101,11 +121,27 @@
       </select>
     </Field>
     {#if block.role === 'plain'}
+      {@const textId = block.id}
+      <fieldset class="message-of">
+        <legend>Message of</legend>
+        {#each messageButtons as m (m.button.id)}
+          <label class="tick">
+            <input
+              type="checkbox"
+              checked={isMessageOf(m.button, m.field, textId)}
+              onchange={(e) => setMessageOf(m.button, m.field, textId, e.currentTarget.checked)}
+            />
+            {m.button.label || blockName(m.button)} <span class="quiet">({KIND_NAME[m.kind]})</span>
+          </label>
+        {:else}
+          <p class="quiet hint">No sharing button to Jira, Slack, Discord, Reddit or Teams in this layout yet.</p>
+        {/each}
+      </fieldset>
       <div class="toggles">
         <Toggle label="Formatting buttons" checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
         <p class="quiet hint">
-          Bold, italic, underline, code, quotes and lists above the box, only the ones the service it is sent to can show.
-          They need a button that sends this box as the message of Jira, Slack, Discord, Reddit or Teams.
+          Bold, italic, underline, code, quotes and lists above the box, and shown in it, when it is the message of a
+          button above: only the ones that service can show, written the way it wants them.
         </p>
       </div>
     {/if}
@@ -336,6 +372,10 @@
   .issue.warning { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 12%, transparent); }
   .issue.debug { border-color: var(--dbg); background: color-mix(in srgb, var(--dbg) 12%, transparent); }
   .toggles { display: grid; gap: 4px; }
+  .message-of { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
+  .message-of legend { font-weight: 600; font-size: 12.5px; padding: 0 4px; }
+  .message-of .tick { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .message-of .hint { margin: 0; font-size: 12px; }
   .toggles .hint { margin: 0 0 6px 46px; font-size: 12px; }
   .auto-field { display: grid; gap: 4px; }
   .auto-title { font-weight: 600; font-size: 13px; }

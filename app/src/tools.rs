@@ -78,17 +78,20 @@ pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
     RuleTest {
         folder: folder.map(str::to_string),
         value: first.and_then(|v| v.value.clone()),
-        problem: cargoframe_rules::check(&named).err().or_else(|| {
-            match (&seen.file, root) {
+        problem: cargoframe_rules::check(&named)
+            .err()
+            .or_else(|| match (&seen.file, root) {
                 (None, Some(_)) => Some(
                     cargoframe_rules::RuleError::FileNotFound(rule.file.trim().to_string())
                         .to_string(),
                 ),
                 (_, None) => Some(cargoframe_rules::RuleError::NoProject.to_string()),
                 _ => None,
-            }
-        }),
-        kind: seen.file.as_deref().map(|f| cargoframe_rules::find::kind_name(f).to_string()),
+            }),
+        kind: seen
+            .file
+            .as_deref()
+            .map(|f| cargoframe_rules::find::kind_name(f).to_string()),
         file: seen.file,
         excerpt: seen.excerpt,
         files: report.found.get("test").cloned().unwrap_or_default(),

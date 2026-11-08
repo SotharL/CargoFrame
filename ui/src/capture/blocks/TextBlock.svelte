@@ -3,7 +3,8 @@
   import { roleTag } from '../../lib/roles';
   import { KIND_NAME } from '../../lib/connector';
   import type { Block, ServiceKind } from '../../lib/types';
-  import { MARKS, applyMark, type Mark } from './formatting';
+  import RichBox from './RichBox.svelte';
+  import { MARKS, type Mark } from './formatting';
 
   type TextBlock = Extract<Block, { type: 'text' }>;
   let {
@@ -25,37 +26,15 @@
   const tag = $derived(roleTag(block.role));
   const buttons = $derived(MARKS.filter((m) => marks.includes(m.mark)));
   const forWhom = $derived(services.map((k) => KIND_NAME[k]).join(', '));
-  let box = $state<HTMLTextAreaElement>();
-
-  /** A button (or its shortcut) changes the text around the selection and keeps the selection. */
-  function format(mark: Mark) {
-    if (!box) return;
-    const edit = applyMark(value, box.selectionStart, box.selectionEnd, mark);
-    value = edit.text;
-    const el = box;
-    // the box shows the new text before the selection can be set on it
-    queueMicrotask(() => {
-      el.focus();
-      el.setSelectionRange(edit.start, edit.end);
-    });
-  }
-
-  function onKey(e: KeyboardEvent) {
-    if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.altKey) return;
-    const mark = ({ b: 'bold', i: 'italic', u: 'underline' } as const)[e.key.toLowerCase() as 'b' | 'i' | 'u'];
-    if (mark && marks.includes(mark)) {
-      e.preventDefault();
-      format(mark);
-    }
-  }
+  let rich = $state<RichBox>();
 </script>
 
 <div class="text">
   {#if !inside}
-    <label for={id}>{block.title}{#if tag}<span class="role">{tag}</span>{/if}</label>
+    <label id={`${id}-label`} for={buttons.length > 0 ? undefined : id}>{block.title}{#if tag}<span class="role">{tag}</span>{/if}</label>
   {/if}
   {#if buttons.length > 0}
-    <div class="tools" role="toolbar" aria-label={`Formatting for ${forWhom}`} title={`Shown right on ${forWhom}`}>
+    <div class="tools" role="toolbar" aria-label={`Formatting for ${forWhom}`} title={`Written the way ${forWhom} shows it when sent`}>
       {#each buttons as b (b.mark)}
         <button
           type="button"
@@ -63,7 +42,7 @@
           aria-label={b.label}
           title={b.hint}
           onmousedown={(e) => e.preventDefault()}
-          onclick={() => format(b.mark)}
+          onclick={() => rich?.format(b.mark)}
         >{b.text}</button>
       {/each}
     </div>
@@ -74,7 +53,18 @@
     {#if inside && value === ''}
       <div class="inner" aria-hidden="true">{block.title}{#if tag}<span class="role">{tag}</span>{/if}</div>
     {/if}
-    <textarea {id} bind:this={box} bind:value onkeydown={onKey} spellcheck="true" aria-label={inside ? block.title : undefined}></textarea>
+    {#if buttons.length > 0}
+      <RichBox
+        bind:this={rich}
+        bind:value
+        {id}
+        {marks}
+        label={inside ? block.title : undefined}
+        labelledby={inside ? undefined : `${id}-label`}
+      />
+    {:else}
+      <textarea {id} bind:value spellcheck="true" aria-label={inside ? block.title : undefined}></textarea>
+    {/if}
   </div>
   {#if unresolved.length}
     <div class="chips">

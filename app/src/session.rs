@@ -605,7 +605,10 @@ pub fn prepare_with(
                 } else {
                     ""
                 };
-                notes.push(format!("From a file, \u{201c}{}\u{201d}: {problem}{tail}", name.trim()));
+                notes.push(format!(
+                    "From a file, \u{201c}{}\u{201d}: {problem}{tail}",
+                    name.trim()
+                ));
             }
         }
         added_files = report.files;
@@ -1284,7 +1287,12 @@ pub(crate) mod tests {
             name: "L".into(),
             blocks: vec![Block {
                 id: "logs".into(),
-                rect: Rect { x: 0, y: 0, w: 6, h: 2 },
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 2,
+                },
                 // the block itself only offers logs: the rule adds its file anyway
                 kind: BlockKind::Files(FilesBlock {
                     title: "Logs".into(),

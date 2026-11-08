@@ -10,11 +10,20 @@ export const MARKS: { mark: Mark; label: string; text: string; hint: string }[] 
   { mark: 'bold', label: 'Bold', text: 'B', hint: 'Bold (Ctrl+B)' },
   { mark: 'italic', label: 'Italic', text: 'I', hint: 'Italic (Ctrl+I)' },
   { mark: 'underline', label: 'Underline', text: 'U', hint: 'Underline (Ctrl+U)' },
-  { mark: 'code', label: 'Code', text: '</>', hint: 'Code' },
-  { mark: 'quote', label: 'Quote', text: '❝', hint: 'Quote' },
-  { mark: 'bullets', label: 'Bulleted list', text: '•', hint: 'Bulleted list' },
-  { mark: 'numbers', label: 'Numbered list', text: '1.', hint: 'Numbered list' },
+  { mark: 'code', label: 'Code', text: '</>', hint: 'Code (Ctrl+E)' },
+  { mark: 'quote', label: 'Quote', text: '❝', hint: 'Quote (Ctrl+Shift+9)' },
+  { mark: 'bullets', label: 'Bulleted list', text: '•', hint: 'Bulleted list (Ctrl+Shift+8)' },
+  { mark: 'numbers', label: 'Numbered list', text: '1.', hint: 'Numbered list (Ctrl+Shift+7)' },
 ];
+
+/** The mark a key press asks for: Ctrl+B, I, U, E, and Ctrl+Shift+9, 8, 7 (as in Slack and Docs). */
+export function shortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'key' | 'code'>): Mark | null {
+  if (!(e.ctrlKey || e.metaKey) || e.altKey) return null;
+  if (e.shiftKey) {
+    return ({ Digit9: 'quote', Digit8: 'bullets', Digit7: 'numbers' } as const)[e.code as 'Digit9'] ?? null;
+  }
+  return ({ b: 'bold', i: 'italic', u: 'underline', e: 'code' } as const)[e.key.toLowerCase() as 'b'] ?? null;
+}
 
 const EVERY = MARKS.map((m) => m.mark);
 const NO_UNDERLINE = EVERY.filter((m) => m !== 'underline');
@@ -31,6 +40,11 @@ const BODY: Partial<Record<ServiceKind, { field: string; marks: Mark[] }>> = {
   slack: { field: 'message', marks: NO_UNDERLINE },
   reddit: { field: 'text', marks: NO_UNDERLINE },
 };
+
+/** The field of a service that takes a formatted message, if it has one. */
+export function messageField(kind: ServiceKind | null | undefined): string | null {
+  return (kind && BODY[kind]?.field) || null;
+}
 
 type TextBlock = Extract<Block, { type: 'text' }>;
 

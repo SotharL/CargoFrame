@@ -20,7 +20,7 @@ order to build them in, and the gates every change passes. For what the app is a
 | F1 | Wait in the tray; run a **trigger** on a global shortcut (or from the tray menu) |
 | F2 | Capture the program in focus, the screen, or all screens; or **record** the last seconds when the layout has a Video block |
 | F3 | Find the program's **project folder** (same name as the program, else one folder above) |
-| F4 | Read values from allowed files there with **data rules** (text line, JSON, YAML, TOML, INI, CSV, XML, regex) |
+| F4 | **Data rules**: if a file is found there, add it to the files and read values (after a name, between two pieces, the line with a word); the kind of file is known from its name |
 | F5 | Open a window built from a **layout**: Screenshot (with editor), Video (trim, crop, mark), Text, Dropdown, Files, sharing buttons |
 | F6 | Fill dropdowns from the service's API; "where to post" as one path that goes as deep as the service does |
 | F7 | Send to Jira, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip |
@@ -130,7 +130,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; Wayland focus, portal screenshot and screen sharing | `capture_with`, `wayland.rs`, `screencast.rs` |
 | `video` | Ring of segments, clip edits (trim, crop, mark), the ffmpeg command; Windows loopback sound; a fed picture (Wayland) | `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
 | `layout` | Blocks on a 12-column grid, validation chips, templates | `model.rs`, `templates.rs` |
-| `rules` | Data rules: read one value from an allowed file | one module per format |
+| `rules` | Data rules: find a file, read values from it | `find.rs` (the three ways to find a value), one module per format |
 | `window` | Everything the CargoFrame window shows for one capture, as one serializable view | `view::SessionView` |
 | `bundle` | The fallback zip and the Files zip, with a manifest | |
 | `net` | The one HTTP client: HTTPS only, checked redirects, size cap, multipart; a mock server | `Http`, `Request`, `mock::MockServer` |
@@ -172,7 +172,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `settings/layout` | The layout builder: grid, block inspector, sharing routes |
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes |
-| `capture/blocks` | Screenshot, Video (trim strip, crop box, mark layer), Text (formatting), Dropdown (path steps), Files, Sharing |
+| `capture/blocks` | Screenshot, Video (trim strip, crop box, mark layer), Text (formatted box: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files, Sharing |
 | `capture/editor` | Picture editor: pen, rectangle, ellipse, text, crop, colour, width |
 | `capture/*.ts` | Values, tick boxes, what each button will send, remembered choices |
 | `lib/` | `ipc.ts` (real and in-memory API), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links) |
@@ -380,7 +380,7 @@ listed. Branches merge with a **merge commit**.
   an inspector in the layout builder, and what each connector does with it in `share.rs`.
 - **Setting:** the field in `core/config` with a default (older files keep working), the control on one page only,
   and a guide step if it is not obvious.
-- **Rule format:** a module in `core/rules` with tests, and its option in the *Data from files* page.
+- **A way to find a value:** a `Find` case in `core/rules/src/find.rs` with tests, and its option in the *Data from files* page.
 
 </details>
 

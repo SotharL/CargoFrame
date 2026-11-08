@@ -184,10 +184,24 @@ fn find_all(root: &Path, pattern: &str) -> Result<Vec<String>, RuleError> {
         }
     } else {
         let wanted = pattern.to_lowercase();
-        walk_names(root, root, 0, &|n| n.to_lowercase() == wanted, &mut visited, &mut found);
+        walk_names(
+            root,
+            root,
+            0,
+            &|n| n.to_lowercase() == wanted,
+            &mut visited,
+            &mut found,
+        );
         if found.is_empty() {
             visited = 0;
-            walk_names(root, root, 0, &|n| n.to_lowercase().contains(&wanted), &mut visited, &mut found);
+            walk_names(
+                root,
+                root,
+                0,
+                &|n| n.to_lowercase().contains(&wanted),
+                &mut visited,
+                &mut found,
+            );
         }
     }
     if found.is_empty() {
@@ -397,7 +411,11 @@ pub fn run_rules<'a>(
         }
         // each file is read once, from the end when only the last value is wanted
         let wants_tail = !steps.is_empty() && steps.iter().all(|s| s.which == Which::Last);
-        let mode = if wants_tail { ReadMode::Tail } else { ReadMode::Head };
+        let mode = if wants_tail {
+            ReadMode::Tail
+        } else {
+            ReadMode::Head
+        };
         let texts: Vec<(String, Result<String, RuleError>)> = match project {
             Some(root) if !steps.is_empty() => chosen
                 .iter()
@@ -439,9 +457,7 @@ pub fn run_rules<'a>(
                     }
                 }
             };
-            report
-                .owners
-                .insert(step.key.clone(), id.to_string());
+            report.owners.insert(step.key.clone(), id.to_string());
             report
                 .values
                 .insert(step.key.clone(), outcome(result, &step.fallback));
@@ -1070,11 +1086,17 @@ mod tests {
         let d = machine();
         let r = config(Several::Newest, true);
         let report = run_rules([("machine", &r)], Some(d.path()), &FsFiles);
-        assert_eq!(report.values["gpu"].value.as_deref(), Some("RTX 4070, UHD 770"));
+        assert_eq!(
+            report.values["gpu"].value.as_deref(),
+            Some("RTX 4070, UHD 770")
+        );
         assert_eq!(report.values["os"].value.as_deref(), Some("Windows 11"));
         assert_eq!(report.owners["gpu"], "machine");
         assert_eq!(report.files, vec!["logs/system_info.txt".to_string()]);
-        assert_eq!(report.found["machine"], vec!["logs/system_info.txt".to_string()]);
+        assert_eq!(
+            report.found["machine"],
+            vec!["logs/system_info.txt".to_string()]
+        );
     }
 
     #[test]
@@ -1122,7 +1144,11 @@ mod tests {
         let mut gone = config(Several::Newest, true);
         gone.file = "nowhere".into();
         let report = run_rules([("machine", &gone)], Some(d.path()), &FsFiles);
-        assert!(report.values["os"].problem.as_deref().unwrap().contains("nowhere"));
+        assert!(report.values["os"]
+            .problem
+            .as_deref()
+            .unwrap()
+            .contains("nowhere"));
         assert!(report.files.is_empty());
     }
 

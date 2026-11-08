@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import TextBlock from './TextBlock.svelte';
 import type { Block } from '../../lib/types';
+import { readText, select, selectionIn } from './richtext';
 
 type Text = Extract<Block, { type: 'text' }>;
 const block = (placement: Text['placement'], role: Text['role'] = 'plain'): Text => ({
@@ -60,34 +61,86 @@ describe('TextBlock formatting buttons', () => {
     expect(screen.getAllByRole('button').map((b) => b.getAttribute('aria-label'))).toEqual(['Bold', 'Code']);
   });
 
+  const rich = () => screen.getByRole('textbox') as HTMLDivElement;
+  const selected = () => selectionIn(rich());
+  const pick = (a: number, b: number) => select(rich(), a, b);
+
+  it('shows the marks as they look, and hides their stars until the cursor is at them', () => {
+    render(TextBlock, { block: block('above'), value: 'it **crashes** on save\n- open\n> said', marks: [...tools], services: ['jira'] });
+    const box = rich();
+    expect(box.getAttribute('contenteditable')).toBe('true');
+    expect(screen.getByRole('textbox', { name: 'Description' })).toBe(box);
+    expect(box.querySelector('.m.bold')?.textContent).toBe('**crashes**');
+    expect(box.querySelector('.m.bold.on')).toBeNull();
+    expect(box.querySelector('.ln.bullet')).toBeTruthy();
+    expect(box.querySelector('.ln.quote')).toBeTruthy();
+    // every character is in the box, so the text read back is the text
+    expect(readText(box)).toBe('it **crashes** on save\n- open\n> said');
+  });
+
   it('a button marks the selected words and keeps them selected', async () => {
     render(TextBlock, { block: block('above'), value: 'it crashes on save', marks: [...tools], services: ['jira'] });
-    const box = screen.getByRole('textbox') as HTMLTextAreaElement;
-    box.setSelectionRange(3, 10);
+    pick(3, 10);
     await fireEvent.click(screen.getByRole('button', { name: names.bold }));
-    expect(box.value).toBe('it **crashes** on save');
-    await new Promise((r) => setTimeout(r, 0));
-    expect([box.selectionStart, box.selectionEnd]).toEqual([5, 12]);
+    expect(readText(rich())).toBe('it **crashes** on save');
+    expect(selected()).toEqual([5, 12]);
+    // the selection is in the bold words: their stars show
+    expect(rich().querySelector('.m.bold.on')).toBeTruthy();
+    // pressed again, the words are plain again
+    await fireEvent.click(screen.getByRole('button', { name: names.bold }));
+    expect(readText(rich())).toBe('it crashes on save');
   });
 
   it('a list button works on the line the cursor is in', async () => {
     render(TextBlock, { block: block('above'), value: 'Steps:\nopen\nsave', marks: [...tools], services: ['jira'] });
-    const box = screen.getByRole('textbox') as HTMLTextAreaElement;
-    box.setSelectionRange(8, 16);
+    pick(8, 16);
     await fireEvent.click(screen.getByRole('button', { name: names.numbers }));
-    expect(box.value).toBe('Steps:\n1. open\n2. save');
+    expect(readText(rich())).toBe('Steps:\n1. open\n2. save');
+    expect(rich().querySelectorAll('.ln.number').length).toBe(2);
   });
 
-  it('Ctrl+B, Ctrl+I and Ctrl+U do the same, but only for marks on offer', async () => {
-    render(TextBlock, { block: block('above'), value: 'word', marks: ['bold', 'italic'], services: ['slack'] });
-    const box = screen.getByRole('textbox') as HTMLTextAreaElement;
-    box.setSelectionRange(0, 4);
-    await fireEvent.keyDown(box, { key: 'b', ctrlKey: true });
-    expect(box.value).toBe('**word**');
-    box.setSelectionRange(0, 8);
-    await fireEvent.keyDown(box, { key: 'u', ctrlKey: true });
-    // no underline on offer: the keys are left to the box
-    expect(box.value).toBe('**word**');
+  it('Ctrl+B, Ctrl+E and Ctrl+Shift+8 do the same, but only for marks on offer', async () => {
+    render(TextBlock, { block: block('above'), value: 'word', marks: ['bold', 'code', 'bullets'], services: ['slack'] });
+    pick(0, 4);
+    await fireEvent.keyDown(rich(), { key: 'b', code: 'KeyB', ctrlKey: true });
+    expect(readText(rich())).toBe('**word**');
+    pick(0, 8);
+    await fireEvent.keyDown(rich(), { key: 'u', code: 'KeyU', ctrlKey: true });
+    // no underline on offer: nothing happens
+    expect(readText(rich())).toBe('**word**');
+    await fireEvent.keyDown(rich(), { key: '*', code: 'Digit8', ctrlKey: true, shiftKey: true });
+    expect(readText(rich())).toBe('- **word**');
+  });
+
+  it('Enter goes on with a list, and ends it on an empty item', async () => {
+    render(TextBlock, { block: block('above'), value: '1. open', marks: [...tools], services: ['jira'] });
+    pick(7, 7);
+    await fireEvent(rich(), new InputEvent('beforeinput', { inputType: 'insertParagraph', cancelable: true, bubbles: true }));
+    expect(readText(rich())).toBe('1. open\n2. ');
+    expect(selected()).toEqual([11, 11]);
+    await fireEvent(rich(), new InputEvent('beforeinput', { inputType: 'insertParagraph', cancelable: true, bubbles: true }));
+    expect(readText(rich())).toBe('1. open\n');
+  });
+
+  it('what is typed is read back and drawn with its marks; Ctrl+Z takes it back', async () => {
+    render(TextBlock, { block: block('above'), value: 'a *b', marks: [...tools], services: ['jira'] });
+    const box = rich();
+    // the browser types the closing star in the last text of the box
+    const walk = document.createTreeWalker(box, NodeFilter.SHOW_TEXT);
+    let last: CharacterData | null = null;
+    for (let t = walk.nextNode(); t; t = walk.nextNode()) last = t as CharacterData;
+    pick(4, 4);
+    await fireEvent(box, new InputEvent('beforeinput', { inputType: 'insertText', data: '*', cancelable: true, bubbles: true }));
+    last!.data += '*';
+    await fireEvent.input(box);
+    expect(readText(box)).toBe('a *b*');
+    expect(box.querySelector('.m.italic')).toBeTruthy();
+    await fireEvent.keyDown(box, { key: 'z', code: 'KeyZ', ctrlKey: true });
+    expect(readText(box)).toBe('a *b');
+  });
+
+  it('a plain box stays a plain text area', () => {
+    render(TextBlock, { block: block('above'), value: 'x' });
+    expect((screen.getByRole('textbox') as HTMLElement).tagName).toBe('TEXTAREA');
   });
 });
-
