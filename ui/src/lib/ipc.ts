@@ -8,6 +8,7 @@ import type {
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
+import { valuesOf } from '../settings/ruleValues';
 
 /** Whatever a failed list request rejected with, as an `OptionsError`. */
 export function asOptionsError(e: unknown): OptionsError {
@@ -682,18 +683,33 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     discardImport: async () => {},
     listVariables: async () => [
       ...BUILTINS,
-      ...[...store.rule.entries()].map(([id, r]) => ({
-        name: `rule.${id}`,
-        description: `Data rule: ${(r as Rule).name}`,
-      })),
+      ...[...store.rule.entries()].flatMap(([id, r]) =>
+        valuesOf(id, r as Rule).map((v) => ({
+          name: `rule.${v.key}`,
+          description: `From a file: ${(r as Rule).name}, ${v.name}`,
+        })),
+      ),
     ],
-    testRule: async (rule, folder) => ({
-      folder: folder ?? '/home/me/dev/Foo',
-      value: '1.2.3',
-      problem: null,
-      file: rule.file.trim() || null,
-      excerpt: '{\n  "version": "1.2.3"\n}',
-    }),
+    testRule: async (rule, folder) => {
+      // A stand-in that answers like the real one: each value is "found" as "<its name> demo".
+      const file = rule.file.trim() || null;
+      const values = (rule.values ?? []).map((v) => ({
+        key: v.key,
+        value: file ? `${v.name || v.key} demo` : v.fallback,
+        problem: file ? null : 'no file matches',
+        used_fallback: !file && v.fallback !== null,
+      }));
+      return {
+        folder: folder ?? '/home/me/dev/Foo',
+        value: values[0]?.value ?? null,
+        problem: null,
+        file,
+        excerpt: 'GPU: RTX 4070\nOS Name: Windows 11',
+        kind: 'text',
+        files: file ? [file] : [],
+        values,
+      };
+    },
     previewFiles: async (block, program) => {
       const folders = block.look_in.folders.length ? block.look_in.folders : (['project'] as LookFolder[]);
       const names: Record<LookFolder, string> = {

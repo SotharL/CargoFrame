@@ -105,6 +105,31 @@ describe('Properties: a text block', () => {
     expect(block.formatting).toBe(true);
   });
 
+  it('makes the box the message of a sharing button, one message per button', async () => {
+    const box = { ...title, id: 'notes' } as Block;
+    const other = { ...title, id: 'other' } as Block;
+    const send = {
+      id: 'send', rect: rect(4), type: 'sharing_button', label: 'Send to Jira', connection_id: 'work', prompt_block_id: null,
+      mappings: [{ field: 'description', source: { kind: 'block', value: 'other' } }, { field: 'summary', source: { kind: 'block', value: 'other' } }],
+      on_success: 'close_window',
+    } as unknown as Extract<Block, { type: 'sharing_button' }>;
+    open(box, [box, other, send]);
+    const tick = screen.getByRole('checkbox', { name: /Send to Jira/ }) as HTMLInputElement;
+    expect(tick.checked).toBe(false);
+    await fireEvent.click(tick);
+    expect(send.mappings).toEqual([
+      { field: 'summary', source: { kind: 'block', value: 'other' } },
+      { field: 'description', source: { kind: 'block', value: 'notes' } },
+    ]);
+    await fireEvent.click(tick);
+    expect(send.mappings).toEqual([{ field: 'summary', source: { kind: 'block', value: 'other' } }]);
+  });
+
+  it('says when no button takes a formatted message', () => {
+    open({ ...title } as Block);
+    expect(screen.getByText(/No sharing button to Jira, Slack, Discord, Reddit or Teams/)).toBeTruthy();
+  });
+
   it('has no formatting for a prompt or a zip name', () => {
     open({ ...title, role: 'prompt' } as Block);
     expect(screen.queryByRole('switch', { name: 'Formatting buttons' })).toBeNull();

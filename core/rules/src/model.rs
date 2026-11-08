@@ -64,15 +64,83 @@ fn default_separator() -> String {
     ", ".to_string()
 }
 
+/// When several files match a rule's file name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Several {
+    /// The one changed last (the latest log).
+    #[default]
+    Newest,
+    /// All of them: values are joined, and every one is added to the files.
+    All,
+}
+
+/// Which of the places a value is found in a file.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Which {
+    #[default]
+    First,
+    Last,
+    /// Every one, joined (lines one per line, other values with ", ").
+    All,
+}
+
+/// How a value is found in a file. The file's kind is worked out from its name, so nobody has to
+/// say whether it is JSON or a log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum Find {
+    /// The value written after a name: `GPU: RTX 4070`, `version = 3.1`, or the key `version` of
+    /// a JSON, YAML, TOML, INI or XML file (`build.number` reaches inside).
+    ValueOf { name: String },
+    /// The text between two pieces of text on a line. No `end`: up to the end of the line.
+    Between { start: String, end: Option<String> },
+    /// The whole line that holds a piece of text.
+    LineWith { text: String },
+    /// A rule made before 0.3.0: its own format and query (the fields of [`Rule`]).
+    Advanced,
+}
+
+/// One value a rule reads, used in text as `{{rule.<key>}}`.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ValueStep {
+    /// The variable's name: `{{rule.<key>}}`. Letters, digits, `_` and `-`.
+    pub key: String,
+    /// What the person calls it ("GPU").
+    pub name: String,
+    pub find: Find,
+    #[serde(default)]
+    pub which: Which,
+    /// Used when the file or the value is missing.
+    #[serde(default)]
+    pub fallback: Option<String>,
+}
+
+fn is_default<T: Default + PartialEq>(v: &T) -> bool {
+    *v == T::default()
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Rule {
-    /// What the person calls it ("Build number").
+    /// What the person calls it ("Machine config").
     pub name: String,
-    /// The file to read: a path relative to the project folder, `/` separated. It may use the
-    /// patterns `*`, `**` and `?`; the first match in alphabetical order is read.
+    /// The file to look for: its name or part of it (`system_info`, `.log`), found anywhere in the
+    /// project folder; or a path with patterns (`logs/*.log`, `**/app.toml`).
     pub file: String,
+    /// When several files match.
+    #[serde(skip_serializing_if = "is_default")]
+    pub several: Several,
+    /// Tick the file (or files) in the window's Files blocks.
+    #[serde(skip_serializing_if = "is_default")]
+    pub add_to_files: bool,
+    /// The values read from the file.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub values: Vec<ValueStep>,
+    // ----- before 0.3.0 a rule read one value with a format and a query (`Find::Advanced`) -----
     pub format: Format,
+    #[serde(skip_serializing_if = "String::is_empty")]
     pub query: String,
     pub multiple: Multiple,
     pub separator: String,
@@ -94,6 +162,9 @@ impl Default for Rule {
         Self {
             name: String::new(),
             file: String::new(),
+            several: Several::default(),
+            add_to_files: false,
+            values: Vec::new(),
             format: Format::default(),
             query: String::new(),
             multiple: Multiple::default(),
@@ -107,6 +178,20 @@ impl Default for Rule {
 }
 
 impl Rule {
+    /// The values this rule reads. A rule from before 0.3.0 reads one, named by the rule's id.
+    pub fn steps(&self, id: &str) -> Vec<ValueStep> {
+        if !self.values.is_empty() || self.query.trim().is_empty() {
+            return self.values.clone();
+        }
+        vec![ValueStep {
+            key: id.to_string(),
+            name: self.name.clone(),
+            find: Find::Advanced,
+            which: Which::First,
+            fallback: self.fallback.clone(),
+        }]
+    }
+
     /// The size limit actually applied.
     pub fn byte_limit(&self) -> u64 {
         self.max_bytes.clamp(1, HARD_MAX_BYTES)

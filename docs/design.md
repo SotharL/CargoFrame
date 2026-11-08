@@ -33,7 +33,7 @@ flowchart LR
     L -- holds --> B[Blocks<br><i>Screenshot · Video · Text<br>Dropdown · Files</i>]
     L -- holds --> S[Sharing buttons<br><i>up to 5</i>]
     S -- send through --> C[Connection<br><i>a signed-in service</i>]
-    R[Data rule<br><i>a value from a file</i>] -- fills --> B
+    R[Data rule<br><i>values from a file found</i>] -- fills --> B
     X[Extra field<br><i>e.g. Jira priority</i>] -- maps a block to --> C
     TP[Template] -. saved as .-> L
 ```
@@ -44,7 +44,7 @@ flowchart LR
 | **Layout** | Blocks on a 12-column grid. A **Video** block makes a press record; otherwise it takes a screenshot | `layouts/<id>.json` |
 | **Block** | Screenshot, Video, Text, Dropdown, Files, or a sharing button | inside its layout |
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
-| **Data rule** | "In this file, read this value", used in text as `{{rule.<id>}}` | `rules/<id>.json` |
+| **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{{rule.<key>}}` | `rules/<id>.json` |
 | **Extra field** | A service field beyond where to post, mapped to a block | `infotypes/<id>.json` |
 | **Template** | A ready-made layout per service, never stored until saved | in the code |
 
@@ -83,7 +83,7 @@ sequenceDiagram
 |------|--------------|------|
 | Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse | `core/capture`, `core/window` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
-| Data rules | Read one value from a text line, JSON, YAML, TOML, INI, CSV, XML or a regular expression | `core/rules` |
+| Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values (after a name, between two pieces, the line with a word; first, last or all). The kind of file is known from its name: JSON, YAML, TOML, INI and XML are read by key, the rest as text | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
 | Share | One `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices), handed to the connector | `app/src/share.rs` |
 | Fallback | Retry with backoff; then a zip of everything is kept. A button with no connection is **Save locally** | `core/safe`, `core/bundle` |
@@ -194,7 +194,7 @@ opening the page, outlining the field and saying in one sentence what goes in it
 |---------|-----------|
 | **Screenshot** | Pen, rectangle, ellipse, text, crop; colour and line width |
 | **Video** | Trim handles, crop, one mark; *Also take a screenshot when the recording ends* |
-| **Text** | Formatting buttons (bold, italic, underline, code, quote, lists) limited to what every target service shows; `{{variables}}` filled in |
+| **Text** | *Message of* ticks pick the sharing buttons whose message it is; such a box shows its formatting (bold, italic, underline, code, quote, lists) as it looks, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files; the ones matching the block's patterns (like `*.log`) are ticked in advance |
 | **Sharing buttons** | Up to five, in the service's colour. Tick boxes on each block say which button sends it: dashed = cannot take it, ring = required |

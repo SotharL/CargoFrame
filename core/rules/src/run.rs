@@ -2,7 +2,8 @@
 
 use crate::details::{self, FileDetails, What};
 use crate::extract::{extract, RuleError};
-use crate::model::{Format, ReadMode, Rule};
+use crate::find;
+use crate::model::{Format, ReadMode, Rule, Several, Which};
 use cargoframe_context::glob;
 use std::collections::BTreeMap;
 use std::fs;
@@ -23,10 +24,15 @@ pub trait ProjectFiles {
         mode: ReadMode,
     ) -> Result<String, RuleError>;
 
-    /// The path (relative to `root`) of the file `pattern` means: the first match in
-    /// alphabetical order.
+    /// The path (relative to `root`) of the file `pattern` means. A source that cannot look
+    /// takes the pattern for the file.
     fn locate(&self, _root: &Path, pattern: &str) -> Result<String, RuleError> {
-        Err(RuleError::FileNotFound(pattern.to_string()))
+        Ok(pattern.trim().to_string())
+    }
+
+    /// Every file `pattern` means, relative to `root`, the newest first.
+    fn locate_all(&self, root: &Path, pattern: &str) -> Result<Vec<String>, RuleError> {
+        self.locate(root, pattern).map(|f| vec![f])
     }
 
     /// Facts about the file `pattern` means. The file's content is only read when `what` needs it.
@@ -97,25 +103,124 @@ fn walk(
     }
 }
 
-/// The file a pattern means, relative to `root`.
-fn find(root: &Path, pattern: &str) -> Result<String, RuleError> {
+/// Every file under `dir` whose name (not its folder) passes `keep`.
+fn walk_names(
+    root: &Path,
+    dir: &Path,
+    depth: usize,
+    keep: &dyn Fn(&str) -> bool,
+    visited: &mut usize,
+    out: &mut Vec<String>,
+) {
+    if depth > MAX_DEPTH || *visited >= MAX_VISITED {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        *visited += 1;
+        if *visited >= MAX_VISITED {
+            return;
+        }
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        let name = entry.file_name();
+        let path = entry.path();
+        if kind.is_dir() {
+            if SKIPPED_DIRS.iter().any(|s| name == *s) {
+                continue;
+            }
+            walk_names(root, &path, depth + 1, keep, visited, out);
+        } else if (kind.is_file() || kind.is_symlink()) && keep(&name.to_string_lossy()) {
+            if let Ok(rel) = path.strip_prefix(root) {
+                out.push(rel.to_string_lossy().replace('\\', "/"));
+            }
+        }
+    }
+}
+
+/// When a file was last changed, for "the newest".
+fn modified(root: &Path, rel: &str) -> std::time::SystemTime {
+    fs::metadata(root.join(rel))
+        .and_then(|m| m.modified())
+        .unwrap_or(std::time::UNIX_EPOCH)
+}
+
+/// Every file a rule's `file` means, relative to `root`, the newest first:
+///
+/// * a path with `*`, `**` or `?` is a pattern (`logs/*.log`); a pattern without a folder
+///   (`*.log`) is a name looked for in every folder;
+/// * a path with a folder (`config/app.toml`), or a name of a file at the top, is that file;
+/// * any other text is a file name, or part of one, looked for in every folder (`system_info`
+///   finds `logs/system_info.txt`); names that are exactly it come before names that hold it.
+fn find_all(root: &Path, pattern: &str) -> Result<Vec<String>, RuleError> {
     let pattern = pattern.trim();
     if !pattern_ok(pattern) {
         return Err(RuleError::BadQuery(
-            "the file must be a path inside the project folder (no .., no drive letter)".into(),
+            "the file must be a name or a path inside the project folder (no .., no drive letter)"
+                .into(),
         ));
     }
-    let rel = if has_wildcard(pattern) {
-        let mut found = Vec::new();
-        let mut visited = 0;
+    let mut found = Vec::new();
+    let mut visited = 0;
+    if has_wildcard(pattern) && !pattern.contains(['/', '\\']) {
+        // `*.log`: a name, in every folder
+        let insensitive = cfg!(windows);
+        walk_names(
+            root,
+            root,
+            0,
+            &|n| glob::matches(pattern, n, insensitive),
+            &mut visited,
+            &mut found,
+        );
+    } else if has_wildcard(pattern) {
         walk(root, root, 0, pattern, &mut visited, &mut found);
-        found.sort();
-        found.into_iter().next()
+    } else if pattern.contains(['/', '\\']) || root.join(pattern).is_file() {
+        if root.join(pattern).exists() {
+            found.push(pattern.replace('\\', "/"));
+        }
     } else {
-        let direct = root.join(pattern);
-        direct.exists().then(|| pattern.to_string())
-    };
-    rel.ok_or_else(|| RuleError::FileNotFound(pattern.to_string()))
+        let wanted = pattern.to_lowercase();
+        walk_names(
+            root,
+            root,
+            0,
+            &|n| n.to_lowercase() == wanted,
+            &mut visited,
+            &mut found,
+        );
+        if found.is_empty() {
+            visited = 0;
+            walk_names(
+                root,
+                root,
+                0,
+                &|n| n.to_lowercase().contains(&wanted),
+                &mut visited,
+                &mut found,
+            );
+        }
+    }
+    if found.is_empty() {
+        return Err(RuleError::FileNotFound(pattern.to_string()));
+    }
+    // the newest first; the same age in alphabetical order
+    found.sort();
+    found.sort_by_key(|rel| std::cmp::Reverse(modified(root, rel)));
+    Ok(found)
+}
+
+/// The file a pattern means, relative to `root`: the first match in alphabetical order for a
+/// pattern (as before 0.3.0), the newest for a name.
+fn find(root: &Path, pattern: &str) -> Result<String, RuleError> {
+    let mut all = find_all(root, pattern)?;
+    if has_wildcard(pattern.trim()) {
+        all.sort();
+    }
+    Ok(all.swap_remove(0))
 }
 
 impl ProjectFiles for FsFiles {
@@ -132,6 +237,10 @@ impl ProjectFiles for FsFiles {
 
     fn locate(&self, root: &Path, pattern: &str) -> Result<String, RuleError> {
         find(root, pattern)
+    }
+
+    fn locate_all(&self, root: &Path, pattern: &str) -> Result<Vec<String>, RuleError> {
+        find_all(root, pattern)
     }
 
     fn details(&self, root: &Path, pattern: &str, what: What) -> Result<FileDetails, RuleError> {
@@ -230,9 +339,151 @@ pub struct Outcome {
     pub used_fallback: bool,
 }
 
-/// Run every rule against the project folder. One failing rule never stops the others. Rules
-/// that read the same file at the same size limit share one read.
+/// What running the rules gave.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Report {
+    /// By value key (`{{rule.<key>}}`).
+    pub values: BTreeMap<String, Outcome>,
+    /// The rule each value belongs to.
+    pub owners: BTreeMap<String, String>,
+    /// The files to tick in the window's Files blocks, relative to the project folder.
+    pub files: Vec<String>,
+    /// The files each rule found, by rule id.
+    pub found: BTreeMap<String, Vec<String>>,
+}
+
+fn outcome(result: Result<String, RuleError>, fallback: &Option<String>) -> Outcome {
+    match result {
+        Ok(value) => Outcome {
+            value: Some(value),
+            problem: None,
+            used_fallback: false,
+        },
+        Err(e) => Outcome {
+            value: fallback.clone(),
+            problem: Some(e.to_string()),
+            used_fallback: fallback.is_some(),
+        },
+    }
+}
+
+/// Run every rule against the project folder: find its file (or files), read each of its values,
+/// and note the files to add. One failing rule or value never stops the others.
+pub fn run_rules<'a>(
+    rules: impl IntoIterator<Item = (&'a str, &'a Rule)>,
+    project: Option<&Path>,
+    files: &dyn ProjectFiles,
+) -> Report {
+    let mut report = Report::default();
+    let mut legacy: Vec<(&str, &Rule)> = Vec::new();
+    // Rules that read the same part of the same file share one read.
+    let mut cache: BTreeMap<(String, u64, u8), Result<String, RuleError>> = BTreeMap::new();
+    for (id, rule) in rules {
+        let steps = rule.steps(id);
+        // the details of a file itself (size, date…) keep the reader they had before 0.3.0
+        if rule.values.is_empty() && rule.format == Format::File {
+            legacy.push((id, rule));
+            continue;
+        }
+        let located = match project {
+            None => Err(RuleError::NoProject),
+            // a rule from before 0.3.0 reads the file it always read (a pattern's first match
+            // in alphabetical order)
+            Some(root) if rule.values.is_empty() && !rule.add_to_files => {
+                files.locate(root, &rule.file).map(|f| vec![f])
+            }
+            Some(root) => files.locate_all(root, &rule.file),
+        };
+        let chosen: Vec<String> = match &located {
+            Ok(all) => match rule.several {
+                Several::Newest => all.iter().take(1).cloned().collect(),
+                Several::All => all.iter().take(MAX_FILES).cloned().collect(),
+            },
+            Err(_) => Vec::new(),
+        };
+        report.found.insert(id.to_string(), chosen.clone());
+        if rule.add_to_files {
+            for f in &chosen {
+                if !report.files.contains(f) {
+                    report.files.push(f.clone());
+                }
+            }
+        }
+        // each file is read once, from the end when only the last value is wanted
+        let wants_tail = !steps.is_empty() && steps.iter().all(|s| s.which == Which::Last);
+        let mode = if wants_tail {
+            ReadMode::Tail
+        } else {
+            ReadMode::Head
+        };
+        let texts: Vec<(String, Result<String, RuleError>)> = match project {
+            Some(root) if !steps.is_empty() => chosen
+                .iter()
+                .map(|f| {
+                    let mode = if rule.values.is_empty() {
+                        rule.read_mode()
+                    } else {
+                        mode
+                    };
+                    let key = (f.clone(), rule.byte_limit(), mode as u8);
+                    let text = cache
+                        .entry(key)
+                        .or_insert_with(|| files.read(root, f, rule.byte_limit(), mode))
+                        .clone();
+                    (f.clone(), text)
+                })
+                .collect(),
+            _ => Vec::new(),
+        };
+        for step in steps {
+            let result = match (&located, texts.is_empty()) {
+                (Err(e), _) => Err(e.clone()),
+                (Ok(_), true) => Err(RuleError::NoProject),
+                (Ok(_), false) => {
+                    let mut all = Vec::new();
+                    let mut problem = None;
+                    for (path, text) in &texts {
+                        match text {
+                            Ok(t) => match find::all(&step.find, rule, path, t, step.which) {
+                                Ok(mut v) => all.append(&mut v),
+                                Err(e) => problem = Some(e),
+                            },
+                            Err(e) => problem = Some(e.clone()),
+                        }
+                    }
+                    match (all.is_empty(), problem) {
+                        (true, Some(e)) => Err(e),
+                        _ => find::pick(all, step.which, &step.find),
+                    }
+                }
+            };
+            report.owners.insert(step.key.clone(), id.to_string());
+            report
+                .values
+                .insert(step.key.clone(), outcome(result, &step.fallback));
+        }
+    }
+    for (id, outcome) in run_details(legacy, project, files) {
+        report.owners.insert(id.clone(), id.clone());
+        report.values.insert(id, outcome);
+    }
+    report
+}
+
+/// The most files one rule reads or adds.
+const MAX_FILES: usize = 20;
+
+/// Run every rule and give each value. See [`run_rules`] for the files to add.
 pub fn run_all<'a>(
+    rules: impl IntoIterator<Item = (&'a str, &'a Rule)>,
+    project: Option<&Path>,
+    files: &dyn ProjectFiles,
+) -> BTreeMap<String, Outcome> {
+    run_rules(rules, project, files).values
+}
+
+/// Rules from before 0.3.0 that read a detail of a file itself (its size, its date…).
+fn run_details<'a>(
     rules: impl IntoIterator<Item = (&'a str, &'a Rule)>,
     project: Option<&Path>,
     files: &dyn ProjectFiles,
@@ -308,7 +559,15 @@ const PEEK_LINES: usize = 12;
 const PEEK_LINE_CHARS: usize = 200;
 
 pub fn peek(rule: &Rule, root: &Path, files: &dyn ProjectFiles) -> Peek {
-    let Ok(file) = files.locate(root, &rule.file) else {
+    // the file the rule reads: the newest of its matches since 0.3.0
+    let located = if rule.values.is_empty() && !rule.add_to_files {
+        files.locate(root, &rule.file)
+    } else {
+        files
+            .locate_all(root, &rule.file)
+            .and_then(|all| all.into_iter().next().ok_or(RuleError::NoValue))
+    };
+    let Ok(file) = located else {
         return Peek::default();
     };
     let excerpt = files
@@ -765,5 +1024,157 @@ mod tests {
             peek(&rule("nope", Format::Text, "tail: 1"), d.path(), &FsFiles),
             Peek::default()
         );
+    }
+
+    // ----- 0.3.0: a file found by its name, values read from it, files added -----
+
+    use crate::model::{Find, ValueStep};
+
+    fn step(key: &str, find: Find, which: Which) -> ValueStep {
+        ValueStep {
+            key: key.into(),
+            name: key.into(),
+            find,
+            which,
+            fallback: None,
+        }
+    }
+
+    fn machine() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        fs::create_dir_all(p.join("logs/old")).unwrap();
+        fs::write(
+            p.join("logs/old/system_info.txt"),
+            "GPU: GTX 970\nOS Name: Windows 10\n",
+        )
+        .unwrap();
+        // the newer one, written a moment later
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        fs::write(
+            p.join("logs/system_info.txt"),
+            "Host: DEV-07\nGPU: RTX 4070\nGPU: UHD 770\nOS Name: Windows 11\n",
+        )
+        .unwrap();
+        fs::write(p.join("package.json"), r#"{"version":"3.1.4"}"#).unwrap();
+        dir
+    }
+
+    fn config(several: Several, add: bool) -> Rule {
+        Rule {
+            name: "Machine".into(),
+            file: "system_info".into(),
+            several,
+            add_to_files: add,
+            values: vec![
+                step("gpu", Find::ValueOf { name: "GPU".into() }, Which::All),
+                step(
+                    "os",
+                    Find::Between {
+                        start: "OS Name:".into(),
+                        end: None,
+                    },
+                    Which::First,
+                ),
+            ],
+            ..Rule::default()
+        }
+    }
+
+    #[test]
+    fn a_file_named_by_part_of_its_name_is_found_anywhere_and_the_newest_is_read() {
+        let d = machine();
+        let r = config(Several::Newest, true);
+        let report = run_rules([("machine", &r)], Some(d.path()), &FsFiles);
+        assert_eq!(
+            report.values["gpu"].value.as_deref(),
+            Some("RTX 4070, UHD 770")
+        );
+        assert_eq!(report.values["os"].value.as_deref(), Some("Windows 11"));
+        assert_eq!(report.owners["gpu"], "machine");
+        assert_eq!(report.files, vec!["logs/system_info.txt".to_string()]);
+        assert_eq!(
+            report.found["machine"],
+            vec!["logs/system_info.txt".to_string()]
+        );
+    }
+
+    #[test]
+    fn all_the_files_can_be_read_and_added() {
+        let d = machine();
+        let r = config(Several::All, true);
+        let report = run_rules([("machine", &r)], Some(d.path()), &FsFiles);
+        assert_eq!(
+            report.values["gpu"].value.as_deref(),
+            Some("RTX 4070, UHD 770, GTX 970")
+        );
+        assert_eq!(report.files.len(), 2);
+        // without the tick, nothing is added
+        let quiet = config(Several::All, false);
+        assert!(run_rules([("machine", &quiet)], Some(d.path()), &FsFiles)
+            .files
+            .is_empty());
+    }
+
+    #[test]
+    fn a_rule_that_only_adds_files_reads_nothing() {
+        let d = machine();
+        let r = Rule {
+            name: "Logs".into(),
+            file: "*.txt".into(),
+            several: Several::All,
+            add_to_files: true,
+            ..Rule::default()
+        };
+        crate::check(&r).unwrap();
+        let report = run_rules([("logs", &r)], Some(d.path()), &FsFiles);
+        assert!(report.values.is_empty());
+        assert_eq!(report.files.len(), 2);
+    }
+
+    #[test]
+    fn a_missing_file_or_value_gives_the_fallback_and_says_why() {
+        let d = machine();
+        let mut r = config(Several::Newest, false);
+        r.values[0].find = Find::ValueOf { name: "CPU".into() };
+        r.values[0].fallback = Some("unknown".into());
+        let report = run_rules([("machine", &r)], Some(d.path()), &FsFiles);
+        assert_eq!(report.values["gpu"].value.as_deref(), Some("unknown"));
+        assert!(report.values["gpu"].used_fallback);
+        let mut gone = config(Several::Newest, true);
+        gone.file = "nowhere".into();
+        let report = run_rules([("machine", &gone)], Some(d.path()), &FsFiles);
+        assert!(report.values["os"]
+            .problem
+            .as_deref()
+            .unwrap()
+            .contains("nowhere"));
+        assert!(report.files.is_empty());
+    }
+
+    #[test]
+    fn a_rule_from_before_keeps_its_name_and_a_file_at_the_top_is_that_file() {
+        let d = machine();
+        // `package.json` at the top is that file, as before
+        let old = rule("package.json", Format::Json, "version");
+        let report = run_rules([("version", &old)], Some(d.path()), &FsFiles);
+        assert_eq!(report.values["version"].value.as_deref(), Some("3.1.4"));
+        assert_eq!(report.owners["version"], "version");
+    }
+
+    #[test]
+    fn two_values_with_one_name_are_refused() {
+        let mut r = config(Several::Newest, false);
+        r.values[1].key = "gpu".into();
+        assert!(crate::check(&r).unwrap_err().contains("{{rule.gpu}}"));
+        let mut bad = config(Several::Newest, false);
+        bad.values[0].key = "g p u".into();
+        assert!(crate::check(&bad).is_err());
+        let empty = Rule {
+            name: "x".into(),
+            file: "a.txt".into(),
+            ..Rule::default()
+        };
+        assert!(crate::check(&empty).unwrap_err().contains("Add a value"));
     }
 }

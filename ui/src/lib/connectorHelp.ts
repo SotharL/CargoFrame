@@ -10,7 +10,19 @@ export interface GetLinkSpec {
 /** The fields a connection asks the person to fill from a service's own website. */
 export type HelpField = 'token' | 'client_id' | 'client_secret' | 'webhook' | 'app_password';
 
-const DISCORD_WEBHOOKS = 'https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks';
+/** The pages, by what they give. The forms' buttons and the guides both use these. */
+export const PAGES = {
+  jiraToken: { label: 'Create a token', url: 'https://id.atlassian.com/manage-profile/security/api-tokens' },
+  googleCredentials: { label: 'Open Google credentials', url: 'https://console.cloud.google.com/apis/credentials' },
+  redditApps: { label: 'Open Reddit apps', url: 'https://www.reddit.com/prefs/apps' },
+  slackApps: { label: 'Open Slack apps', url: 'https://api.slack.com/apps' },
+  discordWebhooks: { label: 'How to make one', url: 'https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks' },
+  discordPortal: { label: 'Open the developer portal', url: 'https://discord.com/developers/applications' },
+  teamsApps: { label: 'Open app registrations', url: 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade' },
+  xPortal: { label: 'Open the X developer portal', url: 'https://developer.x.com/en/portal/projects-and-apps' },
+  blueskyPasswords: { label: 'Make an app password', url: 'https://bsky.app/settings/app-passwords' },
+  metaApps: { label: 'Open my Meta apps', url: 'https://developers.facebook.com/apps/' },
+} satisfies Record<string, GetLinkSpec>;
 
 /**
  * The page where `field` of this connection is obtained, or `null` when there is none (a custom
@@ -21,7 +33,7 @@ export function getLinkFor(c: Connection, field: HelpField): GetLinkSpec | null 
     case 'jira': {
       if (field !== 'token') return null;
       if (c.auth === 'api_token') {
-        return { label: 'Create a token', url: 'https://id.atlassian.com/manage-profile/security/api-tokens' };
+        return PAGES.jiraToken;
       }
       // Jira Server and Data Center: the token is made on the person's own profile page.
       const site = c.site_url.trim().replace(/\/+$/, '');
@@ -31,27 +43,27 @@ export function getLinkFor(c: Connection, field: HelpField): GetLinkSpec | null 
     }
     case 'google':
       return field === 'client_id' || field === 'client_secret'
-        ? { label: 'Open Google credentials', url: 'https://console.cloud.google.com/apis/credentials' }
+        ? PAGES.googleCredentials
         : null;
     case 'reddit':
-      return field === 'client_id' ? { label: 'Open Reddit apps', url: 'https://www.reddit.com/prefs/apps' } : null;
+      return field === 'client_id' ? PAGES.redditApps : null;
     case 'slack':
-      return field === 'token' ? { label: 'Open Slack apps', url: 'https://api.slack.com/apps' } : null;
+      return field === 'token' ? PAGES.slackApps : null;
     case 'discord':
-      if (field === 'webhook') return { label: 'How to make one', url: DISCORD_WEBHOOKS };
+      if (field === 'webhook') return PAGES.discordWebhooks;
       return field === 'token'
-        ? { label: 'Open the developer portal', url: 'https://discord.com/developers/applications' }
+        ? PAGES.discordPortal
         : null;
     case 'teams':
       return field === 'client_id'
-        ? { label: 'Open app registrations', url: 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade' }
+        ? PAGES.teamsApps
         : null;
     case 'x':
-      return field === 'client_id' ? { label: 'Open the X developer portal', url: 'https://developer.x.com/en/portal/projects-and-apps' } : null;
+      return field === 'client_id' ? PAGES.xPortal : null;
     case 'bluesky':
-      return field === 'app_password' ? { label: 'Make an app password', url: 'https://bsky.app/settings/app-passwords' } : null;
+      return field === 'app_password' ? PAGES.blueskyPasswords : null;
     case 'instagram':
-      return field === 'token' ? { label: 'Open my Meta apps', url: 'https://developers.facebook.com/apps/' } : null;
+      return field === 'token' ? PAGES.metaApps : null;
     default:
       return null;
   }

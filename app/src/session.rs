@@ -7,7 +7,7 @@ use cargoframe_capture as cap;
 use cargoframe_config::{CaptureMode, Kind, Store, Trigger};
 use cargoframe_handoff::ChatList;
 use cargoframe_layout::Layout;
-use cargoframe_rules::{run_all, FsFiles, Rule};
+use cargoframe_rules::{run_rules, FsFiles, Rule};
 use cargoframe_window::files::{self, Limits, Scan};
 use cargoframe_window::places;
 use cargoframe_window::vars::{self, Moment};
@@ -565,12 +565,14 @@ pub fn prepare_with(
         .unwrap_or_default();
     let registry = AppRegistry::from_store(store, connections);
 
-    // Data rules: read their values from the project folder, then offer them to the window as
-    // `{{rule.<id>}}`. A rule that fails only matters if the layout uses it.
+    // Data from files: read the values from the project folder, then offer them to the window as
+    // `{{rule.<key>}}`. A value that is missing only matters if the layout uses it. Files the
+    // rules add are ticked in the Files blocks.
     let mut variables = builtins.values.clone();
     let mut notes = captured.notes.clone();
+    let mut added_files: Vec<String> = Vec::new();
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
-        let outcomes = run_all(
+        let report = run_rules(
             loaded.items.iter().map(|(id, r)| (id.as_str(), r)),
             project.as_ref().map(|p| Path::new(&p.folder)),
             &FsFiles,
@@ -579,27 +581,37 @@ pub fn prepare_with(
             .as_ref()
             .map(vars::referenced_rules)
             .unwrap_or_default();
-        for (id, rule) in &loaded.items {
-            let Some(outcome) = outcomes.get(id) else {
-                continue;
-            };
+        for (key, outcome) in &report.values {
             if let Some(v) = &outcome.value {
-                variables.insert(format!("rule.{id}"), v.clone());
+                variables.insert(format!("rule.{key}"), v.clone());
             }
-            if let (true, Some(problem)) = (used.contains(id), &outcome.problem) {
-                let name = if rule.name.trim().is_empty() {
-                    id.as_str()
-                } else {
-                    rule.name.trim()
-                };
+            if let (true, Some(problem)) = (used.contains(key), &outcome.problem) {
+                let name = report
+                    .owners
+                    .get(key)
+                    .and_then(|id| {
+                        loaded
+                            .items
+                            .iter()
+                            .find(|(rid, _)| rid == id)
+                            .map(|(rid, r)| (rid, r))
+                    })
+                    .and_then(|(rid, r)| r.steps(rid).into_iter().find(|s| &s.key == key))
+                    .map(|s| s.name)
+                    .filter(|n| !n.trim().is_empty())
+                    .unwrap_or_else(|| key.clone());
                 let tail = if outcome.used_fallback {
                     " (using its fallback value)"
                 } else {
                     ""
                 };
-                notes.push(format!("Data rule \u{201c}{name}\u{201d}: {problem}{tail}"));
+                notes.push(format!(
+                    "From a file, \u{201c}{}\u{201d}: {problem}{tail}",
+                    name.trim()
+                ));
             }
         }
+        added_files = report.files;
     }
 
     // Where the Files blocks look. File paths are relative to the highest folder any of them
@@ -638,7 +650,18 @@ pub fn prepare_with(
                 dir: PathBuf::from(&p.dir),
             })
             .collect();
-        files::scan_places(root, &look, &f.include, &f.preselect, Limits::default())
+        // the files rules add are offered and ticked, whatever the block's own patterns say
+        let mut include = f.include.clone();
+        let mut preselect = f.preselect.clone();
+        for file in &added_files {
+            if !include.contains(file) {
+                include.push(file.clone());
+            }
+            if !preselect.contains(file) {
+                preselect.push(file.clone());
+            }
+        }
+        files::scan_places(root, &look, &include, &preselect, Limits::default())
     };
     let subject = match captured.subject {
         cap::Subject::Window => "window",
@@ -1233,6 +1256,70 @@ pub(crate) mod tests {
             .iter()
             .any(|n| n.contains("y rule") && n.contains("fallback")));
         assert!(!s.view.notes.iter().any(|n| n.contains("z rule")));
+    }
+
+    #[test]
+    fn a_file_found_by_its_name_gives_its_values_and_is_ticked_in_the_files() {
+        use cargoframe_rules::{Find, Rule, ValueStep, Which};
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        let project = dir.path().join("Foo");
+        std::fs::create_dir_all(project.join("bin")).unwrap();
+        std::fs::create_dir_all(project.join("diag")).unwrap();
+        std::fs::write(project.join("diag/system_info.txt"), "GPU: RTX 4070\n").unwrap();
+        let rule = Rule {
+            name: "Machine".into(),
+            file: "system_info".into(),
+            add_to_files: true,
+            values: vec![ValueStep {
+                key: "gpu".into(),
+                name: "GPU".into(),
+                find: Find::ValueOf { name: "GPU".into() },
+                which: Which::First,
+                fallback: None,
+            }],
+            ..Rule::default()
+        };
+        store.save_item(Kind::Rules, "machine", &rule).unwrap();
+        let layout = Layout {
+            accepts_input: false,
+            id: String::new(),
+            name: "L".into(),
+            blocks: vec![Block {
+                id: "logs".into(),
+                rect: Rect {
+                    x: 0,
+                    y: 0,
+                    w: 6,
+                    h: 2,
+                },
+                // the block itself only offers logs: the rule adds its file anyway
+                kind: BlockKind::Files(FilesBlock {
+                    title: "Logs".into(),
+                    include: vec!["*.log".into()],
+                    preselect: vec![],
+                    look_in: Default::default(),
+                }),
+            }],
+        };
+        store.save_item(Kind::Layouts, "l", &layout).unwrap();
+        let trigger = Trigger {
+            layout_id: Some("l".into()),
+            ..Trigger::default()
+        };
+        let exe = project.join("bin").join("Foo");
+        let s = prepare_with(
+            &store,
+            &no_connections(),
+            "t",
+            &trigger,
+            fake_capture(Some(&exe.display().to_string())),
+            NOW,
+            4,
+        )
+        .unwrap();
+        assert_eq!(s.view.variables["rule.gpu"], "RTX 4070");
+        assert_eq!(s.preselected(), vec!["diag/system_info.txt".to_string()]);
     }
 
     #[test]

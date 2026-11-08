@@ -1114,3 +1114,30 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
 - **Tested on a headless sway desktop** in CI (`scripts/e2e/wayland-capture.sh`), also run as a GNOME-like desktop to
   cover the XWayland focus, the portal screenshot and GNOME's settings. Real GNOME, KDE and Hyprland sessions are the
   owner's to try.
+
+### 0.3.0, 8 Nov 2026: data from files as a flow, links in the guides, formatting you can see
+
+- **Data from files is a flow, not a format.** A rule now reads: *If this file is found* (its name, part of it or a
+  pattern; the newest, or all of them) *then* add it to the files and/or read values. A value is one of three things
+  people know how to describe: what is written after a name (`GPU: RTX 4070`, `"version": "1.2"`, `name = …`), the
+  text between two pieces (the end is the end of the line unless one is given), or the whole line with a word; the
+  first, the last or all of them, with a text for when nothing is found. There is no format to pick: the kind of file
+  is known from its name, so a JSON, YAML, TOML, INI or XML file is read by key and anything else as text, and a
+  broken JSON file still gives what is written after the name. Each value is its own variable, `{{rule.<key>}}`,
+  named after what the person calls it. Files found by a rule that adds them are ticked in every Files block. Rules
+  made before 0.3.0 keep working as they were (one value, keyed by the rule's id) and can be made simpler in one click.
+  The machine's configuration (a `system_info.txt` with `GPU:`, `CPU:`, `RAM:` lines) is the example the page leads with.
+- **Guides link to the web page they talk about.** A step that used to say "the button beside it opens the page" now
+  shows the page as a link in its bubble ("Create a token"), opened in the browser. The forms' buttons and the guides
+  share one list of pages, so a page that moves is changed once.
+- **The formatted box shows its formatting.** A Text block gets *Message of* ticks in the layout builder, one per
+  sharing button to Jira, Slack, Discord, Reddit or Teams: a ticked box is that button's message (its description,
+  message or text), and only then gets formatting. Before, it needed a field mapping made by hand on the button, so
+  the buttons seemed not to work. The box draws bold, italic, underline, code, quotes, bullets and numbers as they
+  look; the `**` of a mark show only while the cursor is at it, so they can still be typed over. The text itself stays
+  the marks, so the conversion per service (`richtext.rs`) is unchanged and the box reads the marks exactly as it does.
+  Shortcuts: Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E (code), Ctrl+Shift+9 (quote), Ctrl+Shift+8 (bullets), Ctrl+Shift+7
+  (numbers), as in Slack and Google Docs; Enter goes on with a list and ends it on an empty item; a paste comes in as
+  plain text; Ctrl+Z and Ctrl+Y undo and redo. Only the marks every ticked service can show are offered (no underline
+  for Slack or Reddit). A box that is nobody's message stays a plain text area.
+

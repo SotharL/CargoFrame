@@ -1,58 +1,87 @@
 <script lang="ts">
+  // Data from files: "If this file is found, read these values (and add it to the files)".
+  // The file is named by its name or part of it; its kind (JSON, a log…) is worked out from its
+  // name, so nobody chooses a format. Each value is used in text as {{rule.<key>}}.
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import { layoutsUsingRule, usedIn } from '../usage';
-  import { isTextQuery, readBetween } from '../between';
-  import TextBetween from './TextBetween.svelte';
-  import type { Layout, Rule, RuleFormat, RuleTest } from '../../lib/types';
+  import { blankRule, describe, keysOfOthers, newValue, slug, unique, valuesOf } from '../ruleValues';
+  import type { Layout, Rule, RuleFind, RuleTest, RuleValue } from '../../lib/types';
 
   const rules = createItems<Rule>('rule');
   const layouts = createItems<Layout>('layout');
-  /** `between` is the text before and after the value; `lines` is the reader's other instructions. */
-  type TextMode = 'between' | 'lines';
-  let draft = $state<{ id: string | null; value: Rule; useFallback: boolean; textMode: TextMode; key: number } | null>(null);
-  let drafts = 0;
+  /** `auto`: the value's variable name follows its name (only for values made in this edit). */
+  let draft = $state<{ id: string | null; value: Rule; auto: Record<string, boolean> } | null>(null);
   let formError = $state('');
   let confirming = $state<string | null>(null);
   let busy = $state(false);
   let testFolder = $state('');
   let test = $state<RuleTest | null>(null);
   let testing = $state(false);
-
-  const FORMATS: { value: RuleFormat; label: string; ask: string; query: string; help: string }[] = [
-    { value: 'json', ask: 'Path to the value', label: 'JSON', query: 'version', help: 'A path: version, build.number, items[0].name, items[*].id' },
-    { value: 'yaml', ask: 'Path to the value', label: 'YAML', query: 'app.version', help: 'A path, like JSON: app.version, services[0].image' },
-    { value: 'toml', ask: 'Path to the value', label: 'TOML', query: 'package.version', help: 'A path, like JSON: package.version, tool.poetry.name' },
-    { value: 'ini', ask: 'Section and key', label: 'INI', query: 'build.number', help: 'section.key, or just key for lines before the first section' },
-    { value: 'csv', ask: 'Column', label: 'CSV', query: 'name', help: 'A column name from the header row, or a column number (1 is the first)' },
-    { value: 'xml', ask: 'Element', label: 'XML', query: 'project/version', help: 'Element names separated by /, ending in @attribute if you want one. //name finds it at any depth' },
-    { value: 'text', ask: 'Instruction', label: 'Text or log file (.txt, .log)', query: 'tail: 20', help: 'One instruction: line: 3, line: -1 (the last line), lines: 5-9, head: 20, tail: 20, contains: timeout, or level: error, warn' },
-    { value: 'regex', ask: 'Pattern', label: 'Text pattern (regex)', query: 'version = "(.+?)"', help: 'A regular expression. The value is the first (group), or the whole match when there is none. Use “Build the value from groups” for more' },
-    { value: 'file', ask: 'Detail of the file', label: 'Any file: size, date, lines, fingerprint', query: 'size', help: 'name, size, size: human, modified, modified: date, lines, or sha256 (sha256: short for 12 characters). Works on any file, not only text' },
-  ];
-  const format = (f: RuleFormat) => FORMATS.find((x) => x.value === f)!;
+  let copied = $state<string | null>(null);
 
   onMount(() => Promise.all([rules.reload(), layouts.reload()]));
 
-  const blank = (): Rule => ({
-    name: '', file: '', format: 'json', query: '', multiple: 'first', separator: ', ', nth: 1, output: '', fallback: null, max_bytes: 1048576,
-  });
+  const FINDS: { type: RuleFind['type']; label: string }[] = [
+    { type: 'value_of', label: 'the value written after' },
+    { type: 'between', label: 'the text between' },
+    { type: 'line_with', label: 'the whole line with' },
+  ];
 
   function add() {
     formError = '';
     test = null;
-    draft = { id: null, value: blank(), useFallback: false, textMode: 'between', key: ++drafts };
+    const value = blankRule();
+    const first = newValue(keysOfOthers(rules.items, null));
+    value.values = [first];
+    draft = { id: null, value, auto: { [first.key]: true } };
   }
+
   function edit(id: string, r: Rule) {
     formError = '';
     test = null;
-    draft = {
-      id, value: { ...r }, useFallback: r.fallback !== null,
-      textMode: readBetween(r.query) ? 'between' : 'lines', key: ++drafts,
-    };
+    // a rule from before 0.3.0 shows its one value, named as it always was
+    const value: Rule = { ...r, several: r.several ?? 'newest', add_to_files: r.add_to_files ?? false, values: valuesOf(id, r).map((v) => ({ ...v })) };
+    draft = { id, value, auto: {} };
+  }
+
+  /** Variable names already used, by other rules and by this rule's other values. */
+  const taken = (except?: RuleValue) => [
+    ...keysOfOthers(rules.items, draft?.id ?? null),
+    ...(draft?.value.values ?? []).filter((v) => v !== except).map((v) => v.key),
+  ];
+
+  function addValue() {
+    if (!draft) return;
+    const v = newValue(taken());
+    draft.value.values = [...(draft.value.values ?? []), v];
+    draft.auto[v.key] = true;
+  }
+
+  function removeValue(i: number) {
+    if (!draft?.value.values) return;
+    draft.value.values = draft.value.values.filter((_, n) => n !== i);
+  }
+
+  /** A new value's variable follows its name, and "after" looks for that name until changed. */
+  function renamed(v: RuleValue, before: string) {
+    if (!draft || !draft.auto[v.key]) return;
+    const old = v.key;
+    v.key = unique(slug(v.name), taken(v));
+    delete draft.auto[old];
+    draft.auto[v.key] = true;
+    if (v.find.type === 'value_of' && (v.find.name === '' || v.find.name === before)) v.find.name = v.name;
+  }
+
+  function setFind(v: RuleValue, type: RuleFind['type']) {
+    const near = v.find.type === 'value_of' ? v.find.name : v.find.type === 'between' ? v.find.start : v.find.type === 'line_with' ? v.find.text : '';
+    v.find =
+      type === 'value_of' ? { type, name: near }
+      : type === 'between' ? { type, start: near, end: null }
+      : { type: 'line_with', text: near };
   }
 
   async function save() {
@@ -60,7 +89,9 @@
     busy = true;
     formError = '';
     try {
-      const value = { ...draft.value, fallback: draft.useFallback ? (draft.value.fallback ?? '') : null };
+      const value = $state.snapshot(draft.value) as Rule;
+      // a rule from before 0.3.0 keeps its format and query only while its value still uses them
+      if (!(value.values ?? []).some((v) => v.find.type === 'advanced')) value.query = '';
       await rules.save(draft.id, value);
       draft = null;
     } catch (e) {
@@ -69,14 +100,12 @@
     busy = false;
   }
 
-  // The preview: the rule is tried on a real file a moment after the last change, so the value,
-  // the file it came from and the start of that file are always the ones for what is on screen.
-  // An answer that arrives late for an older version of the rule is ignored.
+  // The preview: the rule is tried on a real folder a moment after the last change. An answer that
+  // arrives late for an older version of the rule is ignored.
   let latest = 0;
   $effect(() => {
     if (!draft) return;
     const rule = $state.snapshot(draft.value) as Rule;
-    const useFallback = draft.useFallback;
     const folder = testFolder.trim() || null;
     const mine = ++latest;
     if (!rule.file.trim()) {
@@ -88,8 +117,7 @@
     const timer = setTimeout(async () => {
       let result: RuleTest;
       try {
-        const api = await getApi();
-        result = await api.testRule({ ...rule, fallback: useFallback ? rule.fallback : null }, folder);
+        result = await (await getApi()).testRule(rule, folder);
       } catch (e) {
         result = { folder, value: null, problem: String(e), file: null, excerpt: null };
       }
@@ -101,16 +129,21 @@
     return () => clearTimeout(timer);
   });
 
+  const found = (key: string) => test?.values?.find((v) => v.key === key);
+
   async function choose() {
     const picked = await (await getApi()).pickFolder('Choose a project folder to test against');
     if (picked) testFolder = picked;
   }
 
-  /** A new format: a path from another format means nothing to the text reader, so it starts over. */
-  function formatChanged() {
-    if (!draft || draft.value.format !== 'text') return;
-    if (!isTextQuery(draft.value.query)) draft.value.query = '';
-    draft.textMode = readBetween(draft.value.query) ? 'between' : 'lines';
+  async function copy(key: string) {
+    try {
+      await navigator.clipboard.writeText(`{{rule.${key}}}`);
+      copied = key;
+      setTimeout(() => (copied = null), 2000);
+    } catch {
+      // the name is on the page to select by hand
+    }
   }
 
   async function remove(id: string) {
@@ -125,30 +158,36 @@
 
   {#if rules.loaded && rules.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No values from files yet</h2>
+      <h2>No data from files yet</h2>
       <p class="quiet">
-        CargoFrame can read one value out of a file in the project folder, such as the version in
-        package.json or the last line of a log, and give it a name. You then use that name in a text
-        block, or pick it as the source for an extra field.
+        When a capture's project folder has a file you name, CargoFrame can read values from it, like a
+        machine's graphics card in a system report or the version in package.json, and add the file to the
+        ones sent. Each value is a name you write in a title or a description.
       </p>
       <p class="example">
-        Example: read <code>version</code> from <code>package.json</code>, call it “version”, and write
-        <code>{'{{rule.version}}'}</code> in a text block to have it filled in on every capture.
+        Example: if <code>system_info</code> is found, read the value after <code>GPU</code> and write
+        <code>{'{{rule.gpu}}'}</code> in the description.
       </p>
-      <button class="primary" data-tour="rules.add" onclick={add}>Add a value from a file</button>
+      <button class="primary" data-tour="rules.add" onclick={add}>Add data from a file</button>
     </div>
   {/if}
 
   {#each rules.items as { id, item } (id)}
+    {@const values = valuesOf(id, item)}
     <article class="card">
       <div class="main">
         <h2>{item.name}</h2>
         <p class="quiet">
-          <span class="mono">{item.file}</span> · {format(item.format).label}
-          · <span class="mono">{item.query || 'whole file'}</span>
+          If <span class="mono">{item.file}</span> is found{#if item.several === 'all'} (all of them){/if}:
+          {#if item.add_to_files}add it to the files{#if values.length}, and {/if}{/if}
+          {#if values.length}read {values.length === 1 ? 'one value' : `${values.length} values`}{/if}
         </p>
-        <p class="use">Write <code class="selectable">{`{{rule.${id}}}`}</code> in a text block to use it.</p>
-        <p class="use quiet">{usedIn(layoutsUsingRule(layouts.items, id))}</p>
+        <ul class="values">
+          {#each values as v (v.key)}
+            <li><code class="selectable">{`{{rule.${v.key}}}`}</code> <span class="quiet">{v.name}: {describe(v.find, item)}</span></li>
+          {/each}
+        </ul>
+        <p class="use quiet">{usedIn(layoutsUsingRule(layouts.items, id, values.map((v) => v.key)))}</p>
       </div>
       <div class="actions">
         <button onclick={() => edit(id, item)}>Edit</button>
@@ -163,79 +202,125 @@
   {/each}
 
   {#if rules.items.length > 0 && !draft}
-    <div><button class="primary" data-tour="rules.add" onclick={add}>Add a value from a file</button></div>
+    <div><button class="primary" data-tour="rules.add" onclick={add}>Add data from a file</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit value from a file' : 'New value from a file'}</h2>
-      <Field label="Name" hint="Also the name you write in a text block, and shown when the value cannot be found." tour="rules.name">
-        <input type="text" bind:value={draft.value.name} placeholder="App version" />
+      <h2>{draft.id ? 'Edit data from a file' : 'New data from a file'}</h2>
+      <Field label="Name" hint="What this is, like Machine config. Shown when something cannot be found." tour="rules.name">
+        <input type="text" bind:value={draft.value.name} placeholder="Machine config" />
       </Field>
-      <Field label="File" tour="rules.file" hint="Relative to the project folder. Use * or ** to match several; the first match is read.">
-        <input type="text" bind:value={draft.value.file} placeholder={draft.value.format === 'text' ? 'logs/*.log' : 'package.json'} />
-      </Field>
-      <Field label="Format" tour="rules.format">
-        <select bind:value={draft.value.format} onchange={formatChanged}>
-          {#each FORMATS as f (f.value)}<option value={f.value}>{f.label}</option>{/each}
-        </select>
-      </Field>
-      {#if draft.value.format === 'text'}
-        <Field label="Find it" hint="Between two pieces of text covers most files. The other way reads lines by position, or the ones with a word or a log level.">
-          <select bind:value={draft.textMode} onchange={() => (draft!.value.query = '')}>
-            <option value="between">Between two pieces of text</option>
-            <option value="lines">By line, word or log level</option>
+
+      <section class="step">
+        <h3>If this file is found</h3>
+        <div class="line" data-tour="rules.file">
+          <input
+            type="text"
+            class="grow"
+            bind:value={draft.value.file}
+            placeholder="system_info"
+            aria-label="File name, or part of it"
+          />
+          <select bind:value={draft.value.several} aria-label="If several files match">
+            <option value="newest">the newest, if several</option>
+            <option value="all">all of them, if several</option>
           </select>
-        </Field>
-      {/if}
-      {#if draft.value.format === 'text' && draft.textMode === 'between'}
-        {#key draft.key}<TextBetween bind:query={draft.value.query} name={draft.value.name} />{/key}
-      {:else}
-        <Field label={format(draft.value.format).ask} tour="rules.query" hint={format(draft.value.format).help}>
-          <input type="text" bind:value={draft.value.query} placeholder={format(draft.value.format).query} />
-        </Field>
-      {/if}
-      {#if draft.value.format === 'regex'}
-        <Field label="Build the value from groups" hint="Optional. $1 and $2 are the pattern's (groups), ${'{'}name{'}'} a named one, $0 the whole match: for example $1.$2. Empty gives the first group.">
-          <input type="text" bind:value={draft.value.output} placeholder="$1.$2" />
-        </Field>
-      {/if}
-      {#if draft.value.format !== 'file'}
-        <Field label="If there are several values">
-          <select bind:value={draft.value.multiple}>
-            <option value="first">Use the first</option>
-            <option value="last">Use the last</option>
-            <option value="nth">Use the one at a number</option>
-            <option value="join">Join them all</option>
-          </select>
-        </Field>
-        {#if draft.value.multiple === 'nth'}
-          <Field label="Which one" hint="1 is the first, 2 the second; -1 is the last, -2 the one before it.">
-            <input type="number" step="1" bind:value={draft.value.nth} aria-label="Which one" />
-          </Field>
-        {/if}
-        {#if draft.value.multiple === 'join'}
-          <Field label="Separator" hint="Write \n for a new line and \t for a tab.">
-            <input type="text" bind:value={draft.value.separator} />
-          </Field>
-        {/if}
-      {/if}
-      {#if draft.value.format === 'text' && draft.textMode === 'lines'}
-        <p class="quiet small">
-          Several lines at once: choose “Join them all” (for example tail: 20, joined with \n). A file
-          larger than the limit is read from its end for tail:, line: -1, contains: and level:,
-          and from its start for head:, line: 3 and lines:.
+        </div>
+        <p class="hint quiet">
+          Its name or part of it, looked for in every folder of the project: <code>system_info</code>,
+          <code>.log</code>, <code>package.json</code>. Or a path: <code>logs/*.log</code>.
         </p>
-      {/if}
-      <label class="check">
-        <input type="checkbox" bind:checked={draft.useFallback} />
-        <span>Use a fallback value when nothing is found</span>
-      </label>
-      {#if draft.useFallback}
-        <Field label="Fallback value">
-          <input type="text" value={draft.value.fallback ?? ''} oninput={(e) => (draft!.value.fallback = e.currentTarget.value)} placeholder="unknown" />
-        </Field>
-      {/if}
+      </section>
+
+      <section class="step">
+        <h3>Then</h3>
+        <label class="check" data-tour="rules.add_files">
+          <input type="checkbox" bind:checked={draft.value.add_to_files} />
+          <span>Add it to the files <span class="quiet">(ticked in the window's Files box, ready to send)</span></span>
+        </label>
+
+        <div class="list" data-tour="rules.values">
+          {#each draft.value.values ?? [] as v, i (i)}
+            {@const result = found(v.key)}
+            <div class="value">
+              <div class="line">
+                <span class="word">Read</span>
+                <input
+                  type="text"
+                  class="name"
+                  value={v.name}
+                  oninput={(e) => { const before = v.name; v.name = e.currentTarget.value; renamed(v, before); }}
+                  placeholder="GPU"
+                  aria-label="Name of the value"
+                />
+                <button type="button" class="token" title="Copy, then paste it in a title or a description" onclick={() => copy(v.key)}>
+                  {copied === v.key ? 'Copied' : `{{rule.${v.key}}}`}
+                </button>
+                <button type="button" class="remove" aria-label={`Remove ${v.name || 'this value'}`} onclick={() => removeValue(i)}>×</button>
+              </div>
+              {#if v.find.type === 'advanced'}
+                <p class="quiet small">
+                  Made before 0.3.0: <span class="mono">{describe(v.find, draft.value)}</span>.
+                  <button type="button" class="link" onclick={() => setFind(v, 'value_of')}>Make it simpler</button>
+                </p>
+              {:else}
+                <div class="line">
+                  <select bind:value={v.which} aria-label="Which one">
+                    <option value="first">the first</option>
+                    <option value="last">the last</option>
+                    <option value="all">all</option>
+                  </select>
+                  <select value={v.find.type} onchange={(e) => setFind(v, e.currentTarget.value as RuleFind['type'])} aria-label="How to find it">
+                    {#each FINDS as f (f.type)}<option value={f.type}>{f.label}</option>{/each}
+                  </select>
+                  {#if v.find.type === 'value_of'}
+                    <input type="text" class="grow" bind:value={v.find.name} placeholder="GPU" aria-label="The name written before the value" />
+                  {:else if v.find.type === 'between'}
+                    {@const between = v.find}
+                    <input type="text" class="grow" bind:value={between.start} placeholder="GPU:" aria-label="The text before the value" />
+                    <span class="word">and</span>
+                    {#if between.end === null}
+                      <button type="button" class="eol" onclick={() => (between.end = '')} title="Click to stop at a text instead">the end of the line</button>
+                    {:else}
+                      <input type="text" class="grow" bind:value={between.end} placeholder="]" aria-label="The text after the value" />
+                      <button type="button" class="link" onclick={() => (between.end = null)}>the end of the line</button>
+                    {/if}
+                  {:else if v.find.type === 'line_with'}
+                    <input type="text" class="grow" bind:value={v.find.text} placeholder="ERROR" aria-label="A text the line holds" />
+                  {/if}
+                </div>
+                {#if v.find.type === 'value_of'}
+                  <p class="hint quiet small">Finds <code>GPU: …</code>, <code>GPU = …</code>, or the key GPU in a JSON, YAML, TOML, INI or XML file (<code>build.number</code> reaches inside).</p>
+                {/if}
+              {/if}
+              <div class="line">
+                <span class="word quiet">If not found</span>
+                <input
+                  type="text"
+                  class="grow"
+                  value={v.fallback ?? ''}
+                  oninput={(e) => (v.fallback = e.currentTarget.value === '' ? null : e.currentTarget.value)}
+                  placeholder="leave it out"
+                  aria-label="Value if not found"
+                />
+              </div>
+              {#if result}
+                <div class="result" aria-live="polite">
+                  {#if result.value !== null && !result.used_fallback}
+                    <Chip kind="ok" label="Found" /> <code class="selectable shown">{result.value}</code>
+                  {:else if result.value !== null}
+                    <Chip kind="warn" label="Not found, fallback used" /> <code class="selectable">{result.value}</code>
+                  {:else}
+                    <Chip kind="dbg" label={result.problem ?? 'Not found'} />
+                  {/if}
+                </div>
+              {/if}
+            </div>
+          {/each}
+          <div><button type="button" onclick={addValue}>Add a value to read</button></div>
+        </div>
+      </section>
 
       <div class="test" aria-live="polite">
         <h3>Preview{#if testing}<span class="quiet small"> updating…</span>{/if}</h3>
@@ -244,23 +329,19 @@
           <button type="button" onclick={choose}>Choose…</button>
         </div>
         {#if !draft.value.file.trim()}
-          <p class="quiet small">Choose a file above to see what this reads from it.</p>
+          <p class="quiet small">Write a file name above to see what is found.</p>
         {:else if test}
-          {#if test.problem}
-            <Chip kind="warn" label={test.problem} />
-          {:else}
-            <div class="result"><Chip kind="ok" label="Found" /> <code class="selectable">{test.value}</code></div>
-          {/if}
+          {#if test.problem}<Chip kind="warn" label={test.problem} />{/if}
           {#if test.file}
-            <p class="quiet small">Reading <span class="mono">{test.file}</span>{#if test.folder} in <span class="mono">{test.folder}</span>{/if}</p>
+            <p class="quiet small">
+              Found <span class="mono">{test.file}</span>{#if (test.files?.length ?? 0) > 1} (the newest of {test.files?.length}){/if}{#if test.kind}, read as {test.kind}{/if}{#if test.folder} in <span class="mono">{test.folder}</span>{/if}
+            </p>
             {#if test.excerpt}
               <details>
                 <summary class="small">Start of the file</summary>
                 <pre class="excerpt selectable">{test.excerpt}</pre>
               </details>
             {/if}
-          {:else if test.folder}
-            <p class="quiet small mono">in {test.folder}</p>
           {/if}
         {/if}
       </div>
@@ -282,17 +363,33 @@
   .empty { display: grid; gap: 8px; justify-items: start; }
   .card { display: flex; gap: 16px; justify-content: space-between; flex-wrap: wrap; }
   .main { display: grid; gap: 4px; min-width: 0; }
+  .values { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: 13px; }
   .use { font-size: 13px; }
   .example { font-size: 13px; }
   code { font: 12.5px var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 5px; }
   .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: start; }
   .editor { display: grid; gap: 14px; }
-  .check { display: flex; gap: 8px; align-items: center; }
+  .step { display: grid; gap: 8px; padding-left: 12px; border-left: 3px solid var(--accent); }
+  .step h3 { font-size: 13px; margin: 0; }
+  .line { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .line select { width: auto; }
+  .grow { flex: 1; min-width: 120px; }
+  .name { width: 140px; }
+  .word { font-size: 13px; }
+  .hint { font-size: 12.5px; margin: 0; }
+  .list { display: grid; gap: 10px; }
+  .value { display: grid; gap: 6px; padding: 10px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+  .token { font: 12px var(--mono); padding: 2px 8px; }
+  .remove { margin-left: auto; width: 28px; padding: 0; }
+  .eol { font-size: 12.5px; padding: 2px 8px; border-style: dashed; }
+  .link { border: 0; background: transparent; color: var(--accent); padding: 0; text-decoration: underline; font-size: 12.5px; }
+  .check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
   .test { display: grid; gap: 8px; padding: 12px; background: var(--surface-2); border-radius: var(--radius-sm); }
   .test h3 { font-size: 13px; }
   .row { display: flex; gap: 8px; }
   .row input { flex: 1; min-width: 0; }
   .result { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .shown { white-space: pre-wrap; }
   .excerpt { margin: 4px 0 0; padding: 8px; max-height: 180px; overflow: auto; font: 12px var(--mono); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); white-space: pre; }
   .small { font-size: 12px; }
   .buttons { display: flex; gap: 8px; }

@@ -132,7 +132,7 @@ press the sharing button. A layout with a Video block starts recording on the fi
 | **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, or a sharing button |
 | **Connection** | A service you signed in to (Jira, Slack…) |
 | **Where to post** | One dropdown that goes as deep as the service does: project, or server, channel, thread |
-| **Data from files** | A value read from a file in the program's folder, used in text as `{{name}}` |
+| **Data from files** | If a file is found in the program's folder: add it to the files, read values from it (`{{rule.gpu}}`) |
 | **Template** | A ready-made layout to start from; it becomes yours when you save it |
 
 </details>
@@ -161,11 +161,14 @@ ends* to get both. Recordings go to Jira, Google, Slack, Discord and Save locall
 <details>
 <summary><b>In the window: formatting, values from files, extra fields</b></summary>
 
-- **Formatting:** text boxes have bold, italic, underline, code, quote and list buttons (Ctrl+B, Ctrl+I, Ctrl+U).
-  CargoFrame converts them for each service, and only shows the buttons every target service understands.
-- **Data from files** (*Settings*): read a value from a file in the program's project folder (a text line, JSON, YAML,
-  TOML, INI, CSV, XML or a pattern) and use it in a text box as `{{name}}`. For a text line you only say the text before
-  and after the value. Only files your rules name are read, and only inside that folder.
+- **Formatting:** in the layout builder, tick *Message of* on a Text block to make it the message of a Jira, Slack,
+  Discord, Reddit or Teams button. The box then shows bold, italic, underline, code, quotes and lists as they look,
+  with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8
+  bullets, Ctrl+Shift+7 numbers), only the ones that service can show. CargoFrame writes them the way each service wants.
+- **Data from files** (*Settings*): *If this file is found* (its name or part of it, no format to choose), *add it to the
+  files* and/or *read* values: the value written after a name (`GPU: …`), the text between two pieces (or to the end of
+  the line), or the whole line with a word; the first, the last or all of them. Each value is a variable such as
+  `{{rule.gpu}}` for the title or description. Only files your rules name are read, and only inside the project folder.
 - **Extra fields** (*Settings*): service fields beyond where to post, like a Jira priority, mapped to a block.
 - **Last choices:** each dropdown starts on what you used last and lists the last five.
 - **Several windows:** a shortcut pressed while a window is open opens another, up to ten.
