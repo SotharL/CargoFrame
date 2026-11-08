@@ -1,12 +1,14 @@
 <script lang="ts">
+  // How videos are recorded on this PC: where ffmpeg is, how it captures and compresses, and a
+  // short test. Cutting, cropping and marking a clip happen in the CargoFrame window a video
+  // trigger opens, so they are not repeated here.
   import { onDestroy, onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
   import Section from '../../lib/components/Section.svelte';
   import { getApi } from '../../lib/ipc';
-  import type {
-    Video, VideoCapture, VideoEncoder, VideoRecording, VideoTestEdit, VideoTools, VideoTrial,
-  } from '../../lib/types';
+  import { go } from '../route.svelte';
+  import type { Video, VideoCapture, VideoEncoder, VideoTools, VideoTrial } from '../../lib/types';
 
   const CAPTURES: { id: VideoCapture; label: string }[] = [
     { id: 'auto', label: 'Automatic' },
@@ -33,31 +35,9 @@
   let trying = $state(false);
   let trial = $state<VideoTrial | null>(null);
   let openError = $state('');
-  let recording = $state<VideoRecording>({ state: 'idle' });
-  let stopping = $state(false);
-  let timer: ReturnType<typeof setInterval> | undefined;
-  // trim, crop and mark a copy of the test clip
-  let trimStart = $state(0);
-  let trimEnd = $state(0);
-  let cropOn = $state(false);
-  let crop = $state({ x: 0, y: 0, w: 0, h: 0 });
-  let markKind = $state<VideoTestEdit['mark']>('none');
-  // where the drawn mark goes, in the clip's own pixels, and what its text says
-  let markAt = $state({ x: 0, y: 0 });
-  let markText = $state('CargoFrame test');
-  let exporting = $state(false);
-  let copy = $state<VideoTrial | null>(null);
-  let playing = $state<'test' | 'exported'>('test');
-  let stage = $state<HTMLElement | null>(null);
-  let player = $state<HTMLVideoElement | null>(null);
-  let strip = $state<HTMLElement | null>(null);
-  let now = $state(0);
-  let edgeDrag = $state<'start' | 'end' | null>(null);
-  let dragging: { mode: 'move' | 'size'; sx: number; sy: number; from: { x: number; y: number; w: number; h: number } } | null = null;
   let playerUrl = $state<string | null>(null);
   let playerError = $state('');
   let loadingPlayer = $state(false);
-  const running = $derived(recording.state === 'recording' || recording.state === 'finishing' || stopping);
 
   function name(list: { id: string; label: string }[], id: string | null): string {
     const full = list.find((x) => x.id === id)?.label ?? String(id);
@@ -122,6 +102,13 @@
     }
   }
 
+  function failure(message: string): VideoTrial {
+    return {
+      ok: false, message, capture: null, encoder: null, width: 0, height: 0,
+      clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
+    };
+  }
+
   async function tryRecording() {
     const v = current();
     if (!v) return;
@@ -131,12 +118,9 @@
     closePlayer();
     playerError = '';
     try {
-      setTrial(await (await getApi()).tryVideoRecording(v));
+      trial = await (await getApi()).tryVideoRecording(v);
     } catch (e) {
-      trial = {
-        ok: false, message: String(e), capture: null, encoder: null, width: 0, height: 0,
-        clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
-      };
+      trial = failure(String(e));
     } finally {
       trying = false;
     }
@@ -148,13 +132,12 @@
   }
 
   /** Play the clip in this window. Whether the window can play H.264 is itself worth knowing. */
-  async function watch(exported = false) {
+  async function watch() {
     closePlayer();
     playerError = '';
     loadingPlayer = true;
     try {
-      playerUrl = URL.createObjectURL(await (await getApi()).getVideoTestClip(exported));
-      playing = exported ? 'exported' : 'test';
+      playerUrl = URL.createObjectURL(await (await getApi()).getVideoTestClip());
     } catch (e) {
       playerError = String(e);
     } finally {
@@ -169,266 +152,10 @@
     closePlayer();
   }
 
-  /** A new test clip starts a new edit: the whole clip, no crop, and a crop box ready in the middle. */
-  function setTrial(t: VideoTrial) {
-    trial = t;
-    copy = null;
-    if (!t.ok) return;
-    trimStart = 0;
-    trimEnd = Math.round(t.clip_ms / 100) / 10;
-    now = 0;
-    const even = (n: number) => Math.floor(n / 2) * 2;
-    crop = { x: even(t.width / 4), y: even(t.height / 4), w: even(t.width / 2), h: even(t.height / 2) };
-    cropOn = false;
-    markKind = 'none';
-    markAt = { x: Math.round(t.width / 2), y: Math.round(t.height / 2) };
-  }
-
-  /**
-   * A circle and a text on a see-through picture the size of the clip: how the editor will make
-   * marks, so what the window draws (fonts included) is checked against what ffmpeg lays over the video.
-   */
-  async function drawMark(width: number, height: number): Promise<Blob> {
-    const canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) throw 'This window cannot draw the mark';
-    const red = '#e5322d';
-    const cx = clamp(markAt.x, 0, width);
-    const cy = clamp(markAt.y, 0, height);
-    ctx.lineWidth = Math.max(4, Math.round(height / 120));
-    ctx.strokeStyle = red;
-    ctx.beginPath();
-    ctx.arc(cx, cy, Math.min(width, height) / 10, 0, Math.PI * 2);
-    ctx.stroke();
-    const text = markText.trim();
-    if (text) {
-      // the text sits just under the circle
-      const size = Math.max(16, Math.round(height / 18));
-      ctx.font = `bold ${size}px sans-serif`;
-      ctx.textBaseline = 'top';
-      ctx.textAlign = 'center';
-      ctx.lineWidth = Math.max(2, Math.round(size / 8));
-      ctx.strokeStyle = '#ffffff';
-      const y = Math.min(cy + Math.min(width, height) / 10 + size / 3, height - size * 1.2);
-      ctx.strokeText(text, cx, y);
-      ctx.fillStyle = red;
-      ctx.fillText(text, cx, y);
-    }
-    return new Promise((resolve, reject) => {
-      canvas.toBlob((b) => (b ? resolve(b) : reject('The mark could not be made into a picture')), 'image/png');
-    });
-  }
-
-  async function exportCopy() {
-    const v = current();
-    if (!v) return;
-    const nums = [trimStart, trimEnd, crop.x, crop.y, crop.w, crop.h].map(Number);
-    if (nums.some((n) => !Number.isFinite(n))) {
-      copy = failure('The start, the end and the crop must be numbers');
-      return;
-    }
-    const edit: VideoTestEdit = {
-      start_ms: Math.max(0, Math.round(Number(trimStart) * 1000)),
-      end_ms: Math.round(Number(trimEnd) * 1000),
-      crop: cropOn ? { x: Math.round(crop.x), y: Math.round(crop.y), w: Math.round(crop.w), h: Math.round(crop.h) } : null,
-      mark: markKind,
-    };
-    exporting = true;
-    copy = null;
-    closePlayer();
-    playerError = '';
-    try {
-      const api = await getApi();
-      // a drawn mark is made here, the size of the clip, and handed over before the export
-      if (markKind === 'drawn' && trial) {
-        await api.setVideoTestMark(await drawMark(trial.width, trial.height));
-      }
-      copy = await api.exportVideoTest(v, edit);
-    } catch (e) {
-      copy = failure(String(e));
-    } finally {
-      exporting = false;
-    }
-  }
-
-  /** Where the playing clip is, to the tenth of a second. */
-  function playhead(): number {
-    return Math.round((player?.currentTime ?? 0) * 10) / 10;
-  }
-
-  const MIN_CROP = 16;
-  const clamp = (n: number, lo: number, hi: number) => Math.min(Math.max(n, lo), Math.max(lo, hi));
-  const even = (n: number) => Math.round(n / 2) * 2;
-
-  /** A click on the picture puts the drawn mark there (when a drawn mark is chosen and not cropping). */
-  function placeMark(e: MouseEvent) {
-    if (markKind !== 'drawn' || cropOn || playing !== 'test' || !stage || !trial) return;
-    const box = stage.getBoundingClientRect();
-    if (!box.width || !box.height) return;
-    markAt = {
-      x: Math.round(clamp(((e.clientX - box.left) / box.width) * trial.width, 0, trial.width)),
-      y: Math.round(clamp(((e.clientY - box.top) / box.height) * trial.height, 0, trial.height)),
-    };
-  }
-
-  const clipSecs = $derived(trial ? trial.clip_ms / 1000 : 0);
-  const tenth = (n: number) => Math.round(n * 10) / 10;
-  const edges = $derived<{ which: 'start' | 'end'; label: string; value: number }[]>([
-    { which: 'start', label: 'Start of the copy', value: Number(trimStart) },
-    { which: 'end', label: 'End of the copy', value: Number(trimEnd) },
-  ]);
-  /** Where a second sits on the timeline, as a percentage of its width. */
-  const pct = (secs: number) => (clipSecs ? clamp(secs / clipSecs, 0, 1) * 100 : 0);
-
-  /** Moves one end of the trim, in tenths of a second, keeping at least a tenth between the two. */
-  function setEdge(which: 'start' | 'end', secs: number) {
-    if (which === 'start') trimStart = tenth(clamp(secs, 0, Number(trimEnd) - 0.1));
-    else trimEnd = tenth(clamp(secs, Number(trimStart) + 0.1, clipSecs));
-  }
-
-  function secsAt(clientX: number): number | null {
-    if (!strip) return null;
-    const box = strip.getBoundingClientRect();
-    return box.width ? clamp((clientX - box.left) / box.width, 0, 1) * clipSecs : null;
-  }
-
-  function startEdge(e: MouseEvent, which: 'start' | 'end') {
-    e.preventDefault();
-    e.stopPropagation();
-    edgeDrag = which;
-    window.addEventListener('mousemove', onEdge);
-    window.addEventListener('mouseup', endEdge);
-  }
-
-  function onEdge(e: MouseEvent) {
-    const secs = secsAt(e.clientX);
-    if (edgeDrag && secs !== null) setEdge(edgeDrag, secs);
-  }
-
-  function endEdge() {
-    edgeDrag = null;
-    window.removeEventListener('mousemove', onEdge);
-    window.removeEventListener('mouseup', endEdge);
-  }
-
-  /** From the keyboard: arrows move an end by a tenth of a second, with Shift by a second. */
-  function edgeKey(e: KeyboardEvent, which: 'start' | 'end') {
-    const step = e.shiftKey ? 1 : 0.1;
-    const at = Number(which === 'start' ? trimStart : trimEnd);
-    if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') setEdge(which, at - step);
-    else if (e.key === 'ArrowRight' || e.key === 'ArrowUp') setEdge(which, at + step);
-    else return;
-    e.preventDefault();
-  }
-
-  /** A click on the timeline takes the playing clip to that moment. */
-  function seek(e: MouseEvent) {
-    const secs = secsAt(e.clientX);
-    if (secs !== null && player) {
-      player.currentTime = secs;
-      now = secs;
-    }
-  }
-
-  function startDrag(e: MouseEvent, mode: 'move' | 'size') {
-    e.preventDefault();
-    e.stopPropagation();
-    dragging = { mode, sx: e.clientX, sy: e.clientY, from: { ...crop } };
-    window.addEventListener('mousemove', onDrag);
-    window.addEventListener('mouseup', endDrag);
-  }
-
-  /** The box is moved and sized in the clip's own pixels, always on even numbers, inside the picture. */
-  function onDrag(e: MouseEvent) {
-    if (!dragging || !stage || !trial) return;
-    const width = stage.getBoundingClientRect().width;
-    if (!width) return;
-    const scale = trial.width / width;
-    const dx = (e.clientX - dragging.sx) * scale;
-    const dy = (e.clientY - dragging.sy) * scale;
-    const f = dragging.from;
-    if (dragging.mode === 'move') {
-      crop.x = even(clamp(f.x + dx, 0, trial.width - f.w));
-      crop.y = even(clamp(f.y + dy, 0, trial.height - f.h));
-    } else {
-      crop.w = even(clamp(f.w + dx, MIN_CROP, trial.width - f.x));
-      crop.h = even(clamp(f.h + dy, MIN_CROP, trial.height - f.y));
-    }
-  }
-
-  function endDrag() {
-    dragging = null;
-    window.removeEventListener('mousemove', onDrag);
-    window.removeEventListener('mouseup', endDrag);
-  }
-
-  function failure(message: string): VideoTrial {
-    return {
-      ok: false, message, capture: null, encoder: null, width: 0, height: 0,
-      clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
-    };
-  }
-
-  function stopPolling() {
-    if (timer) clearInterval(timer);
-    timer = undefined;
-  }
-
-  async function refresh() {
-    try {
-      recording = await (await getApi()).getVideoRecording();
-    } catch {
-      return;
-    }
-    if (recording.state === 'failed') {
-      // stopping hands over the reason and clears it
-      await stopRecording();
-    } else if (recording.state === 'idle') {
-      stopPolling();
-    }
-  }
-
-  async function startRecording() {
-    const v = current();
-    if (!v) return;
-    trial = null;
-    openError = '';
-    closePlayer();
-    playerError = '';
-    try {
-      await (await getApi()).startVideoRecording(v);
-    } catch (e) {
-      trial = failure(String(e));
-      return;
-    }
-    await refresh();
-    stopPolling();
-    timer = setInterval(refresh, 500);
-  }
-
-  async function stopRecording() {
-    stopPolling();
-    stopping = true;
-    try {
-      setTrial(await (await getApi()).stopVideoRecording());
-    } catch (e) {
-      trial = failure(String(e));
-    } finally {
-      stopping = false;
-      recording = { state: 'idle' };
-    }
-  }
-
-  function seconds(ms: number): string {
-    return (ms / 1000).toFixed(0);
-  }
-
-  async function openClip(exported = false) {
+  async function openClip() {
     openError = '';
     try {
-      await (await getApi()).openVideoTest(exported);
+      await (await getApi()).openVideoTest();
     } catch (e) {
       openError = String(e);
     }
@@ -454,29 +181,16 @@
     video = await (await getApi()).getVideo();
     ffmpegText = video.ffmpeg ?? '';
     loaded = true;
-    // a recording started earlier may still be running
-    try {
-      recording = await (await getApi()).getVideoRecording();
-    } catch {
-      recording = { state: 'idle' };
-    }
-    if (recording.state === 'recording') timer = setInterval(refresh, 500);
-    else if (recording.state === 'failed') await stopRecording();
     await detect();
   });
 
-  onDestroy(() => {
-    stopPolling();
-    closePlayer();
-    endDrag();
-    endEdge();
-  });
+  onDestroy(closePlayer);
 </script>
 
 {#if loaded}
   <Section
     title="ffmpeg"
-    hint="CargoFrame uses ffmpeg, a free program, to record and to write the video. It is not part of CargoFrame: install it (on Windows: winget install Gyan.FFmpeg) or point to the folder you unpacked it in."
+    hint="CargoFrame uses ffmpeg, a free program, to record and to write the video. Screenshots do not need it."
   >
     <Field
       label="Where ffmpeg is"
@@ -509,6 +223,8 @@
       {:else}
         <div class="facts">
           <Chip kind="err" label="ffmpeg not found" />
+          <p class="quiet note">The Setup page installs it for you (Windows) or gives the one command to run (Linux).</p>
+          <button type="button" class="primary" onclick={() => go('setup')}>Install it from Setup</button>
         </div>
       {/if}
       {#if tools.problem}<p class="problem" role="alert">{tools.problem}</p>{/if}
@@ -552,37 +268,15 @@
 
   <Section
     title="Try it on this PC"
-    hint="Records the screen with the settings above and keeps the clip so you can watch it. Move something on the screen while it records. Recording from a shortcut is not available yet; this only checks what your PC can do."
+    hint="Records the screen for 5 seconds with the settings above so you can watch the result. Move something on the screen while it records. The sound and what is recorded are chosen in each layout's Video block."
   >
     <div class="row wrap">
-      <button type="button" class="primary" onclick={tryRecording} disabled={trying || running || (tools !== null && !tools.found)}>
+      <button type="button" class="primary" onclick={tryRecording} disabled={trying || (tools !== null && !tools.found)}>
         {trying ? 'Recording…' : 'Try a 5-second recording'}
       </button>
-      {#if running}
-        <button type="button" onclick={stopRecording} disabled={stopping}>
-          {stopping ? 'Making the clip…' : 'Stop and make the clip'}
-        </button>
-      {:else}
-        <button type="button" onclick={startRecording} disabled={trying || (tools !== null && !tools.found)}>
-          Record until I stop
-        </button>
-      {/if}
     </div>
     {#if trying}
       <p class="quiet" role="status">Recording for 5 seconds. Move something on the screen…</p>
-    {/if}
-    {#if recording.state === 'recording'}
-      <div class="facts" role="status" aria-label="Recording">
-        <Chip kind="warn" label="Recording" />
-        <p>
-          {seconds(recording.elapsed_ms)} s so far. The last {seconds(recording.buffered_ms)} s are kept (up to {recording.keep_secs} s),
-          as in a real recording.
-        </p>
-        {#if recording.squeezed}<p class="quiet note">The disk limit cut the start short.</p>{/if}
-        <p class="quiet note">
-          Open Task Manager now (Performance: CPU, GPU) to see what recording costs on this PC. It stops by itself after 10 minutes, or when you close Settings.
-        </p>
-      </div>
     {/if}
     {#if trial}
       <div class="facts" aria-label="Test result">
@@ -595,139 +289,16 @@
             {#if trial.clip}<dt>File</dt><dd><code>{trial.clip}</code></dd>{/if}
           </dl>
           <div class="row">
-            <button type="button" onclick={() => openClip(false)}>Open the clip</button>
-            <button type="button" onclick={() => watch(false)} disabled={loadingPlayer}>
+            <button type="button" onclick={openClip}>Open the clip</button>
+            <button type="button" onclick={watch} disabled={loadingPlayer}>
               {loadingPlayer ? 'Loading…' : 'Watch it here'}
             </button>
           </div>
-          <details class="edit">
-            <summary>Trim, crop and mark a copy</summary>
-            <div class="editbody">
-              <p class="quiet note">
-                Makes an edited copy of the test clip the way an edited video will be saved. The test clip itself is not changed.
-              </p>
-              <div class="two">
-                <Field label="Start (seconds)">
-                  <input type="number" min="0" step="0.1" bind:value={trimStart} />
-                </Field>
-                <Field label="End (seconds)">
-                  <input type="number" min="0" step="0.1" bind:value={trimEnd} />
-                </Field>
-              </div>
-              <label class="check"><input type="checkbox" bind:checked={cropOn} /> Crop to an area</label>
-              {#if cropOn}
-                <div class="four">
-                  <Field label="Left (px)"><input type="number" min="0" bind:value={crop.x} /></Field>
-                  <Field label="Top (px)"><input type="number" min="0" bind:value={crop.y} /></Field>
-                  <Field label="Width (px)"><input type="number" min="2" bind:value={crop.w} /></Field>
-                  <Field label="Height (px)"><input type="number" min="2" bind:value={crop.h} /></Field>
-                </div>
-              {/if}
-              <Field label="Mark" hint="Laid over the whole copy. The drawn mark is a red circle and a text that this window draws, the way the editor will make marks.">
-              <select bind:value={markKind}>
-                <option value="none">No mark</option>
-                <option value="square">A red square (drawn by ffmpeg)</option>
-                <option value="drawn">A circle and a text (drawn by this window)</option>
-              </select>
-            </Field>
-              {#if markKind === 'drawn'}
-                <Field label="Mark text" hint="Written under the circle. Click on the playing picture to put the mark where you want it.">
-                  <input type="text" bind:value={markText} />
-                </Field>
-              {/if}
-              <div class="row">
-                <button type="button" onclick={exportCopy} disabled={exporting}>
-                  {exporting ? 'Making the copy…' : 'Export a copy'}
-                </button>
-              </div>
-              {#if copy}
-                <div class="facts" aria-label="Copy result">
-                  <Chip kind={copy.ok ? 'ok' : 'err'} label={copy.ok ? 'Copy made' : 'No copy made'} />
-                  <p class={copy.ok ? '' : 'problem'} role={copy.ok ? 'status' : 'alert'}>{copy.message}</p>
-                  {#if copy.ok}
-                    <dl>
-                      <dt>Copy</dt><dd>{(copy.clip_ms / 1000).toFixed(1)} s, {copy.width}×{copy.height}, {mb(copy.clip_bytes)} MB</dd>
-                      {#if copy.clip}<dt>File</dt><dd><code>{copy.clip}</code></dd>{/if}
-                    </dl>
-                    <div class="row">
-                      <button type="button" onclick={() => openClip(true)}>Open the copy</button>
-                      <button type="button" onclick={() => watch(true)} disabled={loadingPlayer}>Watch the copy here</button>
-                    </div>
-                  {/if}
-                </div>
-              {/if}
-            </div>
-          </details>
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
           {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
           {#if playerUrl}
-            <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-            <div class="stage" class:placing={markKind === 'drawn' && !cropOn && playing === 'test'} bind:this={stage} onclick={placeMark}>
-              <!-- svelte-ignore a11y_media_has_caption -->
-              <video
-                bind:this={player}
-                src={playerUrl}
-                controls
-                muted
-                aria-label={playing === 'exported' ? 'Edited copy' : 'Test clip'}
-                onerror={playerFailed}
-                ontimeupdate={() => (now = player?.currentTime ?? 0)}
-              ></video>
-              {#if playing === 'test' && markKind === 'drawn' && !cropOn && trial}
-                <span
-                  class="markdot"
-                  aria-label="Mark position"
-                  style:left="{(markAt.x / trial.width) * 100}%"
-                  style:top="{(markAt.y / trial.height) * 100}%"
-                ></span>
-              {/if}
-              {#if playing === 'test' && cropOn && trial}
-                <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div
-                  class="cropbox"
-                  aria-label="Crop area"
-                  role="presentation"
-                  style:left="{(crop.x / trial.width) * 100}%"
-                  style:top="{(crop.y / trial.height) * 100}%"
-                  style:width="{(crop.w / trial.width) * 100}%"
-                  style:height="{(crop.h / trial.height) * 100}%"
-                  onmousedown={(e) => startDrag(e, 'move')}
-                >
-                  <!-- svelte-ignore a11y_no_static_element_interactions -->
-                  <span class="grip" aria-label="Resize the crop area" role="presentation" onmousedown={(e) => startDrag(e, 'size')}></span>
-                </div>
-              {/if}
-            </div>
-            {#if playing === 'test' && clipSecs > 0}
-              <!-- svelte-ignore a11y_click_events_have_key_events -->
-              <div class="timeline" role="presentation" aria-label="Timeline" bind:this={strip} onclick={seek}>
-                <div class="kept" style:left="{pct(Number(trimStart))}%" style:width="{Math.max(0, pct(Number(trimEnd)) - pct(Number(trimStart)))}%"></div>
-                <span class="playhead" aria-hidden="true" style:left="{pct(now)}%"></span>
-                {#each edges as edge (edge.which)}
-                  <span
-                    class="edge"
-                    role="slider"
-                    tabindex="0"
-                    aria-label={edge.label}
-                    aria-valuemin={0}
-                    aria-valuemax={clipSecs}
-                    aria-valuenow={edge.value}
-                    aria-valuetext="{edge.value.toFixed(1)} s"
-                    style:left="{pct(edge.value)}%"
-                    onmousedown={(e) => startEdge(e, edge.which)}
-                    onkeydown={(e) => edgeKey(e, edge.which)}
-                    onclick={(e) => e.stopPropagation()}
-                  ></span>
-                {/each}
-              </div>
-            {/if}
-            {#if playing === 'test'}
-              <div class="row wrap">
-                <button type="button" onclick={() => (trimStart = playhead())}>Start here</button>
-                <button type="button" onclick={() => (trimEnd = playhead())}>End here</button>
-                <span class="quiet note">Play or pause the clip where you want the copy to start or end. {cropOn ? 'Drag the box to move the crop, and its corner to resize it.' : 'Tick “Crop to an area” to draw a box on the picture.'}</span>
-              </div>
-            {/if}
+            <!-- svelte-ignore a11y_media_has_caption -->
+            <video src={playerUrl} controls muted aria-label="Test clip" onerror={playerFailed}></video>
           {/if}
         {/if}
       </div>
@@ -753,27 +324,5 @@
     border-radius: var(--radius-sm); padding: 6px 8px; width: 100%;
   }
   .primary { font-weight: 600; }
-  .four { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; align-items: start; }
-  .editbody { display: grid; gap: 12px; margin-top: 10px; }
-  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; }
-  .edit { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; width: 100%; box-sizing: border-box; }
-  .edit summary { cursor: pointer; font-weight: 600; font-size: 13px; }
-  .stage { position: relative; width: fit-content; max-width: 100%; line-height: 0; overflow: hidden; border-radius: var(--radius-sm); }
   video { display: block; max-width: 100%; border: 1px solid var(--border); border-radius: var(--radius-sm); background: #000; }
-  .cropbox {
-    position: absolute; box-sizing: border-box; cursor: move;
-    border: 2px solid var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
-    box-shadow: 0 0 0 9999px rgb(0 0 0 / 35%); /* dims everything outside the crop */
-  }
-  .stage.placing { cursor: crosshair; }
-  .markdot {
-    position: absolute; width: 22px; height: 22px; margin: -11px 0 0 -11px; box-sizing: border-box;
-    border: 3px solid #e5322d; border-radius: 50%; pointer-events: none;
-  }
-  .timeline { position: relative; box-sizing: border-box; width: calc(100% - 10px); height: 22px; margin: 10px 5px 4px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); cursor: pointer; }
-  .timeline .kept { position: absolute; top: 0; bottom: 0; background: color-mix(in srgb, var(--accent) 30%, transparent); pointer-events: none; }
-  .timeline .playhead { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: currentColor; pointer-events: none; }
-  .timeline .edge { position: absolute; top: -4px; bottom: -4px; width: 10px; margin-left: -5px; background: var(--accent); border: 2px solid #fff; border-radius: 3px; box-sizing: border-box; cursor: ew-resize; }
-  .timeline .edge:focus-visible { outline: 2px solid currentColor; outline-offset: 1px; }
-  .grip { position: absolute; right: 0; bottom: 0; width: 12px; height: 12px; background: var(--accent); border: 2px solid #fff; border-radius: 2px; cursor: nwse-resize; }
 </style>

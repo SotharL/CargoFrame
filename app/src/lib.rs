@@ -141,12 +141,7 @@ pub fn run() {
             commands::install_missing,
             commands::open_sound_settings,
             commands::try_video_recording,
-            commands::start_video_recording,
-            commands::get_video_recording,
-            commands::stop_video_recording,
             commands::get_video_test_clip,
-            commands::export_video_test,
-            commands::set_video_test_mark,
             commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
@@ -465,48 +460,39 @@ mod shipped_config_tests {
         }
     }
 
+    /// The CargoFrame window shows a screen capture and text read from files, so it is the less
+    /// trusted window: it holds exactly these commands, all about its own capture. A new command
+    /// for it has to be added here on purpose, never by accident.
     #[test]
-    fn the_capture_window_cannot_change_settings_or_manage_connections() {
+    fn the_capture_window_holds_only_what_its_own_capture_needs() {
         let caps = capabilities();
         let (_, capture) = &caps[0];
-        let granted: Vec<&str> = capture["permissions"]
+        let mut granted: Vec<&str> = capture["permissions"]
             .as_array()
             .unwrap()
             .iter()
             .filter_map(Value::as_str)
             .collect();
-        for forbidden in [
-            "allow-save-item",
-            "allow-delete-item",
-            "allow-set-connection-secret",
-            "allow-connect-connection",
-            "allow-disconnect-connection",
-            "allow-set-general",
-            "allow-set-safe",
-            "allow-set-video",
-            "allow-try-video-recording",
-            "allow-start-video-recording",
-            "allow-get-video-recording",
-            "allow-stop-video-recording",
-            "allow-get-video-test-clip",
-            "allow-open-video-test",
-            "allow-start-video-recording",
-            "allow-stop-video-recording",
-            "allow-get-video-test-clip",
-            "allow-export-video-test",
-            "allow-set-video-test-mark",
-            "allow-pick-folder",
-            "allow-list-layout-templates",
-            "allow-layout-from-template",
-            "allow-export-settings",
-            "allow-open-import",
-            "allow-apply-import",
-            "allow-discard-import",
-        ] {
-            assert!(
-                !granted.contains(&forbidden),
-                "the CargoFrame window must not hold {forbidden}"
-            );
-        }
+        granted.sort_unstable();
+        let mut expected = vec![
+            "allow-app-info",
+            "allow-close-capture",
+            "allow-edit-layout",
+            "allow-fetch-options",
+            "allow-get-general",
+            "allow-get-session",
+            "allow-get-session-clip",
+            "allow-get-session-image",
+            "allow-open-link",
+            "allow-open-settings",
+            "allow-report-painted",
+            "allow-set-clip-mark",
+            "allow-set-edited-image",
+            "allow-share",
+            "core:event:allow-listen",
+            "core:event:allow-unlisten",
+        ];
+        expected.sort_unstable();
+        assert_eq!(granted, expected);
     }
 }

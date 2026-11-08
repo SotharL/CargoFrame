@@ -14,35 +14,19 @@ afterEach(() => {
 });
 
 describe('General settings', () => {
-  it('lists the sections in the order the person asked for, Updates last', async () => {
+  it('holds how CargoFrame looks, starts, tells you things, keeps windows and handles a failed share', async () => {
     render(General);
-    // Safety and Export and import load their own data, so wait for the last of them.
-    await screen.findByRole('heading', { name: 'Safety' });
-    await screen.findByRole('heading', { name: 'Export and import' });
+    await screen.findByRole('heading', { name: 'When sharing fails' });
     const titles = [...document.querySelectorAll('section > h2')].map((h) => h.textContent);
-    expect(titles).toEqual(['Appearance', 'Startup', 'Notifications', 'Safety', 'Export and import', 'Your data', 'Performance', 'Updates']);
+    expect(titles).toEqual(['Appearance', 'Startup', 'Notifications', 'When sharing fails', 'Windows kept ready']);
   });
 
-  it('shows what the memory setting is doing to each window', async () => {
+  it('saves the memory setting and says what it does', async () => {
     render(General);
-    expect(await screen.findByText('Capture window')).toBeTruthy();
-    expect(screen.getByText('Hidden, kept ready (holds memory)')).toBeTruthy();
-    expect(screen.getByText('Open now')).toBeTruthy();
-  });
-
-  it('Refresh visibly refreshes, then says when, and picks up a changed setting', async () => {
-    render(General);
-    await screen.findByText('Capture window');
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Keep windows ready' }), { target: { value: 'low_memory' } });
-    // Changing the setting refreshes the numbers too.
-    await waitFor(() => expect(screen.getByText('Closed (no memory held)')).toBeTruthy(), { timeout: 3000 });
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy(), { timeout: 3000 });
-
-    await fireEvent.click(screen.getByRole('button', { name: 'Refresh' }));
-    expect(screen.getByRole('button', { name: 'Refreshing…' })).toBeTruthy();
-    expect(screen.getByText('Reading the current state…')).toBeTruthy();
-    await waitFor(() => expect(screen.getByText(/^Refreshed at /)).toBeTruthy(), { timeout: 3000 });
-    expect(screen.getByRole('button', { name: 'Refresh' })).toBeTruthy();
+    const box = await screen.findByRole('combobox', { name: 'Keep windows ready' });
+    await fireEvent.change(box, { target: { value: 'low_memory' } });
+    await waitFor(async () => expect((await api.getGeneral()).memory_mode).toBe('low_memory'));
+    expect(screen.getByText(/Frees the memory as soon as a window closes/)).toBeTruthy();
   });
 });
 

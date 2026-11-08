@@ -17,10 +17,12 @@ mock = []
 serde_json.workspace = true
 thiserror.workspace = true
 getrandom = "0.4"
-ureq = { version = "3", default-features = false, features = ["rustls", "gzip"] }
+# `platform-verifier`: trust the certificates the operating system trusts, so a company's own
+# certificate (for example one its network inspection uses) works on Windows and on Linux alike.
+ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "platform-verifier"] }
 
 [target.'cfg(windows)'.dependencies]
-# Windows trusts the certificates the person's organisation installed.
+# Windows also hands over the proxy the person's organisation set.
 ureq = { version = "3", default-features = false, features = ["rustls", "gzip", "platform-verifier", "win-system-proxy"] }
 
 [dev-dependencies]

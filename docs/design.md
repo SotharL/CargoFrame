@@ -1,6 +1,6 @@
 # Design
 
-How CargoFrame is built today (7 Nov 2026, after the second feedback round). It is a short map, not a manual: for why a choice was
+How CargoFrame is built today (8 Nov 2026, after the flow review). It is a short map, not a manual: for why a choice was
 made read [decisions.md](decisions.md), for what has been tried on real machines read [status.md](status.md).
 
 ## What it is
@@ -9,12 +9,16 @@ A tray program for Windows 11 and Linux. A shortcut captures the program in focu
 recording), finds that program's project folder, reads the few values the person asked for, and opens one
 window to check everything and send it to a web service with one button. Nothing is sent without that button.
 
-Three rules shape everything else:
+Four rules shape everything else:
 
 1. **Cheap while idle.** The always-on process is tray-only: no web view, a few megabytes.
-2. **Easy for the person.** Every setup step has a button, a link or a short in-app guide. The person never edits a file.
+2. **Easy for the person.** Every setup step has a button, a link or a short in-app guide. The person never edits a file
+   and never has to think about where a setting lives: each thing is set in one place.
 3. **Little to maintain.** One place for each thing: one list of templates, one list of "get a token" links,
    one file per setting, one HTTP client, one data-driven guide. A service that changes breaks one file.
+4. **Fit for a large company.** It installs per user without an administrator, can be built without the services a
+   company does not use, can be set up centrally, works behind the company's proxy and certificates, and other programs
+   can hand it data. See *For companies* below.
 
 ## One press, from shortcut to sent
 
@@ -62,9 +66,28 @@ a backup. Secrets (tokens, passwords, webhook links) are **not** in these files;
 **Last choices** in a dropdown (the last five, the newest first) are kept in the window's own local storage,
 per layout and block: values and labels only, never secrets.
 
-**Your data** (Settings, General) lists what the program keeps in its two folders (settings; work in progress, kept zips,
+**Your data** (Settings, Your data) lists what the program keeps in its two folders (settings; work in progress, kept zips,
 logs, updates), clears each kind, or resets everything (settings, connections, sign-ins, data; never the program or the
 person's own folder for saved zips). `app/src/cleanup.rs` is the only code that deletes, and only inside those folders.
+
+## The Settings window, by content
+
+The sidebar is in three groups, in the order a new person sets things up. Each thing is set on one page only.
+
+| Group | Page | What it holds |
+|-------|------|---------------|
+| Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with the one install button; then **Connections**, the services you share to |
+| Captures | **Layouts** | The window a capture opens, block by block, and what each sharing button sends |
+| | **Triggers** | Shortcuts, and the layout each opens |
+| | **Data from files** | Values read from files in the project folder |
+| | **Extra fields** | Boxes on a service beyond where to post (Jira priority) |
+| | **Recording** | Where ffmpeg is, capture and compression, a 5-second test |
+| CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
+| | **Your data** | What is kept on this computer and a way to clear it or start again; export and import |
+| | **About** | Version and updates; speed and memory numbers |
+
+**Guides** sit at the bottom of the sidebar. Old addresses (`safe`, `connections`, `recording`, `updates`) still land on
+the right page.
 
 ## The CargoFrame window and layouts
 
@@ -120,8 +143,9 @@ names a service.
 ## Video
 
 `core/video` runs **ffmpeg** (the one optional program) to keep a ring of short segments, so a press of the shortcut
-keeps the last seconds (10 by default). The window plays the clip, trims it (timeline handles), crops it and puts
-one ring with a text on it; the export is cut by ffmpeg. Sound of the computer and a microphone are optional; if
+keeps the last seconds (10 by default). The CargoFrame window plays the clip, trims it (timeline handles), crops it and
+puts one ring with a text on it; the export is cut by ffmpeg. This editing lives in the CargoFrame window only: the
+Recording page in Settings only checks ffmpeg and records a 5-second test. Sound of the computer and a microphone are optional; if
 a sound device is missing the recording goes on without it and says why. On Linux ffmpeg reads PulseAudio's monitor of
 the default output. On Windows ffmpeg cannot hear what the computer plays, so `core/video/src/loopback.rs` does (WASAPI
 loopback): everything the computer plays, or only the program in focus, and passes the samples to ffmpeg through a local
@@ -136,8 +160,8 @@ feed (`pcm.rs`). No device has to be switched on.
   run each time the page opens: a spinner on each row, then a tick or a warning; the details fold away until the row is
   opened. The **default sound output** is named from Windows. **Connections** are the lower half of the same page.
 - **Notifications:** two switches in General (routine, problems), because a notice can end up inside a recording.
-- **Updates:** a manual "check for updates" against GitHub (a read-only token while the repository is private); a
-  daily check is off by default.
+- **Updates (About):** a manual "check for updates" against GitHub (a read-only token while the repository is private); a
+  daily check is off by default. An update notice opens the About page.
 
 ## The in-app guide
 
@@ -146,6 +170,32 @@ how" links on the pages): `tours.ts` lists, for each connector and for *first ca
 *Data from files* and *Extra fields*, a few steps of `{page, field, one short sentence}`. The guide opens the
 right page, scrolls to the field (found by its `data-tour` attribute), draws a box in the accent colour around it and
 shows the sentence. A test fails if a step names a field that no longer exists, so the guides cannot silently go stale.
+
+## Flow review (8 Nov 2026): what was set in two places
+
+| Repeated | Now | State |
+|----------|-----|-------|
+| Trim, crop and mark in Settings, Video **and** in the CargoFrame window | Only in the CargoFrame window; Settings keeps a 5-second test | Done |
+| Installing ffmpeg from Setup **and** a typed `winget` command on the Video page | Setup installs; Recording sends you there | Done |
+| General holding eight topics, from colours to updates | General, Your data and About, each about one thing | Done |
+| Memory setting and speed numbers in one "Performance" box | The setting in General, the numbers in About | Done |
+| **Extra fields** describe a service field, its list, a default and "required", which a Dropdown block and a button's route already do | The route in the layout gets *required* and *if empty, use*; the Extra fields page goes, its files are folded into the layouts that use them | Planned (connector round) |
+| What to capture is chosen in the trigger (*Makes*, *Capture*) **and** in the layout (Video block's *Record*) | The layout says what it captures; a trigger is a shortcut and a layout | Planned |
+| A Claude app install button on Setup **and** on the Claude form | Kept: one backend, two doors where people look for it | Kept on purpose |
+
+## For companies
+
+CargoFrame is meant to be used by companies of thousands of people. What that needs, and how it is (or will be) met:
+
+| Need | How | State |
+|------|-----|-------|
+| Leave out services a company does not use | One Cargo feature per connector (`jira`, `slack`, `x`, ...). A build without a feature has no code, no template, no form and no guide for that service; a saved connection of a missing kind shows "not in this build" | Planned (connector round) |
+| Set up for everyone at once | A read-only *managed* folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`) with the same JSON files as the settings folder plus `policy.json` (which services, update check on or off, settings that are locked). Managed items show a lock and cannot be edited; each person still signs in for themselves | Planned |
+| Other programs hand data to CargoFrame | `cargoframe open <layout> --set <block>=<text> --file <block>=<path>` reaches the running copy through the single-instance channel (same user only, no network port). Only a layout marked *Other programs can fill this* accepts it, the window opens with the values in their blocks, and nothing is sent until the person presses a button | Planned (connector round) |
+| The company's sign-in | OAuth with the company's identity provider where the service allows it (Teams with Entra today; Jira OAuth and a generic OAuth 2.0 for Custom API next). Tokens stay in each person's credential store | Partly built |
+| The company's network | The operating system's certificate store on Windows and Linux (a company root certificate just works); the Windows proxy setting, or the usual proxy variables on Linux | Built (Linux certificates since 8 Nov) |
+| Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`) for Intune or a login script; the update check can be turned off so IT pushes versions | Built; the policy switch is planned |
+| Accessible without thinking | Every control has a label, the keyboard reaches everything (arrow keys in the sidebar), focus is always visible, motion is reduced when the system asks, colours are checked for contrast, and each screen has one obvious button | Built; a screen reader pass on a real PC is open |
 
 ## Safety
 
@@ -182,4 +232,4 @@ not on every change.
 - Text colour is not offered: only Jira and Teams could show it.
 - Wayland "active window" may not be possible on some compositors (the fallback is the screen under the cursor).
 - The installer and the program inside it are not signed yet.
-- Twitter/X, BlueSky and Instagram are planned for a later version.
+- Twitter/X, BlueSky and Instagram are being added (connector round, under review).

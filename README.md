@@ -20,7 +20,7 @@ For Windows 11 and Linux. It waits in the tray and costs almost nothing while it
 
 **In this page:** [Install](#install) · [First capture](#your-first-capture-in-five-steps) · [Connect a service](#connect-a-service) ·
 [What the window can do](#what-the-window-can-do) · [Templates and clean-up](#ready-made-layouts-and-cleaning-up) ·
-[Problems](#problems) · [For developers](#for-developers)
+[Problems](#problems) · [For companies](#for-companies) · [For developers](#for-developers)
 
 ---
 
@@ -158,7 +158,7 @@ block whether a button sends it, as the prompt, or in one of the service's field
 <summary><b>Video</b></summary>
 
 A trigger whose **Makes** is *A video* starts recording the first time you press its shortcut and stops the second
-time. Only the last seconds are kept (10 by default, set in *Settings, Video*). The window plays the clip; you can trim
+time. Only the last seconds are kept (10 by default, set in *Settings, Recording*). The window plays the clip; you can trim
 it (drag the two handles under it), crop it (*Crop*, drag the box, *Apply crop*) and put one red ring with a text on
 it (*Mark*) before sending.
 
@@ -250,12 +250,12 @@ A template is never stored or changed. Opening one shows an unsaved layout; **Sa
 | A connection | *Setup, Connections*, **Delete**, then **Delete for good** (its tokens leave the password store too) | **Sign out**, or switch off **Enabled** |
 | A data rule or extra field | **Delete**, then **Delete for good** | none needed |
 
-**What CargoFrame keeps on your computer** is listed in *General, Your data* with its size: captures and recordings in
+**What CargoFrame keeps on your computer** is listed in *Settings, Your data* with its size: captures and recordings in
 progress, zips kept here, log files and downloaded updates. Each has a **Clear** button. Under it, **Reset CargoFrame**
 removes your settings, connections, sign-ins and all of that data, and leaves the program (and the folder you chose for
 saved zips) alone. Uninstalling in Windows **Settings, Apps** can delete the settings too.
 
-Before a big clean-up use *General, Export and import*: tick what to keep, press **Export**, and **Import** puts it back later.
+Before a big clean-up use *Your data, Export and import*: tick what to keep, press **Export**, and **Import** puts it back later.
 
 </details>
 
@@ -307,6 +307,24 @@ connection if the chat is slow to open. Turn off **Send the message for me** to 
 
 CargoFrame retries, then keeps a zip of everything it was going to send and tells you where. Nothing is lost; the message
 says what the service answered (a missing permission, a file too large, a deleted webhook).
+
+</details>
+
+---
+
+## For companies
+
+<details>
+<summary><b>Rolling CargoFrame out to many people</b></summary>
+
+- **Install without an administrator:** the installer is per user. For Intune or a login script run it with `/S`
+  (add `/NOSTARTUP` to leave "start when I sign in" off).
+- **Your network:** CargoFrame trusts the certificates your computers trust (a company root certificate just works) and
+  uses the Windows proxy setting, or the usual proxy variables on Linux.
+- **Your sign-in:** Teams signs in with your Microsoft Entra account; each person's tokens stay in their own password store.
+- **Coming next, under review:** builds that leave out the services you do not use, settings set up centrally for
+  everyone, and a command other programs can use to fill a layout before the person sends it. See
+  [the design](docs/design.md#for-companies).
 
 </details>
 
