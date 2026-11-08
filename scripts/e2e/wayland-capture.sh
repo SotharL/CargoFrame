@@ -68,7 +68,13 @@ xwayland enable
 exec sh -c 'echo "\$DISPLAY" > $work/display'
 CFG
 sway -c "$work/sway.cfg" > "$work/sway.log" 2>&1 & pids+=($!)
-for _ in $(seq 100); do ls "$XDG_RUNTIME_DIR"/wayland-? >/dev/null 2>&1 && break; sleep 0.1; done
+# sway makes its display socket first and its IPC socket a moment later: wait for both (a busy
+# CI machine can take seconds).
+for _ in $(seq 300); do
+  ls "$XDG_RUNTIME_DIR"/wayland-? >/dev/null 2>&1 && ls "$XDG_RUNTIME_DIR"/sway-ipc.* >/dev/null 2>&1 && break
+  sleep 0.1
+done
+ls "$XDG_RUNTIME_DIR"/sway-ipc.* >/dev/null 2>&1 || { cp "$work/sway.log" "$out/sway.log" 2>/dev/null; fail "sway did not start"; }
 export WAYLAND_DISPLAY="$(basename "$(ls "$XDG_RUNTIME_DIR"/wayland-? | head -n1)")"
 export SWAYSOCK="$(ls "$XDG_RUNTIME_DIR"/sway-ipc.* | head -n1)"
 for _ in $(seq 50); do swaymsg -t get_outputs >/dev/null 2>&1 && break; sleep 0.1; done
@@ -183,7 +189,12 @@ for _ in $(seq 100); do grep -q "shortcuts go through the desktop" "$work/cargof
 if command -v gsettings >/dev/null && gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings >/dev/null 2>&1; then
   grep -q "r=Gnome" "$work/cargoframe2.log" || fail "GNOME's keyboard settings were not used"
   path=/org/gnome/settings-daemon/plugins/media-keys/custom-keybindings/cargoframe-bug/
-  binding="$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" binding)"
+  # the log line comes just before the settings are written: give them a moment
+  for _ in $(seq 100); do
+    binding="$(gsettings get "org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:$path" binding)"
+    [ "$binding" = "'<Control><Shift>F9'" ] && break
+    sleep 0.1
+  done
   [ "$binding" = "'<Control><Shift>F9'" ] || fail "GNOME's shortcut is $binding"
   echo "ok: the shortcut was written into GNOME's keyboard settings"
 else
