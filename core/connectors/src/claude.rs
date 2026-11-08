@@ -252,6 +252,22 @@ impl Connector for ClaudeConnector {
             (n, true) => format!("{n} file{} and the message", if n == 1 { "" } else { "s" }),
             (n, false) => format!("{n} file{}", if n == 1 { "" } else { "s" }),
         };
+        if done.handed_over {
+            let summary = if done.text {
+                "Opened Claude and copied the message: paste it there with Ctrl+V"
+            } else {
+                "Opened Claude"
+            };
+            notes.push(
+                "This desktop does not let CargoFrame paste into another window, so the message is on the clipboard".to_string(),
+            );
+            return Ok(SendOutcome {
+                summary: summary.into(),
+                url: None,
+                notes,
+                place: None,
+            });
+        }
         let summary = if done.submitted {
             format!("Sent {what} to Claude")
         } else {
@@ -327,6 +343,33 @@ mod tests {
 
     fn connector(windows: bool) -> ClaudeConnector {
         ClaudeConnector::new(ClaudeSettings::default()).on_windows(windows)
+    }
+
+    #[test]
+    fn on_a_desktop_that_cannot_be_driven_the_message_waits_on_the_clipboard() {
+        let d = FakeDeliver::default();
+        d.blind.store(true, std::sync::atomic::Ordering::SeqCst);
+        let (r, opened) = run(
+            &connector(false),
+            &payload(Some("What is wrong?"), None),
+            &d,
+        );
+        let out = r.unwrap();
+        assert_eq!(opened.len(), 1);
+        assert_eq!(
+            out.summary,
+            "Opened Claude and copied the message: paste it there with Ctrl+V"
+        );
+        assert!(
+            out.notes.iter().any(|n| n.contains("on the clipboard")),
+            "{:?}",
+            out.notes
+        );
+        assert!(
+            out.notes.iter().any(|n| n.contains("not attached")),
+            "{:?}",
+            out.notes
+        );
     }
 
     #[test]
@@ -576,6 +619,7 @@ mod tests {
                     skipped_files: d.files.len(),
                     text: true,
                     submitted: true,
+                    handed_over: false,
                 })
             }
         }

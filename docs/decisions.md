@@ -1086,3 +1086,31 @@ programs handing data to a layout, company sign-in, accessibility).
 - **0.2.0** gathers the flow review, the connector round (X, Bluesky, Instagram, a build switch per service,
   `cargoframe open`) and these two changes.
 
+
+### Wayland, 8 Nov 2026: through the desktop, not around it
+
+Wayland lets no program listen to keys, read the screen or ask which window is in focus. Before this, CargoFrame took
+a portal screenshot of the whole screen, its shortcuts never fired (the plugin only hears X11 programs), recording was
+refused and pasting into Claude failed. Each is now asked of the desktop, and the program picks the way by itself.
+
+- **Shortcuts are handed to the desktop**, which runs `cargoframe open --trigger <id>`; the running copy takes it over
+  (the same path other programs use). GNOME: custom shortcuts in its keyboard settings, because every GNOME version has
+  them and its GlobalShortcuts portal only arrived in GNOME 48. sway and Hyprland: bound live over their IPC socket at
+  each start, so their config files are never written. KDE and others: the portal's GlobalShortcuts. Where none of
+  these exists, Settings shows the command, with a Copy button. The plugin is not used on Wayland: it would only hear
+  keys pressed in XWayland programs, which looks like a bug.
+- **The window in focus comes from the compositor** (sway and Hyprland sockets, a short KWin script on KDE) or, on
+  GNOME and others, from XWayland's active window, which the compositor clears when a Wayland window takes the focus.
+  GNOME has no way at all for Wayland windows; the window says so instead of a vague "could not be read".
+- **`grim` first on wlroots desktops**: no portal round trip, and sway set up with only the wlr portal has no
+  screenshot service at all (it needs the GTK portal beside it).
+- **Recording goes through the portal's screen sharing and GStreamer.** ffmpeg cannot read the PipeWire stream;
+  GStreamer's `pipewiresrc` can. GStreamer writes raw video to CargoFrame, which passes it to ffmpeg over a local
+  connection (as the Windows sound already is), so the recorder, the ring of segments and the export stay the same.
+  The node is opened by number, not through the portal's file descriptor, because handing a descriptor to a child
+  process needs unsafe code; a desktop that only allows the descriptor would need that changed.
+- **GNOME and KDE allow no program to press keys in another**, so a Claude share there opens the chat and leaves the
+  message on the clipboard, and says to press Ctrl+V. sway and Hyprland use `wtype`.
+- **Tested on a headless sway desktop** in CI (`scripts/e2e/wayland-capture.sh`), also run as a GNOME-like desktop to
+  cover the XWayland focus, the portal screenshot and GNOME's settings. Real GNOME, KDE and Hyprland sessions are the
+  owner's to try.

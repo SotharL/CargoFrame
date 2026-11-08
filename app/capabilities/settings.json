@@ -16,7 +16,7 @@
     "allow-get-memory-status",
     "allow-set-autostart",
     "allow-open-config-folder",
-    "allow-get-shortcut-errors",
+    "allow-get-shortcut-status",
     "allow-list-items",
     "allow-save-item",
     "allow-delete-item",

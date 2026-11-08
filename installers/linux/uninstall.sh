@@ -24,6 +24,19 @@ if [ -e "$target" ]; then
   sleep 1
 fi
 
+# On GNOME (Wayland), CargoFrame's shortcuts live in GNOME's keyboard settings: take them out.
+# Only the ones it made (their path has "cargoframe-" in it) are touched.
+schema=org.gnome.settings-daemon.plugins.media-keys
+if command -v gsettings >/dev/null 2>&1 && gsettings get "$schema" custom-keybindings >/dev/null 2>&1; then
+  list="$(gsettings get "$schema" custom-keybindings)"
+  for path in $(printf '%s' "$list" | grep -o "'[^']*/cargoframe-[^']*'" | tr -d "'"); do
+    gsettings reset-recursively "$schema.custom-keybinding:$path" 2>/dev/null || true
+  done
+  kept="$(printf '%s' "$list" | sed -E "s#'[^']*/cargoframe-[^']*'(, )?##g; s#, \]#]#")"
+  [ "$kept" = "[]" ] && kept="@as []"
+  [ "$kept" != "$list" ] && gsettings set "$schema" custom-keybindings "$kept" || true
+fi
+
 rm -f "$target" "$prog_dir/uninstall.sh"
 rm -f "$data_home/applications/cargoframe.desktop"
 rm -f "$config_home/autostart/CargoFrame.desktop"

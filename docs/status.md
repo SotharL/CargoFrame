@@ -79,8 +79,15 @@ those is true for each piece.
 - **Signing and releases.** `release.yml` and `scripts/windows/sign.ps1` have never run with a
   certificate; the program inside the installer is not signed. `new-signing-material.ps1` has
   not been run.
-- **Wayland "active window" capture** may not be possible on some compositors; the fallback is
-  the display under the cursor.
+- **Wayland on real desktops.** Verified on a headless sway desktop with the portal, PipeWire and
+  XWayland (`scripts/e2e/wayland-capture.sh`, also run as a GNOME-like desktop): shortcuts through
+  sway and through GNOME's keyboard settings (real gsettings), the Wayland and XWayland program in
+  focus, `grim` and portal screenshots, the uninstaller removing GNOME shortcuts. Checked against
+  fakes that follow the documented D-Bus interfaces: the KWin script (KDE) and the portal's
+  GlobalShortcuts. Recording: the portal session was asked of the real wlr portal (which could not
+  copy frames on a GPU-less headless screen), and GStreamer reading a real PipeWire video node into
+  a real ffmpeg recording works. Not yet seen: a real GNOME, KDE or Hyprland session, KDE's shortcut
+  dialog, GNOME's screen-sharing dialog and its remembered choice, and `wtype` pasting into a browser.
 
 ## Phases
 
@@ -88,7 +95,7 @@ those is true for each piece.
 |-------|-------|-------|
 | 0 Foundations | Workspace, CI, signing docs, spike runbook | Done. Owner runs: signing material, spikes, name check |
 | 1 Shell and installer | Tray, single instance, launch notice, Settings window, installers | Done and built in CI |
-| 2 Capture and window | Triggers, capture, CargoFrame window, themes | Done; Windows, X11 and the Wayland portal are implemented, Wayland is untested |
+| 2 Capture and window | Triggers, capture, CargoFrame window, themes | Done; Windows, X11 and Wayland (sway, Hyprland, KDE, GNOME through XWayland and the portal); Wayland verified on headless sway |
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
 | 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, Connections page, share flow | Done against mock servers |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |

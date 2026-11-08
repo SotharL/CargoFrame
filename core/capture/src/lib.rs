@@ -6,7 +6,8 @@
 //!
 //! * Windows: the foreground window and a desktop copy.
 //! * Linux on X11: the window manager's active window and the root window's pixels.
-//! * Linux on Wayland: the desktop portal's screenshot (no focused-window information exists).
+//! * Linux on Wayland: `grim` or the desktop portal for the picture, and the compositor (sway,
+//!   Hyprland, KDE) or XWayland for the window in focus. See [`wayland`].
 
 pub mod error;
 pub mod frame;
@@ -15,6 +16,10 @@ pub mod session;
 
 #[cfg(target_os = "linux")]
 pub mod portal;
+#[cfg(target_os = "linux")]
+pub mod screencast;
+#[cfg(target_os = "linux")]
+pub mod wayland;
 #[cfg(windows)]
 mod win;
 #[cfg(target_os = "linux")]
@@ -33,7 +38,10 @@ pub fn capture(mode: Mode) -> Result<Captured, CaptureError> {
     #[cfg(target_os = "linux")]
     {
         match session::detect_env() {
-            session::Session::Wayland => policy::capture_with(&portal::Portal::new(), mode),
+            session::Session::Wayland => policy::capture_with(
+                &wayland::Wayland::new(wayland::Compositor::detect_env()),
+                mode,
+            ),
             session::Session::X11 => policy::capture_with(&x11::X11::connect()?, mode),
             session::Session::Other => Err(CaptureError::NoDisplay(
                 "this is not a desktop session (no DISPLAY or WAYLAND_DISPLAY)".into(),
@@ -49,8 +57,8 @@ pub fn capture(mode: Mode) -> Result<Captured, CaptureError> {
     }
 }
 
-/// The window in focus right now, without taking a picture. `None` when nothing has the focus or
-/// the system does not say (Wayland).
+/// The window in focus right now, without taking a picture. `None` when nothing has the focus.
+/// On a Wayland desktop that does not say (GNOME), the error is [`CaptureError::FocusUnknown`].
 pub fn focused_app() -> Result<Option<FocusedApp>, CaptureError> {
     #[cfg(windows)]
     {
@@ -60,7 +68,8 @@ pub fn focused_app() -> Result<Option<FocusedApp>, CaptureError> {
     {
         match session::detect_env() {
             session::Session::X11 => policy::Backend::focused(&x11::X11::connect()?),
-            _ => Ok(None),
+            session::Session::Wayland => wayland::focused_app(&wayland::Compositor::detect_env()),
+            session::Session::Other => Ok(None),
         }
     }
     #[cfg(not(any(windows, target_os = "linux")))]

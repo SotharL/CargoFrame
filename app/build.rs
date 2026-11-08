@@ -21,7 +21,7 @@ fn main() {
             "report_painted",
             "get_timings",
             "get_memory_status",
-            "get_shortcut_errors",
+            "get_shortcut_status",
             "list_items",
             "save_item",
             "delete_item",

@@ -51,8 +51,8 @@ order to build them in, and the gates every change passes. For what the app is a
 | UI | **Svelte 5** + TypeScript, **Vite** | Tiny bundles, two pages (`settings.html`, `capture.html`) |
 | UI tests | **vitest** + Testing Library, `svelte-check` | Fast tests against an in-memory backend |
 | HTTP | **ureq** behind one `Http` trait | Blocking, small, easy to mock |
-| Capture | Win32/GDI (`windows` crate), **x11rb**, Wayland portal (**zbus**) | No large capture libraries |
-| Video | **ffmpeg** (external, optional); **wasapi** for Windows sound | Proven encoder; installed with one button |
+| Capture | Win32/GDI (`windows` crate), **x11rb**; on Wayland the desktop portal (**zbus**), `grim`, and the compositor's IPC for the focused window | No large capture libraries |
+| Video | **ffmpeg** (external, optional); **wasapi** for Windows sound; on Wayland **GStreamer** (`pipewiresrc`) reads the portal's screen stream | Proven encoder; installed with one button |
 | Secrets | **keyring** (Windows Credential Manager, Secret Service) | Never on disk in our files |
 | Files | serde JSON, `serde_yaml_ng`, `toml`, `csv`, `roxmltree`, `regex`, `zip` | One crate per format, no custom parsers |
 | Installers | **NSIS** (Windows), **AppImage** + `install.sh` (Linux) | Per user, no administrator |
@@ -98,7 +98,8 @@ flowchart BT
     connectors --> context & deliver & handoff & net & safe
     config --> connectors & handoff & layout & rules
     update --> net
-    app[app] --> config & window & bundle & video & update & rules
+    shortcuts --> config & capture
+    app[app] --> config & window & bundle & video & update & rules & shortcuts
 ```
 
 Leaf crates have no CargoFrame dependencies and are built and tested first. `app` is the only crate that knows Tauri.
@@ -107,7 +108,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 
 | Path | Contents |
 |------|----------|
-| `core/*` | 14 library crates, testable without a display |
+| `core/*` | 15 library crates, testable without a display |
 | `app/` | The program: tray, triggers, commands, sharing, secrets, setup checks, `cargoframe open` |
 | `ui/src/settings` | Settings window: pages, layout builder, connections, guides |
 | `ui/src/capture` | CargoFrame window: blocks, editor, tick boxes, sharing |
@@ -126,8 +127,8 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `context` | Climb to the project folder; `{{variable}}` templates; the read allow-list | pure string logic |
 | `safe` | What happens on failure: retry with backoff, failure classes, fallback ladder, zip names | `retry`, `FailureKind`, `SendError` |
 | `handoff` | Claude chat links, clipboard plan, pinned and recent chats | |
-| `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait | `capture_with` |
-| `video` | Ring of segments, clip edits (trim, crop, mark), the ffmpeg command; Windows loopback sound | `loopback.rs`, `pcm.rs` |
+| `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; Wayland focus, portal screenshot and screen sharing | `capture_with`, `wayland.rs`, `screencast.rs` |
+| `video` | Ring of segments, clip edits (trim, crop, mark), the ffmpeg command; Windows loopback sound; a fed picture (Wayland) | `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
 | `layout` | Blocks on a 12-column grid, validation chips, templates | `model.rs`, `templates.rs` |
 | `rules` | Data rules: read one value from an allowed file | one module per format |
 | `window` | Everything the CargoFrame window shows for one capture, as one serializable view | `view::SessionView` |
@@ -137,6 +138,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `connectors` | One folder per service behind the `Connector` trait; OAuth with PKCE; secret store trait; text converter | `Connector`, `Payload`, `oauth.rs`, `richtext.rs`, `media.rs` |
 | `config` | One versioned JSON file per item; checks; migrations with backup | |
 | `update` | Check GitHub releases, download, verify SHA-256, run the installer | `check`, `fetch`, `install` |
+| `shortcuts` | Wayland: hand each shortcut to the desktop (GNOME settings, sway and Hyprland IPC, the portal's GlobalShortcuts, or a command to copy) | `Route`, `gnome::sync`, `wlroots`, `portal::Portal` |
 | `app` | Glue: tray, triggers, sessions, share, commands, secrets, setup checks, clean-up, CLI | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs` |
 
 <details>
@@ -147,6 +149,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `lib.rs` | Start-up: plugins, tray, shortcuts, single instance, `cargoframe open` |
 | `tray.rs`, `tray_host.rs` | Tray icon and menu (pause triggers, open settings, quit) |
 | `triggers.rs` | Run a trigger: capture or record, build the session, open a window |
+| `desktop_keys.rs` | Wayland: hand the shortcuts to the desktop, and say how in Settings |
 | `session.rs` | Build the `SessionView`; `records()` (layout has a Video block); apply values from `cargoframe open` |
 | `share.rs` | Build the `Payload` from ticked blocks, call the connector, fall back to a zip |
 | `commands.rs` | The Tauri commands |
@@ -192,13 +195,14 @@ flowchart LR
     P6 --> P7[7 · Settings and guides]
     P7 --> P8[8 · Video]
     P8 --> P9[9 · Installers and updates]
-    P9 --> P10[10 · Company features]
+    P9 --> P9b[9b · Wayland]
+    P9b --> P10[10 · Company features]
 ```
 
 | Phase | Build | Done when |
 |-------|-------|-----------|
 | **1 · Foundation** | Workspace, lints (`unsafe` forbidden, clippy `-D warnings`), `check.sh`, CI on Linux; `config` (versioned files, migration); tray-only `app` with a shortcut | The tray starts, idles under 40 MB, a shortcut logs a press |
-| **2 · Capture** | `capture` on Windows, X11, Wayland portal; the program in focus and its path | A press yields a picture in under 150 ms, checked on a virtual screen |
+| **2 · Capture** | `capture` on Windows, X11 and Wayland (portal or `grim`; focus from sway, Hyprland, KDE or XWayland); the program in focus and its path | A press yields a picture in under 150 ms, checked on a virtual screen |
 | **3 · Context and rules** | `context` (folder climb, templates, allow-list), `rules` (each format) | `{{rule.version}}` fills from a real project folder in tests |
 | **4 · Layouts and window** | `layout` (grid, validation, templates), `window` (`SessionView`), `capture.html` with all blocks and the picture editor | A press opens the window with picture, texts and files |
 | **5 · Network and connectors** | `net` and its mock server; `Connector` trait, `oauth`, secret store; Jira first (densest), then the others | Every connector passes its tests against a mock of its documented API |
@@ -206,6 +210,7 @@ flowchart LR
 | **7 · Settings and guides** | `settings.html`: pages in sidebar groups, layout builder, connection forms with get-token buttons, guides, Your data, export and import | A new person goes from empty to first share without editing a file |
 | **8 · Video** | `video` (ring of segments, edits, ffmpeg), sound (PulseAudio, WASAPI loopback), the Video block | A layout with a Video block records, trims and sends |
 | **9 · Installers and updates** | NSIS one-button installer, AppImage, `update` with SHA-256, release workflow | CI installs, upgrades, uninstalls and clicks the real installer |
+| **9b · Wayland** | Compositor focus (sway, Hyprland, KWin script, XWayland), `grim` and portal screenshots, `shortcuts` crate, screen sharing with GStreamer, clipboard hand-over for Claude | The Wayland end-to-end test passes on headless sway |
 | **10 · Company features** | Cargo feature per connector and `CF_SERVICES`; `cargoframe open`; system certificates and proxy | A build with only `jira` has no other service's code; a script fills a layout |
 
 ---
@@ -304,7 +309,7 @@ CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, rel
 | Connectors | Against `MockServer` following each service's documented API: sign-in, lists, send, retries, "never twice" |
 | UI | vitest on `memoryApi`; whole windows rendered (`App.test.ts`) including recording and demo variants |
 | Guides | `tours.test.ts` (every field exists), `walk.test.ts` (every step can be walked) |
-| Whole program | A fake program on a virtual X11 screen is captured by the real binary (`scripts/e2e/linux-capture.sh`) |
+| Whole program | A fake program on a virtual X11 screen is captured by the real binary (`scripts/e2e/linux-capture.sh`); on a headless sway desktop with the portal, the shortcut, focus and capture of a Wayland and an XWayland program (`scripts/e2e/wayland-capture.sh`) |
 | Budgets | Idle memory and CPU, capture and window times, script size per window (`scripts/ci/check-budgets.mjs`) |
 | Installers | Windows: silent install, upgrade, uninstall, and a click on the real installer window; Linux: AppImage install and run |
 | Security | `cargo audit` and `npm audit` on a schedule (`security.yml`) |

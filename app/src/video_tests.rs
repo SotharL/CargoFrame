@@ -33,6 +33,9 @@ fn found(encoders: &[VideoEncoder], captures: &[VideoCapture]) -> Found {
         version: "7.1".into(),
         encoders: encoders.to_vec(),
         captures: captures.to_vec(),
+        gstreamer: captures
+            .contains(&VideoCapture::Wayland)
+            .then(|| "gst-launch-1.0".into()),
     }
 }
 
@@ -169,7 +172,52 @@ fn an_explicit_choice_must_exist_in_this_ffmpeg() {
 }
 
 #[test]
-fn linux_records_x11_and_says_plainly_that_wayland_is_not_supported() {
+fn a_wayland_desktop_is_recorded_through_screen_sharing() {
+    let f = found(
+        &[VideoEncoder::Software],
+        &[VideoCapture::X11, VideoCapture::Wayland],
+    );
+    let wayland = Session {
+        wayland: true,
+        display: Some(":0".into()),
+    };
+    let c = choose(&Video::default(), &f, Os::Linux, &wayland).unwrap();
+    assert_eq!(c.capture, VideoCapture::Wayland);
+    assert_eq!(c.encoder, VideoEncoder::Software);
+    // and not on an X11 desktop, even when asked
+    let x11 = Session {
+        wayland: false,
+        display: Some(":0".into()),
+    };
+    let forced = Video {
+        capture: VideoCapture::Wayland,
+        ..Video::default()
+    };
+    assert!(choose(&forced, &f, Os::Linux, &x11)
+        .unwrap_err()
+        .contains("Wayland session"));
+    assert_eq!(
+        choose(&Video::default(), &f, Os::Linux, &x11)
+            .unwrap()
+            .capture,
+        VideoCapture::X11
+    );
+    // the shared screen's place makes the window a part of its picture
+    let cfg = recorder_config(
+        &f,
+        &c,
+        &Video::default(),
+        &wayland,
+        std::path::Path::new("/r"),
+    );
+    assert!(matches!(
+        cfg.capture,
+        cargoframe_video::recorder::Capture::Feed { .. }
+    ));
+}
+
+#[test]
+fn linux_records_x11_and_says_what_wayland_needs() {
     let f = found(&[VideoEncoder::Software], &[VideoCapture::X11]);
     let x11 = Session {
         wayland: false,
@@ -186,7 +234,7 @@ fn linux_records_x11_and_says_plainly_that_wayland_is_not_supported() {
         display: Some(":0".into()),
     };
     let err = choose(&Video::default(), &f, Os::Linux, &wayland).unwrap_err();
-    assert!(err.contains("Wayland"), "{err}");
+    assert!(err.contains("gstreamer1.0-pipewire"), "{err}");
     let forced = Video {
         capture: VideoCapture::X11,
         ..Video::default()

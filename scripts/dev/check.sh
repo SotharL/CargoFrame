@@ -54,6 +54,11 @@ if [ "$mode" = all ]; then
   else
     echo "SKIP  e2e capture (needs xvfb and xdotool)"
   fi
+  if command -v sway >/dev/null && command -v wtype >/dev/null && command -v foot >/dev/null; then
+    step "e2e Wayland (headless sway)" timeout 300 bash scripts/e2e/wayland-capture.sh
+  else
+    echo "SKIP  e2e Wayland (needs sway, wtype, foot, grim and the desktop portal)"
+  fi
 fi
 
 echo

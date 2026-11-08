@@ -22,6 +22,8 @@ pub struct FakeDeliver {
     pub deliveries: Mutex<Vec<Delivery>>,
     /// Make the next delivery fail with this.
     pub fail_with: Mutex<Option<DeliverError>>,
+    /// Play a desktop that cannot be driven: the message is handed over on the clipboard.
+    pub blind: std::sync::atomic::AtomicBool,
 }
 
 impl Deliver for FakeDeliver {
@@ -37,12 +39,21 @@ impl Deliver for FakeDeliver {
         if let Some(e) = self.fail_with.lock().unwrap().take() {
             return Err(e);
         }
+        if self.blind.load(std::sync::atomic::Ordering::SeqCst) {
+            return Ok(Delivered {
+                skipped_files: d.files.len(),
+                text: !d.text.trim().is_empty(),
+                handed_over: true,
+                ..Delivered::default()
+            });
+        }
         Ok(Delivered {
             window: "Claude".into(),
             files: d.files.len(),
             skipped_files: 0,
             text: !d.text.trim().is_empty(),
             submitted: d.submit,
+            handed_over: false,
         })
     }
 }

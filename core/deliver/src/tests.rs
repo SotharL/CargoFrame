@@ -30,6 +30,7 @@ struct FakeDesk {
     can_files: bool,
     fail_files: bool,
     fail_keys: bool,
+    blind: bool,
 }
 
 impl FakeDesk {
@@ -44,6 +45,7 @@ impl FakeDesk {
                 can_files: true,
                 fail_files: false,
                 fail_keys: false,
+                blind: false,
             },
             log,
         )
@@ -96,6 +98,10 @@ impl Desk for FakeDesk {
 
     fn sleep(&self, d: Duration) {
         self.now.set(self.now.get() + d);
+    }
+
+    fn can_drive(&self) -> bool {
+        !self.blind
     }
 }
 
@@ -181,7 +187,8 @@ fn opens_the_chat_pastes_the_files_then_the_text_and_presses_enter() {
             files: 2,
             skipped_files: 0,
             text: true,
-            submitted: true
+            submitted: true,
+            handed_over: false,
         }
     );
 }
@@ -484,4 +491,36 @@ fn the_browser_waits_longer_and_the_extra_wait_is_added() {
     assert!(browser.settle > app.settle);
     let slow = Timing::for_target(Target::App, Duration::from_secs(5));
     assert_eq!(slow.settle, app.settle + Duration::from_secs(5));
+}
+
+#[test]
+fn a_desktop_that_cannot_be_driven_gets_the_chat_opened_and_the_message_on_the_clipboard() {
+    let f = files(&[1000]);
+    // nothing is ever seen in front: waiting for Claude would only time out
+    let (mut desk, log) = FakeDesk::new(|_, _| None);
+    desk.blind = true;
+    let opened = RefCell::new(Vec::new());
+    let d = Delivery {
+        open_url: "https://claude.ai/new".into(),
+        target: Target::Browser,
+        files: f.paths.clone(),
+        text: "Why does it fail?".into(),
+        submit: true,
+        timing: Timing::for_target(Target::Browser, Duration::ZERO),
+    };
+    let done = deliver(
+        &desk,
+        &|url| {
+            opened.borrow_mut().push(url.to_string());
+            Ok(())
+        },
+        &d,
+        &|| false,
+    )
+    .unwrap();
+    assert!(done.handed_over && done.text && !done.submitted);
+    assert_eq!(done.skipped_files, 1);
+    assert_eq!(*opened.borrow(), vec!["https://claude.ai/new".to_string()]);
+    // the text is on the clipboard before the chat opens, and no key is pressed
+    assert_eq!(*log.borrow(), vec!["text:Why does it fail?".to_string()]);
 }

@@ -16,6 +16,7 @@ fn probes() -> Probes {
         claude_app: None,
         xdotool: true,
         packages: Packages::Apt,
+        wayland: None,
     }
 }
 
@@ -513,4 +514,99 @@ fn powershell_answers_yes_or_no_about_the_claude_app() {
     assert_eq!(parse_yes_no(" No "), Some(false));
     assert_eq!(parse_yes_no(""), None);
     assert_eq!(parse_yes_no("ERROR"), None);
+}
+
+fn wayland(desktop: &'static str, wlroots: bool) -> WaylandProbe {
+    WaylandProbe {
+        desktop,
+        wlroots,
+        portal_screenshot: true,
+        grim: false,
+        gstreamer: true,
+        wtype: false,
+    }
+}
+
+#[test]
+fn a_wayland_desktop_lists_what_wayland_needs_instead_of_xdotool() {
+    let gnome = Probes {
+        xdotool: false,
+        wayland: Some(wayland("GNOME", false)),
+        ..probes()
+    };
+    let r = report(Os::Linux, &gnome, false, None);
+    assert!(r.items.iter().all(|i| i.id != "xdotool" && i.id != "wtype"));
+    assert_eq!(item(&r, "wayland_screenshot").status, Status::Ok);
+    assert_eq!(
+        item(&r, "wayland_screenshot").detail,
+        "GNOME's screenshot portal takes them."
+    );
+    assert_eq!(item(&r, "wayland_recording").status, Status::Ok);
+    assert_eq!(r.install, Install::None);
+
+    // without GStreamer, the command installs it with its PipeWire plugin
+    let no_gst = Probes {
+        wayland: Some(WaylandProbe {
+            gstreamer: false,
+            ..wayland("GNOME", false)
+        }),
+        ..gnome.clone()
+    };
+    assert_eq!(
+        report(Os::Linux, &no_gst, false, None).install,
+        Install::Copy {
+            command: "sudo apt install gstreamer1.0-tools gstreamer1.0-pipewire".into()
+        }
+    );
+    let fedora = Probes {
+        packages: Packages::Dnf,
+        ..no_gst
+    };
+    assert_eq!(
+        report(Os::Linux, &fedora, false, None).install,
+        Install::Copy {
+            command: "sudo dnf install gstreamer1 pipewire-gstreamer".into()
+        }
+    );
+}
+
+#[test]
+fn sway_takes_screenshots_with_grim_and_presses_keys_with_wtype() {
+    let sway = Probes {
+        xdotool: false,
+        wayland: Some(WaylandProbe {
+            portal_screenshot: false,
+            grim: true,
+            ..wayland("sway", true)
+        }),
+        ..probes()
+    };
+    let r = report(Os::Linux, &sway, false, None);
+    assert_eq!(
+        item(&r, "wayland_screenshot").detail,
+        "grim takes the screenshots."
+    );
+    assert_eq!(item(&r, "wtype").status, Status::Missing);
+    assert_eq!(r.missing, 1);
+    assert_eq!(
+        r.install,
+        Install::Copy {
+            command: "sudo apt install wtype".into()
+        }
+    );
+    // nothing to take screenshots with: grim is the one to install there
+    let bare = Probes {
+        wayland: Some(WaylandProbe {
+            portal_screenshot: false,
+            wtype: true,
+            ..wayland("sway", true)
+        }),
+        ..sway
+    };
+    assert_eq!(
+        report(Os::Linux, &bare, false, None).install,
+        Install::Copy {
+            command: "sudo apt install grim".into()
+        }
+    );
 }

@@ -14,6 +14,7 @@ pub mod export;
 pub mod loopback;
 pub mod pcm;
 pub mod recorder;
+pub mod screenfeed;
 pub mod segments;
 
 pub use buffer::{RollingBuffer, Window};

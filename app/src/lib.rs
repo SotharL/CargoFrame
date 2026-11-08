@@ -10,6 +10,7 @@ mod cli;
 mod commands;
 mod connections;
 mod desktop;
+mod desktop_keys;
 mod items;
 mod logging;
 mod notify;
@@ -55,6 +56,15 @@ pub fn run() {
     logging::init(&dirs);
     tracing::info!(version = env!("CARGO_PKG_VERSION"), ?cli, "starting");
 
+    // WebKit's GPU path shows blank windows with NVIDIA's driver on Wayland: draw without it there.
+    #[cfg(target_os = "linux")]
+    if desktop_keys::wayland()
+        && std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none()
+        && std::path::Path::new("/proc/driver/nvidia/version").exists()
+    {
+        tracing::info!("NVIDIA on Wayland: WebKit draws without DMA-BUF");
+        std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
+    }
     let tray_available = tray_host::available();
     let startup = cli::startup(&cli, tray_available);
 
@@ -103,7 +113,7 @@ pub fn run() {
             commands::close_capture,
             commands::edit_layout,
             commands::open_settings,
-            commands::get_shortcut_errors,
+            commands::get_shortcut_status,
             commands::list_items,
             commands::save_item,
             commands::delete_item,

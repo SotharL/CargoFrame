@@ -67,7 +67,7 @@ impl Session {
     pub fn current() -> Self {
         let var = |k: &str| std::env::var(k).ok().filter(|v| !v.trim().is_empty());
         Self {
-            wayland: var("XDG_SESSION_TYPE").is_some_and(|t| t.eq_ignore_ascii_case("wayland")),
+            wayland: crate::desktop_keys::wayland(),
             display: var("DISPLAY"),
         }
     }
@@ -81,6 +81,8 @@ pub struct Found {
     pub version: String,
     pub encoders: Vec<VideoEncoder>,
     pub captures: Vec<VideoCapture>,
+    /// GStreamer with its PipeWire plugin, which reads a Wayland desktop's screen.
+    pub gstreamer: Option<PathBuf>,
 }
 
 /// Where the settings window is told things stand.
@@ -167,14 +169,44 @@ pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String>
     // old builds may not know the lists; no devices or filters just means fewer choices
     let devices = ask(&ffmpeg, &["-hide_banner", "-devices"]).unwrap_or_default();
     let filters = ask(&ffmpeg, &["-hide_banner", "-filters"]).unwrap_or_default();
+    let mut captures = parse_captures(&devices, &filters);
+    let gstreamer = wayland_reader();
+    if gstreamer.is_some() {
+        captures.push(VideoCapture::Wayland);
+    }
     Ok(Found {
         ffmpeg,
         ffprobe,
         version: parse_version(&version),
         encoders: parse_encoders(&encoders),
-        captures: parse_captures(&devices, &filters),
+        captures,
+        gstreamer,
     })
 }
+
+/// `gst-launch-1.0`, when GStreamer can read PipeWire here (`pipewiresrc`).
+pub fn wayland_reader() -> Option<PathBuf> {
+    #[cfg(target_os = "linux")]
+    {
+        let launch = cargoframe_capture::wayland::find_program("gst-launch-1.0")?;
+        let inspect = launch.with_file_name("gst-inspect-1.0");
+        let has_plugin = std::process::Command::new(inspect)
+            .args(["--exists", "pipewiresrc"])
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .is_ok_and(|s| s.success());
+        has_plugin.then_some(launch)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        None
+    }
+}
+
+/// What to install to record a Wayland desktop.
+pub const WAYLAND_RECORDING_NEEDS: &str = "Recording a Wayland desktop needs GStreamer with its PipeWire plugin: install gstreamer1.0-tools and gstreamer1.0-pipewire (Ubuntu, Debian), gstreamer1-plugins-base-tools and pipewire-gstreamer (Fedora), or gstreamer and gst-plugin-pipewire (Arch).";
 
 /// "ffmpeg version 7.1-full_build ..." -> "7.1-full_build"
 pub fn parse_version(text: &str) -> String {
@@ -243,7 +275,13 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
                 .ok_or("This ffmpeg cannot capture the Windows screen (it has neither gdigrab nor ddagrab). Use a full build, for example winget install Gyan.FFmpeg.")?,
             Os::Linux => {
                 if session.wayland {
-                    return Err("This desktop runs Wayland, and recording its screen is not supported yet. Log in with an X11 session to record.".into());
+                    if !found.captures.contains(&VideoCapture::Wayland) {
+                        return Err(WAYLAND_RECORDING_NEEDS.into());
+                    }
+                    return Ok(Choice {
+                        capture: VideoCapture::Wayland,
+                        encoder: choose_encoder(setting, found)?,
+                    });
                 }
                 if !found.captures.contains(&VideoCapture::X11) {
                     return Err("This ffmpeg cannot capture an X11 screen (no x11grab).".into());
@@ -260,12 +298,22 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
                 ));
             }
             if explicit == VideoCapture::X11 && session.wayland {
-                return Err("This desktop runs Wayland: X11 capture would only see old-style windows. Log in with an X11 session to record.".into());
+                return Err("This desktop runs Wayland: X11 capture would only see old-style windows. Choose Automatic or Wayland screen sharing in Settings, Recording.".into());
+            }
+            if explicit == VideoCapture::Wayland && !session.wayland {
+                return Err("Wayland screen sharing only works in a Wayland session.".into());
             }
             explicit
         }
     };
-    let encoder = match setting.encoder {
+    Ok(Choice {
+        capture,
+        encoder: choose_encoder(setting, found)?,
+    })
+}
+
+fn choose_encoder(setting: &Video, found: &Found) -> Result<VideoEncoder, String> {
+    Ok(match setting.encoder {
         VideoEncoder::Auto => {
             // software works everywhere; a build without it falls back to what it has
             [
@@ -289,8 +337,7 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
             }
             explicit
         }
-    };
-    Ok(Choice { capture, encoder })
+    })
 }
 
 pub fn capture_name(c: VideoCapture) -> &'static str {
@@ -299,6 +346,7 @@ pub fn capture_name(c: VideoCapture) -> &'static str {
         VideoCapture::Gdigrab => "GDI",
         VideoCapture::Ddagrab => "Desktop Duplication",
         VideoCapture::X11 => "X11",
+        VideoCapture::Wayland => "Wayland screen sharing",
     }
 }
 
@@ -470,6 +518,78 @@ fn open_sounds(
     (inputs, feeds)
 }
 
+/// Where the desktop's "remember this screen" answer is kept, beside the recording's folder.
+fn screen_sharing_token(work: &Path) -> PathBuf {
+    work.parent().unwrap_or(work).join("screen-sharing.token")
+}
+
+/// Ask the desktop to share a screen (it may ask the person which, the first time) and start
+/// GStreamer reading it. The window to record, if any, becomes a part of that screen.
+#[cfg(target_os = "linux")]
+fn open_wayland_picture(
+    found: &Found,
+    fps: u32,
+    area: Option<Area>,
+    work: &Path,
+    notes: &mut Vec<String>,
+) -> Result<
+    (
+        cargoframe_video::screenfeed::PictureFeed,
+        Option<cargoframe_video::recorder::Part>,
+    ),
+    String,
+> {
+    use cargoframe_capture::screencast::ScreenCast;
+    use cargoframe_capture::CaptureError;
+    let gst = found
+        .gstreamer
+        .clone()
+        .ok_or_else(|| WAYLAND_RECORDING_NEEDS.to_string())?;
+    let token_file = screen_sharing_token(work);
+    let token = std::fs::read_to_string(&token_file).ok();
+    let cast = ScreenCast::start(token.as_deref().map(str::trim)).map_err(|e| match e {
+        CaptureError::Refused => "The screen was not shared, so nothing was recorded.".to_string(),
+        other => format!("The desktop did not share the screen: {other}"),
+    })?;
+    if let Some(t) = &cast.restore_token {
+        let _ = std::fs::write(&token_file, t);
+    }
+    let part = match (area, cast.stream.position, cast.stream.size) {
+        (Some(a), Some((x, y)), Some((w, h))) => {
+            let part = cargoframe_video::recorder::Part::of(a, Area { x, y, w, h });
+            if part.is_none() {
+                notes.push("The window in focus is not on the shared screen, so the whole screen is recorded.".into());
+            }
+            part
+        }
+        (Some(_), _, _) => {
+            notes.push("The desktop did not say where the shared screen is, so the whole screen is recorded.".into());
+            None
+        }
+        _ => None,
+    };
+    let args = cargoframe_video::screenfeed::pipewire_args(cast.stream.node, fps);
+    let feed = cargoframe_video::screenfeed::PictureFeed::open(gst, args, Box::new(cast))?;
+    Ok((feed, part))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_wayland_picture(
+    _found: &Found,
+    _fps: u32,
+    _area: Option<Area>,
+    _work: &Path,
+    _notes: &mut Vec<String>,
+) -> Result<
+    (
+        cargoframe_video::screenfeed::PictureFeed,
+        Option<cargoframe_video::recorder::Part>,
+    ),
+    String,
+> {
+    Err("Wayland screen sharing only works on Linux.".into())
+}
+
 /// How a recording began: whether it has sound, and what the person should be told about what
 /// was left out.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -489,6 +609,11 @@ pub fn recorder_config(
     let capture = match choice.capture {
         VideoCapture::Gdigrab => Capture::Gdigrab,
         VideoCapture::Ddagrab => Capture::Ddagrab { output: 0 },
+        // the port is known once the screen-sharing stream is open (see `start_with_extras`)
+        VideoCapture::Wayland => Capture::Feed {
+            port: 0,
+            part: None,
+        },
         // Auto never reaches here; X11 takes the whole screen
         _ => Capture::X11 {
             display: session.display.clone().unwrap_or_else(|| ":0".into()),
@@ -863,9 +988,25 @@ impl Recording {
             &mut notes,
         );
         cfg.audio = inputs;
+        // Wayland: the desktop shares the screen as a stream, which GStreamer reads for ffmpeg.
+        let picture = if choice.capture == VideoCapture::Wayland {
+            let (feed, part) =
+                open_wayland_picture(&found, cfg.fps, extras.area, work, &mut notes)?;
+            cfg.capture = Capture::Feed {
+                port: feed.port(),
+                part,
+            };
+            cfg.area = None;
+            Some(feed)
+        } else {
+            None
+        };
         let mut recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
         for feed in feeds {
             recorder.keep(Box::new(feed));
+        }
+        if let Some(p) = picture {
+            recorder.keep(Box::new(p));
         }
         if !cfg.audio.is_empty() {
             // A sound device that is not there ends ffmpeg at once. The picture matters more than

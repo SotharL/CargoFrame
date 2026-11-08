@@ -81,7 +81,7 @@ sequenceDiagram
 
 | Step | What happens | Code |
 |------|--------------|------|
-| Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland portal. With no window in focus, the screen under the mouse | `core/capture`, `core/window` |
+| Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse | `core/capture`, `core/window` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
 | Data rules | Read one value from a text line, JSON, YAML, TOML, INI, CSV, XML or a regular expression | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
@@ -114,6 +114,31 @@ One dropdown per connection, as a **path**: server, category (optional), channel
 inside it (*New* first, then the ones used before, the listed ones, or a pasted link). Long lists are searched. The
 window starts on the last path used and lists the last five (values and labels only, kept per layout and block).
 Discord webhooks cannot list threads, so a thread reply goes through the webhook of the thread's own channel.
+
+</details>
+
+<details>
+<summary><b>On Wayland</b></summary>
+
+Wayland lets no program listen to keys, read the screen or ask which window is in focus, so CargoFrame goes through
+the desktop for each. The program checks which desktop it is on and picks the way by itself.
+
+| Desktop | Shortcut | Window in focus | Screenshot | Recording | Paste into Claude |
+|---------|----------|-----------------|------------|-----------|-------------------|
+| **GNOME** | Written into GNOME's keyboard settings (Custom Shortcuts) | XWayland programs only | Portal | Portal + GStreamer | Message left on the clipboard |
+| **KDE Plasma** | The portal's shortcut service (KDE asks once) | A short KWin script | Portal | Portal + GStreamer | Message left on the clipboard |
+| **sway** | Bound live over sway's IPC | sway's IPC | `grim`, else portal | Portal + GStreamer | `wtype` |
+| **Hyprland** | Bound live over Hyprland's IPC | Hyprland's IPC | `grim`, else portal | Portal + GStreamer | `wtype` |
+| **Others** | Settings shows the command to add | XWayland programs only | Portal | Portal + GStreamer | Message left on the clipboard |
+
+- **Shortcut.** The desktop runs `cargoframe open --trigger <id>`, and the running copy takes it over. CargoFrame only
+  changes the shortcuts it made (GNOME: the ones under `cargoframe-`); uninstalling removes them.
+- **Focus.** Window places are scaled from the desktop's logical pixels to the picture (scaled screens). Without a
+  focused window the whole screen is captured, and the window says why.
+- **Recording.** The portal shares a screen (the desktop may ask which, once: the choice is remembered), GStreamer reads
+  it (`pipewiresrc`), and ffmpeg records it as on other systems. The window in focus is cut out when it is on that screen.
+- **What it needs** is listed on the Setup page: the desktop portal (or `grim`), GStreamer with its PipeWire plugin
+  for video, and `wtype` on sway and Hyprland.
 
 </details>
 
@@ -211,7 +236,7 @@ flowchart TB
 |-------|-------|-----|
 | Tray program | `app/` | Tray, shortcuts, windows on demand, commands, secrets, `cargoframe open` |
 | Windows | `ui/` | `settings.html` and `capture.html`, built once, loaded on demand |
-| Logic | `core/*` (14 crates) | Everything testable without a display: capture rules, layout, config, rules, connectors, net, video, update… |
+| Logic | `core/*` (15 crates) | Everything testable without a display: capture rules, layout, config, rules, connectors, net, video, update… |
 | Installers | `installers/` | Windows NSIS (one button), Linux AppImage and `install.sh` |
 | CI | `.github/` | Linux on pull requests; Windows and Linux on `main`; installers; release draft; security audit |
 
@@ -292,7 +317,9 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
 - Not yet run against every real account; the Windows sound capture and Discord threads need one run on a real PC.
   See [status.md](status.md).
 - The installer and the program are not signed yet.
-- Wayland "window in focus" is not possible on some compositors (falls back to the screen under the mouse).
+- Wayland: GNOME tells no program which Wayland window is in focus (XWayland programs are found), and GNOME and KDE
+  let no program press keys, so a Claude message is left on the clipboard. Verified on a headless sway desktop (also
+  run as a GNOME-like desktop); real GNOME, KDE and Hyprland sessions are still to be tried.
 - X, Bluesky and Instagram take pictures and plain text, not video. Instagram needs a picture server the person owns.
 - Text colour is not offered: only Jira and Teams could show it.
 - Next for the connectors (folding Extra fields into the layout, required fields shown before sending, company sign-in):

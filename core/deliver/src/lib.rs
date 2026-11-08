@@ -103,6 +103,11 @@ pub trait Desk {
     /// Press a key in the window that has the focus.
     fn press(&self, key: Key) -> Result<(), String>;
     fn sleep(&self, d: Duration);
+    /// Whether this desktop lets CargoFrame see the window in front and press keys in it. When
+    /// it does not, the message is handed over on the clipboard instead.
+    fn can_drive(&self) -> bool {
+        true
+    }
 }
 
 /// How long to wait for what. The windows cannot be asked whether the page has loaded or the
@@ -161,7 +166,7 @@ pub struct Delivery {
 }
 
 /// What was done.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Delivered {
     /// The title of the window it was pasted into.
     pub window: String,
@@ -170,6 +175,10 @@ pub struct Delivered {
     pub skipped_files: usize,
     pub text: bool,
     pub submitted: bool,
+    /// This desktop does not let CargoFrame see the window in front or press keys (GNOME and
+    /// KDE on Wayland): the chat was opened and the message put on the clipboard, for the
+    /// person to paste.
+    pub handed_over: bool,
 }
 
 /// Does the whole job against a real or pretend desktop.
@@ -202,6 +211,22 @@ pub fn deliver(
     }
     let attach = d.files.is_empty() || desk.can_paste_files();
     let timing = d.timing;
+
+    if !desk.can_drive() {
+        // Nothing can be checked or pressed here: open the chat and leave the message on the
+        // clipboard, so one Ctrl+V puts it there.
+        let has_text = !d.text.trim().is_empty();
+        if has_text {
+            desk.put_text(&d.text).map_err(DeliverError::Clipboard)?;
+        }
+        open(&d.open_url).map_err(DeliverError::Open)?;
+        return Ok(Delivered {
+            skipped_files: d.files.len(),
+            text: has_text,
+            handed_over: true,
+            ..Delivered::default()
+        });
+    }
 
     open(&d.open_url).map_err(DeliverError::Open)?;
     let window = wait_for_front(desk, d.target, &timing, cancelled)?;
@@ -261,6 +286,7 @@ pub fn deliver(
         skipped_files: if attach { 0 } else { d.files.len() },
         text: pasted_text,
         submitted: d.submit,
+        handed_over: false,
     })
 }
 

@@ -1,13 +1,9 @@
-//! Wayland: the desktop portal's Screenshot request, which works on GNOME and KDE.
-//!
-//! Wayland lets programs neither read the screen nor ask which window has the focus, so this
-//! backend captures the whole desktop and reports no focused window. The desktop may ask the
-//! person to allow it the first time. Not yet verified on a real session (spike S3).
+//! Wayland: the desktop portal's Screenshot request, which works on GNOME, KDE and wlroots
+//! desktops that have a portal with a screenshot service. The desktop may ask the person to allow
+//! it the first time. Verified on sway with xdg-desktop-portal-wlr (scripts/e2e/wayland-capture.sh).
 
 use crate::error::{grab, CaptureError};
-use crate::frame::{Frame, PixelRect};
-use crate::policy::{Backend, FocusedApp};
-use std::cell::RefCell;
+use crate::frame::Frame;
 use std::collections::HashMap;
 use std::sync::mpsc;
 use std::time::Duration;
@@ -19,53 +15,34 @@ const OBJECT: &str = "/org/freedesktop/portal/desktop";
 /// Long enough for a person to read and answer the desktop's permission question.
 const WAIT: Duration = Duration::from_secs(60);
 
-#[derive(Default)]
-pub struct Portal {
-    cached: RefCell<Option<Frame>>,
+/// The version of one of the portal's services, or `None` when the portal does not offer it.
+/// (Asked directly, without a proxy that would complain about a missing service in the log.)
+pub fn interface_version(interface: &str) -> Option<u32> {
+    let conn = Connection::session().ok()?;
+    let reply = conn
+        .call_method(
+            Some(DESTINATION),
+            OBJECT,
+            Some("org.freedesktop.DBus.Properties"),
+            "Get",
+            &(interface, "version"),
+        )
+        .ok()?;
+    let value: OwnedValue = reply.body().deserialize().ok()?;
+    u32::try_from(&value).ok()
 }
 
-impl Portal {
-    pub fn new() -> Self {
-        Self::default()
-    }
-
-    fn whole_screen(&self) -> Result<Frame, CaptureError> {
-        if let Some(f) = self.cached.borrow().as_ref() {
-            return Ok(f.clone());
-        }
-        let frame = screenshot()?;
-        *self.cached.borrow_mut() = Some(frame.clone());
-        Ok(frame)
-    }
-}
-
-impl Backend for Portal {
-    fn focused(&self) -> Result<Option<FocusedApp>, CaptureError> {
-        Ok(None)
-    }
-
-    fn pointer_display(&self) -> Result<Option<PixelRect>, CaptureError> {
-        Ok(None)
-    }
-
-    fn desktop(&self) -> Result<PixelRect, CaptureError> {
-        let f = self.whole_screen()?;
-        Ok(PixelRect::new(0, 0, f.width(), f.height()))
-    }
-
-    fn grab(&self, area: PixelRect) -> Result<Frame, CaptureError> {
-        self.whole_screen()?
-            .crop(area)
-            .ok_or_else(|| CaptureError::Grab("the area is outside the screenshot".into()))
-    }
+/// Whether the desktop portal has a screenshot service on this session bus.
+pub fn available() -> bool {
+    interface_version("org.freedesktop.portal.Screenshot").is_some()
 }
 
 /// `:1.234` becomes `1_234`, the form the portal uses in request paths.
-pub(crate) fn sender_path_part(unique_name: &str) -> String {
+pub fn sender_path_part(unique_name: &str) -> String {
     unique_name.trim_start_matches(':').replace('.', "_")
 }
 
-pub(crate) fn request_path(unique_name: &str, token: &str) -> String {
+pub fn request_path(unique_name: &str, token: &str) -> String {
     format!(
         "/org/freedesktop/portal/desktop/request/{}/{token}",
         sender_path_part(unique_name)
@@ -93,7 +70,8 @@ pub(crate) fn path_from_uri(uri: &str) -> Option<std::path::PathBuf> {
     Some(std::path::PathBuf::from(String::from_utf8(out).ok()?))
 }
 
-fn screenshot() -> Result<Frame, CaptureError> {
+/// The whole desktop through the portal's Screenshot request.
+pub(crate) fn screenshot() -> Result<Frame, CaptureError> {
     let conn = Connection::session().map_err(|e| CaptureError::NoDisplay(e.to_string()))?;
     let unique = conn
         .unique_name()

@@ -68,8 +68,8 @@ impl X11 {
         Ok(Some(String::from_utf8_lossy(&reply.value).into_owned()))
     }
 
-    /// The window the person is working in.
-    fn active_window(&self) -> Result<Option<Window>, CaptureError> {
+    /// The window the window manager calls active, if it says.
+    fn net_active_window(&self) -> Result<Option<Window>, CaptureError> {
         let root = self.root();
         let active = self.atom("_NET_ACTIVE_WINDOW")?;
         let reply = self
@@ -78,11 +78,16 @@ impl X11 {
             .map_err(grab)?
             .reply()
             .map_err(grab)?;
-        if let Some(w) = reply
+        Ok(reply
             .value32()
             .and_then(|mut v| v.next())
-            .filter(|w| *w != 0)
-        {
+            .filter(|w| *w != 0))
+    }
+
+    /// The window the person is working in.
+    fn active_window(&self) -> Result<Option<Window>, CaptureError> {
+        let root = self.root();
+        if let Some(w) = self.net_active_window()? {
             return Ok(Some(w));
         }
         // No window manager (or one that does not say): ask the input focus. 0 is None and
@@ -147,7 +152,7 @@ impl X11 {
 
 /// `/proc/<pid>/exe`, without the " (deleted)" suffix Linux adds when the file was replaced
 /// (as it is by an upgrade while the program runs).
-fn exe_of(pid: u32) -> Option<std::path::PathBuf> {
+pub(crate) fn exe_of(pid: u32) -> Option<std::path::PathBuf> {
     let target = std::fs::read_link(format!("/proc/{pid}/exe")).ok()?;
     let text = target.to_string_lossy();
     match text.strip_suffix(" (deleted)") {
@@ -156,11 +161,18 @@ fn exe_of(pid: u32) -> Option<std::path::PathBuf> {
     }
 }
 
-impl Backend for X11 {
-    fn focused(&self) -> Result<Option<FocusedApp>, CaptureError> {
-        let Some(win) = self.active_window()? else {
-            return Ok(None);
-        };
+impl X11 {
+    /// Under Wayland, the XWayland window in focus. The compositor marks an XWayland window
+    /// active only while it has the focus and clears the mark when a Wayland window takes it,
+    /// so only that mark is trusted here (the X input focus can be left on an old window).
+    pub fn xwayland_focused(&self) -> Result<Option<FocusedApp>, CaptureError> {
+        match self.net_active_window()? {
+            Some(win) => self.app_of(win).map(Some),
+            None => Ok(None),
+        }
+    }
+
+    fn app_of(&self, win: Window) -> Result<FocusedApp, CaptureError> {
         let utf8 = self.atom("UTF8_STRING")?;
         let title = match self.text(win, "_NET_WM_NAME", utf8)? {
             Some(t) => t,
@@ -169,13 +181,22 @@ impl Backend for X11 {
                 .unwrap_or_default(),
         };
         let pid = self.cardinals(win, "_NET_WM_PID")?.first().copied();
-        Ok(Some(FocusedApp {
+        Ok(FocusedApp {
             window: u64::from(win),
             exe_path: pid.and_then(exe_of),
             title,
             pid,
             bounds: self.bounds(win)?,
-        }))
+        })
+    }
+}
+
+impl Backend for X11 {
+    fn focused(&self) -> Result<Option<FocusedApp>, CaptureError> {
+        match self.active_window()? {
+            Some(win) => self.app_of(win).map(Some),
+            None => Ok(None),
+        }
     }
 
     fn pointer_display(&self) -> Result<Option<PixelRect>, CaptureError> {

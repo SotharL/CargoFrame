@@ -112,6 +112,10 @@ pub fn capture_with(backend: &dyn Backend, mode: Mode) -> Result<Captured, Captu
                 notes.push("No window has the focus, so the display was captured.".into());
                 display_or_desktop(&mut notes)
             }
+            Err(CaptureError::FocusUnknown(why)) => {
+                notes.push(why);
+                display_or_desktop(&mut notes)
+            }
             Err(e) => {
                 tracing::debug!("focused window unknown: {e}");
                 notes.push(
