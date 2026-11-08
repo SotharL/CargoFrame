@@ -4,8 +4,10 @@ import type {
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
   VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
+  ServiceKind,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
+import { KIND_NAME } from './connector';
 
 /** Whatever a failed list request rejected with, as an `OptionsError`. */
 export function asOptionsError(e: unknown): OptionsError {
@@ -286,6 +288,8 @@ export interface MemoryOptions {
   video?: Partial<Video>;
   /** The stand-in finds no ffmpeg. */
   noFfmpeg?: boolean;
+  /** The services the stand-in build has (all of them by default). */
+  connectors?: ServiceKind[];
   /** The stand-in's test recording fails. */
   recordingFails?: boolean;
   /** The stand-in is a Windows PC (it can record one program's sound, and has no "Stereo Mix"). */
@@ -332,6 +336,9 @@ const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.', service: 'discord' },
   { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
   { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
+  { key: 'x-post', name: 'X post', description: 'Post the screenshot to your X account with a short text (280 characters).', service: 'x' },
+  { key: 'bluesky-post', name: 'Bluesky post', description: 'Post the screenshot to your Bluesky account with a short text (300 characters) and a description of the picture.', service: 'bluesky' },
+  { key: 'instagram-post', name: 'Instagram post', description: 'Post the screenshot to your Instagram professional account with a caption.', service: 'instagram' },
   { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
 ];
 
@@ -451,9 +458,10 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   });
   const TYPED: Record<string, string[]> = {
     jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], teams: [], custom: ['secret'],
+    x: [], bluesky: ['app_password'], instagram: ['token', 'host_key'],
     discord: ['token', ...Array.from({ length: 10 }, (_, i) => `hook${i}`)],
   };
-  const OAUTH = new Set(['google', 'reddit', 'teams']);
+  const OAUTH = new Set(['google', 'reddit', 'teams', 'x']);
   const describeFor = (c: Connection): Describe => {
     if (c.kind === 'jira') {
       return {
@@ -516,6 +524,24 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         lists: [{ id: 'channels', label: 'Channels the app can see', param: null }],
       };
     }
+    if (c.kind === 'x' || c.kind === 'bluesky') {
+      const most = c.kind === 'x' ? 280 : 300;
+      return {
+        summary: `Posts the text and the screenshot to your ${KIND_NAME[c.kind]} account.`,
+        fields: [
+          { key: 'text', label: 'Text', hint: `The post, at most ${most} characters`, list: null },
+          { key: 'alt', label: 'Picture description', hint: 'Read out to people who cannot see the picture', list: null },
+        ],
+        lists: [],
+      };
+    }
+    if (c.kind === 'instagram') {
+      return {
+        summary: 'Posts the screenshot with a caption to your Instagram professional account.',
+        fields: [{ key: 'caption', label: 'Caption', hint: 'Up to 2,200 characters', list: null }],
+        lists: [],
+      };
+    }
     if (c.kind === 'claude') {
       return {
         summary: 'Copies the screenshot, then opens Claude. The prompt is required.',
@@ -550,6 +576,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       os: 'linux',
       config_dir: '~/.config/CargoFrame',
       data_dir: '~/.local/share/CargoFrame',
+      connectors: opts.connectors ?? ['jira', 'google', 'reddit', 'claude', 'slack', 'discord', 'teams', 'x', 'bluesky', 'instagram', 'custom'],
       tray_available: true,
     }),
     getGeneral: async () => ({ ...general }),
@@ -694,7 +721,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           id,
           name: c.name,
           kind: c.kind,
-          kind_label: { jira: 'Jira', google: 'Google', reddit: 'Reddit', claude: 'Claude', slack: 'Slack', discord: 'Discord', teams: 'Teams', custom: 'Custom API' }[c.kind],
+          kind_label: KIND_NAME[c.kind],
           enabled: c.enabled,
           state: stateOf(id, c),
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),

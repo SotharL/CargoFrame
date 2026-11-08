@@ -13,6 +13,22 @@ name = "cargoframe_app"
 [lints]
 workspace = true
 
+# One feature per service. `cargo build --no-default-features --features jira,teams` makes a
+# CargoFrame with only those two: the code for the others is not in the program at all.
+[features]
+default = ["jira", "google", "reddit", "claude", "slack", "discord", "teams", "custom", "x", "bluesky", "instagram"]
+jira = ["cargoframe-connectors/jira"]
+google = ["cargoframe-connectors/google"]
+reddit = ["cargoframe-connectors/reddit"]
+claude = ["cargoframe-connectors/claude"]
+slack = ["cargoframe-connectors/slack"]
+discord = ["cargoframe-connectors/discord"]
+teams = ["cargoframe-connectors/teams"]
+custom = ["cargoframe-connectors/custom"]
+x = ["cargoframe-connectors/x"]
+bluesky = ["cargoframe-connectors/bluesky"]
+instagram = ["cargoframe-connectors/instagram"]
+
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
@@ -37,7 +53,7 @@ cargoframe-window = { path = "../core/window" }
 cargoframe-rules = { path = "../core/rules" }
 cargoframe-bundle = { path = "../core/bundle" }
 cargoframe-safe = { path = "../core/safe" }
-cargoframe-connectors = { path = "../core/connectors" }
+cargoframe-connectors = { path = "../core/connectors", default-features = false }
 cargoframe-net = { path = "../core/net" }
 cargoframe-update = { path = "../core/update" }
 cargoframe-video = { path = "../core/video" }

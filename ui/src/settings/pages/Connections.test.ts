@@ -183,4 +183,46 @@ describe('Connections page', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /^Teams/ }));
     expect(screen.getByRole('button', { name: /Open app registrations/ })).toBeTruthy();
   });
+
+  it('adds an X connection: the app steps, the Client ID, then a browser sign-in', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^X\b/ }));
+    const steps = screen.getByText('How to make the app').closest('details')!;
+    for (const word of ['Read and write', 'Native App', 'http://127.0.0.1:53683/callback']) expect(steps.textContent).toContain(word);
+    await fireEvent.input(screen.getByLabelText('Client ID'), { target: { value: 'abc123' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Not signed in')).toBeTruthy();
+    const saved = await api.listItems('connection');
+    expect(saved.items[0]!.item).toMatchObject({ kind: 'x', client_id: 'abc123', redirect_port: 53683 });
+  });
+
+  it('adds a Bluesky connection: the handle, then an app password', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Bluesky/ }));
+    await fireEvent.input(screen.getByLabelText('Handle'), { target: { value: 'jane.bsky.social' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Saved. Now add the token below.')).toBeTruthy();
+    expect(screen.getByText('App password')).toBeTruthy();
+    expect(screen.getByRole('button', { name: /Make an app password/ })).toBeTruthy();
+  });
+
+  it('adds an Instagram connection: the two addresses, and the key box only when a header is named', async () => {
+    render(Connections);
+    await fireEvent.click(await screen.findByRole('button', { name: /^Instagram/ }));
+    await fireEvent.input(screen.getByLabelText('Upload address'), { target: { value: 'https://up.example.com/{name}' } });
+    await fireEvent.input(screen.getByLabelText('Public address'), { target: { value: 'https://cdn.example.com/{name}' } });
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    expect(await screen.findByText('Access token')).toBeTruthy();
+    expect(screen.queryByText('Key of the picture server')).toBeNull();
+  });
+
+  it('offers only the services this copy of CargoFrame was built with', async () => {
+    setApiForTests(memoryApi({ connectors: ['jira', 'teams'] }));
+    render(Connections);
+    await screen.findByRole('button', { name: /^Jira/ });
+    await waitFor(() => expect(screen.queryByRole('button', { name: /^Bluesky/ })).toBeNull());
+    const offered = [...screen.getByRole('region', { name: 'Add a connection' }).querySelectorAll('button strong')].map((b) => b.textContent);
+    expect(offered).toEqual(['Jira', 'Teams']);
+  });
 });
+

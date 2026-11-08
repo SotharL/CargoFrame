@@ -72,7 +72,15 @@ pub fn layout_kind(kind: Kind) -> ConnectionKind {
         Kind::Discord => ConnectionKind::Discord,
         Kind::Teams => ConnectionKind::Teams,
         Kind::Custom => ConnectionKind::CustomApi,
+        Kind::X => ConnectionKind::X,
+        Kind::Bluesky => ConnectionKind::Bluesky,
+        Kind::Instagram => ConnectionKind::Instagram,
     }
+}
+
+/// The connection kind a layout names.
+pub fn kind_of_layout(kind: ConnectionKind) -> Option<Kind> {
+    Kind::ALL.into_iter().find(|k| layout_kind(*k) == kind)
 }
 
 /// What a connection can take. A kind has one table; a Custom API carries only what its request
@@ -111,7 +119,8 @@ pub struct ConnectionView {
     pub kind: Kind,
     pub kind_label: &'static str,
     pub enabled: bool,
-    /// `connected`, `disconnected`, `expired` or `disabled`.
+    /// `connected`, `disconnected`, `expired`, `disabled`, or `not_in_build` (a service this
+    /// build of CargoFrame leaves out).
     pub state: &'static str,
     /// Which of the secrets the person types are stored (never their values).
     pub secrets: Vec<SecretFlag>,
@@ -185,9 +194,14 @@ impl Connections {
         f: impl FnOnce(&dyn Connector, &Ctx) -> Result<R, SendError>,
     ) -> Result<R, SendError> {
         let connector = conn::build(connection).ok_or_else(|| {
+            let kind = connection.settings.kind();
             cargoframe_safe::SendError::new(
                 cargoframe_safe::FailureKind::ConnectorUnavailable,
-                "This connection is turned off",
+                if conn::available(kind) {
+                    "This connection is turned off".to_string()
+                } else {
+                    format!("This copy of CargoFrame is built without {}", kind.label())
+                },
             )
         })?;
         let now = unix_now;
@@ -314,7 +328,11 @@ impl Connections {
                     kind,
                     kind_label: kind.label(),
                     enabled: c.enabled,
-                    state: state_name(self.status_of(id, c), c.enabled),
+                    state: if conn::available(kind) {
+                        state_name(self.status_of(id, c), c.enabled)
+                    } else {
+                        "not_in_build"
+                    },
                     secrets,
                     describe,
                     capabilities: capabilities_of(c),

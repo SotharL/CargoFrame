@@ -29,6 +29,9 @@ pub enum Settings {
     Discord(Discord),
     Teams(Teams),
     Custom(Custom),
+    X(X),
+    Bluesky(Bluesky),
+    Instagram(Instagram),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -42,6 +45,26 @@ pub enum Kind {
     Discord,
     Teams,
     Custom,
+    X,
+    Bluesky,
+    Instagram,
+}
+
+impl Kind {
+    /// Every kind, in the order the interface lists them.
+    pub const ALL: [Kind; 11] = [
+        Kind::Jira,
+        Kind::Google,
+        Kind::Reddit,
+        Kind::Claude,
+        Kind::Slack,
+        Kind::Discord,
+        Kind::Teams,
+        Kind::X,
+        Kind::Bluesky,
+        Kind::Instagram,
+        Kind::Custom,
+    ];
 }
 
 impl Settings {
@@ -55,6 +78,9 @@ impl Settings {
             Settings::Discord(_) => Kind::Discord,
             Settings::Teams(_) => Kind::Teams,
             Settings::Custom(_) => Kind::Custom,
+            Settings::X(_) => Kind::X,
+            Settings::Bluesky(_) => Kind::Bluesky,
+            Settings::Instagram(_) => Kind::Instagram,
         }
     }
 }
@@ -70,6 +96,9 @@ impl Kind {
             Kind::Discord => "Discord",
             Kind::Teams => "Teams",
             Kind::Custom => "Custom API",
+            Kind::X => "X",
+            Kind::Bluesky => "Bluesky",
+            Kind::Instagram => "Instagram",
         }
     }
 
@@ -84,6 +113,9 @@ impl Kind {
             Kind::Discord => &DISCORD_SECRETS,
             Kind::Teams => &["oauth"],
             Kind::Custom => &["secret"],
+            Kind::X => &["oauth"],
+            Kind::Bluesky => &["app_password"],
+            Kind::Instagram => &["token", "host_key"],
         }
     }
 
@@ -94,8 +126,10 @@ impl Kind {
             Kind::Google => &["client_secret"],
             Kind::Slack => &["token"],
             Kind::Discord => &DISCORD_SECRETS,
-            Kind::Reddit | Kind::Claude | Kind::Teams => &[],
+            Kind::Reddit | Kind::Claude | Kind::Teams | Kind::X => &[],
             Kind::Custom => &["secret"],
+            Kind::Bluesky => &["app_password"],
+            Kind::Instagram => &["token", "host_key"],
         }
     }
 }
@@ -174,6 +208,66 @@ impl Default for Teams {
             tenant: "organizations".into(),
         }
     }
+}
+
+// ----- X -----
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct X {
+    /// The OAuth 2.0 Client ID of the person's own app in the X developer portal (a "Native App",
+    /// so there is no client secret).
+    pub client_id: String,
+    /// Must match the app's callback address `http://127.0.0.1:<port>/callback`.
+    pub redirect_port: u16,
+}
+
+impl Default for X {
+    fn default() -> Self {
+        Self {
+            client_id: String::new(),
+            redirect_port: 53683,
+        }
+    }
+}
+
+// ----- Bluesky -----
+
+/// Bluesky needs the account's handle and an app password (kept in the credential store): no
+/// developer app to register.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Bluesky {
+    /// `name.bsky.social`, or a custom domain handle.
+    pub handle: String,
+    /// The account's server. Almost everyone is on `https://bsky.social`.
+    pub service: String,
+}
+
+impl Default for Bluesky {
+    fn default() -> Self {
+        Self {
+            handle: String::new(),
+            service: "https://bsky.social".into(),
+        }
+    }
+}
+
+// ----- Instagram -----
+
+/// Instagram takes a picture only from a public web address, never as an upload. So a picture
+/// is first put on a web server the person (or their company) owns, then Instagram is told
+/// where it is.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Instagram {
+    /// Where the picture is sent with an HTTP PUT. `{name}` is replaced by a new file name.
+    pub upload_url: String,
+    /// The public address of the same file once it is there, also with `{name}`.
+    pub public_url: String,
+    /// A header that carries the key kept as the secret `host_key` (`AccessKey`, `Authorization`).
+    /// Empty: the upload address needs no key.
+    pub host_header: String,
 }
 
 // ----- Claude -----
@@ -399,6 +493,42 @@ pub fn check(c: &Connection) -> Result<(), String> {
         Settings::Claude(_) | Settings::Slack(_) => {}
         Settings::Discord(d) => check_discord(d)?,
         Settings::Custom(cu) => check_custom(cu)?,
+        Settings::X(x) => {
+            if x.client_id.trim().is_empty() {
+                return Err("Write the Client ID of your X app".into());
+            }
+            if x.redirect_port < 1024 {
+                return Err("Use a port of 1024 or more for the callback address".into());
+            }
+        }
+        Settings::Bluesky(b) => {
+            if !b.handle.contains('.') {
+                return Err("Write your Bluesky handle, like jane.bsky.social".into());
+            }
+            cargoframe_net::check_url(&b.service)
+                .map_err(|e| format!("Bluesky server address: {e}"))?;
+        }
+        Settings::Instagram(i) => check_instagram(i)?,
+    }
+    Ok(())
+}
+
+fn check_instagram(i: &Instagram) -> Result<(), String> {
+    for (what, url) in [
+        ("upload address", &i.upload_url),
+        ("public address", &i.public_url),
+    ] {
+        if !url.contains("{name}") {
+            return Err(format!(
+                "The {what} must contain {{name}}, where the file name goes"
+            ));
+        }
+        cargoframe_net::check_url(&url.replace("{name}", "x.jpg"))
+            .map_err(|e| format!("The {what}: {e}"))?;
+    }
+    let h = i.host_header.trim();
+    if h.chars().any(|c| c.is_control() || c == ':' || c == ' ') {
+        return Err("The key header is a single word, like AccessKey".into());
     }
     Ok(())
 }

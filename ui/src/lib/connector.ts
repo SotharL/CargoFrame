@@ -11,6 +11,9 @@ export const KIND_NAME: Record<KindKey, string> = {
   slack: 'Slack',
   discord: 'Discord',
   teams: 'Teams',
+  x: 'X',
+  bluesky: 'Bluesky',
+  instagram: 'Instagram',
   custom: 'Custom API',
   local: 'This computer',
 };

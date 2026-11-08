@@ -107,6 +107,9 @@ Settings menu walks you through each service.
 | **Slack** | A bot token (`xoxb-`) from an app you make in your workspace | Invite the app to each channel it posts in |
 | **Discord** | A webhook link for each channel (no bot needed) | A bot token is the last resort, for people who want the server lists |
 | **Teams** | An app ID from your own Microsoft Entra app (work or school accounts) | Posts a message |
+| **X** | A Client ID from your own app in the X developer portal | Posts the screenshot with a short text |
+| **Bluesky** | Your handle and an app password | Posts the screenshot with a short text; nothing to register |
+| **Instagram** | A token from your Meta app and a picture server you own | Instagram only takes pictures from a public address, so CargoFrame puts the picture on your server first |
 | **Custom API** | An address and how to sign in | Any web service with an API |
 
 Passwords and tokens go to your system's password store, never to a file.
@@ -322,9 +325,13 @@ says what the service answered (a missing permission, a file too large, a delete
 - **Your network:** CargoFrame trusts the certificates your computers trust (a company root certificate just works) and
   uses the Windows proxy setting, or the usual proxy variables on Linux.
 - **Your sign-in:** Teams signs in with your Microsoft Entra account; each person's tokens stay in their own password store.
-- **Coming next, under review:** builds that leave out the services you do not use, settings set up centrally for
-  everyone, and a command other programs can use to fill a layout before the person sends it. See
-  [the design](docs/design.md#for-companies).
+- **Only the services you use:** set `CF_SERVICES` (for example `jira,teams,custom`) before running
+  `scripts\windows\build.cmd`; the others are not in the program at all.
+- **Your tools can fill a layout:** turn on *Other programs can fill this* in the layout, then run
+  `cargoframe open --trigger bug --set summary="It crashed"`. The window opens with the value in place; nothing is
+  sent until the person presses a button.
+- **Coming next:** settings set up centrally for everyone. See [the design](docs/design.md#for-companies) and the
+  [connector proposals](docs/connectors.md).
 
 </details>
 
@@ -375,6 +382,7 @@ in `ui/` and open `settings.html` or `capture.html`.
 
 - [Design](docs/design.md): how the app is built today, in one short page
 - [Decisions](docs/decisions.md): what was decided, and why
+- [Connectors](docs/connectors.md): how each service flows, and what to improve next
 - [Status](docs/status.md): what works, what is verified, what is still open
 - [Security](docs/security.md): the review, the findings and the known limits
 - [Performance](docs/performance.md): budgets, how each is checked, what has been measured

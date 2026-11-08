@@ -73,6 +73,19 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         files: no('Teams needs files in OneDrive, which CargoFrame does not use yet'),
         link: yes('Addresses are shown as typed and Teams links them by itself; markup is shown as text'),
       };
+    case 'x':
+    case 'bluesky':
+    case 'instagram': {
+      const name = { x: 'X', bluesky: 'Bluesky', instagram: 'Instagram' }[kind];
+      return {
+        text: limited('Posted as plain text, within the length the service allows'),
+        dropdown: no(`${name} has no lists to pick from`),
+        screenshot: yes('Attached to the post, made smaller when it is too big'),
+        video: no(`Videos are not sent to ${name} yet; the screenshot is`),
+        files: no(`${name} cannot take files`),
+        link: kind === 'instagram' ? limited('Addresses are shown as text: Instagram captions have no links') : yes('Addresses become links'),
+      };
+    }
     default:
       return {
         text: yes('Placed in the request where you write {{prompt}} or {{field}}'),

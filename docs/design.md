@@ -125,6 +125,9 @@ names a service.
 | Reddit | OAuth, the person's own app | A post with the picture | No |
 | Teams | OAuth through the person's own Entra app (work or school) | A message | No |
 | Claude | None: opens a chat by link and pastes | The picture, files and prompt, into the Claude desktop app or the browser | No |
+| X | OAuth, the person's own Native App (no secret) | A post: text (280 characters) and the screenshot, made smaller to fit | No |
+| Bluesky | Handle and an app password | A post: text (300 characters), the screenshot, links marked | No |
+| Instagram | Token from the Meta app dashboard; a picture server the person owns | A post with a caption; the picture goes to the person's server first, because Instagram only fetches from a public address | No |
 | Custom API | Header or token | Any HTTPS endpoint, with the fields you define | No |
 
 - **Discord without a bot.** A webhook is made in the channel's settings and pasted once. It cannot list servers,
@@ -189,9 +192,9 @@ CargoFrame is meant to be used by companies of thousands of people. What that ne
 
 | Need | How | State |
 |------|-----|-------|
-| Leave out services a company does not use | One Cargo feature per connector (`jira`, `slack`, `x`, ...). A build without a feature has no code, no template, no form and no guide for that service; a saved connection of a missing kind shows "not in this build" | Planned (connector round) |
+| Leave out services a company does not use | One Cargo feature per connector (`jira`, `slack`, `x`, ...); `set CF_SERVICES=jira,teams` before `scripts\windows\build.cmd`. The service's code is not in the program; its form, templates and guide are hidden; a saved connection of a missing kind shows "not in this copy" | Built on the connector branch (the Settings forms stay in the window's code, hidden) |
 | Set up for everyone at once | A read-only *managed* folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`) with the same JSON files as the settings folder plus `policy.json` (which services, update check on or off, settings that are locked). Managed items show a lock and cannot be edited; each person still signs in for themselves | Planned |
-| Other programs hand data to CargoFrame | `cargoframe open <layout> --set <block>=<text> --file <block>=<path>` reaches the running copy through the single-instance channel (same user only, no network port). Only a layout marked *Other programs can fill this* accepts it, the window opens with the values in their blocks, and nothing is sent until the person presses a button | Planned (connector round) |
+| Other programs hand data to CargoFrame | `cargoframe open --trigger <id> --set <block>=<text>` reaches the running copy through the single-instance channel (same user only, no network port). It runs the trigger (so the calling program is captured), and fills text boxes and dropdowns. Only a layout with *Other programs can fill this* accepts values; nothing is sent until the person presses a button. At most 50 values of 20,000 characters; the log records how many, never what | Built on the connector branch (text and dropdowns; files and video triggers next) |
 | The company's sign-in | OAuth with the company's identity provider where the service allows it (Teams with Entra today; Jira OAuth and a generic OAuth 2.0 for Custom API next). Tokens stay in each person's credential store | Partly built |
 | The company's network | The operating system's certificate store on Windows and Linux (a company root certificate just works); the Windows proxy setting, or the usual proxy variables on Linux | Built (Linux certificates since 8 Nov) |
 | Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`) for Intune or a login script; the update check can be turned off so IT pushes versions | Built; the policy switch is planned |
@@ -232,4 +235,5 @@ not on every change.
 - Text colour is not offered: only Jira and Teams could show it.
 - Wayland "active window" may not be possible on some compositors (the fallback is the screen under the cursor).
 - The installer and the program inside it are not signed yet.
-- Twitter/X, BlueSky and Instagram are being added (connector round, under review).
+- X, Bluesky and Instagram are on the connector branch, under review. They send pictures, not videos, and plain text.
+  Instagram needs a picture server the person owns. Proposals for every connector: [connectors.md](connectors.md).

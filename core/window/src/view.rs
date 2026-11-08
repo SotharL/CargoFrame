@@ -427,6 +427,7 @@ mod tests {
 
     fn layout() -> Layout {
         Layout {
+            accepts_input: false,
             id: "l".into(),
             name: "L".into(),
             blocks: vec![
@@ -649,6 +650,7 @@ mod tests {
 
     fn one_button(connection: Option<&str>) -> Layout {
         Layout {
+            accepts_input: false,
             id: "l".into(),
             name: "L".into(),
             blocks: vec![Block {

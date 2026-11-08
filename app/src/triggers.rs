@@ -145,6 +145,11 @@ fn show(app: &AppHandle, state: &AppState, s: session::Session) {
 /// Take a capture for `trigger_id` and open the CargoFrame window. Safe to call from any
 /// thread; does nothing while paused or while another capture is running.
 pub fn run(app: &AppHandle, trigger_id: String) {
+    run_with(app, trigger_id, Vec::new());
+}
+
+/// The same, with values another program sent for the window's blocks (`cargoframe open`).
+pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String)>) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
@@ -160,6 +165,13 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         .flatten()
         .is_some_and(|t| t.media == Media::Video);
     if makes_video {
+        if !values.is_empty() {
+            notify::problem(
+                app,
+                "CargoFrame",
+                "A video trigger cannot take values from another program yet; it records as usual.",
+            );
+        }
         press_video(app, trigger_id);
         return;
     }
@@ -183,7 +195,8 @@ pub fn run(app: &AppHandle, trigger_id: String) {
         .await;
         let state = app.state::<AppState>();
         match result {
-            Ok(Ok(s)) => {
+            Ok(Ok(mut s)) => {
+                session::apply_incoming(&mut s.view, &values);
                 state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
                 show(&app, &state, s);
             }

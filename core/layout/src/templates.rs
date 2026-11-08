@@ -24,7 +24,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 15] = [
+pub const TEMPLATES: [TemplateInfo; 18] = [
     TemplateInfo {
         key: "local-capture",
         name: "Save a capture locally",
@@ -108,6 +108,24 @@ pub const TEMPLATES: [TemplateInfo; 15] = [
         name: "Teams message",
         description: "Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.",
         service: Some(ConnectionKind::Teams),
+    },
+    TemplateInfo {
+        key: "x-post",
+        name: "X post",
+        description: "Post the screenshot to your X account with a short text (280 characters).",
+        service: Some(ConnectionKind::X),
+    },
+    TemplateInfo {
+        key: "bluesky-post",
+        name: "Bluesky post",
+        description: "Post the screenshot to your Bluesky account with a short text (300 characters) and a description of the picture.",
+        service: Some(ConnectionKind::Bluesky),
+    },
+    TemplateInfo {
+        key: "instagram-post",
+        name: "Instagram post",
+        description: "Post the screenshot to your Instagram professional account with a caption.",
+        service: Some(ConnectionKind::Instagram),
     },
     TemplateInfo {
         key: "custom-post",
@@ -392,6 +410,69 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 ],
             ),
         ],
+        ("x-post", Some(c)) => vec![
+            shot(8),
+            block(
+                "text",
+                rect(7, 0, 5, 5),
+                text("Post (280 characters)", TextRole::Plain, WHERE),
+            ),
+            block(
+                "alt",
+                rect(7, 5, 5, 2),
+                text(
+                    "Picture description",
+                    TextRole::Plain,
+                    "A screenshot of {{app.title}}",
+                ),
+            ),
+            button(
+                rect(7, 7, 5, 1),
+                "Post to X",
+                Some(c),
+                None,
+                vec![from_block("text", "text"), from_block("alt", "alt")],
+            ),
+        ],
+        ("bluesky-post", Some(c)) => vec![
+            shot(8),
+            block(
+                "text",
+                rect(7, 0, 5, 5),
+                text("Post (300 characters)", TextRole::Plain, WHERE),
+            ),
+            block(
+                "alt",
+                rect(7, 5, 5, 2),
+                text(
+                    "Picture description",
+                    TextRole::Plain,
+                    "A screenshot of {{app.title}}",
+                ),
+            ),
+            button(
+                rect(7, 7, 5, 1),
+                "Post to Bluesky",
+                Some(c),
+                None,
+                vec![from_block("text", "text"), from_block("alt", "alt")],
+            ),
+        ],
+        ("instagram-post", Some(c)) => vec![
+            shot(8),
+            block(
+                "caption",
+                rect(7, 0, 5, 7),
+                text("Caption", TextRole::Plain, WHERE),
+            ),
+            button(
+                rect(7, 7, 5, 1),
+                "Post to Instagram",
+                Some(c),
+                None,
+                vec![from_block("caption", "caption")],
+            ),
+        ],
         ("claude-ask", Some(c)) => vec![
             shot(8),
             block(
@@ -564,6 +645,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         blocks
     };
     Some(Layout {
+        accepts_input: false,
         id: String::new(),
         name: t.name.to_string(),
         blocks,
@@ -627,6 +709,9 @@ mod tests {
             ConnectionKind::Discord,
             ConnectionKind::Teams,
             ConnectionKind::CustomApi,
+            ConnectionKind::X,
+            ConnectionKind::Bluesky,
+            ConnectionKind::Instagram,
         ] {
             assert!(
                 TEMPLATES.iter().any(|t| t.service == Some(kind)),

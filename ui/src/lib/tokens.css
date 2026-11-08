@@ -17,6 +17,9 @@
   --kind-slack: #9b2c6e;   --kind-slack-line: #6e1d4d;
   --kind-discord: #7a3db8; --kind-discord-line: #55288a;
   --kind-teams: #3b5a9d;   --kind-teams-line: #284178;
+  --kind-x: #1f1f1f;       --kind-x-line: #000000;
+  --kind-bluesky: #0a66c2; --kind-bluesky-line: #074a8f;
+  --kind-instagram: #b0306a; --kind-instagram-line: #7f1f4b;
   --kind-custom: #5b5fc7;  --kind-custom-line: #3f43a0;
   --kind-local: #4b5563;   --kind-local-line: #2f3844;
   --on-kind: #ffffff;
@@ -55,6 +58,9 @@
     --kind-slack-line: #e58bc0;
     --kind-discord-line: #c4a0f0;
     --kind-teams-line: #8fb0ef;
+    --kind-x-line: #d6d6d6;
+    --kind-bluesky-line: #7db8f0;
+    --kind-instagram-line: #ef8fbb;
     --kind-custom-line: #9fa2ee;
     --kind-local-line: #aab2bf;
     color-scheme: dark;
@@ -76,6 +82,9 @@
   --kind-slack-line: #e58bc0;
   --kind-discord-line: #c4a0f0;
   --kind-teams-line: #8fb0ef;
+  --kind-x-line: #d6d6d6;
+  --kind-bluesky-line: #7db8f0;
+  --kind-instagram-line: #ef8fbb;
   --kind-custom-line: #9fa2ee;
   --kind-local-line: #aab2bf;
   color-scheme: dark;

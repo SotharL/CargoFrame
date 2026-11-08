@@ -1,7 +1,18 @@
 <script lang="ts">
   // The list of all guides, at the foot of the sidebar.
+  import { onMount } from 'svelte';
   import { startTour } from './tourState.svelte';
   import { TOURS } from './tours';
+  import { getApi } from '../../lib/ipc';
+
+  // a company build can leave services out: their guides go with them
+  let built = $state<string[] | null>(null);
+  onMount(async () => {
+    built = (await (await getApi()).appInfo().catch(() => null))?.connectors ?? null;
+  });
+  const shown = $derived(
+    TOURS.filter((t) => !built || !t.id.startsWith('connect-') || built.includes(t.id.slice('connect-'.length))),
+  );
 
   let menu = $state<HTMLDetailsElement>();
   function pick(id: string) {
@@ -13,7 +24,7 @@
 <details class="menu" bind:this={menu}>
   <summary>Guides</summary>
   <ul>
-    {#each TOURS as t (t.id)}
+    {#each shown as t (t.id)}
       <li><button type="button" onclick={() => pick(t.id)}>{t.title}</button></li>
     {/each}
   </ul>

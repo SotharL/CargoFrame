@@ -75,6 +75,9 @@ pub enum ConnectionKind {
     Discord,
     Teams,
     CustomApi,
+    X,
+    Bluesky,
+    Instagram,
 }
 
 impl ConnectionKind {
@@ -89,6 +92,9 @@ impl ConnectionKind {
             ConnectionKind::Discord => "discord",
             ConnectionKind::Teams => "teams",
             ConnectionKind::CustomApi => "custom",
+            ConnectionKind::X => "x",
+            ConnectionKind::Bluesky => "bluesky",
+            ConnectionKind::Instagram => "instagram",
         }
     }
 
@@ -653,6 +659,7 @@ mod tests {
 
     fn layout(blocks: Vec<Block>) -> Layout {
         Layout {
+            accepts_input: false,
             id: "l".into(),
             name: "L".into(),
             blocks,

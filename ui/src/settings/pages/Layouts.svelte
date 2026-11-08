@@ -1,6 +1,7 @@
 <script lang="ts">
   import { onMount, untrack } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
+  import Toggle from '../../lib/components/Toggle.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Reach, Rule, Trigger, VariableInfo } from '../../lib/types';
@@ -59,7 +60,8 @@
     if (!l) return;
     currentId = id;
     fromTemplate = null;
-    draft = structuredClone($state.snapshot(l));
+    // every key the editor changes is there from the start, so a change to it is seen
+    draft = { accepts_input: false, ...structuredClone($state.snapshot(l)) };
     draft.id = id;
     saved = JSON.stringify(tidy(draft));
     selected = null;
@@ -87,7 +89,7 @@
     try {
       const layout = await (await getApi()).layoutFromTemplate(offer.key, offer.connectionId);
       currentId = null;
-      draft = structuredClone(layout);
+      draft = { accepts_input: false, ...structuredClone(layout) };
       fromTemplate = { name: layout.name };
       saved = '';
       selected = null;
@@ -107,13 +109,14 @@
       const api = await getApi();
       const out = tidy($state.snapshot(draft));
       out.name = name;
+      const wasTemplate = fromTemplate !== null;
       const id = await api.newItemId('layout', name);
       out.id = id;
       await api.saveItem('layout', id, out);
       await layouts.reload();
       go('layouts', id);
       open(id);
-      message = { kind: 'ok', text: fromTemplate ? 'Saved as your own layout' : 'Saved as a copy' };
+      message = { kind: 'ok', text: wasTemplate ? 'Saved as your own layout' : 'Saved as a copy' };
     } catch (e) {
       message = { kind: 'err', text: String(e) };
     }
@@ -261,7 +264,7 @@
       {/each}
       {#if !connections.length}
         <p class="quiet small">
-          Add a connection to see layouts for Jira, Google, Reddit, Claude, Slack, Discord, Teams or your own API.
+          Add a connection to see the layouts made for it.
           <button class="link" onclick={() => go('setup', 'connections')}>Go to Connections</button>
         </p>
       {/if}
@@ -317,6 +320,20 @@
       </div>
     </div>
     {#if message}<Chip kind={message.kind} label={message.text} />{/if}
+    <details class="others">
+      <summary>Other programs{draft.accepts_input ? ': can fill this layout' : ''}</summary>
+      <Toggle
+        label="Other programs can fill this layout"
+        bind:checked={() => draft?.accepts_input === true, (on) => { if (draft) draft.accepts_input = on; }}
+      />
+      <p class="quiet">
+        A program on this computer can then open the window with values in its text boxes and
+        dropdowns. Nothing is sent until you press a button.
+      </p>
+      {#if draft.accepts_input}
+        <code class="example selectable">cargoframe open --trigger {usedBy[0]?.id ?? 'TRIGGER'} --set {draft.blocks.find((b) => b.type === 'text')?.id ?? 'BLOCK'}="text"</code>
+      {/if}
+    </details>
 
     <div class="workspace">
       <Canvas bind:blocks={draft.blocks} bind:selected {issues} {reach} {connections} />
@@ -354,6 +371,10 @@
 </div>
 
 <style>
+  .others { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 12px; background: var(--surface); }
+  .others summary { cursor: pointer; font-size: 13px; font-weight: 600; }
+  .others { display: grid; gap: 6px; }
+  .example { display: block; padding: 6px 8px; background: var(--surface-2); border-radius: var(--radius-sm); font-size: 12.5px; overflow-x: auto; }
   .page { display: grid; gap: 12px; min-width: 0; }
   .bar { display: flex; gap: 12px; align-items: end; flex-wrap: wrap; }
   .pick { display: grid; gap: 2px; }

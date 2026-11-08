@@ -28,8 +28,14 @@
     { kind: 'slack', label: 'Slack', blurb: 'Post a message with the screenshot and files into a channel or thread.' },
     { kind: 'discord', label: 'Discord', blurb: 'Post a message with the screenshot and files into a channel, thread or forum.' },
     { kind: 'teams', label: 'Teams', blurb: 'Post a message with the screenshot into a chat, channel or channel thread, as you.' },
+    { kind: 'x', label: 'X', blurb: 'Post the screenshot with a short text to your X account.' },
+    { kind: 'bluesky', label: 'Bluesky', blurb: 'Post the screenshot with a short text to your Bluesky account. Needs only an app password.' },
+    { kind: 'instagram', label: 'Instagram', blurb: 'Post the screenshot with a caption to your Instagram professional account.' },
     { kind: 'custom', label: 'Custom API', blurb: 'Send to any web service that has an HTTP API.' },
   ];
+  // a company build can leave services out: only the ones this copy has are offered
+  let built = $state<ServiceKind[] | null>(null);
+  const offered = $derived(built ? KINDS.filter((k) => built!.includes(k.kind)) : KINDS);
 
   function blank(kind: ServiceKind): Connection {
     switch (kind) {
@@ -47,6 +53,12 @@
         return { kind, name: 'Discord', enabled: true, mode: 'webhook', shown_as: '', hooks: [] };
       case 'teams':
         return { kind, name: 'Teams', enabled: true, client_id: '', tenant: 'organizations' };
+      case 'x':
+        return { kind, name: 'X', enabled: true, client_id: '', redirect_port: 53683 };
+      case 'bluesky':
+        return { kind, name: 'Bluesky', enabled: true, handle: '', service: 'https://bsky.social' };
+      case 'instagram':
+        return { kind, name: 'Instagram', enabled: true, upload_url: 'https://', public_url: 'https://', host_header: '' };
       case 'custom':
         return {
           kind, name: 'My API', enabled: true, base_url: 'https://', auth: { type: 'none' },
@@ -64,16 +76,20 @@
       formError = String(e);
     }
   }
-  onMount(refresh);
+  onMount(async () => {
+    built = (await (await getApi()).appInfo().catch(() => null))?.connectors ?? null;
+    await refresh();
+  });
 
   const viewOf = (id: string): ConnectionView | undefined => view?.items.find((c) => c.id === id);
-  const oauth = (k: ServiceKind) => k === 'google' || k === 'reddit' || k === 'teams';
+  const oauth = (k: ServiceKind) => k === 'google' || k === 'reddit' || k === 'teams' || k === 'x';
 
   function stateChip(c: ConnectionView, saved: Connection): { kind: 'ok' | 'warn' | 'err' | 'dbg'; label: string } {
     switch (c.state) {
       case 'connected': return { kind: 'ok', label: c.kind === 'claude' ? 'Ready' : 'Connected' };
       case 'expired': return { kind: 'err', label: 'Sign-in expired' };
       case 'disabled': return { kind: 'dbg', label: 'Turned off' };
+      case 'not_in_build': return { kind: 'dbg', label: 'Not in this copy of CargoFrame' };
       default: return { kind: 'warn', label: oauth(c.kind) ? 'Not signed in' : saved.kind === 'discord' && saved.mode === 'webhook' ? 'Needs a webhook link' : 'Needs its token' };
     }
   }
@@ -83,6 +99,8 @@
     if (c.kind === 'jira') return c.auth === 'pat' ? 'Personal access token' : 'API token';
     if (c.kind === 'slack') return 'Bot token (starts with xoxb-)';
     if (c.kind === 'discord') return 'Bot token';
+    if (c.kind === 'bluesky') return 'App password';
+    if (c.kind === 'instagram') return name === 'host_key' ? 'Key of the picture server' : 'Access token';
     if (c.kind === 'custom') {
       return { bearer: 'Token', header: 'Key', basic: 'Password', query: 'Key', none: 'Key' }[c.auth.type];
     }
@@ -92,6 +110,8 @@
     if (c.kind === 'custom' && name === 'secret' && c.auth.type === 'none') return false;
     // Discord: the bot token only for a bot; each webhook link has its own box in the channel list
     if (c.kind === 'discord') return c.mode === 'bot' && name === 'token';
+    // the picture server's key only when it says which header carries one
+    if (c.kind === 'instagram' && name === 'host_key') return c.host_header.trim() !== '';
     return true;
   };
 
@@ -224,7 +244,7 @@
         {/if}
       </div>
       <div class="actions">
-        {#if v && item.enabled}
+        {#if v && item.enabled && v.state !== 'not_in_build'}
           {#if oauth(item.kind)}
             {#if signingIn === id}
               <span class="quiet">Waiting for your browser…</span>
@@ -260,7 +280,7 @@
     <section class="adders" aria-label="Add a connection">
       <h2>Add a connection</h2>
       <div class="kinds">
-        {#each KINDS as k (k.kind)}
+        {#each offered as k (k.kind)}
           <button class="kind" data-tour={`add-${k.kind}`} onclick={() => add(k.kind)}>
             <strong>{k.label}</strong>
             <span class="quiet">{k.blurb}</span>
@@ -280,7 +300,7 @@
               label={secretLabel(draft.value, s.name)}
               hint="Kept in your system's password store. You cannot read it back from here."
               stored={s.stored}
-              get={getLinkFor(draft.value, s.name === 'client_secret' ? 'client_secret' : 'token')}
+              get={getLinkFor(draft.value, s.name === 'client_secret' ? 'client_secret' : s.name === 'app_password' ? 'app_password' : 'token')}
               onsave={async (value) => {
                 await (await getApi()).setConnectionSecret(draft!.id!, s.name, value);
                 note = '';
