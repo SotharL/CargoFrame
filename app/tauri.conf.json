@@ -33,6 +33,8 @@
         "languages": [
           "English"
         ],
+        "installerIcon": "icons/installer.ico",
+        "uninstallerIcon": "icons/icon.ico",
         "template": "../installers/windows/installer.nsi",
         "installerHooks": "../installers/windows/hooks.nsh"
       },
