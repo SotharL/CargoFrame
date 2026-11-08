@@ -1,6 +1,6 @@
 [package]
 name = "cargoframe-connectors"
-description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, Slack, Discord, custom APIs)"
+description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, Slack, Discord, Teams, X, Bluesky, Instagram, custom APIs)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,6 +8,23 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+# One feature per service. A build without one has none of that service's code: see
+# docs/design.md, "For companies". The settings models stay, so a saved connection of a
+# service left out still reads and is shown as "not in this build".
+[features]
+default = ["jira", "google", "reddit", "claude", "slack", "discord", "teams", "custom", "x", "bluesky", "instagram"]
+jira = []
+google = []
+reddit = []
+claude = []
+slack = []
+discord = []
+teams = []
+custom = []
+x = ["png"]
+bluesky = ["png"]
+instagram = ["png", "jpeg-encoder"]
 
 [dependencies]
 cargoframe-net = { path = "../net" }
@@ -21,6 +38,9 @@ thiserror.workspace = true
 sha2 = "0.11"
 base64 = "0.23"
 getrandom = "0.4"
+# Only for the services that need a picture made smaller or made a JPEG.
+png = { version = "0.18", optional = true }
+jpeg-encoder = { version = "0.6", optional = true }
 
 [dev-dependencies]
 cargoframe-net = { path = "../net", features = ["mock"] }

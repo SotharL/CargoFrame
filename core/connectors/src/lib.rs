@@ -4,21 +4,40 @@
 //! uses only what [`Ctx`] gives it (network, credential store, browser), so every one of them is
 //! tested against a local mock server with no real service involved.
 
+// The services, each behind its own feature (see Cargo.toml).
+#[cfg(feature = "bluesky")]
+pub mod bluesky;
+#[cfg(feature = "claude")]
 pub mod claude;
-pub mod ctx;
+#[cfg(feature = "custom")]
 pub mod custom;
+#[cfg(feature = "discord")]
 pub mod discord;
-pub mod error;
+#[cfg(feature = "google")]
 pub mod google;
+#[cfg(feature = "instagram")]
+pub mod instagram;
+#[cfg(feature = "jira")]
 pub mod jira;
+#[cfg(feature = "reddit")]
+pub mod reddit;
+#[cfg(feature = "slack")]
+pub mod slack;
+#[cfg(feature = "teams")]
+pub mod teams;
+#[cfg(feature = "x")]
+pub mod x;
+
+// What they share.
+pub mod ctx;
+pub mod error;
+#[cfg(any(feature = "x", feature = "bluesky", feature = "instagram"))]
+pub mod media;
 pub mod model;
 pub mod oauth;
 pub mod payload;
-pub mod reddit;
 pub mod richtext;
 pub mod secrets;
-pub mod slack;
-pub mod teams;
 
 #[cfg(test)]
 mod testkit;
@@ -109,19 +128,59 @@ pub trait Connector {
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError>;
 }
 
-/// The connector for a saved connection. `None` for a disabled one.
+/// Whether this build has the code for `kind`. A company build can leave services out.
+pub fn available(kind: Kind) -> bool {
+    match kind {
+        Kind::Jira => cfg!(feature = "jira"),
+        Kind::Google => cfg!(feature = "google"),
+        Kind::Reddit => cfg!(feature = "reddit"),
+        Kind::Claude => cfg!(feature = "claude"),
+        Kind::Slack => cfg!(feature = "slack"),
+        Kind::Discord => cfg!(feature = "discord"),
+        Kind::Teams => cfg!(feature = "teams"),
+        Kind::Custom => cfg!(feature = "custom"),
+        Kind::X => cfg!(feature = "x"),
+        Kind::Bluesky => cfg!(feature = "bluesky"),
+        Kind::Instagram => cfg!(feature = "instagram"),
+    }
+}
+
+/// The kinds this build has, in the order the interface lists them.
+pub fn available_kinds() -> Vec<Kind> {
+    Kind::ALL.into_iter().filter(|k| available(*k)).collect()
+}
+
+/// The connector for a saved connection. `None` for a disabled one, or one this build does
+/// not have the code for.
 pub fn build(connection: &Connection) -> Option<Box<dyn Connector>> {
     if !connection.enabled {
         return None;
     }
+    // (with every service left out, every arm but the last is gone)
+    #[allow(unreachable_patterns, unreachable_code)]
     Some(match &connection.settings {
+        #[cfg(feature = "jira")]
         Settings::Jira(s) => Box::new(jira::JiraConnector::new(s.clone())),
+        #[cfg(feature = "reddit")]
         Settings::Reddit(s) => Box::new(reddit::RedditConnector::new(s.clone())),
+        #[cfg(feature = "google")]
         Settings::Google(s) => Box::new(google::GoogleConnector::new(s.clone())),
+        #[cfg(feature = "claude")]
         Settings::Claude(s) => Box::new(claude::ClaudeConnector::new(s.clone())),
+        #[cfg(feature = "slack")]
         Settings::Slack(s) => Box::new(slack::SlackConnector::new(s.clone())),
+        #[cfg(feature = "discord")]
         Settings::Discord(s) => Box::new(discord::DiscordConnector::new(s.clone())),
+        #[cfg(feature = "teams")]
         Settings::Teams(s) => Box::new(teams::TeamsConnector::new(s.clone())),
+        #[cfg(feature = "custom")]
         Settings::Custom(s) => Box::new(custom::CustomConnector::new(s.clone())),
+        #[cfg(feature = "x")]
+        Settings::X(s) => Box::new(x::XConnector::new(s.clone())),
+        #[cfg(feature = "bluesky")]
+        Settings::Bluesky(s) => Box::new(bluesky::BlueskyConnector::new(s.clone())),
+        #[cfg(feature = "instagram")]
+        Settings::Instagram(s) => Box::new(instagram::InstagramConnector::new(s.clone())),
+        _ => return None,
     })
 }

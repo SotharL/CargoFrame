@@ -33,6 +33,8 @@ pub struct AppInfo {
     config_dir: String,
     data_dir: String,
     tray_available: bool,
+    /// The services this build has (a company build can leave some out).
+    connectors: Vec<cargoframe_connectors::Kind>,
 }
 
 fn os_name() -> &'static str {
@@ -55,6 +57,7 @@ pub fn app_info(state: State<'_, AppState>) -> AppInfo {
         config_dir: state.store.dirs().config().display().to_string(),
         data_dir: state.store.dirs().data().display().to_string(),
         tray_available: state.tray_available,
+        connectors: cargoframe_connectors::available_kinds(),
     }
 }
 
@@ -355,21 +358,8 @@ pub struct TemplateView {
     key: &'static str,
     name: &'static str,
     description: &'static str,
-    /// `jira`, `google`, `reddit`, `claude`, `slack`, `discord`, `teams` or `custom`; `None` for the one that saves locally.
+    /// The service's kind (`jira`, `x`, `custom`...); `None` for the one that saves locally.
     service: Option<&'static str>,
-}
-
-fn service_name(kind: ConnectionKind) -> &'static str {
-    match kind {
-        ConnectionKind::Jira => "jira",
-        ConnectionKind::Google => "google",
-        ConnectionKind::Reddit => "reddit",
-        ConnectionKind::Claude => "claude",
-        ConnectionKind::Slack => "slack",
-        ConnectionKind::Discord => "discord",
-        ConnectionKind::Teams => "teams",
-        ConnectionKind::CustomApi => "custom",
-    }
 }
 
 /// The ready-made layouts, one or two for each kind of destination.
@@ -377,11 +367,17 @@ fn service_name(kind: ConnectionKind) -> &'static str {
 pub fn list_layout_templates() -> Vec<TemplateView> {
     templates::TEMPLATES
         .iter()
+        // a service this build leaves out has no templates either
+        .filter(|t| {
+            t.service.is_none_or(|k| {
+                crate::connections::kind_of_layout(k).is_some_and(cargoframe_connectors::available)
+            })
+        })
         .map(|t| TemplateView {
             key: t.key,
             name: t.name,
             description: t.description,
-            service: t.service.map(service_name),
+            service: t.service.map(ConnectionKind::key),
         })
         .collect()
 }
@@ -1222,6 +1218,9 @@ mod template_tests {
             ConnectionKind::Discord => json!({"name": "d", "kind": "discord"}),
             ConnectionKind::Teams => json!({"name": "t", "kind": "teams"}),
             ConnectionKind::CustomApi => json!({"name": "x", "kind": "custom"}),
+            ConnectionKind::X => json!({"name": "x", "kind": "x"}),
+            ConnectionKind::Bluesky => json!({"name": "b", "kind": "bluesky"}),
+            ConnectionKind::Instagram => json!({"name": "i", "kind": "instagram"}),
         })
         .unwrap();
         build(&connection).expect("enabled").describe()

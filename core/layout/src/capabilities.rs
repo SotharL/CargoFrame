@@ -146,6 +146,30 @@ impl Capabilities {
                 files: Capability::no("Teams needs files in OneDrive, which CargoFrame does not use yet"),
                 link: Capability::yes("Addresses are shown as typed and Teams links them by itself; markup is shown as text"),
             },
+            ConnectionKind::X => Self {
+                text: Capability::limited("Posted as the post, at most 280 characters; formatting is shown as plain text"),
+                dropdown: Capability::no("X has no lists to pick from"),
+                screenshot: Capability::yes("Attached to the post, made smaller when over 5 MB"),
+                video: Capability::no("Videos are not sent to X yet; the screenshot is"),
+                files: Capability::no("X cannot take files"),
+                link: Capability::yes("Addresses become links by themselves"),
+            },
+            ConnectionKind::Bluesky => Self {
+                text: Capability::limited("Posted as the post, at most 300 characters; formatting is shown as plain text"),
+                dropdown: Capability::no("Bluesky has no lists to pick from"),
+                screenshot: Capability::yes("Attached to the post, made smaller when over 1 MB"),
+                video: Capability::no("Videos are not sent to Bluesky yet; the screenshot is"),
+                files: Capability::no("Bluesky cannot take files"),
+                link: Capability::yes("Addresses in the text are marked as links"),
+            },
+            ConnectionKind::Instagram => Self {
+                text: Capability::limited("The caption, at most 2,200 characters; formatting is shown as plain text"),
+                dropdown: Capability::no("Instagram has no lists to pick from"),
+                screenshot: Capability::yes("The post's picture, put on your picture server first, as a JPEG"),
+                video: Capability::no("Videos are not sent to Instagram yet; the screenshot is"),
+                files: Capability::no("Instagram cannot take files"),
+                link: Capability::limited("Addresses are shown as text: Instagram captions have no links"),
+            },
             ConnectionKind::CustomApi => Self::custom(CustomShape::default()),
         }
     }
@@ -195,7 +219,10 @@ impl Capabilities {
 mod tests {
     use super::*;
 
-    const KINDS: [ConnectionKind; 8] = [
+    const KINDS: [ConnectionKind; 11] = [
+        ConnectionKind::X,
+        ConnectionKind::Bluesky,
+        ConnectionKind::Instagram,
         ConnectionKind::Jira,
         ConnectionKind::Google,
         ConnectionKind::Reddit,
@@ -283,6 +310,9 @@ mod tests {
             ConnectionKind::Claude,
             ConnectionKind::Teams,
             ConnectionKind::CustomApi,
+            ConnectionKind::X,
+            ConnectionKind::Bluesky,
+            ConnectionKind::Instagram,
         ] {
             assert_eq!(video(no), Support::No, "{no:?}");
         }

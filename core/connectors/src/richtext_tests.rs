@@ -212,3 +212,13 @@ fn a_mark_further_away_than_anyone_would_bold_is_left_as_typed() {
         format!("*{}*", "x".repeat(100))
     );
 }
+
+#[test]
+fn plain_text_keeps_the_words_and_drops_the_marks() {
+    let text = "It **crashes** on *save* with `E42`\n> as seen\n- one\n- two\n1. first";
+    assert_eq!(
+        render(text, Style::Plain),
+        "It crashes on save with E42\n“as seen”\n• one\n• two\n1. first"
+    );
+    assert_eq!(render("__under__", Style::Plain), "under");
+}

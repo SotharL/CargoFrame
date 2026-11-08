@@ -33,6 +33,8 @@ pub enum Style {
     Jira,
     /// Teams' HTML, with every piece of text escaped.
     Html,
+    /// No formatting at all (X, Bluesky, Instagram): the marks go, the words stay, a bullet is "• ".
+    Plain,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -180,6 +182,7 @@ fn inline(spans: &[Span], style: Style) -> String {
                     Style::Discord | Style::Reddit => format!("**{body}**"),
                     Style::Slack | Style::Jira => format!("*{body}*"),
                     Style::Html => format!("<b>{body}</b>"),
+                    Style::Plain => body,
                 });
             }
             Span::Italic(inner) => {
@@ -188,6 +191,7 @@ fn inline(spans: &[Span], style: Style) -> String {
                     Style::Discord | Style::Reddit => format!("*{body}*"),
                     Style::Slack | Style::Jira => format!("_{body}_"),
                     Style::Html => format!("<i>{body}</i>"),
+                    Style::Plain => body,
                 });
             }
             Span::Underline(inner) => {
@@ -197,13 +201,14 @@ fn inline(spans: &[Span], style: Style) -> String {
                     Style::Jira => format!("+{body}+"),
                     Style::Html => format!("<u>{body}</u>"),
                     // no underline on these: the words stay, the mark goes
-                    Style::Reddit | Style::Slack => body,
+                    Style::Reddit | Style::Slack | Style::Plain => body,
                 });
             }
             Span::Code(code) => out.push_str(&match style {
                 Style::Discord | Style::Reddit | Style::Slack => format!("`{code}`"),
                 Style::Jira => format!("{{{{{code}}}}}"),
                 Style::Html => format!("<code>{}</code>", escape_html(code)),
+                Style::Plain => code.clone(),
             }),
         }
     }
@@ -287,9 +292,10 @@ pub fn render(text: &str, style: Style) -> String {
                 out.push("{quote}".into());
             }
             (_, Kind::Plain) => out.extend(run.iter().map(|(_, l)| l.clone())),
+            (Style::Plain, Kind::Quote) => out.extend(run.iter().map(|(_, l)| format!("“{l}”"))),
             (_, Kind::Quote) => out.extend(run.iter().map(|(_, l)| format!("> {l}"))),
             (style, Kind::Bullet) => out.extend(run.iter().map(|(_, l)| match style {
-                Style::Slack => format!("• {l}"),
+                Style::Slack | Style::Plain => format!("• {l}"),
                 Style::Jira => format!("* {l}"),
                 _ => format!("- {l}"),
             })),
