@@ -1512,9 +1512,18 @@ pub(crate) mod tests {
         use cargoframe_layout::VideoBlock;
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(cargoframe_config::Dirs::under(dir.path()));
-        let rect = Rect { x: 0, y: 0, w: 6, h: 4 };
+        let rect = Rect {
+            x: 0,
+            y: 0,
+            w: 6,
+            h: 4,
+        };
         let mut shot = Layout::empty("", "Shot");
-        shot.blocks = vec![Block { id: "s".into(), rect, kind: BlockKind::Screenshot }];
+        shot.blocks = vec![Block {
+            id: "s".into(),
+            rect,
+            kind: BlockKind::Screenshot,
+        }];
         let mut both = shot.clone();
         both.blocks.push(Block {
             id: "v".into(),
@@ -1537,5 +1546,4 @@ pub(crate) mod tests {
         assert!(!records(&store, &with(None, Media::Video)));
         assert!(!records(&store, &with(Some("gone"), Media::Video)));
     }
-
 }

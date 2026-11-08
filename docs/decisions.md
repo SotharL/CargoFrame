@@ -1070,3 +1070,19 @@ programs handing data to a layout, company sign-in, accessibility).
   shortcut. Off for every layout until switched on.
 - **Fixed on the way:** saving a template said "Saved as a copy" instead of "Saved as your own layout".
 
+### Version 0.2.0, 8 Nov 2026: the layout decides, and a window that never drew
+
+- **A shortcut records or takes a screenshot from its layout.** The owner found the trigger's *Makes* (screenshot or
+  video) redundant with the layout and easy to set wrong. Now a layout with a Video block records (a press starts, the
+  next one stops) and any other takes a screenshot. The trigger keeps *Screenshot of* (the program in focus, the screen
+  under the mouse, all screens), shown only for a screenshot layout. Old trigger files keep their `media` field, which
+  is read but no longer used, so nothing breaks and nothing is rewritten.
+- **A window whose layout had a dropdown stayed on "Loading…" (fixed).** Since the thread step of 7 Nov, the window
+  binds each dropdown's second step, and the value was missing until the person chose something; Svelte refuses to
+  bind a missing value to a component that has a default, so the window never drew. Every dropdown now starts with an
+  empty second step. The tests of single blocks could not see it, so the end-to-end check on a virtual screen now uses a
+  layout with a dropdown (it failed without the fix and passes with it), and the whole window is drawn in a test for
+  each kind of layout.
+- **0.2.0** gathers the flow review, the connector round (X, Bluesky, Instagram, a build switch per service,
+  `cargoframe open`) and these two changes.
+

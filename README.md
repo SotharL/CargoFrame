@@ -15,12 +15,26 @@ Nothing leaves your computer until you press that button.
 
 For Windows 11 and Linux. It waits in the tray and costs almost nothing while it waits.
 
-> **Status: private beta.** The Windows installer has been tried and works. Everything is built and tested, but it has
+> **Version 0.2.0, private beta.** The Windows installer has been tried and works. Everything is built and tested, but it has
 > not yet been used with every real account, and the installer is not signed. [What is and is not verified](docs/status.md).
 
 **In this page:** [Install](#install) · [First capture](#your-first-capture-in-five-steps) · [Connect a service](#connect-a-service) ·
 [What the window can do](#what-the-window-can-do) · [Templates and clean-up](#ready-made-layouts-and-cleaning-up) ·
 [Problems](#problems) · [For companies](#for-companies) · [For developers](#for-developers)
+
+<details>
+<summary><b>What is new in 0.2.0</b></summary>
+
+- **The layout decides:** a shortcut records when its layout has a Video block, and takes a screenshot otherwise. No
+  more "Makes" to set on each trigger.
+- **Fixed:** a CargoFrame window whose layout had a dropdown could stay on "Loading…".
+- **New services:** X, Bluesky and Instagram.
+- **Settings grouped by content:** *Get started*, *Captures*, *CargoFrame* (General, Your data, About).
+- **For companies:** builds with only the services you use, and other programs can fill a layout
+  (`cargoframe open`).
+- **Linux** trusts the certificates your company installed.
+
+</details>
 
 ---
 
@@ -81,9 +95,10 @@ Do these once. The app starts empty: no connections, shortcuts or layouts.
    then **Test**. Beside each token field a button opens the service's own page to get it. You can skip this and
    start with **Save locally**, which needs no account.
 3. **Make a layout** (*Layouts, Start from a template*). A layout is the window a capture opens. Press **Use** on a
-   template, change what you like, and press **Save as my layout**.
-4. **Add a trigger** (*Triggers, Add a trigger*). Name it, click the Shortcut box and press the keys, choose what it
-   **Makes** (a screenshot or a video), what to capture, and your layout. **Save**.
+   template, change what you like, and press **Save as my layout**. A layout with a **Video** block records the
+   screen; any other takes a screenshot.
+4. **Add a trigger** (*Triggers, Add a trigger*). Name it, click the Shortcut box and press the keys, and pick your
+   layout. For a screenshot, choose what it shows (the program in focus, the screen, or all screens). **Save**.
 5. **Press the shortcut** in any program. Check the window, type your note, press the sharing button.
    If sending fails it retries, then keeps a zip of everything so nothing is lost.
 
@@ -160,7 +175,7 @@ block whether a button sends it, as the prompt, or in one of the service's field
 <details>
 <summary><b>Video</b></summary>
 
-A trigger whose **Makes** is *A video* starts recording the first time you press its shortcut and stops the second
+A shortcut whose layout has a **Video** block starts recording the first time you press it and stops the second
 time. Only the last seconds are kept (10 by default, set in *Settings, Recording*). The window plays the clip; you can trim
 it (drag the two handles under it), crop it (*Crop*, drag the box, *Apply crop*) and put one red ring with a text on
 it (*Mark*) before sending.
@@ -171,7 +186,7 @@ Click the Video block in the layout builder to choose what is recorded: the whol
 - **Screenshot and video together:** tick *Also take a screenshot when the recording ends* on the video block, or press
   *Take screenshot* while you look at the clip. The screenshot block stays empty until then.
 - **Where a recording can go:** Slack, Google Drive, Jira and Discord (up to 100 MB; the service may allow less).
-  Reddit, Teams, Claude and Custom API take pictures only, and the window says so.
+  Reddit, Teams, Claude, X, Bluesky, Instagram and Custom API take pictures only, and the window says so.
 - **Sound:** the video block's **Sound from** records everything the computer plays (the default) or only the program
   in focus; a microphone is a separate choice. Nothing has to be switched on in Windows. **Setup** shows the current
   sound output, and its button opens the Windows sound settings on the Playback tab.
@@ -237,6 +252,9 @@ Nothing is pre-installed: no ready-made connections, triggers or layouts sit in 
 | Slack | Message · Message with a recording |
 | Discord | Message |
 | Teams | Message |
+| X | Post |
+| Bluesky | Post |
+| Instagram | Post |
 | Custom API | Post |
 
 A template is never stored or changed. Opening one shows an unsaved layout; **Save as my layout** writes your copy.
@@ -380,7 +398,7 @@ in `ui/` and open `settings.html` or `capture.html`.
 <details>
 <summary><b>Documents</b></summary>
 
-- [Design](docs/design.md): how the app is built today, in one short page
+- [Design](docs/design.md): how the app is built today, with its [branding](docs/design.md#branding)
 - [Decisions](docs/decisions.md): what was decided, and why
 - [Connectors](docs/connectors.md): how each service flows, and what to improve next
 - [Status](docs/status.md): what works, what is verified, what is still open

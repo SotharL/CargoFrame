@@ -169,7 +169,7 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
             notify::problem(
                 app,
                 "CargoFrame",
-                "A video trigger cannot take values from another program yet; it records as usual.",
+                "A layout that records cannot take values from another program yet; it records as usual.",
             );
         }
         press_video(app, trigger_id);
