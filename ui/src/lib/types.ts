@@ -442,28 +442,69 @@ export interface ShortcutStatus {
 export type RuleFormat = 'json' | 'yaml' | 'toml' | 'ini' | 'csv' | 'xml' | 'regex' | 'text' | 'file';
 export type RuleMultiple = 'first' | 'last' | 'join' | 'nth';
 
+/** When several files match a data rule's file: the newest, or all of them. */
+export type RuleSeveral = 'newest' | 'all';
+/** Which of the places a value is found: the first, the last, or all of them joined. */
+export type RuleWhich = 'first' | 'last' | 'all';
+
+/** How a value is found in a file. The file's kind (JSON, a log…) is worked out from its name. */
+export type RuleFind =
+  /** The value written after a name (`GPU: …`, `version = …`), or a key of a JSON, YAML, TOML, INI or XML file. */
+  | { type: 'value_of'; name: string }
+  /** The text between two pieces of text on a line; `end` null: up to the end of the line. */
+  | { type: 'between'; start: string; end: string | null }
+  /** The whole line that holds a text. */
+  | { type: 'line_with'; text: string }
+  /** A rule made before 0.3.0: its own `format` and `query`. */
+  | { type: 'advanced' };
+
+/** One value a data rule reads, used in text as `{{rule.<key>}}`. */
+export interface RuleValue {
+  key: string;
+  name: string;
+  find: RuleFind;
+  which: RuleWhich;
+  fallback: string | null;
+}
+
+/** Data from a file: if the file is found, read these values, and maybe add it to the files. */
 export interface Rule {
   name: string;
+  /** The file's name or part of it (found in any folder), or a path with patterns. */
   file: string;
+  several?: RuleSeveral;
+  add_to_files?: boolean;
+  values?: RuleValue[];
+  // before 0.3.0 a rule read one value with a format and a query
   format: RuleFormat;
-  query: string;
+  query?: string;
   multiple: RuleMultiple;
   separator: string;
-  /** Which one when `multiple` is `nth`: 1 is the first, -1 the last. */
   nth: number;
-  /** Regex only: the value built from each match, such as `$1.$2`. Empty gives group 1 or the match. */
-  output: string;
-  fallback: string | null;
+  output?: string;
+  fallback?: string | null;
   max_bytes: number;
+}
+
+export interface RuleValueTest {
+  key: string;
+  value: string | null;
+  problem: string | null;
+  used_fallback: boolean;
 }
 
 export interface RuleTest {
   folder: string | null;
   value: string | null;
   problem: string | null;
-  /** The file the rule's pattern means, relative to the folder, and the start of it. */
+  /** The file the rule reads in the folder (the newest when several match), and the start of it. */
   file: string | null;
   excerpt: string | null;
+  /** How the file is read: "JSON", "text"… */
+  kind?: string | null;
+  /** Every file the name matches, the newest first. */
+  files?: string[];
+  values?: RuleValueTest[];
 }
 
 export type InfoKind = 'text' | 'choice' | 'multi_choice' | 'number' | 'flag';

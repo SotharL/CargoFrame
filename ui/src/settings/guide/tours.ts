@@ -3,6 +3,7 @@
 // this file; to rename a field, change its `data-tour` too. tours.test.ts fails when a step
 // points at something that no longer exists, so a guide cannot silently go stale.
 import type { PageId } from '../nav';
+import { PAGES, type GetLinkSpec } from '../../lib/connectorHelp';
 
 export interface Step {
   /** The `data-tour` name of what to point at. */
@@ -13,6 +14,8 @@ export interface Step {
   page?: PageId;
   /** Next presses the target itself (the button that opens a form, a Save button). */
   click?: boolean;
+  /** A web page the step points to, opened in the browser from the bubble. */
+  link?: GetLinkSpec;
 }
 
 export interface Tour {
@@ -42,7 +45,7 @@ export const TOURS: Tour[] = [
       { target: 'jira.auth', say: 'Jira Cloud uses e-mail and a token. Server uses a personal token.' },
       { target: 'jira.email', say: 'The e-mail you sign in to Jira with.' },
       { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
-      { target: 'conn.secret', say: 'Paste the token. The button beside it opens the page that makes one.' },
+      { target: 'conn.secret', say: 'Paste the token. Make one on this page:', link: PAGES.jiraToken },
       { target: 'conn.done', say: 'Press Done, then Test on the card.' },
     ],
   },
@@ -51,7 +54,7 @@ export const TOURS: Tour[] = [
     title: 'Connect Google Drive and Sheets',
     steps: [
       { target: 'add-google', say: 'Start here: add a Google connection.', page: SETUP, click: true },
-      { target: 'google.client_id', say: 'Paste your Client ID. The button opens the page where you make one.' },
+      { target: 'google.client_id', say: 'Paste your Client ID (a "Desktop app" one). Make it here:', link: PAGES.googleCredentials },
       { target: 'conn.save', say: 'Save. A box for the client secret appears.', click: true },
       { target: 'conn.secret', say: 'Paste the client secret from the same page.' },
       { target: 'conn.done', say: 'Press Done.' },
@@ -63,7 +66,7 @@ export const TOURS: Tour[] = [
     title: 'Connect Reddit',
     steps: [
       { target: 'add-reddit', say: 'Start here: add a Reddit connection.', page: SETUP, click: true },
-      { target: 'reddit.client_id', say: 'Paste the app id. The button opens the page where you register one.' },
+      { target: 'reddit.client_id', say: 'Paste the app id of an "installed app". Register one here:', link: PAGES.redditApps },
       { target: 'conn.save', say: 'Save.', click: true },
       signIn('Reddit'),
     ],
@@ -82,7 +85,7 @@ export const TOURS: Tour[] = [
     title: 'Connect Slack',
     steps: [
       { target: 'add-slack', say: 'Start here: add a Slack connection.', page: SETUP, click: true },
-      { target: 'slack.steps', say: 'These steps make the bot token you need.' },
+      { target: 'slack.steps', say: 'These steps make the bot token you need, on this page:', link: PAGES.slackApps },
       { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
       { target: 'conn.secret', say: 'Paste the bot token (it starts with xoxb-).' },
       { target: 'conn.done', say: 'Press Done. In each channel, type /invite @ and the app name.' },
@@ -97,7 +100,7 @@ export const TOURS: Tour[] = [
       { target: 'discord.add-channel', say: 'Add a channel to post in.', click: true },
       { target: 'discord.channels', say: 'Give it a name, like bugs. Add one for each channel you use.' },
       { target: 'conn.save', say: 'Save. A link box appears for each channel.', click: true },
-      { target: 'conn.secret', say: "Paste the channel's webhook link. The button shows how to make one." },
+      { target: 'conn.secret', say: "Paste the channel's webhook link. How to make one:", link: PAGES.discordWebhooks },
       { target: 'conn.done', say: 'Press Done.' },
       { target: 'layouts.templates', say: 'Then start a layout from a template.', page: 'layouts', click: true },
       { target: 'template-discord-message', say: 'This one lists only threads named like your Title.' },
@@ -109,7 +112,7 @@ export const TOURS: Tour[] = [
     steps: [
       { target: 'add-teams', say: 'Start here: add a Teams connection.', page: SETUP, click: true },
       { target: 'teams.steps', say: 'These steps register the small app Teams needs.' },
-      { target: 'teams.client_id', say: 'Paste its Application (client) ID. The button opens the page.' },
+      { target: 'teams.client_id', say: 'Paste its Application (client) ID, from this page:', link: PAGES.teamsApps },
       { target: 'conn.save', say: 'Save.', click: true },
       signIn('Microsoft'),
     ],
@@ -120,7 +123,7 @@ export const TOURS: Tour[] = [
     steps: [
       { target: 'add-x', say: 'Start here: add an X connection.', page: SETUP, click: true },
       { target: 'x.steps', say: 'These steps make the small app X needs.' },
-      { target: 'x.client_id', say: 'Paste its OAuth 2.0 Client ID. The button opens the portal.' },
+      { target: 'x.client_id', say: 'Paste its OAuth 2.0 Client ID, from the portal:', link: PAGES.xPortal },
       { target: 'conn.save', say: 'Save.', click: true },
       signIn('X'),
     ],
@@ -132,7 +135,7 @@ export const TOURS: Tour[] = [
       { target: 'add-bluesky', say: 'Start here: add a Bluesky connection.', page: SETUP, click: true },
       { target: 'bluesky.handle', say: 'Your handle, like jane.bsky.social.' },
       { target: 'conn.save', say: 'Save. A box for the app password appears.', click: true },
-      { target: 'conn.secret', say: 'Paste an app password. The button opens the page that makes one.' },
+      { target: 'conn.secret', say: 'Paste an app password. Make one here:', link: PAGES.blueskyPasswords },
       { target: 'conn.done', say: 'Press Done, then Test on the card.' },
     ],
   },
@@ -144,7 +147,7 @@ export const TOURS: Tour[] = [
       { target: 'instagram.upload', say: 'Where CargoFrame puts the picture first, on your own server.' },
       { target: 'instagram.public', say: 'The public address of that file. Instagram fetches it there.' },
       { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
-      { target: 'conn.secret', say: 'Paste the token made in your Meta app (Generate token).' },
+      { target: 'conn.secret', say: 'Paste the token made in your Meta app (Generate token):', link: PAGES.metaApps },
       { target: 'conn.done', say: 'Press Done, then Test on the card.' },
     ],
   },
@@ -175,11 +178,11 @@ export const TOURS: Tour[] = [
     id: 'data-from-files',
     title: 'Add a value from a file',
     steps: [
-      { target: 'rules.add', say: 'Read a value, like a version, from a file in the project.', page: 'rules', click: true },
-      { target: 'rules.name', say: 'Its name. Write {{rule.name}} in a text block to use it.' },
-      { target: 'rules.file', say: 'The file, from the project folder: package.json, say.' },
-      { target: 'rules.format', say: 'How to read it: JSON, text, a pattern.' },
-      { target: 'rules.query', say: 'Where the value is: a JSON key, or the text around it.' },
+      { target: 'rules.add', say: "Read values, like a machine's graphics card, from a file in the project.", page: 'rules', click: true },
+      { target: 'rules.name', say: 'Name it, like Machine config.' },
+      { target: 'rules.file', say: 'The file to look for: its name or part of it, like system_info.' },
+      { target: 'rules.add_files', say: 'Tick this to send the file too.' },
+      { target: 'rules.values', say: 'Each value: a name, and the text written before it. Copy its {{rule…}} into a title.' },
       { target: 'rules.save', say: 'Save. The preview shows what it finds.' },
     ],
   },

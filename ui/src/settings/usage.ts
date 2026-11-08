@@ -11,13 +11,13 @@ function names(layouts: Layouts, uses: (l: Layout) => boolean): string[] {
 }
 
 /** Layouts that put `{{rule.<id>}}` in a text block, or fill a field from the rule in a sharing button. */
-export function layoutsUsingRule(layouts: Layouts, ruleId: string): string[] {
-  const token = `{{rule.${ruleId}}}`;
+export function layoutsUsingRule(layouts: Layouts, ruleId: string, keys: readonly string[] = [ruleId]): string[] {
+  const tokens = keys.map((k) => `{{rule.${k}}}`);
   return names(layouts, (l) =>
     l.blocks.some(
       (b) =>
-        (b.type === 'text' && b.default_text.includes(token)) ||
-        (b.type === 'sharing_button' && b.mappings.some((m) => m.source.kind === 'rule' && m.source.value === ruleId)),
+        (b.type === 'text' && tokens.some((t) => b.default_text.includes(t))) ||
+        (b.type === 'sharing_button' && b.mappings.some((m) => m.source.kind === 'rule' && keys.includes(m.source.value))),
     ),
   );
 }

@@ -4,7 +4,7 @@
 use cargoframe_config::{Kind, Store};
 use cargoframe_context::climb;
 use cargoframe_layout::{reach, BlockKind, FilesBlock, Layout, Reach, Registry};
-use cargoframe_rules::{run_all, FsFiles, Rule};
+use cargoframe_rules::{FsFiles, Rule};
 use cargoframe_window::files::{self, PlaceFound};
 use cargoframe_window::{places, vars};
 use serde::Serialize;
@@ -25,43 +25,74 @@ pub fn button_reach(layout: &Layout, registry: &dyn Registry) -> BTreeMap<String
 pub struct RuleTest {
     /// The folder the rule was run against.
     pub folder: Option<String>,
+    /// The first value, as before 0.3.0 (the Settings page reads `values`).
     pub value: Option<String>,
+    /// Why the rule as a whole cannot run (not finished, no such file).
     pub problem: Option<String>,
-    /// The file the rule's pattern means in that folder, and the start of it, so the person sees
-    /// what the rule is looking at.
+    /// The file the rule reads in that folder (the newest when several match), and the start of
+    /// it, so the person sees what the rule is looking at.
     pub file: Option<String>,
     pub excerpt: Option<String>,
+    /// How the file is read: "JSON", "text"…
+    pub kind: Option<String>,
+    /// Every file the name matches, the newest first.
+    pub files: Vec<String>,
+    /// What each value gave.
+    pub values: Vec<ValueTest>,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct ValueTest {
+    pub key: String,
+    pub value: Option<String>,
+    pub problem: Option<String>,
+    pub used_fallback: bool,
 }
 
 /// Run one rule against `folder` (or say there is none). Never writes anything. A rule that is
-/// not finished yet (no name, a query being typed) still shows the file it points at.
+/// not finished yet (no name, a value being typed) still shows the file it points at, and every
+/// value that can already be read.
 pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
-    let seen = folder
-        .map(Path::new)
-        .filter(|f| f.is_dir())
+    let root = folder.map(Path::new).filter(|f| f.is_dir());
+    let seen = root
         .map(|f| cargoframe_rules::peek(rule, f, &FsFiles))
         .unwrap_or_default();
     let mut named = rule.clone();
     if named.name.trim().is_empty() {
         named.name = "preview".into();
     }
-    if let Err(e) = cargoframe_rules::check(&named) {
-        return RuleTest {
-            folder: folder.map(str::to_string),
-            value: None,
-            problem: Some(e),
-            file: seen.file,
-            excerpt: seen.excerpt,
-        };
-    }
-    let outcomes = run_all([("test", &named)], folder.map(Path::new), &FsFiles);
-    let o = &outcomes["test"];
+    let report = cargoframe_rules::run_rules([("test", &named)], root, &FsFiles);
+    let values: Vec<ValueTest> = named
+        .steps("test")
+        .iter()
+        .filter_map(|s| {
+            report.values.get(&s.key).map(|o| ValueTest {
+                key: s.key.clone(),
+                value: o.value.clone(),
+                problem: o.problem.clone(),
+                used_fallback: o.used_fallback,
+            })
+        })
+        .collect();
+    let first = values.first();
     RuleTest {
         folder: folder.map(str::to_string),
-        value: o.value.clone(),
-        problem: o.problem.clone(),
+        value: first.and_then(|v| v.value.clone()),
+        problem: cargoframe_rules::check(&named).err().or_else(|| {
+            match (&seen.file, root) {
+                (None, Some(_)) => Some(
+                    cargoframe_rules::RuleError::FileNotFound(rule.file.trim().to_string())
+                        .to_string(),
+                ),
+                (_, None) => Some(cargoframe_rules::RuleError::NoProject.to_string()),
+                _ => None,
+            }
+        }),
+        kind: seen.file.as_deref().map(|f| cargoframe_rules::find::kind_name(f).to_string()),
         file: seen.file,
         excerpt: seen.excerpt,
+        files: report.found.get("test").cloned().unwrap_or_default(),
+        values,
     }
 }
 
@@ -184,14 +215,19 @@ pub fn variables(store: &Store) -> Vec<VariableInfo> {
         .collect();
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
         for (id, rule) in loaded.items {
-            out.push(VariableInfo {
-                name: format!("rule.{id}"),
-                description: if rule.name.trim().is_empty() {
-                    "Data rule".to_string()
-                } else {
-                    format!("Data rule: {}", rule.name.trim())
-                },
-            });
+            for step in rule.steps(&id) {
+                let file = rule.name.trim();
+                let value = step.name.trim();
+                out.push(VariableInfo {
+                    name: format!("rule.{}", step.key),
+                    description: match (file.is_empty(), value.is_empty() || value == file) {
+                        (true, true) => "From a file".to_string(),
+                        (false, true) => format!("From a file: {file}"),
+                        (true, false) => format!("From a file: {value}"),
+                        (false, false) => format!("From a file: {file}, {value}"),
+                    },
+                });
+            }
         }
     }
     out
@@ -439,7 +475,7 @@ mod tests {
             .unwrap();
         let all = variables(&store);
         assert_eq!(all.last().unwrap().name, "rule.build");
-        assert_eq!(all.last().unwrap().description, "Data rule: Build");
+        assert_eq!(all.last().unwrap().description, "From a file: Build");
         assert!(all.iter().all(|v| !v.description.is_empty()));
     }
 }

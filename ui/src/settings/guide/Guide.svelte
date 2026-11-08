@@ -6,6 +6,12 @@
   import { go, route } from '../route.svelte';
   import { guide, stopTour } from './tourState.svelte';
   import { selectorOf } from './tours';
+  import { getApi } from '../../lib/ipc';
+
+  /** Opens the step's web page in the browser. */
+  async function openPage(url: string) {
+    await (await getApi()).openLink(url);
+  }
 
   /** How long to wait for the target to appear before saying it is not on the screen yet. */
   const WAIT_MS = 2500;
@@ -126,6 +132,9 @@
     style:top={caption ? `${caption.top}px` : undefined}
   >
     <p>{step.say}{#if !box && !waiting} <span class="later">(Not on the screen yet: do the step before, then press Next.)</span>{/if}</p>
+    {#if step.link}
+      <a class="web" href={step.link.url} title={step.link.url} onclick={(e) => { e.preventDefault(); void openPage(step!.link!.url); }}>{step.link.label} <span aria-hidden="true">↗</span></a>
+    {/if}
     <div class="row">
       <span class="count">{guide.index + 1} / {tour.steps.length}</span>
       {#if guide.index > 0}<button type="button" onclick={back}>Back</button>{/if}
@@ -152,6 +161,7 @@
   .say.fixed { left: 50%; bottom: 24px; transform: translateX(-50%); }
   p { margin: 0; }
   .later { opacity: 0.85; }
+  .web { color: inherit; font-weight: 600; text-decoration: underline; justify-self: start; }
   .row { display: flex; gap: 6px; align-items: center; justify-content: flex-end; }
   .count { margin-right: auto; font-size: 12px; opacity: 0.85; }
   button {

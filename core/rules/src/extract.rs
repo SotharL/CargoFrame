@@ -85,6 +85,43 @@ pub fn extract(rule: &Rule, text: &str) -> Result<String, RuleError> {
     })
 }
 
+/// A variable name: letters, digits, `_` and `-`.
+pub fn key_ok(key: &str) -> bool {
+    !key.is_empty()
+        && key.len() <= 64
+        && key
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+}
+
+/// A rule of 0.3.0: values to read, files to add, or both.
+fn check_steps(rule: &Rule) -> Result<(), String> {
+    if rule.values.is_empty() && !rule.add_to_files {
+        return Err("Add a value to read, or tick \u{201c}Add it to the files\u{201d}".into());
+    }
+    let mut keys = std::collections::BTreeSet::new();
+    for step in &rule.values {
+        let name = if step.name.trim().is_empty() {
+            step.key.as_str()
+        } else {
+            step.name.trim()
+        };
+        if step.name.trim().is_empty() {
+            return Err("Give each value a name".into());
+        }
+        if !key_ok(&step.key) {
+            return Err(format!(
+                "\u{201c}{name}\u{201d}: its variable name may only have letters, digits, _ and -"
+            ));
+        }
+        if !keys.insert(step.key.as_str()) {
+            return Err(format!("Two values are called {{{{rule.{}}}}}", step.key));
+        }
+        crate::find::check(&step.find).map_err(|e| format!("\u{201c}{name}\u{201d}: {e}"))?;
+    }
+    Ok(())
+}
+
 /// The `n`th of `values`: 1 is the first, -1 the last, -2 the one before it.
 fn pick_nth(mut values: Vec<String>, n: i64) -> Result<String, RuleError> {
     let found = values.len();
@@ -370,13 +407,16 @@ fn check_output(re: &regex::Regex, output: &str) -> Result<(), RuleError> {
 /// query is valid for the format. Returns what to change, in words.
 pub fn check(rule: &Rule) -> Result<(), String> {
     if rule.name.trim().is_empty() {
-        return Err("Give the rule a name".into());
+        return Err("Give it a name".into());
     }
     if !crate::run::pattern_ok(&rule.file) {
         return Err(
-            "The file must be a path inside the project folder, like package.json or config/*.toml"
+            "Write the file's name or part of it (system_info, .log), or a path inside the project folder (config/*.toml)"
                 .into(),
         );
+    }
+    if !rule.values.is_empty() || rule.query.trim().is_empty() {
+        return check_steps(rule);
     }
     let q = rule.query.trim();
     if q.is_empty() && !matches!(rule.format, Format::Json | Format::Yaml | Format::Toml) {
@@ -647,10 +687,6 @@ mod check_tests {
     #[test]
     fn a_good_rule_passes() {
         assert!(check(&rule("package.json", Format::Json, "version")).is_ok());
-        assert!(
-            check(&rule("**/*.toml", Format::Toml, "")).is_ok(),
-            "the whole document"
-        );
         assert!(check(&rule("a.ini", Format::Ini, "s.k")).is_ok());
     }
 
@@ -665,9 +701,10 @@ mod check_tests {
         assert!(check(&rule("", Format::Json, "x")).is_err());
         assert!(check(&rule("a.json", Format::Json, "a[")).is_err());
         assert!(check(&rule("a.txt", Format::Regex, "(")).is_err());
+        // nothing to look for: since 0.3.0 that is a rule with no value to read
         assert!(check(&rule("a.txt", Format::Regex, " "))
             .unwrap_err()
-            .contains("look for"));
+            .contains("Add a value"));
         assert!(check(&rule("a.csv", Format::Csv, "")).is_err());
     }
 
