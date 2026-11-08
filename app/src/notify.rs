@@ -164,7 +164,7 @@ pub fn update_available(app: &AppHandle, version: &str) {
         .text1("Click here to update.")
         .duration(Duration::Long)
         .on_activated(move |_| {
-            crate::windowing::open_settings_at(&handle, "general");
+            crate::windowing::open_settings_at(&handle, "about");
             Ok(())
         })
         .show();
@@ -191,7 +191,7 @@ pub fn update_available(app: &AppHandle, version: &str) {
         match result {
             Ok(note) => note.wait_for_action(|action| {
                 if action == "default" {
-                    crate::windowing::open_settings_at(&handle, "general");
+                    crate::windowing::open_settings_at(&handle, "about");
                 }
             }),
             Err(e) => tracing::warn!("update notification failed: {e}"),

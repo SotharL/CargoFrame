@@ -51,18 +51,17 @@
 
 {#if loaded}
   <Section
-    title="Safety"
-    hint="What CargoFrame does when a share fails, and where it keeps zips when there is nowhere to send."
+    title="When sharing fails"
+    hint="Nothing you captured is lost: CargoFrame tries again, then keeps a zip in a folder you choose."
   >
     <details class="steps">
-      <summary>When sharing fails</summary>
+      <summary>What happens, step by step</summary>
       <ol>
         <li>CargoFrame tries again a few times, waiting a little longer each time.</li>
         <li>If it still fails, it saves everything as a zip in the folder below.</li>
         <li>If that folder is not set or cannot be written, it asks you where to save.</li>
         <li>If you cancel, the zip is kept in CargoFrame's own folder and you are told where.</li>
       </ol>
-      <p class="quiet">Nothing you captured is thrown away because a service was down.</p>
     </details>
 
     <div class="sub">

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, tick } from 'svelte';
-  import { PAGES } from './nav';
+  import { GROUP_TITLES, PAGES, type PageGroup } from './nav';
   import { go, parseTarget, restore, route } from './route.svelte';
   import General from './pages/General.svelte';
   import Triggers from './pages/Triggers.svelte';
@@ -10,6 +10,8 @@
   import Connections from './pages/Connections.svelte';
   import VideoPage from './pages/Video.svelte';
   import Setup from './pages/Setup.svelte';
+  import DataPage from './pages/DataPage.svelte';
+  import About from './pages/About.svelte';
   import Guide from './guide/Guide.svelte';
   import GuideMenu from './guide/GuideMenu.svelte';
   import { setupState } from './setupState.svelte';
@@ -45,6 +47,7 @@
   });
 
   const current = $derived(PAGES.find((p) => p.id === page)!);
+  const groups = (['start', 'capture', 'app'] as PageGroup[]).map((g) => ({ id: g, pages: PAGES.filter((p) => p.group === g) }));
 
   function onNavKey(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
@@ -59,17 +62,22 @@
 <div class="shell">
   <nav aria-label="Settings sections">
     <div class="brand"><Logo variant="wordmark" size={26} /></div>
-    {#each PAGES as p (p.id)}
-      <button
-        id="nav-{p.id}"
-        class="item"
-        class:on={page === p.id}
-        aria-current={page === p.id ? 'page' : undefined}
-        tabindex={page === p.id ? 0 : -1}
-        onkeydown={onNavKey}
-        onclick={() => go(p.id)}
-        >{p.title}{#if p.id === 'setup' && setupState.missing > 0}<span class="count" aria-label="{setupState.missing} missing">{setupState.missing}</span>{/if}</button
-      >
+    {#each groups as g (g.id)}
+      <p class="group" id="group-{g.id}">{GROUP_TITLES[g.id]}</p>
+      <div role="group" aria-labelledby="group-{g.id}" class="pages">
+        {#each g.pages as p (p.id)}
+          <button
+            id="nav-{p.id}"
+            class="item"
+            class:on={page === p.id}
+            aria-current={page === p.id ? 'page' : undefined}
+            tabindex={page === p.id ? 0 : -1}
+            onkeydown={onNavKey}
+            onclick={() => go(p.id)}
+            >{p.title}{#if p.id === 'setup' && setupState.missing > 0}<span class="count" aria-label="{setupState.missing} missing">{setupState.missing}</span>{/if}</button
+          >
+        {/each}
+      </div>
     {/each}
     <GuideMenu />
   </nav>
@@ -107,6 +115,10 @@
       </section>
     {:else if page === 'video'}
       <VideoPage />
+    {:else if page === 'data'}
+      <DataPage />
+    {:else if page === 'about'}
+      <About />
     {:else}
       <Placeholder title={current.title} />
     {/if}
@@ -122,7 +134,13 @@
     padding: 16px 12px;
     display: flex; flex-direction: column; gap: 2px;
   }
-  .brand { padding: 4px 10px 16px; }
+  .brand { padding: 4px 10px 12px; }
+  .group {
+    margin: 14px 10px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
+    text-transform: uppercase; color: var(--quiet);
+  }
+  .group:first-of-type { margin-top: 0; }
+  .pages { display: flex; flex-direction: column; gap: 2px; }
   .item {
     text-align: left; border: 0; background: transparent;
     padding: 8px 10px; border-radius: var(--radius-sm);

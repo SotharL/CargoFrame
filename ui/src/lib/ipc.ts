@@ -3,7 +3,7 @@ import type {
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
-  VideoRecording, VideoTestEdit, VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
+  VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 
@@ -133,19 +133,10 @@ export interface Api {
   openSoundSettings(): Promise<void>;
   /** Record the screen for a few seconds with the settings as they are in the form. */
   tryVideoRecording(video: Video): Promise<VideoTrial>;
-  /** Start recording until `stopVideoRecording`, keeping only the last seconds. */
-  startVideoRecording(video: Video): Promise<void>;
-  getVideoRecording(): Promise<VideoRecording>;
-  /** Stop, make the clip, and report it like a test recording. */
-  stopVideoRecording(): Promise<VideoTrial>;
-  /** The last test clip (or, with `exported`, its edited copy), to play in the window. */
-  getVideoTestClip(exported?: boolean): Promise<Blob>;
-  /** The picture the page drew as the test mark (a PNG the size of the clip); null forgets it. */
-  setVideoTestMark(png: Blob | null): Promise<void>;
-  /** Cut, crop and mark the test clip into a copy. */
-  exportVideoTest(video: Video, edit: VideoTestEdit): Promise<VideoTrial>;
-  /** Open the clip of the last test recording (or its edited copy) in the video player. */
-  openVideoTest(exported?: boolean): Promise<void>;
+  /** The last test clip, to play in the window. */
+  getVideoTestClip(): Promise<Blob>;
+  /** Open the clip of the last test recording in the video player. */
+  openVideoTest(): Promise<void>;
   /** The system folder picker; null when cancelled. */
   pickFolder(title?: string): Promise<string | null>;
 
@@ -263,19 +254,11 @@ async function tauriApi(): Promise<Api> {
     installMissing: () => invoke('install_missing'),
     openSoundSettings: () => invoke('open_sound_settings'),
     tryVideoRecording: (video) => invoke('try_video_recording', { video }),
-    startVideoRecording: (video) => invoke('start_video_recording', { video }),
-    getVideoRecording: () => invoke('get_video_recording'),
-    stopVideoRecording: () => invoke('stop_video_recording'),
-    getVideoTestClip: async (exported) => {
-      const bytes = await invoke<ArrayBuffer>('get_video_test_clip', { exported });
+    getVideoTestClip: async () => {
+      const bytes = await invoke<ArrayBuffer>('get_video_test_clip');
       return new Blob([bytes], { type: 'video/mp4' });
     },
-    setVideoTestMark: async (png) => {
-      const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
-      await invoke('set_video_test_mark', bytes);
-    },
-    exportVideoTest: (video, edit) => invoke('export_video_test', { video, edit }),
-    openVideoTest: (exported) => invoke('open_video_test', { exported }),
+    openVideoTest: () => invoke('open_video_test'),
     pickFolder: (title) => invoke('pick_folder', { title: title ?? null }),
     getUpdateView: () => invoke('get_update_view'),
     checkUpdate: () => invoke('check_update'),
@@ -442,10 +425,6 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     else if (installFailed && !(installed && claudeInstalled)) install = { type: 'failed', message: 'winget said: No network connection.' };
     return { os: windows ? 'windows' : 'linux', items, missing: items.filter((i) => i.status === 'missing').length, install };
   };
-  let copyMade = false;
-  let markDrawn = false;
-  let recordingSince: number | null = null;
-  let recordingEnded: string | null = null;
   const store: Record<ItemKind, Map<string, unknown>> = {
     trigger: new Map(),
     layout: new Map(),
@@ -871,87 +850,12 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
       };
     },
-    startVideoRecording: async () => {
-      if (recordingSince !== null) throw 'A recording is already running.';
-      recordingSince = Date.now();
-      recordingEnded = opts.recordingFails
-        ? 'The recorder stopped by itself: Cannot load nvcuda.dll. Hardware encoders need the matching graphics card and driver: choose Software to carry on.'
-        : null;
-    },
-    getVideoRecording: async () => {
-      if (recordingEnded) return { state: 'failed', message: recordingEnded };
-      if (recordingSince === null) return { state: 'idle' };
-      const elapsed = Date.now() - recordingSince;
-      return {
-        state: 'recording', elapsed_ms: elapsed, buffered_ms: Math.min(elapsed, video.window_secs * 1000),
-        squeezed: false, keep_secs: video.window_secs,
-      };
-    },
-    stopVideoRecording: async () => {
-      const ended = recordingEnded;
-      const since = recordingSince;
-      recordingSince = null;
-      recordingEnded = null;
-      if (ended) {
-        return {
-          ok: false, message: ended, capture: null, encoder: null, width: 0, height: 0, clip_ms: 0,
-          clip_bytes: 0, took_ms: 0, clip: null,
-        };
-      }
-      if (since === null) {
-        return {
-          ok: false, message: 'No recording is running.', capture: null, encoder: null, width: 0, height: 0,
-          clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
-        };
-      }
-      trialRan = true;
-      const ran = Date.now() - since;
-      const kept = Math.min(ran, video.window_secs * 1000);
-      return {
-        ok: true,
-        message: `Recorded ${(kept / 1000).toFixed(1)} s at 1920×1080 with GDI and software (x264). Open the clip to check that it shows your screen.`,
-        capture: 'gdigrab', encoder: 'software', width: 1920, height: 1080, clip_ms: kept, clip_bytes: kept * 480,
-        took_ms: ran, clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\test-clip.mp4',
-      };
-    },
-    getVideoTestClip: async (exported) => {
-      if (!trialRan || (exported && !copyMade)) throw 'There is no test clip yet: run a test recording first';
+    getVideoTestClip: async () => {
+      if (!trialRan) throw 'There is no test clip yet: run a test recording first';
       return new Blob([new Uint8Array(16)], { type: 'video/mp4' });
     },
-    setVideoTestMark: async (png) => {
-      markDrawn = png !== null;
-    },
-    exportVideoTest: async (_v, edit) => {
-      if (!trialRan) {
-        return {
-          ok: false, message: 'There is no test clip yet: run a test recording first', capture: null, encoder: null,
-          width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
-        };
-      }
-      if (edit.mark === 'drawn' && !markDrawn) {
-        return {
-          ok: false, message: 'The mark was not drawn: try again', capture: null, encoder: null, width: 0,
-          height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
-        };
-      }
-      const length = (edit.end_ms ?? 5000) - edit.start_ms;
-      if (length < 500) {
-        return {
-          ok: false, message: `The clip would be ${(Math.max(length, 0) / 1000).toFixed(1)} s long; it must be at least 0.5 s`,
-          capture: null, encoder: null, width: 0, height: 0, clip_ms: 0, clip_bytes: 0, took_ms: 0, clip: null,
-        };
-      }
-      copyMade = true;
-      const w = edit.crop ? edit.crop.w - (edit.crop.w % 2) : 1920;
-      const h = edit.crop ? edit.crop.h - (edit.crop.h % 2) : 1080;
-      return {
-        ok: true, message: `Made a copy of ${(length / 1000).toFixed(1)} s at ${w}×${h}. Open it to check the cut, the crop and the mark.`,
-        capture: null, encoder: null, width: w, height: h, clip_ms: length, clip_bytes: length * 300, took_ms: 900,
-        clip: 'C:\\Users\\me\\AppData\\Local\\CargoFrame\\video-test\\exported.mp4',
-      };
-    },
-    openVideoTest: async (exported) => {
-      if (!trialRan || (exported && !copyMade)) throw 'There is no test clip yet: run a test recording first';
+    openVideoTest: async () => {
+      if (!trialRan) throw 'There is no test clip yet: run a test recording first';
     },
     pickFolder: async () => '/home/me/Documents/CargoFrame zips',
     getUpdateView: async () => updateView(),

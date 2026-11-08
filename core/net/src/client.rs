@@ -25,7 +25,8 @@ impl UreqHttp {
             .max_redirects(5)
             .user_agent(format!("CargoFrame/{}", env!("CARGO_PKG_VERSION")))
             .timeout_connect(Some(Duration::from_secs(10)));
-        #[cfg(windows)]
+        // The operating system's own certificate store, not a copy built into the program: a
+        // company that installs its own root certificate is trusted without anything to set.
         let builder = builder.tls_config(
             ureq::tls::TlsConfig::builder()
                 .root_certs(ureq::tls::RootCerts::PlatformVerifier)

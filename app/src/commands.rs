@@ -245,14 +245,17 @@ pub fn edit_layout(app: AppHandle, layout_id: Option<String>) {
 /// Open Settings on one of its pages (for example `connections`, to reconnect).
 #[tauri::command]
 pub fn open_settings(app: AppHandle, page: String) {
-    const PAGES: [&str; 7] = [
-        "general",
+    const PAGES: [&str; 10] = [
         "setup",
         "connections",
+        "layouts",
         "triggers",
         "rules",
         "infotypes",
-        "layouts",
+        "video",
+        "general",
+        "data",
+        "about",
     ];
     if PAGES.contains(&page.as_str()) {
         windowing::open_settings_at(&app, &page);
@@ -772,89 +775,24 @@ pub async fn try_video_recording(app: AppHandle, video: Video) -> Result<video::
     .await
 }
 
-/// Start recording until told to stop, keeping only the last seconds, as a real recording will.
+/// The last test clip's bytes, to play in the Recording page (sent raw, not as JSON numbers).
 #[tauri::command]
-pub async fn start_video_recording(app: AppHandle, video: Video) -> Result<(), String> {
-    let video = video::normalized(video);
-    blocking(move || {
-        let state = app.state::<AppState>();
-        let work = state.store.dirs().data().join("video-test");
-        state.recording.start(
-            &video,
-            video::Os::current(),
-            &video::Session::current(),
-            &work,
-            video.window_secs,
-        )
-    })
-    .await?
+pub fn get_video_test_clip(state: State<'_, AppState>) -> Result<Response, String> {
+    video::read_clip(&video_test_file(&state), video::PREVIEW_LIMIT).map(Response::new)
 }
 
-/// How the recording started by hand is doing.
-#[tauri::command]
-pub fn get_video_recording(state: State<'_, AppState>) -> video::RecordingView {
-    state.recording.view()
-}
-
-/// Stop the recording, make the clip and report it like a test recording.
-#[tauri::command]
-pub async fn stop_video_recording(app: AppHandle) -> Result<video::Trial, String> {
-    blocking(move || app.state::<AppState>().recording.stop()).await
-}
-
-/// The last test clip's bytes (or its exported copy's), to play in the Video page (sent raw, not
-/// as JSON numbers).
-#[tauri::command]
-pub fn get_video_test_clip(
-    state: State<'_, AppState>,
-    exported: Option<bool>,
-) -> Result<Response, String> {
-    let clip = video_test_file(&state, exported);
-    video::read_clip(&clip, video::PREVIEW_LIMIT).map(Response::new)
-}
-
-fn video_test_file(state: &AppState, exported: Option<bool>) -> std::path::PathBuf {
-    let name = if exported == Some(true) {
-        video::EXPORTED_CLIP
-    } else {
-        video::TRIAL_CLIP
-    };
-    state.store.dirs().data().join("video-test").join(name)
-}
-
-/// The picture the page drew as the test mark (a PNG, sent raw); an empty body forgets it.
-#[tauri::command]
-pub fn set_video_test_mark(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
-    let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected a picture".into());
-    };
-    let work = state.store.dirs().data().join("video-test");
-    video::store_mark(&work, (!bytes.is_empty()).then_some(bytes.as_slice()))
-}
-
-/// Cut, crop and mark the test clip into a copy.
-#[tauri::command]
-pub async fn export_video_test(
-    app: AppHandle,
-    video: Video,
-    edit: video::TestEdit,
-) -> Result<video::Trial, String> {
-    let video = video::normalized(video);
-    blocking(move || {
-        let state = app.state::<AppState>();
-        let work = state.store.dirs().data().join("video-test");
-        video::export_test(&video, &edit, &state.recording, &work)
-    })
-    .await
+fn video_test_file(state: &AppState) -> std::path::PathBuf {
+    state
+        .store
+        .dirs()
+        .data()
+        .join("video-test")
+        .join(video::TRIAL_CLIP)
 }
 
 #[tauri::command]
-pub fn open_video_test(
-    app: AppHandle,
-    state: State<'_, AppState>,
-    exported: Option<bool>,
-) -> Result<(), String> {
-    let clip = video_test_file(&state, exported);
+pub fn open_video_test(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+    let clip = video_test_file(&state);
     if !clip.is_file() {
         return Err("There is no test clip yet: run a test recording first".into());
     }
