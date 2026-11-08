@@ -1044,3 +1044,29 @@ programs handing data to a layout, company sign-in, accessibility).
   capture records; one Cargo feature per connector; a managed folder and `policy.json`; `cargoframe open` for other
   programs. Each is described in `design.md`, *Flow review* and *For companies*.
 
+### Connector round, 8 Nov 2026 (on a branch, for the owner's review)
+
+- **One Cargo feature per service**, in `core/connectors` and forwarded by the app. The settings models stay in every
+  build, so a saved connection of a service left out still reads and says "not in this copy of CargoFrame" instead of
+  breaking the file. The window asks the program which services it has (`app_info.connectors`) and hides the others'
+  forms, templates and guides. The forms' code stays in the window (a few KB); the code that talks to the service does
+  not.
+- **X**: the API v2 with OAuth 2.0 PKCE and the person's own Native App, because X gives no shared app and charges per
+  post. Pictures only for now (`/2/media/upload`, then `/2/tweets`); a picture description through `/2/media/metadata`.
+- **Bluesky**: handle and app password, because it needs no developer app at all, the easiest setup of any service.
+  The text's links are marked (facets, counted in bytes) so they show as links.
+- **Instagram**: Meta's API only takes a picture from a public address. Running a public server on people's
+  computers was ruled out (security, firewalls). So the picture goes to a server the person or company owns (an HTTP
+  PUT with an optional key header), then Instagram is told where it is, CargoFrame waits until Instagram has fetched
+  it, and publishes. The token comes from the Meta dashboard (no OAuth window to keep working) and is renewed for 60
+  days at each test or post.
+- **Pictures that are too big are halved until they fit** (PNG, so text stays sharp); Instagram gets a JPEG, its only
+  format. One small new dependency, `jpeg-encoder`, only in builds with Instagram.
+- **Plain text** for X, Bluesky and Instagram: the formatting marks are taken out (a bullet becomes "•"), and the
+  window offers no formatting buttons for them.
+- **Other programs fill a layout** through `cargoframe open --trigger <id> --set <block>=<text>`: the single-instance
+  channel already carries a second launch's arguments to the running copy, so there is no port, no service and
+  nothing new to maintain. A trigger rather than a layout is named, so the calling program is captured as with a
+  shortcut. Off for every layout until switched on.
+- **Fixed on the way:** saving a template said "Saved as a copy" instead of "Saved as your own layout".
+

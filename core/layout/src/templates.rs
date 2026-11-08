@@ -645,6 +645,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         blocks
     };
     Some(Layout {
+        accepts_input: false,
         id: String::new(),
         name: t.name.to_string(),
         blocks,

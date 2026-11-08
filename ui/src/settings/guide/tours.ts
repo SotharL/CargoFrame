@@ -115,6 +115,40 @@ export const TOURS: Tour[] = [
     ],
   },
   {
+    id: 'connect-x',
+    title: 'Connect X',
+    steps: [
+      { target: 'add-x', say: 'Start here: add an X connection.', page: SETUP, click: true },
+      { target: 'x.steps', say: 'These steps make the small app X needs.' },
+      { target: 'x.client_id', say: 'Paste its OAuth 2.0 Client ID. The button opens the portal.' },
+      { target: 'conn.save', say: 'Save.', click: true },
+      signIn('X'),
+    ],
+  },
+  {
+    id: 'connect-bluesky',
+    title: 'Connect Bluesky',
+    steps: [
+      { target: 'add-bluesky', say: 'Start here: add a Bluesky connection.', page: SETUP, click: true },
+      { target: 'bluesky.handle', say: 'Your handle, like jane.bsky.social.' },
+      { target: 'conn.save', say: 'Save. A box for the app password appears.', click: true },
+      { target: 'conn.secret', say: 'Paste an app password. The button opens the page that makes one.' },
+      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+    ],
+  },
+  {
+    id: 'connect-instagram',
+    title: 'Connect Instagram',
+    steps: [
+      { target: 'add-instagram', say: 'Start here: add an Instagram connection.', page: SETUP, click: true },
+      { target: 'instagram.upload', say: 'Where CargoFrame puts the picture first, on your own server.' },
+      { target: 'instagram.public', say: 'The public address of that file. Instagram fetches it there.' },
+      { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
+      { target: 'conn.secret', say: 'Paste the token made in your Meta app (Generate token).' },
+      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+    ],
+  },
+  {
     id: 'connect-custom',
     title: 'Connect your own API',
     steps: [

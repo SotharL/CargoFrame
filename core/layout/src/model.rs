@@ -20,6 +20,10 @@ pub struct Layout {
     pub name: String,
     #[serde(default)]
     pub blocks: Vec<Block>,
+    /// Other programs on this computer may fill its text boxes and dropdowns
+    /// (`cargoframe open --trigger <id> --set <block>=<text>`). Off unless the person turns it on.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub accepts_input: bool,
 }
 
 impl Layout {
@@ -29,6 +33,7 @@ impl Layout {
             id: id.into(),
             name: name.into(),
             blocks: Vec::new(),
+            accepts_input: false,
         }
     }
 
@@ -462,6 +467,7 @@ mod serde_tests {
     #[test]
     fn layout_round_trips_with_a_flat_block_shape() {
         let layout = Layout {
+            accepts_input: false,
             id: "bugs".into(),
             name: "Bug report".into(),
             blocks: vec![

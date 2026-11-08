@@ -10,6 +10,11 @@ rem
 rem  Add  fast     to skip reinstalling the web packages (when ui\package-lock.json is unchanged)
 rem  Add  nopause  to close without waiting for a key (VS Code tasks and CI use this)
 rem
+rem  To build with only some services (a company build), set CF_SERVICES first, for example
+rem    set CF_SERVICES=jira,teams,custom
+rem  Names: jira google reddit claude slack discord teams custom x bluesky instagram.
+rem  The services left out are not in the program at all.
+rem
 rem  Every variable here starts with CF_ because the build tools read some plain names from the
 rem  environment (a variable called RC makes the Windows resource compiler run a program of that name).
 rem
@@ -24,6 +29,9 @@ set "CF_BADOPTION="
 
 for %%A in (%*) do call :option "%%~A"
 if defined CF_BADOPTION goto :usage
+
+set "CF_CARGO="
+if defined CF_SERVICES set "CF_CARGO=-- --no-default-features --features %CF_SERVICES%"
 
 cd /d "%~dp0..\.."
 echo CargoFrame build in %CD%
@@ -45,7 +53,8 @@ popd
 if /i "%CF_MODE%"=="program" goto :buildprogram
 echo [2/2] Building the program and the installer. The first time takes several minutes ...
 pushd app
-call ..\ui\node_modules\.bin\tauri.cmd build --bundles nsis
+if defined CF_SERVICES echo Services in this build: %CF_SERVICES%
+call ..\ui\node_modules\.bin\tauri.cmd build --bundles nsis %CF_CARGO%
 if errorlevel 1 goto :failpop
 popd
 goto :built
@@ -53,7 +62,7 @@ goto :built
 :buildprogram
 echo [2/2] Building the program ...
 pushd app
-call ..\ui\node_modules\.bin\tauri.cmd build --no-bundle
+call ..\ui\node_modules\.bin\tauri.cmd build --no-bundle %CF_CARGO%
 if errorlevel 1 goto :failpop
 popd
 

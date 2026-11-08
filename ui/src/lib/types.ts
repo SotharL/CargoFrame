@@ -82,6 +82,8 @@ export interface AppInfo {
   data_dir: string;
   /** False when a Linux desktop has no tray host (for example GNOME without the extension). */
   tray_available: boolean;
+  /** The services this build has; a company build can leave some out. */
+  connectors: ServiceKind[];
 }
 
 // ----- layouts (mirror core/layout) -----
@@ -264,6 +266,8 @@ export interface Layout {
   id: string;
   name: string;
   blocks: Block[];
+  /** Other programs may fill its text boxes and dropdowns (`cargoframe open`). Off when absent. */
+  accepts_input?: boolean;
 }
 
 // ----- the CargoFrame window's data (mirror core/window::view) -----
@@ -349,7 +353,7 @@ export interface LayoutTemplate {
   name: string;
   description: string;
   /** `null`: the one that saves locally and needs no connection. */
-  service: 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | null;
+  service: ServiceKind | null;
 }
 
 // ----- export and import of settings -----
@@ -523,8 +527,10 @@ export interface VariableInfo {
 
 // ----- connections and sharing (mirror core/connectors and app/src/share.rs) -----
 
-export type ServiceKind = 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom';
-export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled';
+export type ServiceKind =
+  | 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | 'x' | 'bluesky' | 'instagram';
+/** `not_in_build`: a service this copy of CargoFrame was built without. */
+export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled' | 'not_in_build';
 
 export interface Pair {
   name: string;
@@ -573,6 +579,9 @@ export type Connection = ConnectionCommon &
         hooks: { slot: number; name: string; server: string }[];
       }
     | { kind: 'teams'; client_id: string; tenant: string }
+    | { kind: 'x'; client_id: string; redirect_port: number }
+    | { kind: 'bluesky'; handle: string; service: string }
+    | { kind: 'instagram'; upload_url: string; public_url: string; host_header: string }
     | {
         kind: 'custom';
         base_url: string;

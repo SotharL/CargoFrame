@@ -37,6 +37,18 @@ use state::AppState;
 use tauri::{Manager, RunEvent};
 use tauri_plugin_autostart::MacosLauncher;
 
+/// `cargoframe open ...` from another program: run the trigger with the values it sent, or
+/// say what was wrong with the request.
+fn open_from_another_program(app: &tauri::AppHandle, open: Result<cli::OpenRequest, String>) {
+    match open {
+        Ok(req) => {
+            tracing::info!(trigger = %req.trigger, values = req.values.len(), "asked to open by another program");
+            triggers::run_with(app, req.trigger, req.values);
+        }
+        Err(why) => notify::problem(app, "CargoFrame could not open that", &why),
+    }
+}
+
 pub fn run() {
     let cli = Cli::parse(std::env::args());
     let dirs = Dirs::from_env().expect("cannot find a settings folder for this user");
@@ -53,6 +65,8 @@ pub fn run() {
             if second.quit {
                 tracing::info!("asked to quit by another launch");
                 app.exit(0);
+            } else if let Some(open) = second.open {
+                open_from_another_program(app, open);
             } else {
                 windowing::open_settings(app);
             }
@@ -174,6 +188,10 @@ pub fn run() {
             tray::build(app.handle())?;
             triggers::reload(app.handle());
             notify::launched(app.handle());
+            // started by another program with `open`: do what it asked once the shortcuts are in
+            if let Some(open) = cli.open.clone() {
+                open_from_another_program(app.handle(), open);
+            }
             if startup == Startup::OpenSettings {
                 // The first run lands on Setup, which says whether anything is missing; after
                 // that, Settings opens where it was left.

@@ -229,6 +229,7 @@ mod tests {
             }),
         };
         let layout = Layout {
+            accepts_input: false,
             id: "l".into(),
             name: "L".into(),
             blocks: vec![

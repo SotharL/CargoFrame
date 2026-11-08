@@ -8,7 +8,7 @@ export interface GetLinkSpec {
 }
 
 /** The fields a connection asks the person to fill from a service's own website. */
-export type HelpField = 'token' | 'client_id' | 'client_secret' | 'webhook';
+export type HelpField = 'token' | 'client_id' | 'client_secret' | 'webhook' | 'app_password';
 
 const DISCORD_WEBHOOKS = 'https://support.discord.com/hc/en-us/articles/228383668-Intro-to-Webhooks';
 
@@ -46,6 +46,12 @@ export function getLinkFor(c: Connection, field: HelpField): GetLinkSpec | null 
       return field === 'client_id'
         ? { label: 'Open app registrations', url: 'https://entra.microsoft.com/#view/Microsoft_AAD_RegisteredApps/ApplicationsListBlade' }
         : null;
+    case 'x':
+      return field === 'client_id' ? { label: 'Open the X developer portal', url: 'https://developer.x.com/en/portal/projects-and-apps' } : null;
+    case 'bluesky':
+      return field === 'app_password' ? { label: 'Make an app password', url: 'https://bsky.app/settings/app-passwords' } : null;
+    case 'instagram':
+      return field === 'token' ? { label: 'Open my Meta apps', url: 'https://developers.facebook.com/apps/' } : null;
     default:
       return null;
   }

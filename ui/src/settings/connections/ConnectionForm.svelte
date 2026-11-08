@@ -124,6 +124,68 @@
       <li>Save this connection and press Sign in. If your organisation asks for an administrator's approval, send them the page that appears.</li>
     </ol>
   </details>
+{:else if value.kind === 'x'}
+  {@const x = value}
+  <p class="quiet">
+    CargoFrame posts as you, through an app you make in the X developer portal. Your app, your
+    account: X may charge for posting through its API.
+  </p>
+  <Field label="Client ID" hint="OAuth 2.0 Client ID, from your app's Keys and tokens page." tour="x.client_id">
+    <span class="with-link"><input type="text" bind:value={x.client_id} /><GetLink link={getLinkFor(x, 'client_id')} /></span>
+  </Field>
+  <Field label="Callback port" hint="The app's callback address must be http://127.0.0.1:{x.redirect_port}/callback">
+    <input type="text" inputmode="numeric" value={String(x.redirect_port)}
+      oninput={(e) => (x.redirect_port = Number(e.currentTarget.value) || 0)} />
+  </Field>
+  <details class="steps" data-tour="x.steps">
+    <summary>How to make the app</summary>
+    <ol>
+      <li>Open the X developer portal and make a project and an app.</li>
+      <li>Under User authentication settings choose <span class="mono">Read and write</span>, and the type <span class="mono">Native App</span>.</li>
+      <li>As Callback URI write <span class="mono">http://127.0.0.1:{x.redirect_port}/callback</span>, and any website address. Save.</li>
+      <li>Copy the OAuth 2.0 Client ID and paste it above. There is no secret to copy.</li>
+      <li>Save this connection and press Sign in.</li>
+    </ol>
+  </details>
+{:else if value.kind === 'bluesky'}
+  {@const b = value}
+  <Field label="Handle" hint="Your Bluesky name, like jane.bsky.social." tour="bluesky.handle">
+    <input type="text" bind:value={b.handle} placeholder="jane.bsky.social" />
+  </Field>
+  <p class="quiet">
+    After saving, paste an app password below: in Bluesky open Settings, Privacy and security, App
+    passwords, and add one called CargoFrame. Never use your real password.
+  </p>
+  <details class="steps">
+    <summary>My account is not on bsky.social</summary>
+    <Field label="Server" hint="Only for an account on its own server. Most people leave https://bsky.social.">
+      <input type="text" bind:value={b.service} />
+    </Field>
+  </details>
+{:else if value.kind === 'instagram'}
+  {@const ig = value}
+  <p class="quiet">
+    For a professional (business or creator) Instagram account. Instagram only takes a picture from a
+    public web address, so CargoFrame first puts the picture on a server you or your company own,
+    then asks Instagram to post it.
+  </p>
+  <Field label="Upload address" hint="CargoFrame sends the picture here with a PUT. Write {'{name}'} where the file name goes." tour="instagram.upload">
+    <input type="text" bind:value={ig.upload_url} placeholder={'https://storage.example.com/shots/{name}'} />
+  </Field>
+  <Field label="Public address" hint="Where the same file can be opened by anyone. Also with {'{name}'}." tour="instagram.public">
+    <input type="text" bind:value={ig.public_url} placeholder={'https://cdn.example.com/shots/{name}'} />
+  </Field>
+  <Field label="Header for the server's key" hint="The header that carries the upload key, like AccessKey or Authorization. Leave empty when the upload address needs no key.">
+    <input type="text" bind:value={ig.host_header} placeholder="AccessKey" />
+  </Field>
+  <details class="steps" data-tour="instagram.steps">
+    <summary>How to get the access token</summary>
+    <ol>
+      <li>Open your Meta apps and make an app with the Instagram product (Instagram API with Instagram login).</li>
+      <li>Under API setup, add your Instagram professional account and press Generate token.</li>
+      <li>Save this connection, then paste the token below. It is renewed for 60 days each time it is used.</li>
+    </ol>
+  </details>
 {:else if value.kind === 'custom'}
   <CustomForm bind:value />
 {/if}

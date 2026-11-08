@@ -422,6 +422,50 @@ pub fn now() -> Moment {
     }
 }
 
+/// Put the values another program sent (`cargoframe open`) into the window's text boxes and
+/// dropdowns. Only a layout marked *Other programs can fill this* takes them; what cannot be
+/// used is said in a note in the window, never silently dropped.
+pub fn apply_incoming(view: &mut SessionView, values: &[(String, String)]) {
+    if values.is_empty() {
+        return;
+    }
+    let Some(layout) = view.layout.clone() else {
+        return;
+    };
+    if !layout.accepts_input {
+        view.notes.push(
+            "Another program sent values, but this layout does not accept them: turn on \"Other programs can fill this\" in the layout".into(),
+        );
+        return;
+    }
+    let mut unknown = Vec::new();
+    for (id, value) in values {
+        match layout.block(id).map(|b| &b.kind) {
+            Some(cargoframe_layout::BlockKind::Text(_)) => {
+                view.texts.insert(
+                    id.clone(),
+                    view::TextState {
+                        value: value.clone(),
+                        unresolved: Vec::new(),
+                    },
+                );
+            }
+            Some(cargoframe_layout::BlockKind::Dropdown(_)) => {
+                if let Some(d) = view.dropdowns.get_mut(id) {
+                    d.selected = Some(value.clone());
+                }
+            }
+            _ => unknown.push(id.as_str()),
+        }
+    }
+    if !unknown.is_empty() {
+        view.notes.push(format!(
+            "Another program sent values for {}, which this layout has no text box or dropdown for",
+            unknown.join(", ")
+        ));
+    }
+}
+
 /// Capture for real and prepare the session.
 pub fn capture_and_prepare(
     store: &Store,
@@ -659,6 +703,7 @@ pub(crate) mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(Dirs::under(dir.path()));
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: "Clip".into(),
             blocks: vec![Block {
@@ -757,6 +802,7 @@ pub(crate) mod tests {
         let exe = project.join("bin").join("Foo");
 
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: "L".into(),
             blocks: vec![
@@ -829,6 +875,7 @@ pub(crate) mod tests {
         std::fs::write(project.join("run.log"), "LOGLINE").unwrap();
         std::fs::write(project.join("other.log"), "OTHER").unwrap();
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {
@@ -882,6 +929,7 @@ pub(crate) mod tests {
         w("dev/logs/shared.log", "SHARED");
         w("dev/foo/readme.log", "README");
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: "L".into(),
             blocks,
@@ -1118,6 +1166,7 @@ pub(crate) mod tests {
             .save_item(Kind::Rules, "unused", &rule("missing.json", "z", None))
             .unwrap();
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {
@@ -1176,6 +1225,7 @@ pub(crate) mod tests {
         let dir = tempfile::tempdir().unwrap();
         let store = Store::new(Dirs::under(dir.path()));
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {
@@ -1372,5 +1422,73 @@ pub(crate) mod tests {
         ] {
             assert!(!is_capture_label(not), "{not}");
         }
+    }
+
+    #[test]
+    fn values_from_another_program_fill_text_boxes_and_dropdowns_of_a_layout_that_accepts_them() {
+        use cargoframe_layout::{DropdownBlock, DropdownSource};
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(cargoframe_config::Dirs::under(dir.path()));
+        let rect = Rect {
+            x: 0,
+            y: 0,
+            w: 6,
+            h: 2,
+        };
+        let mut layout = Layout::empty("", "L");
+        layout.blocks = vec![
+            Block {
+                id: "summary".into(),
+                rect,
+                kind: BlockKind::Text(TextBlock {
+                    title: "Summary".into(),
+                    placement: Default::default(),
+                    role: Default::default(),
+                    default_text: "{{app.title}}".into(),
+                    formatting: true,
+                }),
+            },
+            Block {
+                id: "chat".into(),
+                rect,
+                kind: BlockKind::Dropdown(DropdownBlock::new("Chat", DropdownSource::ClaudeChats)),
+            },
+        ];
+        let prepared = |l: &Layout| {
+            store.save_item(Kind::Layouts, "l", l).unwrap();
+            let trigger = Trigger {
+                layout_id: Some("l".into()),
+                ..Trigger::default()
+            };
+            prepare_with(
+                &store,
+                &no_connections(),
+                "t",
+                &trigger,
+                fake_capture(None),
+                NOW,
+                1,
+            )
+            .unwrap()
+        };
+        let values = vec![
+            ("summary".to_string(), "It crashed".to_string()),
+            ("chat".to_string(), "new".to_string()),
+            ("nope".to_string(), "x".to_string()),
+        ];
+
+        // not accepted: nothing is filled, and the window says why
+        let mut s = prepared(&layout);
+        let before = s.view.texts["summary"].value.clone();
+        apply_incoming(&mut s.view, &values);
+        assert_eq!(s.view.texts["summary"].value, before);
+        assert!(s.view.notes.iter().any(|n| n.contains("does not accept")));
+
+        layout.accepts_input = true;
+        let mut s = prepared(&layout);
+        apply_incoming(&mut s.view, &values);
+        assert_eq!(s.view.texts["summary"].value, "It crashed");
+        assert_eq!(s.view.dropdowns["chat"].selected.as_deref(), Some("new"));
+        assert!(s.view.notes.iter().any(|n| n.contains("nope")));
     }
 }

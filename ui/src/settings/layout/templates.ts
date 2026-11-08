@@ -24,6 +24,7 @@ const STATE_DETAIL: Record<ConnectionView['state'], string> = {
   disconnected: 'not signed in yet',
   expired: 'sign-in expired',
   disabled: 'turned off',
+  not_in_build: 'not in this copy of CargoFrame',
 };
 
 /**

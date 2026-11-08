@@ -215,6 +215,7 @@ mod tests {
             h: 1,
         };
         let layout = Layout {
+            accepts_input: false,
             id: String::new(),
             name: String::new(),
             blocks: vec![

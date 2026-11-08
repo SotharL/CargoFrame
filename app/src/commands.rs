@@ -369,7 +369,7 @@ pub fn list_layout_templates() -> Vec<TemplateView> {
         .iter()
         // a service this build leaves out has no templates either
         .filter(|t| {
-            t.service.is_none_or(|k| {
+            t.service.map_or(true, |k| {
                 crate::connections::kind_of_layout(k).is_some_and(cargoframe_connectors::available)
             })
         })

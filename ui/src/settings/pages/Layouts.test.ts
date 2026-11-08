@@ -107,3 +107,22 @@ describe('Layouts: what a button sends', () => {
     expect(screen.getByLabelText('Ticked files')).toHaveProperty('disabled', true);
   });
 });
+
+describe('Layouts: other programs', () => {
+  it('a layout accepts values from other programs only once that is switched on, and shows how', async () => {
+    render(Layouts);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Start from a template' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Use Save a capture locally' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Save as my layout' }));
+    // saving a template says so (it used to say "Saved as a copy")
+    expect(await screen.findByText('Saved as your own layout')).toBeTruthy();
+    (document.querySelector('.others') as HTMLDetailsElement).open = true;
+    const box = screen.getByRole('switch', { name: 'Other programs can fill this layout' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(document.querySelector('.example')).toBeNull();
+    await fireEvent.click(box);
+    await waitFor(() => expect(document.querySelector('.example')?.textContent ?? '').toContain('cargoframe open --trigger'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect((await api.listItems<Layout>('layout')).items[0]!.item.accepts_input).toBe(true));
+  });
+});

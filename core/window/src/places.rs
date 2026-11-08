@@ -204,6 +204,7 @@ mod tests {
 
     fn layout(blocks: Vec<Block>) -> Layout {
         Layout {
+            accepts_input: false,
             id: "l".into(),
             name: "L".into(),
             blocks,

@@ -110,7 +110,7 @@
       <Setup />
       <section id="connections" class="connections" aria-labelledby="connections-title">
         <h2 id="connections-title">Connections</h2>
-        <p class="quiet">Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, or your own API.</p>
+        <p class="quiet">Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, X, Bluesky, Instagram, or your own API.</p>
         <Connections />
       </section>
     {:else if page === 'video'}
