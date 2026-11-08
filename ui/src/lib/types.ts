@@ -421,8 +421,8 @@ export interface Trigger {
   /** Canonical, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only". */
   shortcut: string;
   capture: CaptureMode;
-  /** What the shortcut makes: a picture of the screen, or a recording of it. */
-  media: Media;
+  /** No longer used: the layout decides (a Video block records). Files saved before 0.2.0 have it. */
+  media?: Media;
   layout_id: string | null;
 }
 

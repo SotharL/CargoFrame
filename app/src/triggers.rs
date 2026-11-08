@@ -4,7 +4,7 @@
 use crate::state::AppState;
 use crate::video::{self, Step};
 use crate::{notify, session, tray, windowing};
-use cargoframe_config::{shortcut, Kind, Media, Trigger, Video};
+use cargoframe_config::{shortcut, Kind, Trigger, Video};
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -157,13 +157,13 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
         tracing::debug!("triggers are paused");
         return;
     }
-    // A video trigger starts a recording, and stops it the next time.
+    // A trigger whose layout has a Video block starts a recording, and stops it the next time.
     let makes_video = state
         .store
         .load_item::<Trigger>(Kind::Triggers, &trigger_id)
         .ok()
         .flatten()
-        .is_some_and(|t| t.media == Media::Video);
+        .is_some_and(|t| session::records(&state.store, &t));
     if makes_video {
         if !values.is_empty() {
             notify::problem(

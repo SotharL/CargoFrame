@@ -251,7 +251,8 @@ pub struct Trigger {
     /// Canonical form, e.g. `Ctrl+Shift+F9`. Empty means "tray menu only".
     pub shortcut: String,
     pub capture: CaptureMode,
-    /// A screenshot (the default, and what a trigger file without this field means) or a video.
+    /// No longer read: since 0.2.0 the trigger's layout says whether a press takes a screenshot
+    /// or records (a layout with a Video block records). Kept so files saved before still read.
     pub media: Media,
     /// `layouts/<id>.json`. Each trigger has its own layout in V1.
     pub layout_id: Option<String>,

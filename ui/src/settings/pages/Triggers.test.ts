@@ -9,7 +9,7 @@ let api: Api;
 const shotLayout: Layout = { id: '', name: 'Picture', blocks: [{ id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 8, h: 8 } }] };
 const clipLayout: Layout = { id: '', name: 'Clip', blocks: [{ id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 8, h: 8 } }] };
 const trigger = (over: Partial<Trigger>): Trigger => ({
-  name: 'T', enabled: true, shortcut: 'F9', capture: 'active_window', media: 'screenshot', layout_id: null, ...over,
+  name: 'T', enabled: true, shortcut: 'F9', capture: 'active_window', layout_id: null, ...over,
 });
 
 beforeEach(async () => {
@@ -23,41 +23,32 @@ afterEach(() => {
   setApiForTests(undefined);
 });
 
-describe('Triggers: screenshot or video', () => {
-  it('a new trigger takes a screenshot, and choosing a video hides the choice of what to capture', async () => {
-    await api.saveItem('trigger', 'first', trigger({ name: 'First' }));
+describe('Triggers: the layout says screenshot or recording', () => {
+  it('a layout without a Video block takes a screenshot, and asks of what', async () => {
     render(Triggers);
     await fireEvent.click(await screen.findByRole('button', { name: 'Add a trigger' }));
-    const makes = screen.getByRole('combobox', { name: 'Makes' }) as HTMLSelectElement;
-    expect(makes.value).toBe('screenshot');
-    expect(screen.getByRole('combobox', { name: 'Capture' })).toBeTruthy();
-    await fireEvent.change(makes, { target: { value: 'video' } });
-    expect(screen.queryByRole('combobox', { name: 'Capture' })).toBeNull();
-    expect(screen.getByText(/The first press starts recording the screen/)).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Makes' })).toBeNull();
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Layout' }), { target: { value: 'pic' } });
+    expect(screen.getByRole('combobox', { name: 'Screenshot of' })).toBeTruthy();
+    expect(screen.getByText(/A press takes a screenshot/)).toBeTruthy();
   });
 
-  it('saves the choice, and the card says it records a video', async () => {
-    await api.saveItem('trigger', 'first', trigger({ name: 'First' }));
+  it('a layout with a Video block records, and the screenshot choice goes away', async () => {
     render(Triggers);
     await fireEvent.click(await screen.findByRole('button', { name: 'Add a trigger' }));
-    await fireEvent.input(screen.getByPlaceholderText('Bug report'), { target: { value: 'Clip it' } });
-    await fireEvent.change(screen.getByRole('combobox', { name: 'Makes' }), { target: { value: 'video' } });
-    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
-    await screen.findByText('Clip it');
-    expect(await screen.findByText(/Records a video of the screen/)).toBeTruthy();
-    const saved = (await api.listItems<Trigger>('trigger')).items.find((i) => i.item.name === 'Clip it');
-    expect(saved?.item.media).toBe('video');
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Layout' }), { target: { value: 'clip' } });
+    expect(screen.queryByRole('combobox', { name: 'Screenshot of' })).toBeNull();
+    expect(screen.getByText(/a press records the screen/)).toBeTruthy();
   });
 
-  it('warns when the layout does not match what the trigger makes, and only then', async () => {
-    await api.saveItem('trigger', 'a', trigger({ name: 'Video, picture layout', media: 'video', layout_id: 'pic' }));
-    await api.saveItem('trigger', 'b', trigger({ name: 'Picture, clip layout', shortcut: 'F10', layout_id: 'clip' }));
-    await api.saveItem('trigger', 'c', trigger({ name: 'Video, clip layout', shortcut: 'F11', media: 'video', layout_id: 'clip' }));
-    await api.saveItem('trigger', 'd', trigger({ name: 'Picture, picture layout', shortcut: 'F12', layout_id: 'pic' }));
+  it('each card says what a press does, from its layout, whatever an old file says', async () => {
+    // an old trigger file that still says "video" for a picture layout, and the other way round
+    await api.saveItem('trigger', 'a', { ...trigger({ name: 'Old video, picture layout', layout_id: 'pic' }), media: 'video' });
+    await api.saveItem('trigger', 'b', trigger({ name: 'Clip layout', shortcut: 'F10', layout_id: 'clip' }));
     render(Triggers);
-    await screen.findByText('Video, picture layout');
-    await waitFor(() => expect(screen.getAllByText(/Video block|clip would not show/).length).toBe(2));
-    expect(screen.getByText('This layout has no Video block, so the clip would not show')).toBeTruthy();
-    expect(screen.getByText('This layout has a Video block but this trigger takes a screenshot')).toBeTruthy();
+    await screen.findByText('Old video, picture layout');
+    await waitFor(() => expect(screen.getAllByText(/Records the screen/).length).toBe(1));
+    expect(screen.getByText(/Captures the program in focus/)).toBeTruthy();
   });
 });
+
