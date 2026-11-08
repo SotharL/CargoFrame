@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-07, evening (the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
+_Last updated 2026-11-08 (the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -92,7 +92,7 @@ those is true for each piece.
 | 3 Builder and safe settings | Layout builder, data rules, zip, safe settings | Done |
 | 4 Connectors | Jira, Google, Reddit, Claude, Slack, Discord, Teams, Custom API, Connections page, share flow | Done against mock servers |
 | 5 Hardening and release | Security review, performance gates, release workflow, docs | Done in code; first real release run and reference-machine measurements are open |
-| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block (record the screen or the window in focus; the computer's sound and a microphone), up to ten CargoFrame windows at once, ready-made video layouts (save locally, Jira, Drive, Slack), a trigger that makes a video (press to start, press to stop), the clip played, cut (timeline with handles), cropped, marked (a ring with a text) and sent from the CargoFrame window. Settings, Video: find ffmpeg, choose capture and encoder, a 5-second test recording, record until stopped, watch the clip in the window, export a trimmed/cropped/marked copy (marks drawn by ffmpeg or by the window), edited on the picture: timeline with handles, crop box, a click to place the mark | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); per-connection size hints and marks that come and go at chosen moments are not built; sound of the computer on Windows is recorded by CargoFrame itself (everything, or the program in focus; not yet tried on a real PC) |
+| 12 Video (in progress) | `core/video`: recorder, ring of segments, edit model, export, tested with a real ffmpeg on a virtual screen. A layout Video block (record the screen or the window in focus; the computer's sound and a microphone), up to ten CargoFrame windows at once, ready-made video layouts (save locally, Jira, Drive, Slack), a trigger that makes a video (press to start, press to stop), the clip played, cut (timeline with handles), cropped, marked (a ring with a text) and sent from the CargoFrame window. Settings, Recording: find ffmpeg, choose capture and encoder, a 5-second test recording watched in the window (cutting, cropping and marking are in the CargoFrame window only, since 8 Nov) | Capture on Windows and Wayland waits for spike S9 (the test recording is how you run it); per-connection size hints and marks that come and go at chosen moments are not built; sound of the computer on Windows is recorded by CargoFrame itself (everything, or the program in focus; not yet tried on a real PC) |
 
 ## What the owner needs to do before calling V1 solid
 
@@ -108,12 +108,10 @@ those is true for each piece.
 5. Reconcile `C:\Users\Admin\Documents\GitHub\CargoFrame` with the repository. Earlier files were
    delivered there by hand and may duplicate files now in git.
 6. Confirm that "log action" in the brief means **data rule** (see `docs/decisions.md`).
-   Video (spike S9), on Windows: install ffmpeg (`winget install Gyan.FFmpeg`), open Settings,
-   Video, press "Test ffmpeg", then "Try a 5-second recording", then "Watch it here" and "Open the
-   clip". Try "Record until I stop" for a minute with Task Manager open, and "Trim, crop and mark a
-   copy" with the drawn mark (look at how the text comes out). While the clip plays, drag the two
-   handles of the timeline under it, drag the crop box, and click on the picture to place the drawn
-   mark and give it a text. Try Capture = Desktop Duplication and an NVIDIA/Intel/AMD encoder if you have one. Write
+   Video (spike S9), on Windows: install ffmpeg from Settings, Setup, open Settings, Recording, press
+   "Test ffmpeg", then "Try a 5-second recording", then "Watch it here" and "Open the clip". To see
+   what a long recording costs, record a minute with a video trigger while Task Manager is open.
+   Try Capture = Desktop Duplication and an NVIDIA/Intel/AMD encoder if you have one. Write
    what worked and what each cost into the S9 table in `docs/spikes.md`.
    Video trigger: on the Triggers page make a trigger with Makes = Video (and a layout with a Video block and a
    sharing button), press its shortcut, do something on the screen, press it again; the window should open
@@ -142,6 +140,9 @@ those is true for each piece.
    check the thread list narrows (and *Show all* undoes it); in General switch both notice kinds off, record, and check
    nothing pops up; open *Your data*, clear one kind and then press *Reset CargoFrame* on a spare install; in a text block
    use the formatting buttons and send to Jira, Slack and Discord and look at how each shows bold, a list and code.
+   The Settings window since 8 Nov: check the sidebar groups (Get started, Captures, CargoFrame), that General,
+   Your data and About each hold what their name says, and that an update notice opens About. On Linux behind a
+   company proxy that inspects traffic, check that a connection's Test works (the system's certificates are trusted).
    Look: open Settings, General, Appearance, pick an accent (try Orange and a very light one), and check that the
    buttons, the selection, the logo arrow and the tray icon's arrow all change, in both themes. Look at the icons
    (program, installer, tray) on a light and a dark taskbar.
@@ -149,7 +150,7 @@ those is true for each piece.
    Install (check that nothing else is asked, that CargoFrame opens on the Setup page, and that
    Windows' "unknown publisher" notice can be passed with More info, Run anyway). On the Setup page
    press *Install ffmpeg* and check that it finds ffmpeg by itself afterwards (no sign-out), then
-   Settings, Video, *Test ffmpeg*. Turn off every sound device but the microphone and check the
+   Settings, Recording, *Test ffmpeg*. Turn off every sound device but the microphone and check the
    Stereo Mix line and the button that opens the sound settings. Run the installer again over the
    installed copy: the button says Update and your settings are kept.
    The 7 November round, on a real PC: on the Setup page look at the *Sound output* line (does it name your

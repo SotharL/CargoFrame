@@ -38,7 +38,7 @@ milliseconds. They contain no window titles, paths or content, and nothing is se
 
 ## Memory modes
 
-Settings, General, Performance, Memory decides what a closed window costs.
+Settings, General, Windows kept ready decides what a closed window costs.
 
 | Mode | A closed window | Reopening |
 |------|-----------------|-----------|

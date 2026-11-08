@@ -1018,3 +1018,29 @@ install stores". The same two rules applied: as friendly as possible, as little 
 - **Kept simple on purpose:** no new settings file, no new dependency apart from `wasapi` (Windows only), no new
   background process.
 
+### Flow review, 8 Nov 2026: Settings by content, and what a large company needs
+
+The owner asked for duplicated features to be found, the Settings sections to be organised by what they hold, a code
+review, and the app to suit companies of thousands of people (connectors that can be left out of a build, other
+programs handing data to a layout, company sign-in, accessibility).
+
+- **The sidebar is in three groups, in setup order.** *Get started* (Setup, which still holds Connections, as asked on
+  7 Nov), *Captures* (Layouts, Triggers, Data from files, Extra fields, Recording) and *CargoFrame* (General, Your
+  data, About). Layouts now come before Triggers because a trigger picks a layout. A new window opens on Setup.
+- **General was split by content.** General keeps appearance, startup, notifications, *When sharing fails* (the old
+  Safety box) and *Windows kept ready* (the memory setting). *Your data* holds what is kept, clearing, reset, and
+  export and import. *About* holds the version, updates and the speed and memory numbers. An update notice opens About.
+- **The second video editor is gone.** Settings, Video had its own *Record until I stop* and *Trim, crop and mark a copy*,
+  written to try ffmpeg before the CargoFrame window could do it. The window does all of it now, so the page (renamed
+  *Recording*) keeps ffmpeg, capture and compression, and a 5-second test. About 1,600 lines and five backend commands
+  went with it. When ffmpeg is missing the page sends you to Setup, the one place that installs it.
+- **Linux trusts the system's certificates.** Windows already used the operating system's store; Linux used a list built
+  into the program, so a company root certificate (network inspection) broke every connector there. Both now use the
+  system store (`platform-verifier` in `core/net`).
+- **The CargoFrame window's commands are an exact list.** The test was a list of forbidden commands that had gaps (newer
+  commands such as the reset were not on it). It now compares the window's grant with the sixteen it needs, so a new
+  command can only reach that window on purpose.
+- **Planned, not built in this round:** fold Extra fields into the layout's routes; let the layout alone say what a
+  capture records; one Cargo feature per connector; a managed folder and `policy.json`; `cargoframe open` for other
+  programs. Each is described in `design.md`, *Flow review* and *For companies*.
+
