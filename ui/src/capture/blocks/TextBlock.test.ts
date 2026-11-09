@@ -144,3 +144,51 @@ describe('TextBlock formatting buttons', () => {
     expect((screen.getByRole('textbox') as HTMLElement).tagName).toBe('TEXTAREA');
   });
 });
+
+describe('TextBlock tables', () => {
+  afterEach(cleanup);
+  const T = '| A | B |\n| --- | --- |\n| 1 | 2 |';
+  const rich = () => screen.getByRole('textbox') as HTMLDivElement;
+  const cells = () => Array.from(rich().querySelectorAll<HTMLElement>('.cell'));
+
+  it('the Table button puts a table to fill in after the line, the cursor in its first cell', async () => {
+    render(TextBlock, { block: block('above'), value: 'Steps', marks: ['bold', 'table'], services: ['jira'] });
+    select(rich(), 2, 2);
+    await fireEvent.click(screen.getByRole('button', { name: 'Table' }));
+    expect(readText(rich())).toBe('Steps\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |');
+    expect(document.activeElement).toBe(cells()[0]);
+  });
+
+  it('typing in a cell changes that cell of the table in the text', async () => {
+    render(TextBlock, { block: block('above'), value: `x\n${T}\ny`, marks: ['bold', 'table'], services: ['jira'] });
+    const c = cells()[3]!;
+    c.textContent = '2 then 3';
+    await fireEvent.input(c);
+    expect(readText(rich())).toBe('x\n| A | B |\n| --- | --- |\n| 1 | 2 then 3 |\ny');
+  });
+
+  it('adds and takes out rows and columns with its buttons', async () => {
+    render(TextBlock, { block: block('above'), value: T, marks: ['table'], services: ['jira'] });
+    await fireEvent.click(rich().querySelector('[data-act="addrow"]')!);
+    expect(readText(rich())).toBe('| A | B |\n| --- | --- |\n| 1 | 2 |\n|  |  |');
+    await fireEvent.click(rich().querySelector('[data-act="addcol"]')!);
+    expect(readText(rich())).toBe('| A | B | Column 3 |\n| --- | --- | --- |\n| 1 | 2 |  |\n|  |  |  |');
+    await fireEvent.click(rich().querySelector('[data-act="col"][data-n="0"]')!);
+    expect(readText(rich())).toBe('| B | Column 3 |\n| --- | --- |\n| 2 |  |\n|  |  |');
+    await fireEvent.click(rich().querySelector('[data-act="row"][data-n="1"]')!);
+    expect(readText(rich())).toBe('| B | Column 3 |\n| --- | --- |\n| 2 |  |');
+  });
+
+  it('a button pressed with the cursor in a cell marks the cell text', async () => {
+    render(TextBlock, { block: block('above'), value: T, marks: ['bold', 'table'], services: ['jira'] });
+    const c = cells()[2]!;
+    c.focus();
+    const r = document.createRange();
+    r.selectNodeContents(c);
+    document.getSelection()!.removeAllRanges();
+    document.getSelection()!.addRange(r);
+    document.dispatchEvent(new Event('selectionchange'));
+    await fireEvent.click(screen.getByRole('button', { name: 'Bold' }));
+    expect(readText(rich())).toBe('| A | B |\n| --- | --- |\n| **1** | 2 |');
+  });
+});

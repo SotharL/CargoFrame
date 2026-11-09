@@ -24,7 +24,7 @@ describe('marksFor', () => {
   it('offers every mark for a Jira description', async () => {
     const { view, note } = await sentTo(['jira', 'description']);
     const { marks, services } = marksFor(view, note);
-    expect(marks).toEqual(['bold', 'italic', 'underline', 'code', 'quote', 'bullets', 'numbers']);
+    expect(marks).toEqual(['bold', 'italic', 'underline', 'code', 'quote', 'bullets', 'numbers', 'codeblock', 'table']);
     expect(services).toEqual(['jira']);
   });
 
@@ -41,6 +41,9 @@ describe('marksFor', () => {
     const { marks, services } = marksFor(view, note);
     expect(marks).not.toContain('underline');
     expect(marks).toContain('numbers');
+    // Slack has code blocks but no tables
+    expect(marks).toContain('codeblock');
+    expect(marks).not.toContain('table');
     expect(services).toEqual(['jira', 'slack']);
   });
 
@@ -95,5 +98,21 @@ describe('applyMark', () => {
   it('works on the last line and on one line of a longer text', () => {
     expect(at('one\ntwo', 5, 5, 'quote').text).toBe('one\n> two');
     expect(at('one\ntwo\nthree', 4, 4, 'bullets').text).toBe('one\n- two\nthree');
+  });
+});
+
+describe('code blocks and tables', () => {
+  it('fences the lines the selection touches, and takes the fences off again', () => {
+    const on = applyMark('a\nlet x = 1;\nb', 3, 5, 'codeblock');
+    expect(on.text).toBe('a\n```\nlet x = 1;\n```\nb');
+    expect(applyMark(on.text, on.start, on.end, 'codeblock').text).toBe('a\nlet x = 1;\nb');
+    expect(applyMark('', 0, 0, 'codeblock')).toEqual({ text: '```\n\n```', start: 4, end: 4 });
+  });
+
+  it('puts a new table on lines of its own after the line the cursor is in', () => {
+    const t = applyMark('one\ntwo', 1, 1, 'table');
+    expect(t.text).toBe('one\n| Column 1 | Column 2 |\n| --- | --- |\n|  |  |\ntwo');
+    expect(t.text.slice(t.start, t.end).startsWith('| Column 1')).toBe(true);
+    expect(applyMark('', 0, 0, 'table').text.startsWith('| Column 1')).toBe(true);
   });
 });
