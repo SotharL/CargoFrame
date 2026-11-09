@@ -77,11 +77,11 @@
     {/each}
   </div>
 </Field>
-<Field label="Subfolder in each" hint="Optional. A folder name such as logs, searched inside every folder ticked above.">
+<Field label="Subfolders in each" hint="Optional. Folder names such as logs, crash, separated by commas: each is searched inside every folder ticked above.">
   <input
     type="text"
     value={look.subfolder}
-    placeholder="logs"
+    placeholder="logs, crash"
     oninput={(e) => (block.look_in = { ...current(), subfolder: e.currentTarget.value })}
   />
 </Field>

@@ -323,12 +323,12 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
             }
             BlockKind::Files(f) => {
                 check_variables(block, &f.title, reg, &mut out);
-                if f.look_in.clean_subfolder().is_err() {
+                if f.look_in.clean_subfolders().is_err() {
                     out.push(issue(
                         block,
                         Severity::Warning,
                         Code::BadSubfolder,
-                        "The subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
+                        "Each subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
                     ));
                 }
             }

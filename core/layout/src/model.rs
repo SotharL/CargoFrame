@@ -387,13 +387,14 @@ impl LookFolder {
     }
 }
 
-/// Where a Files block looks: some folders, and a named subfolder inside each (such as `logs`).
+/// Where a Files block looks: some folders, and named subfolders inside each (such as `logs`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct LookIn {
     /// Empty means the project folder, like the default.
     #[serde(default = "default_folders")]
     pub folders: Vec<LookFolder>,
-    /// A folder inside each of the folders above; empty means the folder itself.
+    /// Folders inside each of the folders above, separated by commas (`logs, crash`); empty
+    /// means the folder itself.
     #[serde(default)]
     pub subfolder: String,
 }
@@ -424,10 +425,18 @@ impl LookIn {
         out
     }
 
-    /// The subfolder as a clean relative path with `/` separators: `None` when none is set,
-    /// `Err` when it is not a plain relative folder (absolute, drive letter, `..`).
-    pub fn clean_subfolder(&self) -> Result<Option<String>, NotASubfolder> {
-        clean_subfolder(&self.subfolder)
+    /// The subfolders as clean relative paths with `/` separators, without repeats: empty when
+    /// none is set, `Err` when one is not a plain relative folder (absolute, drive letter, `..`).
+    pub fn clean_subfolders(&self) -> Result<Vec<String>, NotASubfolder> {
+        let mut out: Vec<String> = Vec::new();
+        for raw in self.subfolder.split(',') {
+            if let Some(s) = clean_subfolder(raw)? {
+                if !out.contains(&s) {
+                    out.push(s);
+                }
+            }
+        }
+        Ok(out)
     }
 }
 
@@ -657,7 +666,23 @@ mod serde_tests {
         };
         assert_eq!(f.look_in, LookIn::default());
         assert_eq!(f.look_in.folders(), vec![LookFolder::Project]);
-        assert_eq!(f.look_in.clean_subfolder(), Ok(None));
+        assert_eq!(f.look_in.clean_subfolders(), Ok(vec![]));
+    }
+
+    #[test]
+    fn several_subfolders_are_separated_by_commas() {
+        let look = |s: &str| LookIn {
+            folders: vec![LookFolder::Project],
+            subfolder: s.into(),
+        };
+        assert_eq!(
+            look(" logs , saved\\crash, logs,, ").clean_subfolders(),
+            Ok(vec!["logs".to_string(), "saved/crash".to_string()])
+        );
+        assert_eq!(
+            look("logs, ../secrets").clean_subfolders(),
+            Err(NotASubfolder)
+        );
     }
 
     #[test]

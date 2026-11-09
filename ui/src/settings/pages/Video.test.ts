@@ -17,6 +17,19 @@ afterEach(() => {
 });
 
 describe('Video settings', () => {
+  it('shows a red outline and a blinking dot while recording, in the corner chosen, and saves the choice', async () => {
+    const api = open();
+    await screen.findByText('ffmpeg found');
+    const outline = screen.getByRole('checkbox', { name: /red outline/ }) as HTMLInputElement;
+    const dot = screen.getByRole('checkbox', { name: /red dot/ }) as HTMLInputElement;
+    expect(outline.checked && dot.checked).toBe(true);
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Dot in the corner' }), { target: { value: 'bottom_left' } });
+    await fireEvent.click(outline);
+    await waitFor(async () => expect((await api.getVideo()).sign).toEqual({ outline: false, dot: true, corner: 'bottom_left' }));
+    await fireEvent.click(dot);
+    expect(screen.queryByRole('combobox', { name: 'Dot in the corner' })).toBeNull();
+  });
+
   it('looks for ffmpeg when the page opens and says what it found and what Automatic would use', async () => {
     open();
     await screen.findByText('ffmpeg found');

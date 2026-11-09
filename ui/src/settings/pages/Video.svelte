@@ -8,7 +8,7 @@
   import Section from '../../lib/components/Section.svelte';
   import { getApi } from '../../lib/ipc';
   import { go } from '../route.svelte';
-  import type { Video, VideoCapture, VideoEncoder, VideoTools, VideoTrial } from '../../lib/types';
+  import type { RecordingSign, SignCorner, Video, VideoCapture, VideoEncoder, VideoTools, VideoTrial } from '../../lib/types';
 
   const CAPTURES: { id: VideoCapture; label: string }[] = [
     { id: 'auto', label: 'Automatic' },
@@ -28,7 +28,22 @@
   ];
 
   let loaded = $state(false);
-  let video = $state<Video>({ ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080 });
+  let video = $state<Video>({
+    ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080,
+    sign: { outline: true, dot: true, corner: 'top_right' },
+  });
+  const CORNERS: { id: SignCorner; label: string }[] = [
+    { id: 'top_left', label: 'Top left' },
+    { id: 'top_right', label: 'Top right' },
+    { id: 'bottom_left', label: 'Bottom left' },
+    { id: 'bottom_right', label: 'Bottom right' },
+  ];
+  /** The sign's settings, filled in for a file saved before 0.3.0. */
+  const sign = $derived<RecordingSign>(video.sign ?? { outline: true, dot: true, corner: 'top_right' });
+  function setSign(change: Partial<RecordingSign>) {
+    video.sign = { ...sign, ...change };
+    void save();
+  }
   let ffmpegText = $state('');
   let status = $state<{ ok: boolean; text: string } | null>(null);
   let tools = $state<VideoTools | null>(null);
@@ -268,6 +283,23 @@
   </Section>
 
   <Section
+    title="While recording"
+    hint="Besides the notification and the tray icon, so nobody forgets a recording is running. Clicks go through them, and they are not in the recording: Windows leaves them out; on Linux they sit just outside a recorded window, so only a whole-screen recording shows them. Wayland desktops show their own sign instead."
+  >
+    <div class="row wrap" data-tour="video.sign">
+      <label class="check"><input type="checkbox" checked={sign.outline} onchange={(e) => setSign({ outline: e.currentTarget.checked })} /> A red outline around what is recorded</label>
+      <label class="check"><input type="checkbox" checked={sign.dot} onchange={(e) => setSign({ dot: e.currentTarget.checked })} /> A red dot blinking once a second</label>
+    </div>
+    {#if sign.dot}
+      <Field label="Dot in the corner">
+        <select value={sign.corner} onchange={(e) => setSign({ corner: e.currentTarget.value as SignCorner })}>
+          {#each CORNERS as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
+        </select>
+      </Field>
+    {/if}
+  </Section>
+
+  <Section
     title="Try it on this PC"
     hint="Records the screen for 5 seconds with the settings above so you can watch the result. Move something on the screen while it records. The sound and what is recorded are chosen in each layout's Video block."
   >
@@ -308,6 +340,7 @@
 {/if}
 
 <style>
+  .check { display: flex; gap: 8px; align-items: center; }
   .row { display: flex; gap: 8px; }
   .row.wrap { flex-wrap: wrap; }
   .row input { flex: 1; min-width: 0; }

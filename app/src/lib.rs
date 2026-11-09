@@ -29,6 +29,7 @@ mod triggers;
 mod updates;
 mod video;
 mod warm;
+mod watch;
 mod windowing;
 
 use cargoframe_config::{Dirs, Store};
@@ -235,6 +236,7 @@ pub fn run() {
             RunEvent::Exit => {
                 if let Some(state) = app.try_state::<AppState>() {
                     state.recording.cancel();
+                    drop(state.take_watch());
                 }
             }
             _ => {}

@@ -177,6 +177,38 @@ pub enum VideoEncoder {
     Vaapi,
 }
 
+/// The corner of the recorded area the blinking dot is in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SignCorner {
+    TopLeft,
+    #[default]
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// What shows on screen while a trigger records, besides the notification and the tray.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct RecordingSign {
+    /// A red outline around what is recorded.
+    pub outline: bool,
+    /// A red dot that blinks once a second.
+    pub dot: bool,
+    pub corner: SignCorner,
+}
+
+impl Default for RecordingSign {
+    fn default() -> Self {
+        Self {
+            outline: true,
+            dot: true,
+            corner: SignCorner::TopRight,
+        }
+    }
+}
+
 /// `video.json`: how videos are recorded. Nothing here records by itself; a recording starts
 /// from a trigger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -193,6 +225,8 @@ pub struct Video {
     pub window_secs: u32,
     /// Larger pictures are scaled down to this height. 0 keeps the screen's own size.
     pub max_height: u32,
+    /// What shows on screen while recording.
+    pub sign: RecordingSign,
 }
 
 impl Video {
@@ -211,6 +245,7 @@ impl Default for Video {
             fps: 30,
             window_secs: 10,
             max_height: 1080,
+            sign: RecordingSign::default(),
         }
     }
 }

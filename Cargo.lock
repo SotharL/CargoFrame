@@ -503,6 +503,7 @@ dependencies = [
  "cargoframe-context",
  "cargoframe-deliver",
  "cargoframe-handoff",
+ "cargoframe-indicator",
  "cargoframe-layout",
  "cargoframe-net",
  "cargoframe-rules",
@@ -618,6 +619,15 @@ version = "0.3.0"
 dependencies = [
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "cargoframe-indicator"
+version = "0.3.0"
+dependencies = [
+ "tracing",
+ "windows",
+ "x11rb 0.14.0",
 ]
 
 [[package]]

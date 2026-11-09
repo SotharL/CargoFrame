@@ -14,7 +14,7 @@ pub struct Place {
     pub which: LookFolder,
     /// The folder the choice means.
     pub base: String,
-    /// Where files are listed from: `base`, or the subfolder inside it.
+    /// Where files are listed from: `base`, or one of the subfolders inside it.
     pub dir: String,
 }
 
@@ -50,10 +50,10 @@ fn join(base: &str, sub: &str) -> String {
     out
 }
 
-/// The folders `look` means for this capture. An unsafe subfolder (see
-/// [`cargoframe_layout::clean_subfolder`]) is ignored: the folders themselves are used.
+/// The folders `look` means for this capture: each subfolder in each folder. Unsafe subfolders
+/// (see [`cargoframe_layout::clean_subfolder`]) are ignored: the folders themselves are used.
 pub fn places_for(look: &LookIn, project: Option<&str>, program: Option<&str>) -> Places {
-    let sub = look.clean_subfolder().ok().flatten();
+    let subs = look.clean_subfolders().unwrap_or_default();
     let mut out = Places::default();
     for which in look.folders() {
         let base = match which {
@@ -69,15 +69,22 @@ pub fn places_for(look: &LookIn, project: Option<&str>, program: Option<&str>) -
             out.missing.push((which, why.to_string()));
             continue;
         };
-        let dir = match &sub {
-            Some(s) => join(&base, s),
-            None => base.clone(),
+        let dirs: Vec<String> = if subs.is_empty() {
+            vec![base.clone()]
+        } else {
+            subs.iter().map(|s| join(&base, s)).collect()
         };
-        // Two choices can mean the same folder: list it once.
-        if out.places.iter().any(|p| p.dir == dir) {
-            continue;
+        for dir in dirs {
+            // Two choices can mean the same folder: list it once.
+            if out.places.iter().any(|p| p.dir == dir) {
+                continue;
+            }
+            out.places.push(Place {
+                which,
+                base: base.clone(),
+                dir,
+            });
         }
-        out.places.push(Place { which, base, dir });
     }
     out
 }
@@ -175,6 +182,24 @@ mod tests {
         let shallow = places_for(&look(&[LookFolder::Above3], ""), None, Some("/a/b/prog"));
         assert!(shallow.places.is_empty());
         assert!(shallow.missing[0].1.contains("not that deep"));
+    }
+
+    #[test]
+    fn several_subfolders_are_each_looked_in() {
+        let p = places_for(
+            &look(&[LookFolder::Project, LookFolder::Program], "logs, crash"),
+            Some(PROJECT),
+            Some(PROGRAM),
+        );
+        assert_eq!(
+            dirs(&p),
+            [
+                "/dev/foo/logs",
+                "/dev/foo/crash",
+                "/dev/foo/bin/release/logs",
+                "/dev/foo/bin/release/crash"
+            ]
+        );
     }
 
     #[test]

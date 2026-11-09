@@ -568,6 +568,18 @@ export interface Video {
   window_secs: number;
   /** Larger pictures are scaled down to this height; 0 keeps the screen's size. */
   max_height: number;
+  /** What shows on screen while a trigger records. */
+  sign?: RecordingSign;
+}
+
+/** The corner of the recorded area the blinking dot is in. */
+export type SignCorner = 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right';
+export interface RecordingSign {
+  /** A red outline around what is recorded. */
+  outline: boolean;
+  /** A red dot that blinks once a second. */
+  dot: boolean;
+  corner: SignCorner;
 }
 
 export interface VideoTools {

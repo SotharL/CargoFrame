@@ -254,6 +254,7 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
         Step::Report(why) => {
             // hand the failure over (this also clears it), so the next press starts again
             let _ = state.recording.stop();
+            drop(state.take_watch());
             tray::refresh_menu(app);
             notify::problem(app, "The recording stopped by itself", &why);
         }
@@ -329,6 +330,18 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
                 body.push_str(n);
             }
             notify::info(app, &format!("CargoFrame is recording {what}"), &body);
+            let area = wish.area.map(|a| cargoframe_indicator::Rect {
+                x: a.x,
+                y: a.y,
+                w: a.w,
+                h: a.h,
+            });
+            state.set_watch(crate::watch::Watch::start(
+                app,
+                &settings.sign,
+                area,
+                video::Session::current().wayland,
+            ));
             tray::refresh_menu(app);
         }
         Err(e) => {
@@ -344,8 +357,17 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
         return;
     }
     let trial = state.recording.stop();
+    let watched = state.take_watch().map(|w| w.finish());
     tray::refresh_menu(app);
-    let made = session_from_recording(state, trigger_id, trial);
+    let keep_ms = u64::from(
+        state
+            .store
+            .load_or_default::<Video>()
+            .map(video::normalized)
+            .unwrap_or_default()
+            .window_secs,
+    ) * 1000;
+    let made = session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms);
     state.end_capture();
     match made {
         Ok(s) => {
@@ -364,6 +386,8 @@ fn session_from_recording(
     state: &AppState,
     trigger_id: &str,
     trial: video::Trial,
+    watched: Option<&crate::watch::Watched>,
+    keep_ms: u64,
 ) -> Result<session::Session, String> {
     if !trial.ok {
         return Err(trial.message);
@@ -377,7 +401,30 @@ fn session_from_recording(
         .load_item::<Trigger>(Kind::Triggers, trigger_id)
         .map_err(|e| e.to_string())?
         .ok_or_else(|| format!("trigger \"{trigger_id}\" does not exist"))?;
-    let captured = session::capture_for_video(&trigger).map_err(|e| e.to_string())?;
+    let mut captured = session::capture_for_video(&trigger).map_err(|e| e.to_string())?;
+    // the data comes from the program in focus the longest in the part kept, not from the one
+    // the shortcut was pressed in
+    if let Some((app, others)) = watched.and_then(|w| crate::watch::longest(w, keep_ms)) {
+        let same = captured.app.as_ref().map(|a| (&a.exe_path, &a.title))
+            == Some((&app.exe_path, &app.title));
+        if !same || !others.is_empty() {
+            let name = app
+                .exe_path
+                .as_ref()
+                .and_then(|p| p.file_stem())
+                .map(|s| s.to_string_lossy().to_string())
+                .unwrap_or_else(|| app.title.clone());
+            captured.notes.push(if others.is_empty() {
+                format!("The data is from {name}, in focus during the recording.")
+            } else {
+                format!(
+                    "The recording also shows {}; the data is from {name}, in focus the longest.",
+                    others.join(", ")
+                )
+            });
+            captured.app = Some(app);
+        }
+    }
     session::prepare_video(
         &state.store,
         &state.connections,
