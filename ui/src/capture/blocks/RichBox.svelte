@@ -5,7 +5,7 @@
   // Ctrl+Z / Ctrl+Y undo and redo. A table shows as a grid: its cells are typed in on their own,
   // with buttons to add a row or a column and to take one out; the text keeps it as `| a | b |`.
   import { untrack } from 'svelte';
-  import { applyMark, shortcut, type Mark } from './formatting';
+  import { applyMark, insertBlock, shortcut, type Mark } from './formatting';
   import {
     newLine,
     offsetOf,
@@ -259,6 +259,16 @@
     remember('insert');
     box.focus();
     set(value.slice(0, a) + text + value.slice(b), a + text.length, a + text.length);
+  }
+
+  /** Put lines of their own (a table) after the line the cursor is in. */
+  export function insertLines(block: string) {
+    if (!box) return;
+    const [, b] = here();
+    remember('insert');
+    const edit = insertBlock(value, b, block);
+    box.focus();
+    set(edit.text, edit.end, edit.end);
   }
 
   /** The selected text. */

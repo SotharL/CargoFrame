@@ -41,7 +41,45 @@ export function looksLikeAddress(url: string): boolean {
 }
 
 /** The variables worth a button of their own, in this order, when the app offers them. */
-export const QUICK_VARIABLES = ['capture.date', 'project.name', 'app.exe'];
+/** The values most texts use, first in the list. */
+export const QUICK_VARIABLES = ['capture.date', 'capture.time', 'app.exe', 'project.name', 'app.title'];
 
-export const quickLabel = (name: string): string =>
-  ({ 'capture.date': 'Date', 'capture.time': 'Time', 'project.name': 'Project', 'app.exe': 'App', 'app.title': 'Window title' })[name] ?? name;
+const LABELS: Record<string, string> = {
+  'capture.date': 'Date',
+  'capture.time': 'Time',
+  'app.exe': 'Program',
+  'app.path': 'Program path',
+  'app.title': 'Window title',
+  'project.name': 'Project',
+  'project.folder': 'Project folder',
+  'capture.screenshot': 'Screenshot',
+  'capture.recording': 'Recording',
+};
+export const quickLabel = (name: string): string => LABELS[name] ?? name;
+
+/** The pictures a text can show where it names them, and the services that do. */
+export const MEDIA_VARIABLES = ['capture.screenshot', 'capture.recording'];
+export const MEDIA_SERVICES: Record<string, string[]> = {
+  'capture.screenshot': ['jira', 'github', 'teams'],
+  'capture.recording': ['jira', 'github'],
+};
+/** A table with the recording and the screenshot side by side, as a bug report shows them. */
+export const MEDIA_TABLE = '| Repro | Highlight |\n| --- | --- |\n| {{capture.recording}} | {{capture.screenshot}} |';
+
+/** The group a value is listed under. */
+export function groupOf(name: string): string {
+  if (MEDIA_VARIABLES.includes(name)) return 'In the text';
+  if (name.startsWith('app.')) return 'Program';
+  if (name.startsWith('project.')) return 'Project';
+  if (name.startsWith('capture.')) return 'Capture';
+  if (name.startsWith('rule.')) return 'From files';
+  return 'Other';
+}
+export const GROUPS = ['Program', 'Project', 'Capture', 'From files', 'In the text', 'Other'];
+
+/** Whether a value matches what was typed in the search: its name, its label or what it is. */
+export function matches(q: string, ...said: string[]): boolean {
+  const words = q.toLowerCase().split(/\s+/).filter(Boolean);
+  const hay = said.join(' ').toLowerCase();
+  return words.every((w) => hay.includes(w));
+}
