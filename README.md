@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.2.0 (private beta)</p>
+Windows 11 and Linux · version 0.3.0 (beta)</p>
 
 <p align="center">
   <picture>
@@ -15,7 +15,7 @@ Windows 11 and Linux · version 0.2.0 (private beta)</p>
   </picture>
 </p>
 
-> **Private beta.** Everything is built and tested, and the Windows installer has been tried, but not every service has
+> **Beta.** Everything is built and tested, and the Windows installer has been tried, but not every service has
 > been used with a real account and the installer is not signed yet. [What is verified](docs/status.md).
 
 **On this page:** [What it is](#what-it-is) · [What it does](#what-it-does) · [How to use it](#how-to-use-it) ·
@@ -56,6 +56,7 @@ flowchart LR
 | Service | Sends | Video |
 |---------|-------|:-----:|
 | **Jira** (Cloud, Server, Data Center) | A new issue or a comment, with pictures and files | ✓ |
+| **GitHub** (and Enterprise Server) | A new issue or a comment; pictures and files shown from a branch of the repository | ✓ |
 | **Google** | A file in Drive, and optionally a row in a spreadsheet | ✓ |
 | **Slack** | A message in a channel or a thread | ✓ |
 | **Discord** | A message, a forum post, or a reply in a thread | ✓ |
@@ -132,7 +133,7 @@ press the sharing button. A layout with a Video block starts recording on the fi
 | **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, or a sharing button |
 | **Connection** | A service you signed in to (Jira, Slack…) |
 | **Where to post** | One dropdown that goes as deep as the service does: project, or server, channel, thread |
-| **Data from files** | If a file is found in the program's folder: add it to the files, read values from it (`{{rule.gpu}}`) |
+| **Data & fields** | *Read from files*: if a file is found in the program's folder, add it to the files and read values from it (`{{rule.gpu}}`). *Fill fields*: fill a field of the service on each share, with steps such as "if `{{rule.gpu}}` is found, add the label `gpu-{{rule.gpu}}`" |
 | **Template** | A ready-made layout to start from; it becomes yours when you save it |
 
 </details>
@@ -154,22 +155,27 @@ it; a ring means the button needs it. Pointing at a button outlines everything i
 Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles to trim, use **Crop** and
 **Mark** (one red ring with a text). Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording
-ends* to get both. Recordings go to Jira, Google, Slack, Discord and Save locally; the other services get the still.
+ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Save locally; the other services get the still.
 
 </details>
 
 <details>
-<summary><b>In the window: formatting, values from files, extra fields</b></summary>
+<summary><b>In the window: formatting, values from files, filled fields</b></summary>
 
-- **Formatting:** in the layout builder, tick *Message of* on a Text block to make it the message of a Jira, Slack,
-  Discord, Reddit or Teams button. The box then shows bold, italic, underline, code, quotes and lists as they look,
-  with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8
-  bullets, Ctrl+Shift+7 numbers), only the ones that service can show. CargoFrame writes them the way each service wants.
-- **Data from files** (*Settings*): *If this file is found* (its name or part of it, no format to choose), *add it to the
+- **Formatting:** in the layout builder, tick *Message of* on a Text block to make it the message of a Jira, GitHub,
+  Slack, Discord, Reddit or Teams button. The box then shows bold, italic, underline, code, quotes and lists as they
+  look, with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8
+  bullets, Ctrl+Shift+7 numbers), only the ones that service can show. The block's starting text in the layout builder
+  has the same buttons, so `Seen in `{{app.exe}}` **({{project.name}})**` is written formatted once and filled in on
+  every capture. CargoFrame writes the marks the way each service wants.
+- **Read from files** (*Settings, Data & fields*): *If this file is found* (its name or part of it, no format to choose), *add it to the
   files* and/or *read* values: the value written after a name (`GPU: …`), the text between two pieces (or to the end of
   the line), or the whole line with a word; the first, the last or all of them. Each value is a variable such as
   `{{rule.gpu}}` for the title or description. Only files your rules name are read, and only inside the project folder.
-- **Extra fields** (*Settings*): service fields beyond where to post, like a Jira priority, mapped to a block.
+- **Fill fields** (*Settings, Data & fields*): a field of the service and the steps that fill it on each share: *If*
+  a value (from a file, the program, the project) *is found / is / contains…*, *add* or *set* a text, *and* more. Add
+  puts one more label in a list, a new line in a description. For every layout that shares there, or only some. A
+  block of the window is still sent in a field from the sharing button.
 - **Last choices:** each dropdown starts on what you used last and lists the last five.
 - **Several windows:** a shortcut pressed while a window is open opens another, up to ten.
 
@@ -200,6 +206,7 @@ other service.
 | Service | What you need |
 |---------|---------------|
 | Jira | Address, plus an API token and your e-mail (Cloud) or a personal access token (Server, Data Center) |
+| GitHub | The repository (owner/name) and a fine-grained token for it: Issues, and Contents for the pictures, read and write |
 | Google | A Client ID from your own Google Cloud project ("Desktop app") |
 | Slack | A bot token (`xoxb-`) from an app in your workspace; invite it to each channel |
 | Discord | A webhook link per channel (*channel settings, Integrations, Webhooks*); no bot needed |

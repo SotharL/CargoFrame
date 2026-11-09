@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-08, version 0.3.0 (Data from files as a flow: if a file is found, add it and read values, no format to pick; links to web pages in the guides; a formatted box that shows its formatting, with *Message of* on the Text block; before that, a shortcut records or takes a screenshot from its layout; fixed: a window whose layout had a dropdown stayed on Loading; X, Bluesky and Instagram against mock servers, one build switch per service, `cargoframe open`; the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
+_Last updated 2026-11-09, version 0.3.0 (Data & fields: read values from files, then fill the service's fields with them by steps; formatting in the layout builder's starting text; a GitHub connector; Data from files as a flow: if a file is found, add it and read values, no format to pick; links to web pages in the guides; a formatted box that shows its formatting, with *Message of* on the Text block; before that, a shortcut records or takes a screenshot from its layout; fixed: a window whose layout had a dropdown stayed on Loading; X, Bluesky and Instagram against mock servers, one build switch per service, `cargoframe open`; the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -8,7 +8,7 @@ those is true for each piece.
 
 ## What is verified
 
-- **Unit and integration tests:** about 900 Rust tests and 497 UI tests pass. `cargo clippy -D warnings`,
+- **Unit and integration tests:** about 990 Rust tests and 503 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
 - **The 7 November round** (Discord webhooks and bot, dependent dropdowns, last five choices, get-token buttons, the
   Claude app line, screenshot with video, the guides): unit tests on each piece, connector tests against the mock
@@ -112,8 +112,8 @@ those is true for each piece.
    a tag (`git tag v0.1.0 && git push origin v0.1.0`) to try the release workflow. It makes a
    **draft** release; nothing is published until you publish it.
 4. Check the product name for conflicts (S7).
-5. Reconcile `C:\Users\Admin\Documents\GitHub\CargoFrame` with the repository. Earlier files were
-   delivered there by hand and may duplicate files now in git.
+5. Reconcile your local copy of the repository with GitHub. Earlier files were delivered there by hand and may
+   duplicate files now in git.
 6. Confirm that "log action" in the brief means **data rule** (see `docs/decisions.md`).
    Video (spike S9), on Windows: install ffmpeg from Settings, Setup, open Settings, Recording, press
    "Test ffmpeg", then "Try a 5-second recording", then "Watch it here" and "Open the clip". To see

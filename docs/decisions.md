@@ -1141,3 +1141,34 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   plain text; Ctrl+Z and Ctrl+Y undo and redo. Only the marks every ticked service can show are offered (no underline
   for Slack or Reddit). A box that is nobody's message stays a plain text area.
 
+### 0.3.0, 9 Nov 2026: Data & fields, formatting in the layout, GitHub
+
+- **Extra fields become *Fill fields*, beside *Read from files*.** One sidebar entry, *Data & fields*, with two tabs,
+  because the second mostly uses what the first finds. A field fill is one field of a service and the steps that
+  fill it on every share: *Always* or *If* a value (one read from a file, the program, the project, or the field
+  itself) *is found / is not found / is / is not / contains* a text, *add* or *set* a text, *and* more. *Add* is one
+  more value in a list field (a label, given once), a new line in a description, or words after a title. It applies
+  in every layout that shares there, or in the ones ticked. The same file (`infotypes/<id>.json`) keeps the field's
+  kind, list and *required* for a custom field, so nothing old is lost: a starting value from before is shown, and
+  saved, as the step "if this field is empty, set it to …".
+- **No duplicate ways to fill a field.** A block of the window is sent in a field from the sharing button (the one
+  list in *What this button does with each block*); everything that is not a block is a field fill. The button's
+  old list (a field from a block, a value from a file or a fixed value) is gone: a value set there before 0.3.0 is
+  listed under *Fields filled on each share* with *Move to Fill fields*, which makes the same fill for that layout.
+  Until moved, it is still sent as before.
+- **Formatting in the layout builder.** A Text block that is a message (*Message of*) gets, in the builder, the same
+  formatted box and buttons as in the capture window, so a starting text such as ``Seen in `{{app.exe}}`
+  **({{project.name}})** on *{{capture.date}}*`` is written formatted once; each capture fills in the values inside
+  the marks. `{{variables}}` are shown as such in the box. The ready-made layouts for Jira, GitHub, Slack, Discord and
+  Teams start with that formatted line. The value-from-a-file list there offers each value (`{{rule.gpu}}`), not
+  each rule.
+- **GitHub connector.** A fine-grained token (Issues, and Contents for pictures), a repository (another one can be
+  picked per layout), GitHub Enterprise Server by its API address. A share opens an issue (title, Markdown
+  description, labels, assignees, milestone, issue type) or, with an issue number, comments on it and adds the
+  labels. GitHub's API cannot attach files, so the screenshot, a recording and the zip go in a branch of the
+  repository kept for them (`cargoframe-attachments`, made from the main branch the first time) under
+  `cargoframe/<day>/`, and the issue shows the picture and links the files; the connection can instead send text
+  only. Each file and the issue are recorded as done, so a retry never doubles them. Underline is written `<ins>`;
+  quotes and lists get the empty lines GitHub needs. Two templates: *GitHub issue* and *GitHub comment on an issue*,
+  and a guide.
+

@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.2.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.3.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -34,7 +34,8 @@ flowchart LR
     L -- holds --> S[Sharing buttons<br><i>up to 5</i>]
     S -- send through --> C[Connection<br><i>a signed-in service</i>]
     R[Data rule<br><i>values from a file found</i>] -- fills --> B
-    X[Extra field<br><i>e.g. Jira priority</i>] -- maps a block to --> C
+    X[Field fill<br><i>e.g. add a Jira label</i>] -- fills a field of --> C
+    R -. its values .-> X
     TP[Template] -. saved as .-> L
 ```
 
@@ -45,7 +46,7 @@ flowchart LR
 | **Block** | Screenshot, Video, Text, Dropdown, Files, or a sharing button | inside its layout |
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
 | **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{{rule.<key>}}` | `rules/<id>.json` |
-| **Extra field** | A service field beyond where to post, mapped to a block | `infotypes/<id>.json` |
+| **Field fill** | One field of a service and the steps that fill it on each share ("if `{{rule.gpu}}` is found, add `gpu-{{rule.gpu}}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
 | **Template** | A ready-made layout per service, never stored until saved | in the code |
 
 ---
@@ -96,6 +97,7 @@ connect, test, list options, send), so the share flow never names a service.
 | Service | Sign-in | What it sends | Video |
 |---------|---------|---------------|:-----:|
 | Jira Cloud / Server | E-mail and API token / personal access token | An issue or a comment, with the picture, still, video and files | ✓ |
+| GitHub / Enterprise Server | A fine-grained token for the repository | An issue or a comment (with labels); the picture, video and zip go in a branch of the repository and are shown or linked in it, because GitHub's API cannot attach files | ✓ |
 | Google | OAuth with the person's own Desktop client | A Drive upload, optional Sheets row | ✓ |
 | Slack | Bot token (`xoxb-`) | A message with files, in a channel or thread | ✓ |
 | Discord | A webhook link per channel (a bot token as a last resort) | A message, a new forum post, a reply in a thread | ✓ |
@@ -177,8 +179,7 @@ opening the page, outlining the field and saying in one sentence what goes in it
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
 | Captures | **Layouts** | The window a capture opens, block by block, and what each sharing button sends |
 | | **Triggers** | Shortcuts and the layout each opens |
-| | **Data from files** | Values read from files in the project folder |
-| | **Extra fields** | Service fields beyond where to post (Jira priority) |
+| | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder) and *Fill fields* (steps that fill a field of the service on each share) |
 | | **Recording** | Where ffmpeg is, quality, a 5-second test |
 | CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
 | | **Your data** | What is kept on this computer, clear or reset, export and import |
@@ -321,6 +322,8 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   let no program press keys, so a Claude message is left on the clipboard. Verified on a headless sway desktop (also
   run as a GNOME-like desktop); real GNOME, KDE and Hyprland sessions are still to be tried.
 - X, Bluesky and Instagram take pictures and plain text, not video. Instagram needs a picture server the person owns.
+- GitHub's API cannot attach a file to an issue: pictures and files go in a branch of the repository (or are left out),
+  so the token needs Contents write as well as Issues.
 - Text colour is not offered: only Jira and Teams could show it.
-- Next for the connectors (folding Extra fields into the layout, required fields shown before sending, company sign-in):
+- Next for the connectors (required fields shown before sending, company sign-in):
   [connectors.md](connectors.md).
