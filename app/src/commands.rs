@@ -1219,6 +1219,7 @@ mod template_tests {
             ConnectionKind::X => json!({"name": "x", "kind": "x"}),
             ConnectionKind::Bluesky => json!({"name": "b", "kind": "bluesky"}),
             ConnectionKind::Instagram => json!({"name": "i", "kind": "instagram"}),
+            ConnectionKind::Github => json!({"name": "h", "kind": "github"}),
         })
         .unwrap();
         build(&connection).expect("enabled").describe()

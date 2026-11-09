@@ -129,6 +129,18 @@ export const TOURS: Tour[] = [
     ],
   },
   {
+    id: 'connect-github',
+    title: 'Connect GitHub',
+    steps: [
+      { target: 'add-github', say: 'Start here: add a GitHub connection.', page: SETUP, click: true },
+      { target: 'github.repository', say: 'The repository issues go to, like octo-org/app.' },
+      { target: 'github.files', say: 'Pictures go in a branch of it, shown in the issue.' },
+      { target: 'conn.save', say: 'Save. A box for the token appears.', click: true },
+      { target: 'conn.secret', say: 'Paste a fine-grained token: Issues and Contents, read and write.', link: PAGES.githubToken },
+      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+    ],
+  },
+  {
     id: 'connect-bluesky',
     title: 'Connect Bluesky',
     steps: [
@@ -178,7 +190,8 @@ export const TOURS: Tour[] = [
     id: 'data-from-files',
     title: 'Add a value from a file',
     steps: [
-      { target: 'rules.add', say: "Read values, like a machine's graphics card, from a file in the project.", page: 'rules', click: true },
+      { target: 'data.files', say: 'Read from files: values found in a file of the project.', page: 'rules', click: true },
+      { target: 'rules.add', say: "Read values, like a machine's graphics card, from a file in the project.", click: true },
       { target: 'rules.name', say: 'Name it, like Machine config.' },
       { target: 'rules.file', say: 'The file to look for: its name or part of it, like system_info.' },
       { target: 'rules.add_files', say: 'Tick this to send the file too.' },
@@ -188,14 +201,15 @@ export const TOURS: Tour[] = [
   },
   {
     id: 'destination-fields',
-    title: 'Fill a field on the service (like Priority)',
+    title: 'Fill a field on the service (like Labels)',
     steps: [
-      { target: 'infotypes.add', say: 'An extra field is a box on the service beyond where to post, like Jira Priority.', page: 'infotypes', click: true },
-      { target: 'infotypes.name', say: 'What you call it.' },
-      { target: 'infotypes.connection', say: 'The connection it belongs to.' },
-      { target: 'infotypes.key', say: "Its key on the service. Search the ones it offers." },
-      { target: 'infotypes.kind', say: 'Text, or a choice from a list.' },
-      { target: 'infotypes.save', say: 'Save. Then map it to a block in your layout.' },
+      { target: 'data.fields', say: 'Fill fields: what goes in a field of the service on each share.', page: 'rules', click: true },
+      { target: 'fields.add', say: 'Fill a field, like Jira Labels, from values found in files.', click: true },
+      { target: 'fields.connection', say: 'The service it goes to.' },
+      { target: 'fields.field', say: 'The field. Search the ones the service offers.' },
+      { target: 'fields.steps', say: 'Steps: if {{rule.gpu}} is found, add gpu-{{rule.gpu}}. Add more with "+ and".' },
+      { target: 'fields.layouts', say: 'Every layout that shares there, or only some.' },
+      { target: 'fields.save', say: 'Save. It fills the field on the next share.' },
     ],
   },
 ];

@@ -19,7 +19,7 @@ describe('Settings sidebar', () => {
     const group = (name: string) =>
       [...screen.getByRole('group', { name }).querySelectorAll('button')].map((b) => b.textContent?.replace(/\d+$/, ''));
     expect(group('Get started')).toEqual(['Setup']);
-    expect(group('Captures')).toEqual(['Layouts', 'Triggers', 'Data from files', 'Extra fields', 'Recording']);
+    expect(group('Captures')).toEqual(['Layouts', 'Triggers', 'Data & fields', 'Recording']);
     expect(group('CargoFrame')).toEqual(['General', 'Your data', 'About']);
   });
 

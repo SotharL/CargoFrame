@@ -1,6 +1,6 @@
 # Connectors: how each one flows, and what to improve
 
-_Version 0.2.0. Proposals for review; "Started" items are in 0.2.0._
+_Version 0.3.0. Proposals for review; "Started" and "Done" items are in the program._
 
 The goal for every service is the same: set up in a few clicks with a guide, pick *where to post* in one box that
 goes as deep as the service does, and send without surprises (sizes, required fields, formatting handled for you).
@@ -12,7 +12,7 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 | 1 | One build switch per service | A company can ship an installer without the services it does not use; their code is not in the program | Started |
 | 2 | Pictures made to fit each service's size limit | No failed share because a 4K screenshot is too big | Started (X, Bluesky, Instagram) |
 | 3 | A "where to post" path for every service with places (the Discord path, extended) | One box instead of several dropdowns; the last place is remembered | Discord done; others below |
-| 4 | Fold Extra fields into the layout: each route gets *required* and *if empty, use* | One place to set a service field; the Extra fields page goes | Proposed |
+| 4 | Extra fields reworked as *Fill fields* (Settings, Data & fields): steps that fill a field on each share, from values found in files; a block is sent in a field from the sharing button only | One place for each: what a block sends, what fills a field by itself | Done (0.3.0) |
 | 5 | Required fields asked by the service shown in the layout before the first send | No "field X is required" error after pressing the button | Proposed (Jira first) |
 | 6 | Company sign-in (OAuth with the company's identity provider) | No personal tokens to paste in a large company | Proposed (Jira, Custom API) |
 | 7 | Other programs fill a layout (`cargoframe open`) | A company tool can open CargoFrame with its own data in the blocks | Started (text boxes and dropdowns) |
@@ -21,6 +21,7 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 
 | Service | How it flows today | Proposed next |
 |---------|--------------------|---------------|
+| **GitHub** (new) | A fine-grained token; repository, labels, assignees, milestone and open-issue lists; a new issue or a comment (with labels); pictures and files in a branch of the repository, shown in the issue | Issue templates and forms of the repository; projects (boards); sign in with a GitHub App so no token is pasted |
 | **Jira** | Address, e-mail and API token (or a personal access token); project, issue type, priority lists; new issue or comment | Path: project, then *New issue* or an existing issue searched by summary (the Discord thread step); required fields of the issue type from the service shown in the layout; OAuth sign-in for Jira Cloud and Data Center |
 | **Google** | Your own OAuth client; Drive folder list; optional Sheets row | Path: Drive folder, then sub-folder; for Sheets, spreadsheet then tab; a short guide for making the OAuth client |
 | **Slack** | Bot token from an app you make; channel list; thread by pasted link | A *Create the app* link with the permissions filled in (Slack app manifest), so setup is one click and a paste; path: channel, then recent threads |
@@ -39,5 +40,8 @@ goes as deep as the service does, and send without surprises (sizes, required fi
   will not run a public server on people's computers, so the picture goes to a server the person or company
   already owns. Without one, Instagram cannot be used from CargoFrame.
 - **X posting needs your own developer app** and may be charged by X per post.
+- **GitHub cannot attach a file to an issue** through its API. CargoFrame puts the picture and the zip in a branch of
+  the repository (`cargoframe-attachments`, made from the main branch the first time) and shows them in the issue; the
+  connection can also send text only.
 - **Formatting** (bold, lists) is shown as plain text on X, Bluesky and Instagram: they have none.
 - **Videos** are not sent to X, Bluesky or Instagram yet: the screenshot (or the still of a recording) is.

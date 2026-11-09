@@ -26,6 +26,9 @@
   /** The text the box shows now. */
   let shown: string | null = null;
   let composing = false;
+  /** Where the selection was when the box last had it: a click on a button outside keeps it. */
+  let lastSel: [number, number] | null = null;
+  const here = (): [number, number] => (box ? selectionIn(box) : null) ?? lastSel ?? [value.length, value.length];
 
   type State = { text: string; start: number; end: number };
   let undo: State[] = [];
@@ -64,23 +67,32 @@
   function set(text: string, start: number, end: number) {
     value = text;
     draw(text, [start, end]);
+    lastSel = [start, end];
   }
 
   /** A button (or its shortcut) changes the text around the selection and keeps the selection. */
   export function format(mark: Mark) {
     if (!box) return;
-    const sel = selectionIn(box) ?? [value.length, value.length];
+    const sel = here();
     remember('format');
     const edit = applyMark(value, sel[0], sel[1], mark);
     box.focus();
     set(edit.text, edit.start, edit.end);
   }
 
-  function insert(text: string) {
+  /** Put text where the selection is (a variable, a link), in place of what is selected. */
+  export function insert(text: string) {
     if (!box) return;
-    const [a, b] = selectionIn(box) ?? [value.length, value.length];
+    const [a, b] = here();
     remember('insert');
+    box.focus();
     set(value.slice(0, a) + text + value.slice(b), a + text.length, a + text.length);
+  }
+
+  /** The selected text. */
+  export function selected(): string {
+    const [a, b] = here();
+    return value.slice(a, b);
   }
 
   function back(from: State[], to: State[]) {
@@ -138,6 +150,7 @@
     const text = readText(box);
     value = text;
     draw(text, sel ?? [text.length, text.length]);
+    lastSel = sel;
   }
 
   function onKey(e: KeyboardEvent) {
@@ -165,7 +178,11 @@
   }
 
   function onSelection() {
-    if (box && document.activeElement === box) showMarksAt(box, selectionIn(box));
+    if (box && document.activeElement === box) {
+      const sel = selectionIn(box);
+      if (sel) lastSel = sel;
+      showMarksAt(box, sel);
+    }
   }
 
   $effect(() => {
@@ -216,6 +233,8 @@
     background: color-mix(in srgb, var(--text) 9%, transparent);
   }
   .rich :global(.lm) { color: var(--quiet); }
+  /* a {{variable}}, filled in on each capture */
+  .rich :global(.var) { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 3px; }
   /* a quote: a bar on the left, its "> " kept in place but not drawn */
   .rich :global(.ln.quote) {
     border-left: 3px solid var(--border-strong); padding-left: 8px; color: var(--muted, inherit);

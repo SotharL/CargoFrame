@@ -32,6 +32,7 @@ pub enum Settings {
     X(X),
     Bluesky(Bluesky),
     Instagram(Instagram),
+    Github(Github),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,12 +49,14 @@ pub enum Kind {
     X,
     Bluesky,
     Instagram,
+    Github,
 }
 
 impl Kind {
     /// Every kind, in the order the interface lists them.
-    pub const ALL: [Kind; 11] = [
+    pub const ALL: [Kind; 12] = [
         Kind::Jira,
+        Kind::Github,
         Kind::Google,
         Kind::Reddit,
         Kind::Claude,
@@ -81,6 +84,7 @@ impl Settings {
             Settings::X(_) => Kind::X,
             Settings::Bluesky(_) => Kind::Bluesky,
             Settings::Instagram(_) => Kind::Instagram,
+            Settings::Github(_) => Kind::Github,
         }
     }
 }
@@ -99,6 +103,7 @@ impl Kind {
             Kind::X => "X",
             Kind::Bluesky => "Bluesky",
             Kind::Instagram => "Instagram",
+            Kind::Github => "GitHub",
         }
     }
 
@@ -116,6 +121,7 @@ impl Kind {
             Kind::X => &["oauth"],
             Kind::Bluesky => &["app_password"],
             Kind::Instagram => &["token", "host_key"],
+            Kind::Github => &["token"],
         }
     }
 
@@ -130,6 +136,7 @@ impl Kind {
             Kind::Custom => &["secret"],
             Kind::Bluesky => &["app_password"],
             Kind::Instagram => &["token", "host_key"],
+            Kind::Github => &["token"],
         }
     }
 }
@@ -251,6 +258,59 @@ impl Default for Bluesky {
             service: "https://bsky.social".into(),
         }
     }
+}
+
+// ----- GitHub -----
+
+/// Where a share's pictures and files go on GitHub, whose API cannot attach a file to an issue.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum GithubFiles {
+    /// Put in a branch of the repository kept for them, and linked from the issue.
+    #[default]
+    Branch,
+    /// Not sent: the issue has the text only.
+    None,
+}
+
+/// GitHub (or GitHub Enterprise Server): a token, the repository issues go to, and where pictures
+/// go. The token (fine-grained: Issues read and write, and Contents read and write for pictures)
+/// is in the credential store.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Github {
+    /// `owner/name`. A layout can send to another one with the field `repo`.
+    pub repository: String,
+    /// `https://api.github.com`, or `https://github.example.com/api/v3` for a company's own.
+    pub api_url: String,
+    pub files: GithubFiles,
+    /// The branch pictures and files are put in.
+    pub branch: String,
+}
+
+impl Default for Github {
+    fn default() -> Self {
+        Self {
+            repository: String::new(),
+            api_url: "https://api.github.com".into(),
+            files: GithubFiles::Branch,
+            branch: "cargoframe-attachments".into(),
+        }
+    }
+}
+
+/// `owner/name`, as GitHub writes a repository.
+pub fn repository_ok(r: &str) -> bool {
+    let Some((owner, name)) = r.trim().split_once('/') else {
+        return false;
+    };
+    let part = |p: &str| {
+        !p.is_empty()
+            && p.len() <= 100
+            && p.chars()
+                .all(|c| c.is_ascii_alphanumeric() || "-_.".contains(c))
+    };
+    part(owner) && part(name) && name != "." && name != ".."
 }
 
 // ----- Instagram -----
@@ -509,6 +569,29 @@ pub fn check(c: &Connection) -> Result<(), String> {
                 .map_err(|e| format!("Bluesky server address: {e}"))?;
         }
         Settings::Instagram(i) => check_instagram(i)?,
+        Settings::Github(g) => {
+            if !repository_ok(&g.repository) {
+                return Err("Write the repository as owner/name, like octo-org/app".into());
+            }
+            cargoframe_net::check_url(&g.api_url)
+                .map_err(|e| format!("GitHub API address: {e}"))?;
+            if g.api_url.trim().to_lowercase().starts_with("http://") {
+                return Err("GitHub API address: it must start with https://".into());
+            }
+            if g.files == GithubFiles::Branch {
+                let b = g.branch.trim();
+                if b.is_empty()
+                    || b.starts_with('-')
+                    || b.contains("..")
+                    || b.chars()
+                        .any(|c| c.is_whitespace() || "~^:?*[\\".contains(c))
+                {
+                    return Err(
+                        "Write a branch name for the pictures, like cargoframe-attachments".into(),
+                    );
+                }
+            }
+        }
     }
     Ok(())
 }

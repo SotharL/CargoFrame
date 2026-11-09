@@ -22,6 +22,7 @@ export const PAGES = {
   xPortal: { label: 'Open the X developer portal', url: 'https://developer.x.com/en/portal/projects-and-apps' },
   blueskyPasswords: { label: 'Make an app password', url: 'https://bsky.app/settings/app-passwords' },
   metaApps: { label: 'Open my Meta apps', url: 'https://developers.facebook.com/apps/' },
+  githubToken: { label: 'Make a token', url: 'https://github.com/settings/personal-access-tokens/new' },
 } satisfies Record<string, GetLinkSpec>;
 
 /**
@@ -62,6 +63,8 @@ export function getLinkFor(c: Connection, field: HelpField): GetLinkSpec | null 
       return field === 'client_id' ? PAGES.xPortal : null;
     case 'bluesky':
       return field === 'app_password' ? PAGES.blueskyPasswords : null;
+    case 'github':
+      return field === 'token' ? PAGES.githubToken : null;
     case 'instagram':
       return field === 'token' ? PAGES.metaApps : null;
     default:

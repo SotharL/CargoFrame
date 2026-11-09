@@ -73,6 +73,15 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         files: no('Teams needs files in OneDrive, which CargoFrame does not use yet'),
         link: yes('Addresses are shown as typed and Teams links them by itself; markup is shown as text'),
       };
+    case 'github':
+      return {
+        text: yes("The issue's title and description, in GitHub's Markdown"),
+        dropdown: yes('The repository, labels, people, milestone and an open issue come from GitHub'),
+        screenshot: yes("Put in the repository's attachments branch and shown in the issue"),
+        video: limited('Put in the attachments branch and linked from the issue, up to 100 MB'),
+        files: limited('One zip in the attachments branch, linked from the issue, up to 100 MB'),
+        link: yes('Addresses and [word](https://…) links are shown as links'),
+      };
     case 'x':
     case 'bluesky':
     case 'instagram': {

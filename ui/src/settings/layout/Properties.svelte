@@ -6,11 +6,14 @@
   import SharingPanel from './SharingPanel.svelte';
   import VideoOptions from './VideoOptions.svelte';
   import { KIND_NAME, buttonKind, kindStyle } from '../../lib/connector';
-  import { messageField } from '../../capture/blocks/formatting';
+  import { marksOf, messageField } from '../../capture/blocks/formatting';
   import { blockName, lineFor } from './reach';
   import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Reach, Rect, Rule, VariableInfo } from '../../lib/types';
   import { COLUMNS, typeLabel } from './model';
+  import { stepLines } from '../fills';
+  import { go } from '../route.svelte';
+  import { getApi } from '../../lib/ipc';
 
   let {
     block,
@@ -21,6 +24,8 @@
     variables,
     issues,
     reach = {},
+    layoutId = null,
+    onfills,
     onrect,
     onremove,
   }: {
@@ -34,6 +39,10 @@
     issues: IssueView[];
     /** What each sharing button sends, by button id, as worked out by the code that shares. */
     reach?: Record<string, Reach>;
+    /** The layout's id, once it has one: the fields filled in it. */
+    layoutId?: string | null;
+    /** The field fills changed (one was made from this button). */
+    onfills?: () => void;
     /** Try to give the block a new position and size; returns false when it does not fit. */
     onrect: (rect: Rect) => boolean;
     onremove: () => void;
@@ -58,6 +67,39 @@
   const connectionOf = (id: string | null | undefined) => connections.find((c) => c.id === id);
 
   type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
+
+  /** The formatting a text block's starting text can have: that of the buttons it is the message of. */
+  const textFormat = $derived(
+    block.type === 'text' ? marksOf(blocks, (b) => connectionOf(b.connection_id)?.kind, block) : { marks: [], services: [] },
+  );
+
+  /** The field fills a share from this button runs. */
+  const fillsFor = (b: SharingBlock) =>
+    infoTypes.filter(
+      (f) => f.item.connection_id === b.connection_id && (f.item.steps ?? []).length > 0 &&
+        ((f.item.layouts ?? []).length === 0 || (layoutId !== null && (f.item.layouts ?? []).includes(layoutId))),
+    );
+  let moveError = $state('');
+  /** A fixed value or a value from a file set on the button, as a field fill of this layout. */
+  async function moveToFills(b: SharingBlock, m: SharingBlock['mappings'][number]) {
+    moveError = '';
+    if (!b.connection_id) return;
+    const text = m.source.kind === 'rule' ? `{{rule.${m.source.value}}}` : m.source.value;
+    const fill: InfoType = {
+      name: fieldsFor(b.connection_id).find((f) => f.key === m.field)?.label ?? m.field,
+      connection_id: b.connection_id, field: m.field, kind: 'text', options: { type: 'none' }, required: false,
+      steps: [{ when: null, then: [{ do: 'set', text }] }],
+      layouts: layoutId ? [layoutId] : [],
+    };
+    try {
+      const api = await getApi();
+      await api.saveItem('infotype', await api.newItemId('infotype', fill.name), fill);
+      b.mappings = b.mappings.filter((x) => x !== m);
+      onfills?.();
+    } catch (e) {
+      moveError = String(e);
+    }
+  }
   /** The sharing buttons whose service takes a formatted message, with that message's field. */
   const messageButtons = $derived(
     blocks
@@ -147,7 +189,7 @@
     {/if}
     <div class="auto-field">
       <span class="auto-title">Text automation</span>
-      <TextAutomation bind:value={block.default_text} {variables} {rules} />
+      <TextAutomation bind:value={block.default_text} {variables} {rules} marks={textFormat.marks} services={textFormat.services} />
     </div>
   {:else if block.type === 'dropdown'}
     <Field label="Title"><input type="text" bind:value={block.title} /></Field>
@@ -286,43 +328,25 @@
       fallback={target?.capabilities ?? null}
       fields={fieldsFor(block.connection_id).map(({ key, label }) => ({ key, label }))}
     />
+    {@const fills = fillsFor(block)}
+    {@const own = block.mappings.filter((m) => m.source.kind !== 'block')}
     <div class="maps">
-      <h3>Fill the service's fields</h3>
-      {#each block.mappings as m, i (i)}
-        <div class="map">
-          <input type="text" bind:value={m.field} list="fields-{block.id}" placeholder="Field" aria-label="Field" />
-          <select
-            value={m.source.kind}
-            aria-label="Value comes from"
-            onchange={(e) => (m.source = { kind: e.currentTarget.value as 'block' | 'rule' | 'fixed', value: '' })}
-          >
-            <option value="block">A block</option>
-            <option value="rule">A data rule</option>
-            <option value="fixed">A fixed value</option>
-          </select>
-          {#if m.source.kind === 'block'}
-            <select bind:value={m.source.value} aria-label="Block">
-              <option value="">Choose…</option>
-              {#each valueBlocks as v (v.id)}<option value={v.id}>{v.title}</option>{/each}
-            </select>
-          {:else if m.source.kind === 'rule'}
-            <select bind:value={m.source.value} aria-label="Data rule">
-              <option value="">Choose…</option>
-              {#each rules as r (r.id)}<option value={r.id}>{r.item.name}</option>{/each}
-            </select>
-          {:else}
-            <input type="text" bind:value={m.source.value} aria-label="Fixed value" placeholder="Value" />
-          {/if}
-          {#if fieldHint(block.connection_id, m.field)}<p class="quiet small hintline">{fieldHint(block.connection_id, m.field)}</p>{/if}
-          <button type="button" aria-label="Remove this field" onclick={() => block.mappings.splice(i, 1)}>✕</button>
-        </div>
+      <h3>Fields filled on each share</h3>
+      {#each fills as f (f.id)}
+        <p class="small"><strong>{f.item.name}</strong> <span class="quiet">({stepLines(f.item).length} {stepLines(f.item).length === 1 ? 'step' : 'steps'})</span></p>
       {:else}
-        <p class="quiet small">None yet. The screenshot, the prompt and the ticked files go unless the send rules above say otherwise.</p>
+        <p class="quiet small">None. Send a block in a field above, or fill a field from values found in files.</p>
       {/each}
-      <datalist id="fields-{block.id}">
-        {#each fieldsFor(block.connection_id) as f (f.key)}<option value={f.key}>{f.label}</option>{/each}
-      </datalist>
-      <button type="button" onclick={() => block.mappings.push({ field: '', source: { kind: 'block', value: '' } })}>Add a field</button>
+      {#each own as m (m.field)}
+        <div class="map">
+          <span class="small"><strong>{m.field}</strong> = <span class="mono">{m.source.kind === 'rule' ? `{{rule.${m.source.value}}}` : m.source.value}</span></span>
+          <button type="button" onclick={() => void moveToFills(block, m)}>Move to Fill fields</button>
+          <button type="button" aria-label="Remove this field" onclick={() => (block.mappings = block.mappings.filter((x) => x !== m))}>✕</button>
+        </div>
+      {/each}
+      {#if own.length > 0}<p class="quiet small">Set on this button before 0.3.0. Fill fields does the same, with conditions.</p>{/if}
+      {#if moveError}<p class="error small" role="alert">{moveError}</p>{/if}
+      <button type="button" onclick={() => go('rules', 'fields')}>Open Fill fields</button>
     </div>
   {:else}
     <p class="quiet">The captured picture, with crop, draw, square, circle and text tools. Nothing to set.</p>
@@ -381,11 +405,10 @@
   .auto-title { font-weight: 600; font-size: 13px; }
   .maps { display: grid; gap: 8px; }
   .maps h3 { font-size: 13px; }
-  .map { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; padding: 8px; background: var(--surface-2); border-radius: var(--radius-sm); }
-  .map > * { min-width: 0; width: 100%; box-sizing: border-box; }
-  .map .hintline { grid-column: 1 / -1; margin: 0; }
-  .map > :nth-child(3) { grid-column: 1 / -1; }
-  .map button { grid-column: 1 / -1; justify-self: end; width: auto; padding: 2px 8px; }
+  .map { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 8px; background: var(--surface-2); border-radius: var(--radius-sm); }
+  .map > span { flex: 1 1 100%; min-width: 0; overflow-wrap: anywhere; }
+  .map button { padding: 2px 8px; }
+  .maps > button { justify-self: start; }
   .small { font-size: 12.5px; }
   .sentby h3 { font-size: 13px; margin: 0 0 4px; }
   .sentby ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }

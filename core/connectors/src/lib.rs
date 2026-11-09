@@ -13,6 +13,8 @@ pub mod claude;
 pub mod custom;
 #[cfg(feature = "discord")]
 pub mod discord;
+#[cfg(feature = "github")]
+pub mod github;
 #[cfg(feature = "google")]
 pub mod google;
 #[cfg(feature = "instagram")]
@@ -142,6 +144,7 @@ pub fn available(kind: Kind) -> bool {
         Kind::X => cfg!(feature = "x"),
         Kind::Bluesky => cfg!(feature = "bluesky"),
         Kind::Instagram => cfg!(feature = "instagram"),
+        Kind::Github => cfg!(feature = "github"),
     }
 }
 
@@ -181,6 +184,8 @@ pub fn build(connection: &Connection) -> Option<Box<dyn Connector>> {
         Settings::Bluesky(s) => Box::new(bluesky::BlueskyConnector::new(s.clone())),
         #[cfg(feature = "instagram")]
         Settings::Instagram(s) => Box::new(instagram::InstagramConnector::new(s.clone())),
+        #[cfg(feature = "github")]
+        Settings::Github(s) => Box::new(github::GithubConnector::new(s.clone())),
         _ => return None,
     })
 }

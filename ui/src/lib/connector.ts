@@ -14,6 +14,7 @@ export const KIND_NAME: Record<KindKey, string> = {
   x: 'X',
   bluesky: 'Bluesky',
   instagram: 'Instagram',
+  github: 'GitHub',
   custom: 'Custom API',
   local: 'This computer',
 };

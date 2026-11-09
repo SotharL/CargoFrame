@@ -1,6 +1,6 @@
 # Development plan
 
-How to make CargoFrame as it is in version 0.2.0: what it must do, the stack, the architecture, each module, the
+How to make CargoFrame as it is in version 0.3.0: what it must do, the stack, the architecture, each module, the
 order to build them in, and the gates every change passes. For what the app is and how it is used, read the
 [design](design.md).
 
@@ -23,7 +23,7 @@ order to build them in, and the gates every change passes. For what the app is a
 | F4 | **Data rules**: if a file is found there, add it to the files and read values (after a name, between two pieces, the line with a word); the kind of file is known from its name |
 | F5 | Open a window built from a **layout**: Screenshot (with editor), Video (trim, crop, mark), Text, Dropdown, Files, sharing buttons |
 | F6 | Fill dropdowns from the service's API; "where to post" as one path that goes as deep as the service does |
-| F7 | Send to Jira, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip |
+| F7 | Send to Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip |
 | F8 | Retry a failed send, then keep a zip, so nothing is lost |
 | F9 | Settings window for everything; in-app guides; templates; export, import, reset |
 | F10 | Other programs fill a layout through `cargoframe open` |
@@ -168,7 +168,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 
 | Folder | Job |
 |--------|-----|
-| `settings/pages` | One component per page: Setup, Connections, Layouts, Triggers, Data from files, Extra fields, Recording, General, Your data, About |
+| `settings/pages` | One component per page: Setup, Connections, Layouts, Triggers, Data & fields (Read from files, Fill fields), Recording, General, Your data, About |
 | `settings/layout` | The layout builder: grid, block inspector, sharing routes |
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes |
@@ -286,7 +286,7 @@ the person presses a button.
 <summary><b>Build features</b></summary>
 
 `core/connectors` and `app` have one Cargo feature per service (`jira google reddit claude slack discord teams custom
-x bluesky instagram`, all on by default). `cargoframe_connectors::available(kind)` tells the UI which forms, templates
+x bluesky instagram github`, all on by default). `cargoframe_connectors::available(kind)` tells the UI which forms, templates
 and guides to show. `scripts\windows\build.cmd` turns `CF_SERVICES=jira,teams` into
 `--no-default-features --features jira,teams`.
 
@@ -391,7 +391,6 @@ listed. Branches merge with a **merge commit**.
 | Item | Why |
 |------|-----|
 | Managed settings folder and `policy.json` | Set up thousands of computers at once, with locked items |
-| Fold Extra fields into the layout (*required*, *if empty, use*) | One place to set a service field |
 | Required fields from the service shown before sending (Jira first) | No "field is required" error after pressing the button |
 | Company sign-in: Jira OAuth, generic OAuth 2.0 for Custom API | No personal tokens in large companies |
 | Video for X, Bluesky, Instagram; Teams files through OneDrive | Recordings everywhere |

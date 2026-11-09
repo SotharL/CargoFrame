@@ -1,6 +1,6 @@
 [package]
 name = "cargoframe-connectors"
-description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, Slack, Discord, Teams, X, Bluesky, Instagram, custom APIs)"
+description = "CargoFrame core: connectors (Jira, Google, Reddit, Claude, Slack, Discord, Teams, X, Bluesky, Instagram, GitHub, custom APIs)"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -13,7 +13,7 @@ workspace = true
 # docs/design.md, "For companies". The settings models stay, so a saved connection of a
 # service left out still reads and is shown as "not in this build".
 [features]
-default = ["jira", "google", "reddit", "claude", "slack", "discord", "teams", "custom", "x", "bluesky", "instagram"]
+default = ["jira", "google", "reddit", "claude", "slack", "discord", "teams", "custom", "x", "bluesky", "instagram", "github"]
 jira = []
 google = []
 reddit = []
@@ -25,6 +25,7 @@ custom = []
 x = ["png"]
 bluesky = ["png"]
 instagram = ["png", "jpeg-encoder"]
+github = []
 
 [dependencies]
 cargoframe-net = { path = "../net" }

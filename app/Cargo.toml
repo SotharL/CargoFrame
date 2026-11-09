@@ -16,7 +16,7 @@ workspace = true
 # One feature per service. `cargo build --no-default-features --features jira,teams` makes a
 # CargoFrame with only those two: the code for the others is not in the program at all.
 [features]
-default = ["jira", "google", "reddit", "claude", "slack", "discord", "teams", "custom", "x", "bluesky", "instagram"]
+default = ["jira", "google", "reddit", "claude", "slack", "discord", "teams", "custom", "x", "bluesky", "instagram", "github"]
 jira = ["cargoframe-connectors/jira"]
 google = ["cargoframe-connectors/google"]
 reddit = ["cargoframe-connectors/reddit"]
@@ -27,6 +27,7 @@ teams = ["cargoframe-connectors/teams"]
 custom = ["cargoframe-connectors/custom"]
 x = ["cargoframe-connectors/x"]
 bluesky = ["cargoframe-connectors/bluesky"]
+github = ["cargoframe-connectors/github"]
 instagram = ["cargoframe-connectors/instagram"]
 
 [build-dependencies]

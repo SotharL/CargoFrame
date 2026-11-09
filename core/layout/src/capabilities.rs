@@ -170,7 +170,40 @@ impl Capabilities {
                 files: Capability::no("Instagram cannot take files"),
                 link: Capability::limited("Addresses are shown as text: Instagram captions have no links"),
             },
+            ConnectionKind::Github => Self::github(true),
             ConnectionKind::CustomApi => Self::custom(CustomShape::default()),
+        }
+    }
+
+    /// GitHub: `files` says whether pictures and files go in a branch of the repository (its API
+    /// cannot attach them to an issue) or are not sent.
+    pub fn github(files: bool) -> Self {
+        let off = "Not sent: the connection sends text only (its pictures setting is off)";
+        Self {
+            text: Capability::yes("The issue's title and description, in GitHub's Markdown"),
+            dropdown: Capability::yes(
+                "The repository, labels, people, milestone and an open issue come from GitHub",
+            ),
+            screenshot: if files {
+                Capability::yes("Put in the repository's attachments branch and shown in the issue")
+            } else {
+                Capability::no(off)
+            },
+            video: if files {
+                Capability::limited(
+                    "Put in the attachments branch and linked from the issue, up to 100 MB",
+                )
+            } else {
+                Capability::no(off)
+            },
+            files: if files {
+                Capability::limited(
+                    "One zip in the attachments branch, linked from the issue, up to 100 MB",
+                )
+            } else {
+                Capability::no(off)
+            },
+            link: Capability::yes("Addresses and [word](https://…) links are shown as links"),
         }
     }
 
@@ -219,7 +252,8 @@ impl Capabilities {
 mod tests {
     use super::*;
 
-    const KINDS: [ConnectionKind; 11] = [
+    const KINDS: [ConnectionKind; 12] = [
+        ConnectionKind::Github,
         ConnectionKind::X,
         ConnectionKind::Bluesky,
         ConnectionKind::Instagram,

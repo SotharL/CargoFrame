@@ -339,6 +339,8 @@ const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
   { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
   { key: 'x-post', name: 'X post', description: 'Post the screenshot to your X account with a short text (280 characters).', service: 'x' },
+  { key: 'github-issue', name: 'GitHub issue', description: 'Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it.', service: 'github' },
+  { key: 'github-comment', name: 'GitHub comment on an issue', description: 'Pick an open issue of the repository and add a comment with the screenshot and files.', service: 'github' },
   { key: 'bluesky-post', name: 'Bluesky post', description: 'Post the screenshot to your Bluesky account with a short text (300 characters) and a description of the picture.', service: 'bluesky' },
   { key: 'instagram-post', name: 'Instagram post', description: 'Post the screenshot to your Instagram professional account with a caption.', service: 'instagram' },
   { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
@@ -460,7 +462,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   });
   const TYPED: Record<string, string[]> = {
     jira: ['token'], google: ['client_secret'], reddit: [], claude: [], slack: ['token'], teams: [], custom: ['secret'],
-    x: [], bluesky: ['app_password'], instagram: ['token', 'host_key'],
+    x: [], bluesky: ['app_password'], instagram: ['token', 'host_key'], github: ['token'],
     discord: ['token', ...Array.from({ length: 10 }, (_, i) => `hook${i}`)],
   };
   const OAUTH = new Set(['google', 'reddit', 'teams', 'x']);
@@ -526,6 +528,27 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         lists: [{ id: 'channels', label: 'Channels the app can see', param: null }],
       };
     }
+    if (c.kind === 'github') {
+      return {
+        summary: `Opens an issue in ${c.repository || 'the repository'}, with the screenshot shown in it.`,
+        fields: [
+          { key: 'repo', label: 'Repository', hint: "owner/name. Defaults to the connection's", list: 'repositories' },
+          { key: 'title', label: 'Title', hint: 'One line. Defaults to the window title', list: null },
+          { key: 'body', label: 'Description', hint: 'Defaults to the prompt text', list: null },
+          { key: 'labels', label: 'Labels', hint: 'Separate several with commas', list: 'labels' },
+          { key: 'assignees', label: 'Assignees', hint: 'GitHub user names. Separate several with commas', list: 'assignees' },
+          { key: 'milestone', label: 'Milestone', hint: '', list: 'milestones' },
+          { key: 'issue', label: 'Add to an existing issue', hint: 'An issue number: adds a comment instead', list: 'recent_issues' },
+        ],
+        lists: [
+          { id: 'repositories', label: 'My repositories', param: null },
+          { id: 'labels', label: 'Labels of the repository', param: null },
+          { id: 'assignees', label: 'People who can be assigned', param: null },
+          { id: 'milestones', label: 'Open milestones', param: null },
+          { id: 'recent_issues', label: 'Open issues, recently updated', param: null },
+        ],
+      };
+    }
     if (c.kind === 'x' || c.kind === 'bluesky') {
       const most = c.kind === 'x' ? 280 : 300;
       return {
@@ -578,7 +601,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       os: 'linux',
       config_dir: '~/.config/CargoFrame',
       data_dir: '~/.local/share/CargoFrame',
-      connectors: opts.connectors ?? ['jira', 'google', 'reddit', 'claude', 'slack', 'discord', 'teams', 'x', 'bluesky', 'instagram', 'custom'],
+      connectors: opts.connectors ?? ['jira', 'google', 'reddit', 'claude', 'slack', 'discord', 'teams', 'x', 'bluesky', 'instagram', 'github', 'custom'],
       tray_available: true,
     }),
     getGeneral: async () => ({ ...general }),

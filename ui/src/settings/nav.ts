@@ -3,7 +3,6 @@ export type PageId =
   | 'layouts'
   | 'triggers'
   | 'rules'
-  | 'infotypes'
   | 'video'
   | 'general'
   | 'data'
@@ -30,8 +29,7 @@ export const PAGES: PageMeta[] = [
   { id: 'setup', group: 'start', title: 'Setup', blurb: 'What CargoFrame uses on this computer, then the services you share to.' },
   { id: 'layouts', group: 'capture', title: 'Layouts', blurb: 'Build the window each trigger opens, block by block.' },
   { id: 'triggers', group: 'capture', title: 'Triggers', blurb: 'Shortcuts that capture your screen and open a layout.' },
-  { id: 'rules', group: 'capture', title: 'Data from files', blurb: 'Pull a value out of a file in the project folder (a version, a log line) to use in your text and fields.' },
-  { id: 'infotypes', group: 'capture', title: 'Extra fields', blurb: 'Extra boxes on the service beyond where to post (Jira priority, labels…) and what fills each one. Where to post is chosen in the layout.' },
+  { id: 'rules', group: 'capture', title: 'Data & fields', blurb: 'Read values from files in the project folder (a machine config, a version), then fill the service’s fields with them (Jira labels, priority…).' },
   { id: 'video', group: 'capture', title: 'Recording', blurb: 'How videos are recorded on this PC: where ffmpeg is, how it captures and compresses, and a short test.' },
   { id: 'general', group: 'app', title: 'General', blurb: 'How CargoFrame looks, starts, tells you things, keeps windows ready, and what it does when a share fails.' },
   { id: 'data', group: 'app', title: 'Your data', blurb: 'What CargoFrame keeps on this computer, a backup of your layouts, and a way to start again.' },
@@ -42,7 +40,7 @@ export const PAGES: PageMeta[] = [
 export const FIRST_PAGE: PageId = 'setup';
 
 /** Pages that moved: the old address still lands somewhere sensible. */
-const MOVED: Record<string, PageId> = { safe: 'general', connections: 'setup', recording: 'video', updates: 'about' };
+const MOVED: Record<string, PageId> = { safe: 'general', connections: 'setup', recording: 'video', updates: 'about', infotypes: 'rules' };
 
 /** Resolve a page name from an address, a saved choice or the backend, following moves. */
 export function resolvePage(v: string | null | undefined): PageId | null {

@@ -147,6 +147,32 @@
       <li>Save this connection and press Sign in.</li>
     </ol>
   </details>
+{:else if value.kind === 'github'}
+  {@const g = value}
+  <Field label="Repository" hint="Where issues go, as owner/name, like octo-org/app. A layout can pick another one." tour="github.repository">
+    <input type="text" bind:value={g.repository} placeholder="octo-org/app" />
+  </Field>
+  <Field label="Pictures and files" hint="GitHub cannot attach a file to an issue, so CargoFrame puts them in a branch of the repository and shows them in the issue." tour="github.files">
+    <select bind:value={g.files}>
+      <option value="branch">Put them in a branch of the repository</option>
+      <option value="none">Do not send them (text only)</option>
+    </select>
+  </Field>
+  {#if g.files === 'branch'}
+    <Field label="Branch for pictures" hint="Made from the main branch the first time.">
+      <input type="text" bind:value={g.branch} placeholder="cargoframe-attachments" />
+    </Field>
+  {/if}
+  <p class="quiet">
+    After saving, paste a fine-grained token below, for this repository only: Issues read and write,
+    and Contents read and write for the pictures.
+  </p>
+  <details class="steps">
+    <summary>My company has its own GitHub</summary>
+    <Field label="API address" hint="GitHub Enterprise Server: https://github.example.com/api/v3. Everyone else leaves https://api.github.com.">
+      <input type="text" bind:value={g.api_url} />
+    </Field>
+  </details>
 {:else if value.kind === 'bluesky'}
   {@const b = value}
   <Field label="Handle" hint="Your Bluesky name, like jane.bsky.social." tour="bluesky.handle">

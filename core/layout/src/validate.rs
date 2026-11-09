@@ -78,6 +78,7 @@ pub enum ConnectionKind {
     X,
     Bluesky,
     Instagram,
+    Github,
 }
 
 impl ConnectionKind {
@@ -95,6 +96,7 @@ impl ConnectionKind {
             ConnectionKind::X => "x",
             ConnectionKind::Bluesky => "bluesky",
             ConnectionKind::Instagram => "instagram",
+            ConnectionKind::Github => "github",
         }
     }
 
