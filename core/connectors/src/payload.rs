@@ -95,7 +95,54 @@ pub struct Payload {
     pub vars: BTreeMap<String, String>,
 }
 
+/// Where the person put the screenshot in a text, for services that can show it there.
+pub const SCREENSHOT_TOKEN: &str = "{{capture.screenshot}}";
+/// Where the person put the recording in a text.
+pub const RECORDING_TOKEN: &str = "{{capture.recording}}";
+
+/// Put the screenshot and the recording where the text says: `shot` and `rec` are what each
+/// place becomes (empty where the service cannot show it in its text: the file is then sent the
+/// usual way).
+pub fn place_media(text: &str, shot: &str, rec: &str) -> String {
+    text.replace(SCREENSHOT_TOKEN, shot)
+        .replace(RECORDING_TOKEN, rec)
+}
+
+/// Whether a text has a place for the screenshot, and for the recording.
+pub fn media_places(text: &str) -> (bool, bool) {
+    (
+        text.contains(SCREENSHOT_TOKEN),
+        text.contains(RECORDING_TOKEN),
+    )
+}
+
 impl Payload {
+    /// The screenshot: the picture of a screenshot capture, or the frame that goes with a
+    /// recording.
+    pub fn screenshot(&self) -> Option<&Attachment> {
+        match &self.image {
+            Some(a) if a.mime.starts_with("image/") => Some(a),
+            _ => self.still.as_ref(),
+        }
+    }
+
+    /// The recording, when the capture is one.
+    pub fn recording(&self) -> Option<&Attachment> {
+        self.image.as_ref().filter(|a| a.mime.starts_with("video/"))
+    }
+
+    /// Every text of the share (fields and prompt) with the places for the screenshot and the
+    /// recording taken out: for services that cannot show them in a text.
+    pub fn without_media_places(mut self) -> Payload {
+        for f in &mut self.fields {
+            f.value = place_media(&f.value, "", "");
+        }
+        if let Some(p) = &mut self.prompt {
+            *p = place_media(p, "", "");
+        }
+        self
+    }
+
     /// The value of a field, trimmed, if there is one.
     pub fn value(&self, key: &str) -> Option<&str> {
         self.fields

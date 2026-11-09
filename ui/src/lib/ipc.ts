@@ -594,6 +594,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     ['project.name', 'That folder\'s name'],
     ['capture.date', 'Date of the capture (YYYY-MM-DD)'],
     ['capture.time', 'Time of the capture (HH:MM:SS)'],
+    ['capture.screenshot', 'The screenshot, shown here in the text (Jira, GitHub, Teams)'],
+    ['capture.recording', 'The recording, shown here in the text (Jira, GitHub)'],
   ].map(([name, description]) => ({ name: name!, description: description! }));
   return {
     appInfo: async () => ({

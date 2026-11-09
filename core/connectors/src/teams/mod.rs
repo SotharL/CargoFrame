@@ -524,8 +524,12 @@ pub fn compose(payload: &Payload, with_image: bool, subject: bool) -> Composed {
         // bold, italic, underline, code, quotes and lists (see `richtext`); every text is escaped
         html.push_str(&render(&b, Style::Html));
     }
-    if with_image {
-        html.push_str("<p><img src=\"../hostedContents/1/$value\" alt=\"Screenshot\"></p>");
+    // the screenshot goes where the text puts it, or at the end; a recording cannot be shown
+    let img = "<img src=\"../hostedContents/1/$value\" alt=\"Screenshot\">";
+    let (placed, _) = crate::payload::media_places(&html);
+    html = crate::payload::place_media(&html, if with_image { img } else { "" }, "");
+    if with_image && !placed {
+        html.push_str(&format!("<p>{img}</p>"));
     }
     Composed {
         html,

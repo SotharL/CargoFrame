@@ -25,9 +25,9 @@ use cargoframe_connectors::{
 };
 use cargoframe_context::template;
 use cargoframe_layout::{
-    select, sharing_mode, sharing_state, validate, BlockKind, DropdownBlock, DropdownSource,
-    FilesHow, Layout, OnSuccess, SendRules, SharingButton, SharingMode, SharingState, TextRole,
-    ValueSource,
+    select, sharing_mode, sharing_state, validate, BlockKind, ConnectionKind, DropdownBlock,
+    DropdownSource, FilesHow, Layout, OnSuccess, SendRules, SharingButton, SharingMode,
+    SharingState, TextRole, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
 use cargoframe_safe::ladder::{PickedFolder, WriteFailure};
@@ -600,6 +600,12 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         prompt,
         fields,
         vars: view.variables.clone(),
+    };
+    // the screenshot and the recording can be put in the text only where the service shows
+    // them there; elsewhere their places are taken out, and the files go the usual way
+    let payload = match kind {
+        Some(ConnectionKind::Jira | ConnectionKind::Github | ConnectionKind::Teams) => payload,
+        _ => payload.without_media_places(),
     };
     let service = match &destination {
         None => "local".to_string(),

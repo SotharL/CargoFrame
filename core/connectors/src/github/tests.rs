@@ -269,3 +269,24 @@ fn days_and_file_names_for_the_branch() {
     assert_eq!(issue_number("0"), None);
     assert_eq!(clean_title(" a\n b "), "a b");
 }
+
+#[test]
+fn the_screenshot_shows_where_the_text_puts_it_and_is_not_added_again_at_the_end() {
+    let server = happy(Arc::new(AtomicU32::new(1)));
+    let c = connector(&server, GithubFiles::Branch);
+    let mut p = payload();
+    p.fields.retain(|f| f.key != "body");
+    p.fields.push(Field::text(
+        "body",
+        "| Shot |\n| --- |\n| {{capture.screenshot}} |",
+    ));
+    world().with("gh", |ctx| c.send(ctx, &p)).unwrap();
+    let body = server.requests_to("/repos/octo/app/issues")[0].json()["body"]
+        .as_str()
+        .unwrap()
+        .to_string();
+    assert!(body.starts_with("| Shot |\n| --- |\n| ![screenshot.png](https://github.com/octo/app/blob/cargoframe-attachments/"), "{body}");
+    // the picture once, in its cell; the zip at the end
+    assert_eq!(body.matches("screenshot.png](").count(), 1, "{body}");
+    assert!(body.trim_end().ends_with("files.zip?raw=true)"), "{body}");
+}
