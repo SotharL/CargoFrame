@@ -1,5 +1,19 @@
 import type { Annotation, EditorState, PxRect } from './model';
-import { visibleRect } from './model';
+import { textBounds, visibleRect } from './model';
+
+/** The canvas font of a text mark. */
+export function fontOf(a: Extract<Annotation, { kind: 'text' }>): string {
+  return `${a.italic ? 'italic ' : ''}${a.bold === false ? 500 : 700} ${a.size}px system-ui, 'Segoe UI', sans-serif`;
+}
+
+let ruler: CanvasRenderingContext2D | null | undefined;
+/** The width of a line of a text mark, as the canvas draws it (a guess where there is no canvas). */
+export function measureLine(a: Extract<Annotation, { kind: 'text' }>, line: string): number {
+  if (ruler === undefined) ruler = typeof document === 'undefined' ? null : document.createElement('canvas').getContext('2d');
+  if (!ruler) return line.length * a.size * 0.58;
+  ruler.font = fontOf(a);
+  return ruler.measureText(line).width;
+}
 
 /** Black or white, whichever reads better on `hex`; used for text outlines. */
 export function contrastOf(hex: string): string {
@@ -62,15 +76,47 @@ function drawOne(ctx: CanvasRenderingContext2D, a: Annotation): void {
       ctx.stroke();
       return;
     }
+    case 'arrow': {
+      ctx.strokeStyle = a.color;
+      ctx.fillStyle = a.color;
+      ctx.lineWidth = a.width;
+      const ang = Math.atan2(a.b.y - a.a.y, a.b.x - a.a.x);
+      const head = Math.max(a.width * 4, 12);
+      // the shaft stops where the head starts, so the tip stays sharp
+      const end = { x: a.b.x - Math.cos(ang) * head * 0.8, y: a.b.y - Math.sin(ang) * head * 0.8 };
+      ctx.beginPath();
+      ctx.moveTo(a.a.x, a.a.y);
+      ctx.lineTo(end.x, end.y);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(a.b.x, a.b.y);
+      ctx.lineTo(a.b.x - Math.cos(ang - 0.45) * head, a.b.y - Math.sin(ang - 0.45) * head);
+      ctx.lineTo(a.b.x - Math.cos(ang + 0.45) * head, a.b.y - Math.sin(ang + 0.45) * head);
+      ctx.closePath();
+      ctx.fill();
+      return;
+    }
     case 'text': {
-      ctx.font = `600 ${a.size}px system-ui, 'Segoe UI', sans-serif`;
+      ctx.font = fontOf(a);
       ctx.textBaseline = 'top';
+      const lines = a.text.split('\n');
+      if (a.box) {
+        const r = textBounds(a, (l) => ctx.measureText(l).width);
+        ctx.fillStyle = contrastOf(a.color);
+        ctx.globalAlpha = 0.85;
+        ctx.beginPath();
+        ctx.roundRect?.(r.x, r.y, r.w, r.h, a.size * 0.2);
+        if (!ctx.roundRect) ctx.rect(r.x, r.y, r.w, r.h);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
       ctx.lineWidth = Math.max(2, a.size / 7);
       ctx.strokeStyle = contrastOf(a.color);
       ctx.fillStyle = a.color;
-      a.text.split('\n').forEach((line, i) => {
+      lines.forEach((line, i) => {
         const y = a.at.y + i * a.size * 1.25;
-        ctx.strokeText(line, a.at.x, y);
+        // without a box, an outline keeps the text readable on any picture
+        if (!a.box) ctx.strokeText(line, a.at.x, y);
         ctx.fillText(line, a.at.x, y);
       });
       return;

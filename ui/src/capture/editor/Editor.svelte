@@ -2,10 +2,10 @@
   import { onMount, tick } from 'svelte';
   import {
     COLORS, THICKNESS, add, clearAll, clampPoint, emptyState, isEdited, rectOf, redo, resetCrop,
-    setCrop, strokeWidth, textSize, toPicturePoint, undo, visibleRect,
-    type Annotation, type EditorState, type Pt, type PxRect, type Thickness,
+    setCrop, strokeWidth, takeOut, textAt as textIndexAt, textSize, toPicturePoint, undo, visibleRect,
+    type Annotation, type EditorState, type Pt, type PxRect, type TextStyle, type Thickness,
   } from './model';
-  import { exportPng, paint } from './render';
+  import { exportPng, fontOf, measureLine, paint } from './render';
   import StylePicker from './StylePicker.svelte';
 
   let {
@@ -21,7 +21,7 @@
     edited?: boolean;
   } = $props();
 
-  type Tool = 'crop' | 'pen' | 'rect' | 'ellipse' | 'text' | null;
+  type Tool = 'crop' | 'pen' | 'rect' | 'ellipse' | 'arrow' | 'text' | null;
   let tool = $state<Tool>(null);
   let color = $state(COLORS[0]!);
   let thickness = $state<Thickness>('medium');
@@ -34,10 +34,13 @@
   let cssSize = $state({ w: 100, h: 100 });
   let dpr = $state(1);
 
-  // text tool
+  // text tool: where the box is, what is typed, and how it looks
   let textAt = $state<{ pt: Pt; css: { x: number; y: number } } | null>(null);
   let textValue = $state('');
-  let textInput = $state<HTMLInputElement>();
+  let textInput = $state<HTMLTextAreaElement>();
+  let textStyle = $state<TextStyle>({ bold: true, italic: false, box: false });
+  /** The size of the text being edited, kept when an existing text is changed. */
+  let textPx = $state<number | null>(null);
 
   const visible = $derived(visibleRect(doc, size));
 
@@ -98,11 +101,10 @@
     if (!tool || e.button !== 0) return;
     const p = pointFrom(e);
     if (tool === 'text') {
+      // without this the click takes the focus back from the box just opened, which closes it
+      e.preventDefault();
       commitText();
-      const r = canvas!.getBoundingClientRect();
-      textAt = { pt: p, css: { x: e.clientX - r.left, y: e.clientY - r.top } };
-      textValue = '';
-      tick().then(() => textInput?.focus());
+      openText(p);
       return;
     }
     canvas!.setPointerCapture(e.pointerId);
@@ -111,6 +113,7 @@
     if (tool === 'pen') live = { kind: 'pen', color, width: w, points: [p] };
     else if (tool === 'rect') live = { kind: 'rect', color, width: w, a: p, b: p };
     else if (tool === 'ellipse') live = { kind: 'ellipse', color, width: w, a: p, b: p };
+    else if (tool === 'arrow') live = { kind: 'arrow', color, width: w, a: p, b: p };
     else if (tool === 'crop') cropPreview = rectOf(p, p);
   }
 
@@ -122,6 +125,8 @@
       if (Math.hypot(p.x - last.x, p.y - last.y) >= 1) live = { ...live, points: [...live.points, p] };
     } else if (live && (live.kind === 'rect' || live.kind === 'ellipse')) {
       live = { ...live, b: e.shiftKey ? square(start, p) : p };
+    } else if (live?.kind === 'arrow') {
+      live = { ...live, b: p };
     } else if (tool === 'crop') {
       cropPreview = rectOf(start, p);
     }
@@ -137,28 +142,72 @@
     start = null;
   }
 
+  /** Where on the frame a point of the picture is shown. */
+  function cssOf(p: Pt) {
+    return { x: ((p.x - visible.x) / visible.w) * cssSize.w, y: ((p.y - visible.y) / visible.h) * cssSize.h };
+  }
+
+  /** Open the text box at `p`: on a text already there, that text comes back to be changed. */
+  function openText(p: Pt) {
+    const i = textIndexAt(doc, p, measureLine);
+    if (i >= 0) {
+      const out = takeOut(doc, i);
+      const m = out.mark;
+      if (m?.kind === 'text') {
+        doc = out.state;
+        color = m.color;
+        textStyle = { bold: m.bold !== false, italic: !!m.italic, box: !!m.box };
+        textPx = m.size;
+        textAt = { pt: m.at, css: cssOf(m.at) };
+        textValue = m.text;
+        tick().then(() => textInput?.focus());
+        return;
+      }
+    }
+    textPx = null;
+    textAt = { pt: p, css: cssOf(p) };
+    textValue = '';
+    tick().then(() => textInput?.focus());
+  }
+
   function commitText() {
     if (!textAt) return;
-    const text = textValue;
+    const text = textValue.replace(/\s+$/, '');
     const at = textAt.pt;
     textAt = null;
     textValue = '';
     if (text.trim()) {
-      doc = add(doc, { kind: 'text', color, size: textSize(size, thickness), at, text });
+      doc = add(doc, { kind: 'text', color, size: textPx ?? textSize(size, thickness), at, text, ...textStyle });
     }
+    textPx = null;
   }
 
   function onTextKey(e: KeyboardEvent) {
     e.stopPropagation();
-    if (e.key === 'Enter') {
+    if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       commitText();
     } else if (e.key === 'Escape') {
       e.preventDefault();
       textAt = null;
       textValue = '';
+    } else if ((e.ctrlKey || e.metaKey) && (e.key === 'b' || e.key === 'i')) {
+      e.preventDefault();
+      if (e.key === 'b') textStyle.bold = !textStyle.bold;
+      else textStyle.italic = !textStyle.italic;
     }
   }
+
+  /** Leaving the box puts the text on the picture, unless the focus went to its own buttons. */
+  function onTextBlur(e: FocusEvent) {
+    const to = e.relatedTarget as HTMLElement | null;
+    if (to?.closest('[data-text-tools]') || to?.closest('.style')) return;
+    commitText();
+  }
+
+  /** How big the text box is drawn on screen, so what is typed looks like the result. */
+  const textCss = $derived(textPx ?? textSize(size, thickness));
+  const textFont = $derived(fontOf({ kind: 'text', color, size: (textCss * cssSize.w) / visible.w, at: { x: 0, y: 0 }, text: '', ...textStyle }));
 
   function pick(t: Exclude<Tool, null>) {
     commitText();
@@ -185,6 +234,7 @@
   }
 
   const cursor = $derived(tool === 'text' ? 'text' : tool ? 'crosshair' : 'default');
+  const textRows = $derived(Math.max(1, textValue.split('\n').length));
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -204,10 +254,22 @@
       <button class="tool" class:on={tool === 'ellipse'} aria-pressed={tool === 'ellipse'} title="Circle (hold Shift for a true circle)" aria-label="Circle" onclick={() => pick('ellipse')}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="7" /></svg>
       </button>
-      <button class="tool" class:on={tool === 'text'} aria-pressed={tool === 'text'} title="Text" aria-label="Text" onclick={() => pick('text')}>
+      <button class="tool" class:on={tool === 'arrow'} aria-pressed={tool === 'arrow'} title="Arrow" aria-label="Arrow" onclick={() => pick('arrow')}>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M10 5h9v9" /></svg>
+      </button>
+      <button class="tool" class:on={tool === 'text'} aria-pressed={tool === 'text'} title="Text: click to write, click a text to change it" aria-label="Text" onclick={() => pick('text')}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6" /></svg>
       </button>
     </div>
+    {#if tool === 'text'}
+      <div class="group" data-text-tools role="group" aria-label="Text style">
+        <button class="tool letter" class:on={textStyle.bold} aria-pressed={!!textStyle.bold} title="Bold (Ctrl+B)" aria-label="Bold" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.bold = !textStyle.bold)}><b>B</b></button>
+        <button class="tool letter" class:on={textStyle.italic} aria-pressed={!!textStyle.italic} title="Italic (Ctrl+I)" aria-label="Italic" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.italic = !textStyle.italic)}><i>I</i></button>
+        <button class="tool" class:on={textStyle.box} aria-pressed={!!textStyle.box} title="On a box: readable on any picture" aria-label="On a box" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.box = !textStyle.box)}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M8 10h8M12 10v5" /></svg>
+        </button>
+      </div>
+    {/if}
 
     <span class="sep" aria-hidden="true"></span>
 
@@ -245,19 +307,21 @@
         onpointercancel={up}
       ></canvas>
       {#if textAt}
-        <input
+        <textarea
           bind:this={textInput}
           class="text-input"
-          type="text"
+          class:box={textStyle.box}
+          rows={textRows}
           style:left="{textAt.css.x}px"
           style:top="{textAt.css.y}px"
           style:color={color}
+          style:font={textFont}
           bind:value={textValue}
           onkeydown={onTextKey}
-          onblur={commitText}
+          onblur={onTextBlur}
           aria-label="Text to add"
-          placeholder="Type, then Enter"
-        />
+          placeholder="Type, Enter to place"
+        ></textarea>
       {/if}
     </div>
   </div>
@@ -265,6 +329,7 @@
     {visible.w} × {visible.h} px{doc.crop ? ' (cropped)' : ''}
     {#if doc.annotations.length}· {doc.annotations.length} mark{doc.annotations.length === 1 ? '' : 's'}{/if}
     {#if tool === 'crop'}· drag to choose the part to keep{/if}
+    {#if tool === 'text'}· click to write (Shift+Enter for a new line), click a text to change it{/if}
   </div>
 </div>
 
@@ -284,10 +349,13 @@
   }
   .frame { position: relative; line-height: 0; box-shadow: 0 1px 4px rgb(0 0 0 / 0.25); }
   canvas { display: block; touch-action: none; }
+  .tool.letter { font-size: 14px; font-family: Georgia, serif; }
+  /* the box is drawn where the text will be, in its size, so what is typed is what is placed */
   .text-input {
-    position: absolute; transform: translate(0, -50%); min-width: 160px;
-    background: rgb(0 0 0 / 0.55); border: 1px solid var(--accent); border-radius: 4px; padding: 2px 6px;
-    font-weight: 600; z-index: 2;
+    position: absolute; min-width: 140px; max-width: 90%; resize: none; overflow: hidden;
+    background: rgb(0 0 0 / 0.35); border: 1px dashed var(--accent); border-radius: 3px; padding: 0;
+    line-height: 1.25; z-index: 2; white-space: pre; field-sizing: content;
   }
+  .text-input.box { background: rgb(255 255 255 / 0.85); }
   .status { font-size: 12px; }
 </style>

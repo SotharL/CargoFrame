@@ -16,11 +16,20 @@ export interface PxRect {
   h: number;
 }
 
+/** How a text mark looks: bold or italic, and on a box of its own so it reads on any picture. */
+export interface TextStyle {
+  bold?: boolean;
+  italic?: boolean;
+  /** A filled box behind the text, in the text's contrast colour. */
+  box?: boolean;
+}
+
 export type Annotation =
   | { kind: 'pen'; color: string; width: number; points: Pt[] }
   | { kind: 'rect'; color: string; width: number; a: Pt; b: Pt }
   | { kind: 'ellipse'; color: string; width: number; a: Pt; b: Pt }
-  | { kind: 'text'; color: string; size: number; at: Pt; text: string };
+  | { kind: 'arrow'; color: string; width: number; a: Pt; b: Pt }
+  | ({ kind: 'text'; color: string; size: number; at: Pt; text: string } & TextStyle);
 
 export interface EditorState {
   /** Visible part of the picture; `null` shows all of it. */
@@ -118,6 +127,8 @@ export function isMeaningful(a: Annotation): boolean {
     case 'rect':
     case 'ellipse':
       return Math.abs(a.a.x - a.b.x) >= 3 && Math.abs(a.a.y - a.b.y) >= 3;
+    case 'arrow':
+      return Math.hypot(a.a.x - a.b.x, a.a.y - a.b.y) >= 6;
     case 'text':
       return a.text.trim().length > 0;
   }
@@ -126,6 +137,35 @@ export function isMeaningful(a: Annotation): boolean {
 export function add(state: EditorState, a: Annotation): EditorState {
   if (!isMeaningful(a)) return state;
   return { ...state, annotations: [...state.annotations, a], redo: [] };
+}
+
+/** The size a text mark takes, from its longest line (measured, or guessed without a canvas). */
+export function textBounds(
+  a: Extract<Annotation, { kind: 'text' }>,
+  measure: (line: string) => number = (line) => line.length * a.size * 0.58,
+): PxRect {
+  const lines = a.text.split('\n');
+  const pad = a.box ? a.size * 0.3 : 0;
+  const w = Math.max(...lines.map(measure), a.size * 0.5);
+  return { x: a.at.x - pad, y: a.at.y - pad, w: w + 2 * pad, h: lines.length * a.size * 1.25 + 2 * pad };
+}
+
+/** The topmost text mark at `p`, by its index, to edit it again. */
+export function textAt(state: EditorState, p: Pt, measure?: (a: Extract<Annotation, { kind: 'text' }>, line: string) => number): number {
+  for (let i = state.annotations.length - 1; i >= 0; i--) {
+    const a = state.annotations[i]!;
+    if (a.kind !== 'text') continue;
+    const r = textBounds(a, measure ? (l) => measure(a, l) : undefined);
+    if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return i;
+  }
+  return -1;
+}
+
+/** Take a mark out to edit it: put back with `add`, or gone if left empty. Undo brings it back. */
+export function takeOut(state: EditorState, index: number): { state: EditorState; mark: Annotation | null } {
+  const mark = state.annotations[index];
+  if (!mark) return { state, mark: null };
+  return { state: { ...state, annotations: state.annotations.filter((_, i) => i !== index), redo: [] }, mark };
 }
 
 export function undo(state: EditorState): EditorState {

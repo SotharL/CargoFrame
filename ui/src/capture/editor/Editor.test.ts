@@ -22,7 +22,7 @@ describe('Editor toolbar', () => {
     const bar = screen.getByRole('toolbar', { name: 'Screenshot tools' });
     const buttons = [...bar.querySelectorAll('button')].filter((b) => !b.closest('.panel'));
     const names = buttons.map((b) => b.getAttribute('aria-label'));
-    expect(names).toEqual(['Crop', 'Draw', 'Square', 'Circle', 'Text', 'Colour and thickness', 'Undo', 'Redo', 'Reset crop', 'Clear all']);
+    expect(names).toEqual(['Crop', 'Draw', 'Square', 'Circle', 'Arrow', 'Text', 'Colour and thickness', 'Undo', 'Redo', 'Reset crop', 'Clear all']);
     for (const b of buttons) {
       expect(b.textContent?.trim()).toBe('');
       expect(b.getAttribute('title')).toBeTruthy();
@@ -47,5 +47,22 @@ describe('Editor toolbar', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Colour and thickness' }));
     expect(screen.getAllByRole('button', { name: /^Colour #/ })).toHaveLength(8);
     expect(screen.getByRole('button', { name: 'thin' })).toBeTruthy();
+  });
+  it('writes text where it is clicked, styled, and opens a text again to change it', async () => {
+    open();
+    await fireEvent.click(screen.getByRole('button', { name: 'Text' }));
+    const canvas = document.querySelector('canvas')!;
+    await fireEvent.pointerDown(canvas, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
+    const box = (await screen.findByRole('textbox', { name: 'Text to add' })) as HTMLTextAreaElement;
+    // the style buttons do not take the focus, so the box stays open
+    await fireEvent.click(screen.getByRole('button', { name: 'Italic' }));
+    expect(screen.getByRole('button', { name: 'Italic' }).getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.input(box, { target: { value: 'Crash here' } });
+    await fireEvent.keyDown(box, { key: 'Enter' });
+    expect(screen.queryByRole('textbox', { name: 'Text to add' })).toBeNull();
+    expect((screen.getByRole('button', { name: 'Undo' }) as HTMLButtonElement).disabled).toBe(false);
+    // a click on it brings it back to be changed
+    await fireEvent.pointerDown(canvas, { button: 0, clientX: 10, clientY: 10, pointerId: 1 });
+    expect(((await screen.findByRole('textbox', { name: 'Text to add' })) as HTMLTextAreaElement).value).toBe('Crash here');
   });
 });

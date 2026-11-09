@@ -395,7 +395,8 @@
   .chips { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .used { font-size: 13px; }
   .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
-  .workspace { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 16px; align-items: start; }
+  /* the layout and its details share the width equally; below one another when it is narrow */
+  .workspace { display: grid; grid-template-columns: minmax(0, 1fr) minmax(320px, 1fr); gap: 16px; align-items: start; }
   .side { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px; position: sticky; top: 0; max-height: calc(100vh - 48px); overflow: auto; }
   .hint { display: grid; gap: 8px; }
   .hint h3 { font-size: 13px; margin-top: 6px; }
