@@ -17,6 +17,7 @@ members = [
     "core/video",
     "core/shortcuts",
     "core/indicator",
+  "core/ocr",
     "app",
 ]
 

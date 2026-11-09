@@ -1,0 +1,25 @@
+[package]
+name = "cargoframe-ocr"
+description = "CargoFrame core: read the text in part of a screenshot (the system's own reader on Windows, tesseract on Linux)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+png = "0.18"
+thiserror.workspace = true
+tracing.workspace = true
+serde.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Graphics_Imaging",
+  "Media_Ocr",
+  "Storage_Streams",
+] }

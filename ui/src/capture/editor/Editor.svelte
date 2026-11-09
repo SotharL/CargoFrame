@@ -7,21 +7,26 @@
   } from './model';
   import { exportPng, fontOf, measureLine, paint } from './render';
   import StylePicker from './StylePicker.svelte';
+  import { READ_TRIES, placed, regionPng, toCopy } from './ocr';
+  import type { TextReading } from '../../lib/types';
 
   let {
     image,
     original,
     size,
     edited = $bindable(false),
+    reader,
   }: {
     image: CanvasImageSource;
     /** The untouched PNG; returned as it is when nothing was changed. */
     original: Blob;
     size: { width: number; height: number };
     edited?: boolean;
+    /** Reads the text in a part of the picture; without it there is no "Read text" tool. */
+    reader?: (png: Blob, attempt: number) => Promise<TextReading>;
   } = $props();
 
-  type Tool = 'crop' | 'pen' | 'rect' | 'ellipse' | 'arrow' | 'text' | null;
+  type Tool = 'crop' | 'pen' | 'rect' | 'ellipse' | 'arrow' | 'text' | 'read' | null;
   let tool = $state<Tool>(null);
   let color = $state(COLORS[0]!);
   let thickness = $state<Thickness>('medium');
@@ -41,6 +46,22 @@
   let textStyle = $state<TextStyle>({ bold: true, italic: false, box: false });
   /** The size of the text being edited, kept when an existing text is changed. */
   let textPx = $state<number | null>(null);
+
+  // read text: the part being chosen, then what was read in it
+  let readPreview = $state<PxRect | null>(null);
+  type Reading = {
+    rect: PxRect;
+    attempt: number;
+    status: 'reading' | 'done' | 'failed';
+    result: TextReading | null;
+    error: string;
+    /** The lines picked to copy (none: all of them). */
+    picked: number[];
+    copied: boolean;
+  };
+  let reading = $state<Reading | null>(null);
+  /** Counts the reads, so a late answer to an earlier one is dropped. */
+  let readRun = 0;
 
   const visible = $derived(visibleRect(doc, size));
 
@@ -115,6 +136,7 @@
     else if (tool === 'ellipse') live = { kind: 'ellipse', color, width: w, a: p, b: p };
     else if (tool === 'arrow') live = { kind: 'arrow', color, width: w, a: p, b: p };
     else if (tool === 'crop') cropPreview = rectOf(p, p);
+    else if (tool === 'read') readPreview = rectOf(p, p);
   }
 
   function move(e: PointerEvent) {
@@ -129,6 +151,8 @@
       live = { ...live, b: p };
     } else if (tool === 'crop') {
       cropPreview = rectOf(start, p);
+    } else if (tool === 'read') {
+      readPreview = rectOf(start, p);
     }
   }
 
@@ -137,10 +161,62 @@
     canvas?.releasePointerCapture(e.pointerId);
     if (live) doc = add(doc, live);
     else if (tool === 'crop' && cropPreview) doc = setCrop(doc, cropPreview, size);
+    else if (tool === 'read' && readPreview && readPreview.w >= 4 && readPreview.h >= 4) void readIn(readPreview, 0);
     live = null;
     cropPreview = null;
+    readPreview = null;
     start = null;
   }
+
+  /** Read the text in the part `rect` of the picture, the `attempt`-th way. */
+  async function readIn(rect: PxRect, attempt: number) {
+    if (!reader) return;
+    const run = ++readRun;
+    reading = { rect, attempt, status: 'reading', result: null, error: '', picked: [], copied: false };
+    try {
+      const png = await regionPng(image, rect);
+      const result = await reader(png, attempt);
+      if (run !== readRun) return;
+      reading = { rect, attempt, status: 'done', result, error: '', picked: [], copied: false };
+    } catch (e) {
+      if (run !== readRun) return;
+      reading = { rect, attempt, status: 'failed', result: null, error: e instanceof Error ? e.message : String(e), picked: [], copied: false };
+    }
+  }
+
+  const tryAgain = () => reading && void readIn(reading.rect, (reading.attempt + 1) % READ_TRIES);
+
+  function closeReading() {
+    readRun++;
+    reading = null;
+  }
+
+  function pickLine(i: number) {
+    if (!reading) return;
+    const picked = reading.picked.includes(i) ? reading.picked.filter((n) => n !== i) : [...reading.picked, i];
+    reading = { ...reading, picked, copied: false };
+  }
+
+  async function copyReading() {
+    if (!reading?.result) return;
+    try {
+      await navigator.clipboard.writeText(toCopy(reading.result, reading.picked));
+      reading = { ...reading, copied: true };
+    } catch {
+      reading = { ...reading, error: 'The text could not be copied: select it below and press Ctrl+C' };
+    }
+  }
+
+  /** Where on the frame a part of the picture is shown. */
+  function cssRect(r: PxRect) {
+    const a = cssOf({ x: r.x, y: r.y });
+    const b = cssOf({ x: r.x + r.w, y: r.y + r.h });
+    return { x: a.x, y: a.y, w: b.x - a.x, h: b.y - a.y };
+  }
+  const readBox = $derived(readPreview ? cssRect(readPreview) : reading ? cssRect(reading.rect) : null);
+  const readLines = $derived(
+    reading?.result ? placed(reading.result, reading.rect).map((l, i) => ({ ...cssRect(l), text: l.text, i })) : [],
+  );
 
   /** Where on the frame a point of the picture is shown. */
   function cssOf(p: Pt) {
@@ -211,10 +287,15 @@
 
   function pick(t: Exclude<Tool, null>) {
     commitText();
+    if (t !== 'read') closeReading();
     tool = tool === t ? null : t;
   }
 
   function onKey(e: KeyboardEvent) {
+    if (e.key === 'Escape' && reading) {
+      closeReading();
+      return;
+    }
     if (!(e.ctrlKey || e.metaKey)) return;
     const k = e.key.toLowerCase();
     if (k === 'z' && !e.shiftKey) {
@@ -234,6 +315,7 @@
   }
 
   const cursor = $derived(tool === 'text' ? 'text' : tool ? 'crosshair' : 'default');
+  const readingText = $derived(reading?.result ? toCopy(reading.result, reading.picked) : '');
   const textRows = $derived(Math.max(1, textValue.split('\n').length));
 </script>
 
@@ -260,6 +342,11 @@
       <button class="tool" class:on={tool === 'text'} aria-pressed={tool === 'text'} title="Text: click to write, click a text to change it" aria-label="Text" onclick={() => pick('text')}>
         <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6" /></svg>
       </button>
+      {#if reader}
+        <button class="tool" class:on={tool === 'read'} aria-pressed={tool === 'read'} title="Read text: drag over the text to copy it" aria-label="Read text" onclick={() => pick('read')}>
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V3h4M17 3h4v4M21 17v4h-4M7 21H3v-4M8 9h8M12 9v7" /></svg>
+        </button>
+      {/if}
     </div>
     {#if tool === 'text'}
       <div class="group" data-text-tools role="group" aria-label="Text style">
@@ -306,6 +393,24 @@
         onpointerup={up}
         onpointercancel={up}
       ></canvas>
+      {#if readBox}
+        <div class="read-area" class:busy={reading?.status === 'reading'} style:left="{readBox.x}px" style:top="{readBox.y}px" style:width="{readBox.w}px" style:height="{readBox.h}px" aria-hidden="true"></div>
+      {/if}
+      {#each readLines as l (l.i)}
+        <button
+          type="button"
+          class="read-line"
+          class:picked={reading?.picked.includes(l.i)}
+          style:left="{l.x}px"
+          style:top="{l.y}px"
+          style:width="{l.w}px"
+          style:height="{l.h}px"
+          title={l.text}
+          aria-label="Line {l.i + 1}: {l.text}"
+          aria-pressed={reading?.picked.includes(l.i) ?? false}
+          onclick={() => pickLine(l.i)}
+        ></button>
+      {/each}
       {#if textAt}
         <textarea
           bind:this={textInput}
@@ -325,16 +430,60 @@
       {/if}
     </div>
   </div>
+  {#if reading}
+    <div class="reading" role="region" aria-label="Text read">
+      {#if reading.status === 'reading'}
+        <p class="quiet" role="status">Reading the text…</p>
+      {:else if reading.status === 'failed'}
+        <p class="warn" role="alert">{reading.error}</p>
+      {:else if reading.result && reading.result.lines.length === 0}
+        <p class="quiet" role="status">No text found here. Try again, or choose a slightly larger part.</p>
+      {:else if reading.result}
+        <textarea class="found selectable" readonly rows={Math.min(5, Math.max(1, readingText.split('\n').length))} aria-label="The text found" value={readingText}></textarea>
+        {#if reading.error}<p class="warn">{reading.error}</p>{/if}
+      {/if}
+      <div class="read-buttons">
+        {#if reading.status === 'done' && reading.result?.lines.length}
+          <button type="button" class="primary" onclick={copyReading}>
+            {reading.copied ? 'Copied' : reading.picked.length ? `Copy ${reading.picked.length} line${reading.picked.length === 1 ? '' : 's'}` : 'Copy'}
+          </button>
+        {/if}
+        <button type="button" onclick={tryAgain} disabled={reading.status === 'reading'} title="Read it another way">Try again</button>
+        <button type="button" onclick={closeReading}>Close</button>
+        {#if reading.result}
+          <span class="quiet small">Read on this computer ({reading.result.reader}), way {reading.attempt + 1} of {READ_TRIES}{reading.result.lines.length > 1 ? ' · click lines to copy only those' : ''}</span>
+        {/if}
+      </div>
+    </div>
+  {/if}
   <div class="status quiet">
     {visible.w} × {visible.h} px{doc.crop ? ' (cropped)' : ''}
     {#if doc.annotations.length}· {doc.annotations.length} mark{doc.annotations.length === 1 ? '' : 's'}{/if}
     {#if tool === 'crop'}· drag to choose the part to keep{/if}
+    {#if tool === 'read'}· drag over the text to read it{/if}
     {#if tool === 'text'}· click to write (Shift+Enter for a new line), click a text to change it{/if}
   </div>
 </div>
 
 <style>
   .editor { display: grid; grid-template-rows: auto 1fr auto; gap: 8px; height: 100%; min-height: 0; }
+  .editor:has(.reading) { grid-template-rows: auto 1fr auto auto; }
+  /* read text: the part read, its lines (click to pick), and what was found */
+  .read-area { position: absolute; border: 2px dashed var(--accent); border-radius: 2px; pointer-events: none; z-index: 1; }
+  .read-area.busy { animation: reading 1s ease-in-out infinite alternate; }
+  @keyframes reading { from { border-color: var(--accent); } to { border-color: transparent; } }
+  @media (prefers-reduced-motion: reduce) { .read-area.busy { animation: none; } }
+  .read-line {
+    position: absolute; z-index: 1; padding: 0; border: none; border-radius: 2px; cursor: pointer;
+    background: color-mix(in srgb, #ffd400 32%, transparent); box-shadow: 0 0 0 1px color-mix(in srgb, #ffd400 70%, transparent);
+  }
+  .read-line:hover { background: color-mix(in srgb, #ffd400 45%, transparent); }
+  .read-line.picked { background: color-mix(in srgb, var(--accent) 40%, transparent); box-shadow: 0 0 0 2px var(--accent); }
+  .reading { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+  .found { width: 100%; resize: vertical; font: 13px var(--mono); background: var(--surface-2); border: 1px solid var(--border); border-radius: 4px; padding: 4px 6px; }
+  .read-buttons { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .small { font-size: 12px; }
+  .warn { color: var(--warn); font-size: 13px; }
   /* One line: icon buttons only. A block too narrow for that wraps rather than cuts anything off. */
   .toolbar { display: flex; flex-wrap: wrap; gap: 4px 4px; align-items: center; }
   .group { display: inline-flex; gap: 2px; align-items: center; }

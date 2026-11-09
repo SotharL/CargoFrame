@@ -47,6 +47,7 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 cargoframe-config = { path = "../core/config" }
 cargoframe-capture = { path = "../core/capture" }
 cargoframe-indicator = { path = "../core/indicator" }
+cargoframe-ocr = { path = "../core/ocr" }
 cargoframe-shortcuts = { path = "../core/shortcuts" }
 cargoframe-context = { path = "../core/context" }
 cargoframe-handoff = { path = "../core/handoff" }

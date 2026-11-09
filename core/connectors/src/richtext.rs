@@ -463,7 +463,7 @@ pub fn render(text: &str, style: Style) -> String {
     let mut out: Vec<String> = Vec::new();
     let mut lines: Vec<&str> = Vec::new();
     let spaced = matches!(style, Style::Reddit | Style::Github);
-    let mut flush = |lines: &mut Vec<&str>, out: &mut Vec<String>| {
+    let flush = |lines: &mut Vec<&str>, out: &mut Vec<String>| {
         if !lines.is_empty() {
             let text = lines.join("\n");
             out.extend(render_lines(&text, style));

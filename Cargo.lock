@@ -506,6 +506,7 @@ dependencies = [
  "cargoframe-indicator",
  "cargoframe-layout",
  "cargoframe-net",
+ "cargoframe-ocr",
  "cargoframe-rules",
  "cargoframe-safe",
  "cargoframe-shortcuts",
@@ -648,6 +649,17 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "ureq",
+]
+
+[[package]]
+name = "cargoframe-ocr"
+version = "0.3.0"
+dependencies = [
+ "png",
+ "serde",
+ "thiserror 2.0.21",
+ "tracing",
+ "windows",
 ]
 
 [[package]]

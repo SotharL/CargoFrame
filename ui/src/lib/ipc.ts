@@ -5,6 +5,7 @@ import type {
   MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
   VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
   ServiceKind, ShortcutStatus,
+  TextReading,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
@@ -112,6 +113,8 @@ export interface Api {
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
   /** The mark drawn over a recording (a see-through PNG the size of the recording), or none. */
   setClipMark(sessionId: number, png: Blob | null): Promise<void>;
+  /** Read the text in part of the screenshot (a PNG), the `attempt`-th way, on this computer. */
+  readText(png: Blob, attempt: number): Promise<TextReading>;
   share(request: ShareRequest): Promise<ShareResult>;
   openLink(url: string): Promise<void>;
   /** Tell the app the window has painted its first usable content (for the timings). */
@@ -238,6 +241,10 @@ async function tauriApi(): Promise<Api> {
       const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
       await invoke('set_edited_image', bytes, { headers: { 'x-session-id': String(sessionId) } });
     },
+    readText: async (png, attempt) => {
+      const bytes = new Uint8Array(await png.arrayBuffer());
+      return invoke<TextReading>('read_text', bytes, { headers: { 'x-attempt': String(attempt) } });
+    },
     setClipMark: async (sessionId, png) => {
       const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
       await invoke('set_clip_mark', bytes, { headers: { 'x-session-id': String(sessionId) } });
@@ -310,6 +317,8 @@ export interface MemoryOptions {
   installPolls?: number;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
+  /** Called by `readText`; the default reads one made-up line. */
+  readText?: (attempt: number) => TextReading | Promise<TextReading>;
   /** Called by `fetchOptions` (as `<block>:<choice>` for the list inside a choice) and `previewOptions`. */
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
   /** What `openImport` finds in the "file" the person picks; the default is a cancelled dialog. */
@@ -816,6 +825,10 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           : [{ value: 'P1', label: 'Demo project', group: null }],
     setEditedImage: async () => {},
     setClipMark: async () => {},
+    readText: async (_png, attempt) =>
+      opts.readText
+        ? opts.readText(attempt)
+        : { text: 'Build 4.2.1 failed on save', lines: [{ text: 'Build 4.2.1 failed on save', x: 4, y: 4, w: 180, h: 16 }], reader: 'demo', attempt },
     share: async (request) =>
       opts.share
         ? opts.share(request)

@@ -907,3 +907,11 @@ export interface UpdateView {
   last: UpdateLast | null;
   phase: UpdatePhase;
 }
+
+/** Text read in part of a screenshot (core/ocr): each line with its place, in that part's pixels. */
+export interface TextReading {
+  text: string;
+  lines: { text: string; x: number; y: number; w: number; h: number }[];
+  reader: string;
+  attempt: number;
+}

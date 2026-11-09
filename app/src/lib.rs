@@ -148,6 +148,7 @@ pub fn run() {
             commands::remove_chat,
             commands::fetch_options,
             commands::set_edited_image,
+            commands::read_text,
             commands::set_clip_mark,
             commands::share,
             commands::open_link,

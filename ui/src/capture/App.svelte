@@ -45,6 +45,11 @@
   /** The choices made before in each dropdown block (newest first), read when the capture opens. */
   let recents = $state<Record<string, Recent[]>>({});
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
+  /** Read the text in a part of the screenshot, on this computer. */
+  const readText = (png: Blob, attempt: number) => {
+    if (!api) return Promise.reject(new Error('CargoFrame is not ready yet'));
+    return api.readText(png, attempt);
+  };
   /** With a recording and a screenshot block: the picture taken from it, or `null` while there is none. */
   let still = $state<Blob | null>(null);
   let stillSize = $state({ width: 0, height: 0 });
@@ -250,12 +255,12 @@
               <div class="body">
               {#if b.type === 'screenshot' && paired}
                 {#if still}
-                  {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} />{/key}
+                  {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />{/key}
                 {:else}
                   <p class="quiet videonote">No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.</p>
                 {/if}
               {:else if b.type === 'screenshot' && image}
-                <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
+                <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />
               {:else if b.type === 'video'}
                 {#if view.video}
                   {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} onshot={paired ? takeShot : undefined} />{/key}
