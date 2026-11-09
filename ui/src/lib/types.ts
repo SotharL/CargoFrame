@@ -514,6 +514,24 @@ export type InfoOptions =
   | { type: 'fixed'; options: { value: string; label: string }[] }
   | { type: 'api'; options_id: string };
 
+/** What a fill step looks at (mirror core/config/src/infotype.rs). */
+export type FillTest = 'found' | 'missing' | 'is' | 'is_not' | 'contains';
+/** "If {{rule.gpu}} is found": `subject` is a variable's name, or '' for the field's own value. */
+export interface FillWhen {
+  subject: string;
+  test: FillTest;
+  text: string;
+}
+export interface FillAction {
+  do: 'add' | 'set';
+  text: string;
+}
+export interface FillStep {
+  when?: FillWhen | null;
+  then: FillAction[];
+}
+
+/** A field fill: one field of a service and the steps that fill it (Data & fields → Fill fields). */
 export interface InfoType {
   name: string;
   connection_id: string;
@@ -521,7 +539,11 @@ export interface InfoType {
   kind: InfoKind;
   options: InfoOptions;
   required: boolean;
-  default_template: string;
+  /** From before 0.3.0: a starting value, now the step "if this field is empty, set it to …". */
+  default_template?: string;
+  steps?: FillStep[];
+  /** The layouts it fills the field in; empty: all of them. */
+  layouts?: string[];
 }
 
 export interface Safe {
@@ -582,7 +604,7 @@ export interface VariableInfo {
 // ----- connections and sharing (mirror core/connectors and app/src/share.rs) -----
 
 export type ServiceKind =
-  | 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | 'x' | 'bluesky' | 'instagram';
+  | 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | 'x' | 'bluesky' | 'instagram' | 'github';
 /** `not_in_build`: a service this copy of CargoFrame was built without. */
 export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled' | 'not_in_build';
 
@@ -635,6 +657,7 @@ export type Connection = ConnectionCommon &
     | { kind: 'teams'; client_id: string; tenant: string }
     | { kind: 'x'; client_id: string; redirect_port: number }
     | { kind: 'bluesky'; handle: string; service: string }
+    | { kind: 'github'; repository: string; api_url: string; files: 'branch' | 'none'; branch: string }
     | { kind: 'instagram'; upload_url: string; public_url: string; host_header: string }
     | {
         kind: 'custom';

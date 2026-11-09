@@ -222,3 +222,12 @@ fn plain_text_keeps_the_words_and_drops_the_marks() {
     );
     assert_eq!(render("__under__", Style::Plain), "under");
 }
+
+#[test]
+fn github_writes_markdown_with_ins_for_underline_and_space_around_blocks() {
+    let text = "Seen in `maya.exe` **(Robot)** on *Monday*, __twice__\n> it froze\nthen:\n- open\n- save\nend";
+    assert_eq!(
+        render(text, Style::Github),
+        "Seen in `maya.exe` **(Robot)** on *Monday*, <ins>twice</ins>\n\n> it froze\n\nthen:\n\n- open\n- save\n\nend"
+    );
+}

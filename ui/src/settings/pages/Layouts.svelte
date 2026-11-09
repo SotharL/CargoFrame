@@ -345,6 +345,8 @@
               blocks={draft.blocks}
               rules={rules.items}
               infoTypes={infos.items}
+              layoutId={draft.id ?? null}
+              onfills={() => void infos.reload()}
               {connections}
               {variables}
               {issues}

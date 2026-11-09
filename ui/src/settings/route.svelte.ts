@@ -17,8 +17,9 @@ export function parseTarget(target: string | null | undefined): { page: PageId; 
   const [name, ...rest] = target.split('/');
   const page = resolvePage(name);
   if (!page) return null;
-  // Connections is the lower half of Setup now; its old address scrolls there
-  const arg = rest.join('/') || (name === 'connections' ? 'connections' : null);
+  // Connections is the lower half of Setup now; its old address scrolls there. Extra fields are
+  // the Fill fields tab of Data & fields.
+  const arg = rest.join('/') || (name === 'connections' ? 'connections' : name === 'infotypes' ? 'fields' : null);
   return { page, arg };
 }
 

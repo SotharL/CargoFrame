@@ -22,6 +22,7 @@
 
   const KINDS: { kind: ServiceKind; label: string; blurb: string }[] = [
     { kind: 'jira', label: 'Jira', blurb: 'Create an issue or comment on one, with the screenshot attached.' },
+    { kind: 'github', label: 'GitHub', blurb: 'Open an issue in a repository, or comment on one, with the screenshot shown in it.' },
     { kind: 'google', label: 'Google', blurb: 'Save the screenshot and files to Drive, and optionally log a row in a sheet.' },
     { kind: 'reddit', label: 'Reddit', blurb: 'Post the screenshot to a subreddit you choose.' },
     { kind: 'claude', label: 'Claude', blurb: 'Copy the screenshot and open a chat, so you can paste it into your message.' },
@@ -57,6 +58,8 @@
         return { kind, name: 'X', enabled: true, client_id: '', redirect_port: 53683 };
       case 'bluesky':
         return { kind, name: 'Bluesky', enabled: true, handle: '', service: 'https://bsky.social' };
+      case 'github':
+        return { kind, name: 'GitHub', enabled: true, repository: '', api_url: 'https://api.github.com', files: 'branch', branch: 'cargoframe-attachments' };
       case 'instagram':
         return { kind, name: 'Instagram', enabled: true, upload_url: 'https://', public_url: 'https://', host_header: '' };
       case 'custom':
@@ -100,6 +103,7 @@
     if (c.kind === 'slack') return 'Bot token (starts with xoxb-)';
     if (c.kind === 'discord') return 'Bot token';
     if (c.kind === 'bluesky') return 'App password';
+    if (c.kind === 'github') return 'Personal access token';
     if (c.kind === 'instagram') return name === 'host_key' ? 'Key of the picture server' : 'Access token';
     if (c.kind === 'custom') {
       return { bearer: 'Token', header: 'Key', basic: 'Password', query: 'Key', none: 'Key' }[c.auth.type];

@@ -105,7 +105,7 @@
     <div class="reset">
       <h3>Start again</h3>
       <p class="quiet">
-        Removes every trigger, layout, value from a file, extra field and connection, forgets the sign-ins and tokens kept for
+        Removes every trigger, layout, value from a file, field fill and connection, forgets the sign-ins and tokens kept for
         them, and clears all of the above. CargoFrame itself stays installed, and so do the files you saved zips to.
       </p>
       {#if confirming}

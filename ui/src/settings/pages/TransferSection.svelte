@@ -11,7 +11,7 @@
   const GROUPS: { group: TransferGroup; label: string; kind: 'layout' | 'rule' | 'infotype' }[] = [
     { group: 'layouts', label: 'Layouts', kind: 'layout' },
     { group: 'rules', label: 'Data from files', kind: 'rule' },
-    { group: 'infotypes', label: 'Extra fields', kind: 'infotype' },
+    { group: 'infotypes', label: 'Field fills', kind: 'infotype' },
   ];
 
   type Row = { id: string; name: string; on: boolean };
@@ -120,12 +120,12 @@
 
 <Section
   title="Export and import"
-  hint="Back up layouts, data from files and extra fields, or move them to another computer. Connections, passwords, keys and shortcuts are never included."
+  hint="Back up layouts, data from files and field fills, or move them to another computer. Connections, passwords, keys and shortcuts are never included."
 >
   <div class="panel">
     <h3>Export</h3>
     {#if total === 0}
-      <p class="quiet">Nothing to export yet. Layouts, data from files and extra fields you create show up here.</p>
+      <p class="quiet">Nothing to export yet. Layouts, data from files and field fills you create show up here.</p>
     {:else}
       {#each GROUPS as g (g.group)}
         {#if rows[g.group].length > 0}

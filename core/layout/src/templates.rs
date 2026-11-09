@@ -24,7 +24,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 18] = [
+pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "local-capture",
         name: "Save a capture locally",
@@ -54,6 +54,18 @@ pub const TEMPLATES: [TemplateInfo; 18] = [
         name: "Jira comment on an issue",
         description: "Pick one of your recent issues and add a comment with the screenshot and files.",
         service: Some(ConnectionKind::Jira),
+    },
+    TemplateInfo {
+        key: "github-issue",
+        name: "GitHub issue",
+        description: "Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it.",
+        service: Some(ConnectionKind::Github),
+    },
+    TemplateInfo {
+        key: "github-comment",
+        name: "GitHub comment on an issue",
+        description: "Pick an open issue of the repository and add a comment with the screenshot and files.",
+        service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
         key: "google-drive",
@@ -231,8 +243,9 @@ fn button(
 
 /// What the person sees of the program in the first text boxes.
 const WHERE: &str = "{{app.title}}";
+/// Written with formatting: the templates that use it send it where formatting is shown.
 const SEEN_IN: &str =
-    "Seen in {{app.exe}} ({{project.name}}) on {{capture.date}} at {{capture.time}}.";
+    "Seen in `{{app.exe}}` **({{project.name}})** on *{{capture.date}}* at *{{capture.time}}*.";
 
 /// Build the template `key` as a layout, for the connection `connection_id`. Templates made for
 /// a service need one (`None` gives no template); the one that saves locally takes none. The
@@ -332,6 +345,53 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                     from_block("issue", "issue"),
                     from_block("description", "comment"),
                 ],
+            ),
+        ],
+        ("github-issue", Some(c)) => vec![
+            shot(8),
+            block(
+                "title",
+                rect(7, 0, 5, 2),
+                text("Title", TextRole::Plain, WHERE),
+            ),
+            block("labels", rect(7, 2, 5, 1), web_list("Label", c, "labels")),
+            block(
+                "description",
+                rect(7, 3, 5, 4),
+                text("Description", TextRole::Plain, SEEN_IN),
+            ),
+            block("files", rect(0, 8, 7, 3), files("Attach files")),
+            button(
+                rect(7, 7, 5, 1),
+                "Open issue",
+                Some(c),
+                None,
+                vec![
+                    from_block("title", "title"),
+                    from_block("labels", "labels"),
+                    from_block("body", "description"),
+                ],
+            ),
+        ],
+        ("github-comment", Some(c)) => vec![
+            shot(8),
+            block(
+                "issue",
+                rect(7, 0, 5, 1),
+                web_list("Issue", c, "recent_issues"),
+            ),
+            block(
+                "comment",
+                rect(7, 1, 5, 4),
+                text("Comment", TextRole::Plain, SEEN_IN),
+            ),
+            block("files", rect(7, 5, 5, 3), files("Attach files")),
+            button(
+                rect(7, 8, 5, 1),
+                "Add comment",
+                Some(c),
+                None,
+                vec![from_block("issue", "issue"), from_block("body", "comment")],
             ),
         ],
         ("google-drive", Some(c)) => vec![
@@ -712,6 +772,7 @@ mod tests {
             ConnectionKind::X,
             ConnectionKind::Bluesky,
             ConnectionKind::Instagram,
+            ConnectionKind::Github,
         ] {
             assert!(
                 TEMPLATES.iter().any(|t| t.service == Some(kind)),

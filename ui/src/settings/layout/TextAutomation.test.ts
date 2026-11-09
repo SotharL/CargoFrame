@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import TextAutomation from './TextAutomation.svelte';
 import type { ItemEntry, Rule, VariableInfo } from '../../lib/types';
+import { readText, select } from '../../capture/blocks/richtext';
 
 const variables: VariableInfo[] = [
   { name: 'app.exe', description: 'File name of the program in focus' },
@@ -71,5 +72,22 @@ describe('TextAutomation', () => {
     render(TextAutomation, { value: '', variables, rules });
     await fireEvent.click(screen.getByRole('button', { name: '🔗 Custom link…' }));
     expect((screen.getByRole('button', { name: 'Insert link' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('as the message of a button, formats the text, variables and all, with the same buttons', async () => {
+    render(TextAutomation, { value: '- Seen in ', variables, rules, marks: ['bold', 'code', 'italic', 'bullets'], services: ['jira'] });
+    const box = screen.getByRole('textbox', { name: 'Text automation' }) as HTMLElement;
+    expect(box.getAttribute('contenteditable')).toBe('true');
+    select(box, 10, 10);
+    await fireEvent.click(screen.getByRole('button', { name: '＋ App' }));
+    expect(readText(box)).toBe('- Seen in {{app.exe}}');
+    // the variable is shown as one, the line as a bullet
+    expect(box.querySelector('.var')?.textContent).toBe('{{app.exe}}');
+    expect(box.querySelector('.ln.bullet')).toBeTruthy();
+    select(box, 10, 21);
+    await fireEvent.click(screen.getByRole('button', { name: 'Code' }));
+    expect(readText(box)).toBe('- Seen in `{{app.exe}}`');
+    // only what the services can show
+    expect(screen.queryByRole('button', { name: 'Underline' })).toBeNull();
   });
 });

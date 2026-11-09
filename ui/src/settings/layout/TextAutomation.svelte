@@ -2,16 +2,40 @@
   // The editor for a text block's starting text. Instead of typing {{names}} from memory, click
   // what you want: a value to fill in, a value read from a file, a link, or a custom link where a
   // word becomes the link and part of the address is live data.
-  import type { ItemEntry, Rule, VariableInfo } from '../../lib/types';
+  //
+  // When the box is the message of a sharing button, it is the formatted box of the capture window
+  // here too, with the same buttons: "- Seen in `{{app.exe}}` **({{project.name}})**" is written
+  // and shown formatted, and each capture fills in the values inside the marks.
+  import type { ItemEntry, Rule, ServiceKind, VariableInfo } from '../../lib/types';
+  import RichBox from '../../capture/blocks/RichBox.svelte';
+  import { MARKS, type Mark } from '../../capture/blocks/formatting';
+  import { KIND_NAME } from '../../lib/connector';
+  import { valuesOf } from '../ruleValues';
   import { LINK_STYLES, QUICK_VARIABLES, insertAt, looksLikeAddress, makeLink, quickLabel, type LinkStyle } from './automation';
 
   let {
     value = $bindable(''),
     variables,
     rules,
-  }: { value: string; variables: VariableInfo[]; rules: ItemEntry<Rule>[] } = $props();
+    marks = [],
+    services = [],
+  }: {
+    value: string;
+    variables: VariableInfo[];
+    rules: ItemEntry<Rule>[];
+    /** The formatting on offer (the box is the message of a button); none: a plain text area. */
+    marks?: Mark[];
+    services?: ServiceKind[];
+  } = $props();
 
   let area = $state<HTMLTextAreaElement>();
+  let rich = $state<RichBox>();
+  const buttons = $derived(MARKS.filter((m) => marks.includes(m.mark)));
+  const forWhom = $derived(services.map((k) => KIND_NAME[k]).join(', '));
+  /** Each value read from a file, by its variable. */
+  const fileValues = $derived(
+    rules.flatMap((r) => valuesOf(r.id, r.item).map((v) => ({ key: v.key, label: `${r.item.name || r.id}: ${v.name || v.key}` }))),
+  );
   let linkOpen = $state(false);
   let word = $state('');
   let url = $state('https://');
@@ -24,6 +48,10 @@
   const addressOk = $derived(looksLikeAddress(url));
 
   function put(snippet: string) {
+    if (rich) {
+      rich.insert(snippet);
+      return;
+    }
     const r = insertAt(value, area?.selectionStart ?? value.length, area?.selectionEnd ?? value.length, snippet);
     value = r.text;
     queueMicrotask(() => {
@@ -35,7 +63,7 @@
 
   function openLink() {
     // A selected word becomes the link's word.
-    const sel = area ? value.slice(area.selectionStart, area.selectionEnd) : '';
+    const sel = rich ? rich.selected() : area ? value.slice(area.selectionStart, area.selectionEnd) : '';
     if (sel && !sel.includes('\n')) word = sel;
     linkOpen = true;
   }
@@ -69,10 +97,10 @@
         {#each others as v (v.name)}<option value={v.name}>{v.name} – {v.description}</option>{/each}
       </select>
     {/if}
-    {#if rules.length}
+    {#if fileValues.length}
       <select aria-label="A value from a file" onchange={(e) => { variable(`rule.${e.currentTarget.value}`); e.currentTarget.value = ''; }}>
         <option value="">A value from a file…</option>
-        {#each rules as r (r.id)}<option value={r.id}>{r.item.name || r.id}</option>{/each}
+        {#each fileValues as v (v.key)}<option value={v.key}>{v.label}</option>{/each}
       </select>
     {/if}
     <button type="button" class="chip" onclick={() => put('https://')}>🔗 Link</button>
@@ -92,10 +120,10 @@
       <div class="live">
         <span class="quiet">Put live data in the address:</span>
         {#each quick as n (n)}<button type="button" class="chip" onclick={() => addToAddress(`{{${n}}}`)}>{quickLabel(n)}</button>{/each}
-        {#if rules.length}
+        {#if fileValues.length}
           <select aria-label="A value from a file, in the address" onchange={(e) => { addToAddress(`{{rule.${e.currentTarget.value}}}`); e.currentTarget.value = ''; }}>
             <option value="">A value from a file…</option>
-            {#each rules as r (r.id)}<option value={r.id}>{r.item.name || r.id}</option>{/each}
+            {#each fileValues as v (v.key)}<option value={v.key}>{v.label}</option>{/each}
           </select>
         {/if}
       </div>
@@ -114,7 +142,16 @@
     </div>
   {/if}
 
-  <textarea rows="6" bind:value bind:this={area} aria-label="Text automation" spellcheck="true"></textarea>
+  {#if buttons.length > 0}
+    <div class="tools" role="toolbar" aria-label={`Formatting for ${forWhom}`} title={`Written the way ${forWhom} shows it when sent`}>
+      {#each buttons as b (b.mark)}
+        <button type="button" class={b.mark} aria-label={b.label} title={b.hint} onmousedown={(e) => e.preventDefault()} onclick={() => rich?.format(b.mark)}>{b.text}</button>
+      {/each}
+    </div>
+    <div class="richwrap"><RichBox bind:this={rich} bind:value id="text-automation" {marks} label="Text automation" /></div>
+  {:else}
+    <textarea rows="6" bind:value bind:this={area} aria-label="Text automation" spellcheck="true"></textarea>
+  {/if}
   <p class="quiet help">
     Filled in for you on every capture; you can still edit it before sharing. Values in
     <code>{'{{curly braces}}'}</code> are replaced, and left visibly empty when CargoFrame cannot find them.
@@ -142,5 +179,12 @@
   .warn { font-size: 12.5px; color: var(--warn); }
   .buttons { display: flex; gap: 8px; }
   .help { font-size: 12.5px; }
+  .tools { display: flex; flex-wrap: wrap; gap: 4px; }
+  .tools button { min-width: 30px; padding: 2px 8px; font-size: 13px; }
+  .tools .bold { font-weight: 700; }
+  .tools .italic { font-style: italic; }
+  .tools .underline { text-decoration: underline; }
+  .tools .code { font-family: var(--mono); font-size: 12px; }
+  .richwrap { height: 9.5em; resize: vertical; overflow: hidden; }
   code { font: 12.5px var(--mono); background: var(--surface); padding: 1px 6px; border-radius: 5px; }
 </style>

@@ -27,8 +27,8 @@ describe('settings route', () => {
   });
 
   it('follows the order a new person sets things up in, with the program itself last', () => {
-    expect(PAGES.map((p) => p.id)).toEqual(['setup', 'layouts', 'triggers', 'rules', 'infotypes', 'video', 'general', 'data', 'about']);
-    expect(PAGES.map((p) => p.group)).toEqual(['start', 'capture', 'capture', 'capture', 'capture', 'capture', 'app', 'app', 'app']);
+    expect(PAGES.map((p) => p.id)).toEqual(['setup', 'layouts', 'triggers', 'rules', 'video', 'general', 'data', 'about']);
+    expect(PAGES.map((p) => p.group)).toEqual(['start', 'capture', 'capture', 'capture', 'capture', 'app', 'app', 'app']);
     expect(PAGES.some((p) => (p.id as string) === 'safe')).toBe(false);
   });
 

@@ -27,6 +27,8 @@ pub enum Style {
     Discord,
     /// Reddit's markdown: no underline, and a list needs an empty line before it.
     Reddit,
+    /// GitHub's markdown: underline as `<ins>`, an empty line around quotes and lists.
+    Github,
     /// Slack's `mrkdwn`: `*bold*`, `_italic_`, no underline, text escaped.
     Slack,
     /// Jira's wiki markup: `*bold*`, `_italic_`, `+underline+`, `{{code}}`.
@@ -179,7 +181,7 @@ fn inline(spans: &[Span], style: Style) -> String {
             Span::Bold(inner) => {
                 let body = inline(inner, style);
                 out.push_str(&match style {
-                    Style::Discord | Style::Reddit => format!("**{body}**"),
+                    Style::Discord | Style::Reddit | Style::Github => format!("**{body}**"),
                     Style::Slack | Style::Jira => format!("*{body}*"),
                     Style::Html => format!("<b>{body}</b>"),
                     Style::Plain => body,
@@ -188,7 +190,7 @@ fn inline(spans: &[Span], style: Style) -> String {
             Span::Italic(inner) => {
                 let body = inline(inner, style);
                 out.push_str(&match style {
-                    Style::Discord | Style::Reddit => format!("*{body}*"),
+                    Style::Discord | Style::Reddit | Style::Github => format!("*{body}*"),
                     Style::Slack | Style::Jira => format!("_{body}_"),
                     Style::Html => format!("<i>{body}</i>"),
                     Style::Plain => body,
@@ -198,6 +200,7 @@ fn inline(spans: &[Span], style: Style) -> String {
                 let body = inline(inner, style);
                 out.push_str(&match style {
                     Style::Discord => format!("__{body}__"),
+                    Style::Github => format!("<ins>{body}</ins>"),
                     Style::Jira => format!("+{body}+"),
                     Style::Html => format!("<u>{body}</u>"),
                     // no underline on these: the words stay, the mark goes
@@ -205,7 +208,9 @@ fn inline(spans: &[Span], style: Style) -> String {
                 });
             }
             Span::Code(code) => out.push_str(&match style {
-                Style::Discord | Style::Reddit | Style::Slack => format!("`{code}`"),
+                Style::Discord | Style::Reddit | Style::Github | Style::Slack => {
+                    format!("`{code}`")
+                }
                 Style::Jira => format!("{{{{{code}}}}}"),
                 Style::Html => format!("<code>{}</code>", escape_html(code)),
                 Style::Plain => code.clone(),
@@ -269,7 +274,12 @@ pub fn render(text: &str, style: Style) -> String {
             .map_or(lines.len(), |p| i + p);
         let run = &lines[i..end];
         let block_starts = kind != Kind::Plain;
-        if style == Style::Reddit && block_starts && out.last().is_some_and(|l| !l.is_empty()) {
+        let spaced = matches!(style, Style::Reddit | Style::Github);
+        if spaced && block_starts && out.last().is_some_and(|l| !l.is_empty()) {
+            out.push(String::new());
+        }
+        // on GitHub a line right after a quote or a list would join it
+        if style == Style::Github && kind == Kind::Plain && i > 0 && lines[i - 1].0 != Kind::Plain {
             out.push(String::new());
         }
         match (style, kind) {

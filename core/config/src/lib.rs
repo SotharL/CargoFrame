@@ -24,7 +24,9 @@ pub mod store;
 pub mod triggers;
 
 pub use error::ConfigError;
-pub use infotype::{InfoKind, InfoOption, InfoOptions, InfoType};
+pub use infotype::{
+    Act, Action, FillStep, InfoKind, InfoOption, InfoOptions, InfoType, Test, When,
+};
 pub use models::{
     normalize_accent, CaptureMode, General, Media, MemoryMode, Notifications, Safe, Theme, Trigger,
     Video, VideoCapture, VideoEncoder, DEFAULT_ACCENT,

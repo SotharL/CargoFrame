@@ -4,8 +4,7 @@
   import { go, parseTarget, restore, route } from './route.svelte';
   import General from './pages/General.svelte';
   import Triggers from './pages/Triggers.svelte';
-  import Rules from './pages/Rules.svelte';
-  import InfoTypes from './pages/InfoTypes.svelte';
+  import DataFields from './pages/DataFields.svelte';
   import Layouts from './pages/Layouts.svelte';
   import Connections from './pages/Connections.svelte';
   import VideoPage from './pages/Video.svelte';
@@ -101,16 +100,14 @@
     {:else if page === 'triggers'}
       <Triggers />
     {:else if page === 'rules'}
-      <Rules />
-    {:else if page === 'infotypes'}
-      <InfoTypes />
+      <DataFields />
     {:else if page === 'layouts'}
       <Layouts />
     {:else if page === 'setup'}
       <Setup />
       <section id="connections" class="connections" aria-labelledby="connections-title">
         <h2 id="connections-title">Connections</h2>
-        <p class="quiet">Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, X, Bluesky, Instagram, or your own API.</p>
+        <p class="quiet">Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, GitHub, X, Bluesky, Instagram, or your own API.</p>
         <Connections />
       </section>
     {:else if page === 'video'}

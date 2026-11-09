@@ -39,6 +39,7 @@ const BODY: Partial<Record<ServiceKind, { field: string; marks: Mark[] }>> = {
   teams: { field: 'message', marks: EVERY },
   slack: { field: 'message', marks: NO_UNDERLINE },
   reddit: { field: 'text', marks: NO_UNDERLINE },
+  github: { field: 'body', marks: EVERY },
 };
 
 /** The field of a service that takes a formatted message, if it has one. */
@@ -54,13 +55,23 @@ type TextBlock = Extract<Block, { type: 'text' }>;
  * off) has none. `services` says which ones the buttons are for.
  */
 export function marksFor(view: SessionView, block: TextBlock): { marks: Mark[]; services: ServiceKind[] } {
+  return marksOf(view.layout?.blocks ?? [], (b) => view.sharing[b.id]?.kind, block);
+}
+
+/** The marks a box offers: those every service it is the message of can show (the layout builder
+ * asks this too, with the kinds of its connections). */
+export function marksOf(
+  blocks: readonly Block[],
+  kindOf: (button: Extract<Block, { type: 'sharing_button' }>) => ServiceKind | null | undefined,
+  block: TextBlock,
+): { marks: Mark[]; services: ServiceKind[] } {
   const none = { marks: [], services: [] };
   if (block.role !== 'plain' || block.formatting === false) return none;
   const kinds: ServiceKind[] = [];
   let shared: Mark[] | null = null;
-  for (const b of view.layout?.blocks ?? []) {
+  for (const b of blocks) {
     if (b.type !== 'sharing_button') continue;
-    const kind = view.sharing[b.id]?.kind;
+    const kind = kindOf(b);
     const body = kind ? BODY[kind] : undefined;
     if (!kind || !body) continue;
     const sends = b.mappings.some((m) => m.field === body.field && m.source.kind === 'block' && m.source.value === block.id);

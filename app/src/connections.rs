@@ -75,6 +75,7 @@ pub fn layout_kind(kind: Kind) -> ConnectionKind {
         Kind::X => ConnectionKind::X,
         Kind::Bluesky => ConnectionKind::Bluesky,
         Kind::Instagram => ConnectionKind::Instagram,
+        Kind::Github => ConnectionKind::Github,
     }
 }
 
@@ -100,6 +101,7 @@ pub fn capabilities_of(connection: &Connection) -> Capabilities {
             ),
             has_lists: !c.lists.is_empty(),
         }),
+        Settings::Github(g) => Capabilities::github(g.files == conn::model::GithubFiles::Branch),
         other => Capabilities::for_kind(layout_kind(other.kind()), cfg!(windows)),
     }
 }

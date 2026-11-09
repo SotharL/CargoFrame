@@ -107,6 +107,8 @@ export function classify(line: string): { kind: LineKind; mark: number } {
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+/** Plain text, with each {{variable}} shown as one. */
+const withVars = (s: string) => esc(s).replace(/\{\{[^{}\n]{1,80}\}\}/g, (v) => `<span class="var">${v}</span>`);
 
 /** Whether a mark from `s` to `e` is where the selection is (or right next to it). */
 const touches = (s: number, e: number, sel: [number, number] | null) => sel !== null && s <= sel[1] && e >= sel[0];
@@ -116,7 +118,7 @@ function pieces(text: string, list: Piece[], sel: [number, number] | null): stri
   for (const p of list) {
     const pos = `data-s="${p.s}" data-e="${p.e}"`;
     if (p.kind === 'text') {
-      out += esc(text.slice(p.s, p.e));
+      out += withVars(text.slice(p.s, p.e));
     } else if (p.kind === 'code') {
       const on = touches(p.s, p.e, sel) ? ' on' : '';
       out += `<span class="m code${on}" ${pos}><span class="mk">\`</span><code>${esc(text.slice(p.s + 1, p.e - 1))}</code><span class="mk">\`</span></span>`;

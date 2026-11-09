@@ -16,6 +16,7 @@ use crate::session::Session;
 use cargoframe_bundle::{
     build_zip, copy_atomic, BundleError, Created, Item, Limits, ManifestInfo, Source, Workspace,
 };
+use cargoframe_config::infotype::{act, holds};
 use cargoframe_config::{InfoKind, InfoOptions, InfoType, Kind, Safe, Store};
 use cargoframe_connectors::{
     claude::{MAX_FILES, MAX_FILE_BYTES},
@@ -375,7 +376,8 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     for mapping in &mappings {
         let (mut value, from_dropdown_list, is_dropdown) =
             source_value(layout, view, req, &mapping.source);
-        let info = info_for(&mapping.field);
+        // a field fill with steps of its own runs after every block is in (below)
+        let info = info_for(&mapping.field).filter(|t| !t.fills());
         if value.trim().is_empty() {
             if let Some(t) = info.filter(|t| !t.default_template.trim().is_empty()) {
                 value = render(&t.default_template, view);
@@ -385,7 +387,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             let name = info.map(|t| t.name.as_str()).unwrap_or(&mapping.field);
             reasons.push(format!("\u{201c}{name}\u{201d} needs a value"));
         }
-        let (kind, from_list) = match info {
+        let (kind, from_list) = match info.or_else(|| info_for(&mapping.field)) {
             Some(t) => (
                 field_kind(t.kind),
                 from_dropdown_list || matches!(t.options, InfoOptions::Api { .. }),
@@ -422,10 +424,68 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             });
         }
     }
+    // Field fills: their steps run on every share to the service, after the blocks are in.
+    if connection_id.is_some() {
+        let spec = connection_id
+            .and_then(|id| svc.connections.describe(svc.store, id).ok())
+            .unwrap_or_default();
+        let fills = infos.iter().filter(|t| {
+            Some(t.connection_id.as_str()) == connection_id && t.fills() && t.applies_in(&layout.id)
+        });
+        for t in fills {
+            let at = fields.iter().position(|f| f.key == t.field);
+            let mut value = at.map(|i| fields[i].value.clone()).unwrap_or_default();
+            let many = t.kind == InfoKind::MultiChoice
+                || spec
+                    .fields
+                    .iter()
+                    .any(|f| f.key == t.field && f.hint.to_lowercase().contains("comma"));
+            let lines = matches!(
+                t.field.as_str(),
+                "description" | "body" | "message" | "text" | "content" | "comment" | "environment"
+            );
+            for step in t.all_steps() {
+                if let Some(w) = &step.when {
+                    let subject = w
+                        .subject
+                        .trim()
+                        .trim_start_matches("{{")
+                        .trim_end_matches("}}");
+                    let of = if subject.is_empty() {
+                        value.clone()
+                    } else {
+                        view.variables
+                            .get(subject.trim())
+                            .cloned()
+                            .unwrap_or_default()
+                    };
+                    if !holds(w, &of) {
+                        continue;
+                    }
+                }
+                for a in &step.then {
+                    value = act(&value, a.act, &render(&a.text, view), many, lines);
+                }
+            }
+            if value.trim().is_empty() && t.required {
+                reasons.push(format!("\u{201c}{}\u{201d} needs a value", t.name));
+            }
+            match at {
+                Some(i) => fields[i].value = value,
+                None if !value.trim().is_empty() => fields.push(Field {
+                    key: t.field.clone(),
+                    value,
+                    kind: field_kind(t.kind),
+                    from_list: matches!(t.options, InfoOptions::Api { .. }),
+                }),
+                None => {}
+            }
+        }
+    }
     // A required field that no mapping fills can never be satisfied: say so.
     for t in infos
         .iter()
-        .filter(|t| Some(t.connection_id.as_str()) == connection_id && t.required)
+        .filter(|t| Some(t.connection_id.as_str()) == connection_id && t.required && !t.fills())
     {
         if !mappings.iter().any(|m| m.field == t.field) {
             reasons.push(format!(
@@ -2155,6 +2215,66 @@ mod tests {
         assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
         let body = w.server.requests_to("/hook")[0].json();
         assert_eq!(body["summary"], "Problem in Editor");
+    }
+
+    #[test]
+    fn a_field_fill_adds_values_when_its_conditions_hold_and_only_in_its_layouts() {
+        use cargoframe_config::{Act, Action, FillStep, Test, When};
+        let w = world(|_| MockResponse::json(200, json!({})));
+        set_safe(&w, None, 0);
+        let add = |text: &str| Action {
+            act: Act::Add,
+            text: text.into(),
+        };
+        let when = |subject: &str, test, text: &str| {
+            Some(When {
+                subject: subject.into(),
+                test,
+                text: text.into(),
+            })
+        };
+        let mut t = cargoframe_config::InfoType {
+            name: "Kind".into(),
+            connection_id: "api".into(),
+            field: "kind".into(),
+            kind: InfoKind::MultiChoice,
+            steps: vec![
+                FillStep {
+                    when: None,
+                    then: vec![add("crash")],
+                },
+                FillStep {
+                    when: when("{{app.title}}", Test::Found, ""),
+                    then: vec![add("in-{{app.title}}"), add("crash")],
+                },
+                FillStep {
+                    when: when("app.title", Test::Is, "Nope"),
+                    then: vec![Action {
+                        act: Act::Set,
+                        text: "never".into(),
+                    }],
+                },
+                FillStep {
+                    when: when("", Test::Contains, "in-editor"),
+                    then: vec![add("seen")],
+                },
+            ],
+            ..Default::default()
+        };
+        w.f.store.save_item(Kind::InfoTypes, "kind", &t).unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        // the button's own value first, then each step that holds, a value given once
+        let body = w.server.requests_to("/hook")[0].json();
+        assert_eq!(body["kind"], "bug in Editor, crash, in-Editor, seen");
+
+        // only in another layout: this share leaves the field alone
+        t.layouts = vec!["elsewhere".into()];
+        w.f.store.save_item(Kind::InfoTypes, "kind", &t).unwrap();
+        let (r, _) = go(&w, &request(), vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let body = w.server.requests_to("/hook")[1].json();
+        assert_eq!(body["kind"], "bug in Editor");
     }
 
     #[test]
