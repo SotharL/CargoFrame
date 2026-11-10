@@ -25,6 +25,7 @@
     issues,
     reach = {},
     layoutId = null,
+    columns = COLUMNS,
     onfills,
     onrect,
     onremove,
@@ -41,6 +42,8 @@
     reach?: Record<string, Reach>;
     /** The layout's id, once it has one: the fields filled in it. */
     layoutId?: string | null;
+    /** Columns in the layout's grid. */
+    columns?: number;
     /** The field fills changed (one was made from this button). */
     onfills?: () => void;
     /** Try to give the block a new position and size; returns false when it does not fit. */
@@ -100,22 +103,19 @@
       moveError = String(e);
     }
   }
-  /** The sharing buttons whose service takes a formatted message, with that message's field. */
-  const messageButtons = $derived(
+  /** The sharing buttons a text can be sent by, with the field of each that takes it, if any. */
+  const sendingButtons = $derived(
     blocks
-      .filter((b): b is SharingBlock => b.type === 'sharing_button')
-      .map((b) => {
-        const kind = connectionOf(b.connection_id)?.kind;
-        return { button: b, kind, field: messageField(kind) };
-      })
-      .filter((x): x is { button: SharingBlock; kind: NonNullable<typeof x.kind>; field: string } => !!x.field && !!x.kind),
+      .filter((b): b is SharingBlock => b.type === 'sharing_button' && !!b.connection_id)
+      .map((b) => ({ button: b, kind: connectionOf(b.connection_id)?.kind ?? null, message: messageField(connectionOf(b.connection_id)?.kind) })),
   );
-  const isMessageOf = (b: SharingBlock, field: string, textId: string) =>
-    b.mappings.some((m) => m.field === field && m.source.kind === 'block' && m.source.value === textId);
-  /** Make this box the message of a button, or not: a button has one message. */
-  function setMessageOf(b: SharingBlock, field: string, textId: string, on: boolean) {
-    const rest = b.mappings.filter((m) => m.field !== field || (!on && !(m.source.kind === 'block' && m.source.value === textId)));
-    b.mappings = on ? [...rest, { field, source: { kind: 'block', value: textId } }] : rest;
+  /** The field of `b` this text goes in ('' for none). */
+  const fieldOf = (b: SharingBlock, textId: string) =>
+    b.mappings.find((m) => m.source.kind === 'block' && m.source.value === textId)?.field ?? '';
+  /** Send this text in `field` of a button (or in none): a field takes one thing, a text goes in one field. */
+  function sendIn(b: SharingBlock, textId: string, field: string) {
+    const rest = b.mappings.filter((m) => !(m.source.kind === 'block' && m.source.value === textId) && m.field !== field);
+    b.mappings = field ? [...rest, { field, source: { kind: 'block', value: textId } }] : rest;
   }
   /** Fields to suggest for a connection: what the service offers, then the person's info types. */
   const fieldsFor = (connection: string | null) => {
@@ -164,26 +164,31 @@
     </Field>
     {#if block.role === 'plain'}
       {@const textId = block.id}
-      <fieldset class="message-of">
-        <legend>Message of</legend>
-        {#each messageButtons as m (m.button.id)}
-          <label class="tick">
-            <input
-              type="checkbox"
-              checked={isMessageOf(m.button, m.field, textId)}
-              onchange={(e) => setMessageOf(m.button, m.field, textId, e.currentTarget.checked)}
-            />
-            {m.button.label || blockName(m.button)} <span class="quiet">({KIND_NAME[m.kind]})</span>
+      <fieldset class="message-of" data-tour="props.sent_in">
+        <legend>Sent in</legend>
+        {#each sendingButtons as m (m.button.id)}
+          <label class="sent">
+            <span>{m.button.label || blockName(m.button)} <span class="quiet">({m.kind ? KIND_NAME[m.kind] : 'service'})</span></span>
+            <select
+              aria-label={`Field of ${m.button.label || blockName(m.button)}`}
+              value={fieldOf(m.button, textId)}
+              onchange={(e) => sendIn(m.button, textId, e.currentTarget.value)}
+            >
+              <option value="">Not sent</option>
+              {#each fieldsFor(m.button.connection_id) as f (f.key)}
+                <option value={f.key}>{f.label}{f.key === m.message ? ' (formatted)' : ''}</option>
+              {/each}
+            </select>
           </label>
         {:else}
-          <p class="quiet hint">No sharing button to Jira, Slack, Discord, Reddit or Teams in this layout yet.</p>
+          <p class="quiet hint">Add a sharing button to the layout to send this box in one of its fields (a Jira summary, a description…).</p>
         {/each}
       </fieldset>
       <div class="toggles">
         <Toggle label="Formatting buttons" checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
         <p class="quiet hint">
-          Bold, italic, underline, code, quotes and lists above the box, and shown in it, when it is the message of a
-          button above: only the ones that service can show, written the way it wants them.
+          Bold, italic, underline, code, quotes, lists and tables above the box, and shown in it, when it is sent in a
+          service's message (marked “formatted”): only the ones that service can show, written the way it wants them.
         </p>
       </div>
     {/if}
@@ -377,9 +382,9 @@
 
   <fieldset class="rect">
     <legend>Position and size</legend>
-    <label>Column<input type="number" min="1" max={COLUMNS} value={block.rect.x + 1} onchange={(e) => setRect({ x: Number(e.currentTarget.value) - 1 })} /></label>
+    <label>Column<input type="number" min="1" max={columns} value={block.rect.x + 1} onchange={(e) => setRect({ x: Number(e.currentTarget.value) - 1 })} /></label>
     <label>Row<input type="number" min="1" value={block.rect.y + 1} onchange={(e) => setRect({ y: Number(e.currentTarget.value) - 1 })} /></label>
-    <label>Width<input type="number" min="1" max={COLUMNS} value={block.rect.w} onchange={(e) => setRect({ w: Number(e.currentTarget.value) })} /></label>
+    <label>Width<input type="number" min="1" max={columns} value={block.rect.w} onchange={(e) => setRect({ w: Number(e.currentTarget.value) })} /></label>
     <label>Height<input type="number" min="1" value={block.rect.h} onchange={(e) => setRect({ h: Number(e.currentTarget.value) })} /></label>
   </fieldset>
   {#if rectError}<p class="error" role="alert">{rectError}</p>{/if}
@@ -398,7 +403,7 @@
   .toggles { display: grid; gap: 4px; }
   .message-of { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
   .message-of legend { font-weight: 600; font-size: 12.5px; padding: 0 4px; }
-  .message-of .tick { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .message-of .sent { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; align-items: center; font-size: 13px; }
   .message-of .hint { margin: 0; font-size: 12px; }
   .toggles .hint { margin: 0 0 6px 46px; font-size: 12px; }
   .auto-field { display: grid; gap: 4px; }

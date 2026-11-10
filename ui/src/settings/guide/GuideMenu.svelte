@@ -13,6 +13,9 @@
   const shown = $derived(
     TOURS.filter((t) => !built || !t.id.startsWith('connect-') || built.includes(t.id.slice('connect-'.length))),
   );
+  // the guides about using CargoFrame first, then one per service, folded
+  const usage = $derived(shown.filter((t) => !t.id.startsWith('connect-')));
+  const services = $derived(shown.filter((t) => t.id.startsWith('connect-')));
 
   let menu = $state<HTMLDetailsElement>();
   function pick(id: string) {
@@ -24,15 +27,28 @@
 <details class="menu" bind:this={menu}>
   <summary>Guides</summary>
   <ul>
-    {#each shown as t (t.id)}
+    {#each usage as t (t.id)}
       <li><button type="button" onclick={() => pick(t.id)}>{t.title}</button></li>
     {/each}
   </ul>
+  {#if services.length}
+    <details class="services">
+      <summary>Connect a service</summary>
+      <ul>
+        {#each services as t (t.id)}
+          <li><button type="button" onclick={() => pick(t.id)}>{t.title.replace(/^Connect /, '')}</button></li>
+        {/each}
+      </ul>
+    </details>
+  {/if}
 </details>
 
 <style>
   .menu { margin-top: auto; padding: 8px 4px 0; border-top: 1px solid var(--border); }
   summary { cursor: pointer; padding: 6px 10px; font-weight: 600; font-size: 13px; }
+  .services { margin-top: 4px; }
+  .services summary { font-weight: 500; font-size: 12.5px; color: var(--quiet); }
+  .services ul { padding-left: 10px; }
   ul { list-style: none; margin: 4px 0 0; padding: 0; display: grid; gap: 1px; }
   button {
     width: 100%; text-align: left; border: 0; background: transparent; padding: 5px 10px;

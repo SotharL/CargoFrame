@@ -124,12 +124,14 @@
 <Guide />
 
 <style>
-  .shell { display: grid; grid-template-columns: 220px 1fr; height: 100%; }
+  /* the window never scrolls as a whole: the sidebar and the page each scroll on their own */
+  .shell { display: grid; grid-template-columns: 220px 1fr; height: 100vh; overflow: hidden; }
   nav {
     border-right: 1px solid var(--border);
     background: var(--surface-2);
     padding: 16px 12px;
     display: flex; flex-direction: column; gap: 2px;
+    min-height: 0; overflow-y: auto; scrollbar-gutter: stable;
   }
   .brand { padding: 4px 10px 16px; }
   .group {
@@ -148,7 +150,7 @@
   }
   .item:hover { background: color-mix(in srgb, var(--text) 7%, transparent); }
   .item.on { background: var(--surface); box-shadow: inset 3px 0 0 var(--accent); font-weight: 600; }
-  main { overflow: auto; padding: 24px 32px 40px; display: grid; align-content: start; gap: 20px; }
+  main { overflow: auto; min-height: 0; padding: 24px 32px 40px; display: grid; align-content: start; gap: 20px; }
   header { display: grid; gap: 4px; }
   .connections { display: grid; gap: 14px; padding-top: 16px; border-top: 1px solid var(--border); }
   .connections h2 { margin: 0; font-size: 20px; }

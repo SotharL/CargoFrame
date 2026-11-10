@@ -19,7 +19,7 @@ use cargoframe_layout::{BlockKind, Layout, ValueSource};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Every built-in name, for the builder's variable picker and for validation.
-pub const NAMES: [&str; 7] = [
+pub const NAMES: [&str; 9] = [
     "app.exe",
     "app.path",
     "app.title",
@@ -27,6 +27,8 @@ pub const NAMES: [&str; 7] = [
     "project.name",
     "capture.date",
     "capture.time",
+    "capture.screenshot",
+    "capture.recording",
 ];
 
 /// A short description of each built-in variable, for the builder's variable picker.
@@ -39,6 +41,8 @@ pub fn describe_name(name: &str) -> &'static str {
         "project.name" => "That folder's name",
         "capture.date" => "Date of the capture (YYYY-MM-DD)",
         "capture.time" => "Time of the capture (HH:MM:SS)",
+        "capture.screenshot" => "The screenshot, shown here in the text (Jira, GitHub, Teams)",
+        "capture.recording" => "The recording, shown here in the text (Jira, GitHub)",
         _ => "",
     }
 }
@@ -101,6 +105,15 @@ pub fn builtins(exe_path: Option<&str>, title: Option<&str>, now: Moment) -> Bui
     }
     values.insert("capture.date".to_string(), now.date());
     values.insert("capture.time".to_string(), now.time());
+    // their places stay in the text as they are: the share puts the files there
+    values.insert(
+        "capture.screenshot".to_string(),
+        "{{capture.screenshot}}".to_string(),
+    );
+    values.insert(
+        "capture.recording".to_string(),
+        "{{capture.recording}}".to_string(),
+    );
     Builtins { values, project }
 }
 
@@ -182,12 +195,14 @@ mod tests {
     }
 
     #[test]
-    fn nothing_known_about_the_program_leaves_only_the_clock() {
+    fn nothing_known_about_the_program_leaves_only_the_clock_and_the_media_places() {
         let b = builtins(None, None, NOW);
-        assert_eq!(b.values.len(), 2);
+        assert_eq!(b.values.len(), 4);
+        // the places for the screenshot and the recording stay as they are, for the share
+        assert_eq!(b.values["capture.screenshot"], "{{capture.screenshot}}");
         assert!(b.project.is_none());
         let b = builtins(Some(""), Some(""), NOW);
-        assert_eq!(b.values.len(), 2);
+        assert_eq!(b.values.len(), 4);
     }
 
     #[test]
@@ -216,6 +231,7 @@ mod tests {
         };
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: String::new(),
             blocks: vec![

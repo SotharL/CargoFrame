@@ -706,6 +706,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
     };
     Some(Layout {
         accepts_input: false,
+        columns: crate::GRID_COLUMNS,
         id: String::new(),
         name: t.name.to_string(),
         blocks,

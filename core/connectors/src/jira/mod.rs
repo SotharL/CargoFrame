@@ -126,6 +126,33 @@ fn split_list(v: &str) -> Vec<&str> {
         .collect()
 }
 
+/// The screenshot and the recording shown where the text puts them: they are attached to the
+/// issue under these names, and Jira shows an attachment named in the text in its place.
+fn with_media(text: &str, payload: &Payload) -> String {
+    let embed = |a: Option<&crate::payload::Attachment>, how: &str, in_table: bool| {
+        a.map(|a| {
+            // in a table a `|` would end the cell: the file is shown at its own size there
+            if in_table {
+                format!("!{}!", a.name)
+            } else {
+                format!("!{}|{how}!", a.name)
+            }
+        })
+        .unwrap_or_default()
+    };
+    text.split('\n')
+        .map(|line| {
+            let t = line.trim_start().starts_with('|');
+            crate::payload::place_media(
+                line,
+                &embed(payload.screenshot(), "thumbnail", t),
+                &embed(payload.recording(), "width=640", t),
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// A summary must be one line of at most 255 characters.
 fn clean_summary(s: &str) -> String {
     let one: String = s.split_whitespace().collect::<Vec<_>>().join(" ");
@@ -236,6 +263,9 @@ pub fn build_fields(payload: &Payload, cloud: bool) -> Result<Map<String, Value>
         if let Some(p) = payload.prompt.as_deref().filter(|p| !p.trim().is_empty()) {
             out.insert("description".into(), Value::String(render(p, Style::Jira)));
         }
+    }
+    if let Some(Value::String(d)) = out.get_mut("description") {
+        *d = with_media(d, payload);
     }
     Ok(out)
 }
@@ -519,7 +549,9 @@ impl Connector for JiraConnector {
             let text = payload
                 .value("description")
                 .map(str::to_string)
-                .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()));
+                .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
+                // written in Jira's markup, the screenshot and recording in their places
+                .map(|t| with_media(&render(&t, Style::Jira), payload));
             if let Some(text) = text {
                 let req = self
                     .request(

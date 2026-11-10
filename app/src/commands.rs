@@ -1027,6 +1027,32 @@ pub fn set_edited_image(state: State<'_, AppState>, request: Request<'_>) -> Res
     Ok(())
 }
 
+/// The most a selection sent to be read can be (a PNG of part of the screenshot).
+const MAX_READ_PNG: usize = 40 * 1024 * 1024;
+
+/// Read the text in part of the screenshot (a PNG in the body), on this computer. `x-attempt`
+/// says which try it is: each reads the picture a little differently.
+#[tauri::command]
+pub async fn read_text(request: Request<'_>) -> Result<cargoframe_ocr::Reading, String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected a picture".into());
+    };
+    if bytes.len() > MAX_READ_PNG {
+        return Err("The part to read is too large".into());
+    }
+    let attempt: u32 = request
+        .headers()
+        .get("x-attempt")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0);
+    let bytes = bytes.clone();
+    tauri::async_runtime::spawn_blocking(move || cargoframe_ocr::read(&bytes, attempt))
+        .await
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())
+}
+
 /// Ask where to keep a copy when a share could not be delivered.
 fn pick_fallback_folder(app: &AppHandle, attempt: u32) -> Option<PickedFolder> {
     let title = if attempt <= 1 {

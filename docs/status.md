@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-09, version 0.3.0 (Data & fields: read values from files, then fill the service's fields with them by steps; formatting in the layout builder's starting text; a GitHub connector; Data from files as a flow: if a file is found, add it and read values, no format to pick; links to web pages in the guides; a formatted box that shows its formatting, with *Message of* on the Text block; before that, a shortcut records or takes a screenshot from its layout; fixed: a window whose layout had a dropdown stayed on Loading; X, Bluesky and Instagram against mock servers, one build switch per service, `cargoframe open`; the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
+_Last updated 2026-11-10, version 0.3.0 (the 10 November round: a sign while recording and the focus followed, tables and code blocks in the formatted box, the screenshot and the recording placed in the text for Jira, GitHub and Teams, the values list beside the starting text, *Read text* on the screenshot, wider layouts with up to 24 columns, the video crop and marks reworked, text on screenshots with bold, italic and a box, several subfolders in a Files block, the layout builder split in half, the guides grouped; before that, 2026-11-09: Data & fields: read values from files, then fill the service's fields with them by steps; formatting in the layout builder's starting text; a GitHub connector; Data from files as a flow: if a file is found, add it and read values, no format to pick; links to web pages in the guides; a formatted box that shows its formatting, with *Message of* on the Text block; before that, a shortcut records or takes a screenshot from its layout; fixed: a window whose layout had a dropdown stayed on Loading; X, Bluesky and Instagram against mock servers, one build switch per service, `cargoframe open`; the flow review: Settings grouped by content, General split into General, Your data and About, the duplicate video editor removed from Settings, Linux trusts the system's certificates; before that, 2026-11-07, evening: the second 7 November round after the installer test: one path to post with threads, sound recorded from Windows itself, Your data and reset, notifications switch, text formatting, Setup checks, Data from files as a sentence; before that, the twelve changes of the first 7 November feedback round: Discord webhooks, dependent dropdowns, last choices, get-token buttons, Claude app install, screenshot with video, in-app guides, Connections under Setup; before that, phases 8 to 12, including video, were merged to `main` in pull request #19; the rest dates from 2026-10-23). V1 was merged to `main` from `dev/v1` in pull request #1. The settings update (General and Safety, Save locally, layout templates, text and log rules, export and import) is in pull request #12._
 
 **V1 is feature-complete in code. It has not yet run on a real Windows 11 or Linux desktop, and
 no real Jira, Google, Reddit or Claude account has been used.** Everything below says which of
@@ -8,7 +8,7 @@ those is true for each piece.
 
 ## What is verified
 
-- **Unit and integration tests:** about 990 Rust tests and 503 UI tests pass. `cargo clippy -D warnings`,
+- **Unit and integration tests:** about 1,010 Rust tests and 511 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
 - **The 7 November round** (Discord webhooks and bot, dependent dropdowns, last five choices, get-token buttons, the
   Claude app line, screenshot with video, the guides): unit tests on each piece, connector tests against the mock
@@ -21,6 +21,12 @@ those is true for each piece.
   rows and the data page against the in-memory stand-in; the Windows sound capture is compiled by Windows CI and its
   feed is tested on Linux with a fake source (`pcm_tests.rs`). A new test checks that every command the web view can
   call is registered, listed and given to a window (it found the data buttons were not granted before this was fixed).
+- **The 10 November round:** unit tests for the recording sign's geometry and, on a virtual X11 display, the real
+  windows (`core/indicator/src/x11.rs`); the Windows sign and the Windows text reader are compiled by Windows CI but
+  have not run on a real PC. *Read text* is tested with tesseract on two pictures (light on dark, small text) for each
+  of its three ways; tables and code blocks per service (`richtext_tests.rs`), pictures in the text for Jira and
+  GitHub against their mock servers; the table grid, the values list, the column control and the Read text panel
+  against the in-memory stand-in, and looked at in a browser with demo data.
 - **Linux end to end** (virtual X11 display): the shortcut captures a fake program, the CargoFrame
   window opens with the capture, closing and reopening behaves as each of the three memory modes
   promises, and the real release binary stays at 19.6 MB of its own memory while idle

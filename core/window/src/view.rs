@@ -428,6 +428,7 @@ mod tests {
     fn layout() -> Layout {
         Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: "l".into(),
             name: "L".into(),
             blocks: vec![
@@ -651,6 +652,7 @@ mod tests {
     fn one_button(connection: Option<&str>) -> Layout {
         Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: "l".into(),
             name: "L".into(),
             blocks: vec![Block {

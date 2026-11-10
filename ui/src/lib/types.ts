@@ -268,6 +268,8 @@ export interface Layout {
   blocks: Block[];
   /** Other programs may fill its text boxes and dropdowns (`cargoframe open`). Off when absent. */
   accepts_input?: boolean;
+  /** Columns in its grid: 12 when absent, up to 24 for a wider window. */
+  columns?: number;
 }
 
 // ----- the CargoFrame window's data (mirror core/window::view) -----
@@ -568,6 +570,18 @@ export interface Video {
   window_secs: number;
   /** Larger pictures are scaled down to this height; 0 keeps the screen's size. */
   max_height: number;
+  /** What shows on screen while a trigger records. */
+  sign?: RecordingSign;
+}
+
+/** The corner of the recorded area the blinking dot is in. */
+export type SignCorner = 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right';
+export interface RecordingSign {
+  /** A red outline around what is recorded. */
+  outline: boolean;
+  /** A red dot that blinks once a second. */
+  dot: boolean;
+  corner: SignCorner;
 }
 
 export interface VideoTools {
@@ -894,4 +908,12 @@ export interface UpdateView {
   token_problem: string | null;
   last: UpdateLast | null;
   phase: UpdatePhase;
+}
+
+/** Text read in part of a screenshot (core/ocr): each line with its place, in that part's pixels. */
+export interface TextReading {
+  text: string;
+  lines: { text: string; x: number; y: number; w: number; h: number }[];
+  reader: string;
+  attempt: number;
 }

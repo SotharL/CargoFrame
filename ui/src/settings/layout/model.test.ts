@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Block, Layout } from '../../lib/types';
 import {
   canPlace, cellAt, COLUMNS, firstFree, fits, makeBlock, MAX_SHARING_BUTTONS, moveTo, newBlockId, overlaps, removeBlock,
-  resizeTo, rowsNeeded, tidy,
+  resizeTo, rowsNeeded, tidy, columnsOf, usedColumns,
 } from './model';
 
 const text = (id: string, x: number, y: number, w = 4, h = 2): Block => ({
@@ -150,5 +150,26 @@ describe('the limit of sharing buttons', () => {
     expect(makeBlock(blocks, 'text')).not.toBeNull();
     // removing one makes room again
     expect(makeBlock(removeBlock(blocks, blocks[0]!.id), 'sharing_button')).not.toBeNull();
+  });
+});
+
+describe('a wider grid', () => {
+  const at = (x: number, w: number): Block => ({ id: `b${x}`, type: 'screenshot', rect: { x, y: 0, w, h: 1 } });
+
+  it('has room on the side for a block past column 12', () => {
+    expect(canPlace([], { x: 12, y: 0, w: 4, h: 1 })).toBe(false);
+    expect(canPlace([], { x: 12, y: 0, w: 4, h: 1 }, undefined, 16)).toBe(true);
+    expect(moveTo([at(0, 4)], 'b0', 20, 0, 16)?.[0]?.rect.x).toBe(12);
+    expect(resizeTo([at(0, 4)], 'b0', 30, 1, 16)?.[0]?.rect.w).toBe(16);
+  });
+
+  it('keeps the column count within 12 to 24 and writes none for 12', () => {
+    expect(columnsOf({})).toBe(12);
+    expect(columnsOf({ columns: 30 })).toBe(24);
+    expect(columnsOf({ columns: 3 })).toBe(12);
+    expect(usedColumns([at(0, 4), at(10, 6)])).toBe(16);
+    const base: Layout = { id: 'l', name: 'L', blocks: [] };
+    expect('columns' in tidy({ ...base, columns: 12 })).toBe(false);
+    expect(tidy({ ...base, columns: 18 }).columns).toBe(18);
   });
 });

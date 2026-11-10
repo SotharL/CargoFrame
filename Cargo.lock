@@ -503,8 +503,10 @@ dependencies = [
  "cargoframe-context",
  "cargoframe-deliver",
  "cargoframe-handoff",
+ "cargoframe-indicator",
  "cargoframe-layout",
  "cargoframe-net",
+ "cargoframe-ocr",
  "cargoframe-rules",
  "cargoframe-safe",
  "cargoframe-shortcuts",
@@ -621,6 +623,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "cargoframe-indicator"
+version = "0.3.0"
+dependencies = [
+ "tracing",
+ "windows",
+ "x11rb 0.14.0",
+]
+
+[[package]]
 name = "cargoframe-layout"
 version = "0.3.0"
 dependencies = [
@@ -638,6 +649,17 @@ dependencies = [
  "serde_json",
  "thiserror 2.0.21",
  "ureq",
+]
+
+[[package]]
+name = "cargoframe-ocr"
+version = "0.3.0"
+dependencies = [
+ "png",
+ "serde",
+ "thiserror 2.0.21",
+ "tracing",
+ "windows",
 ]
 
 [[package]]

@@ -18,10 +18,10 @@ order to build them in, and the gates every change passes. For what the app is a
 | # | Requirement |
 |---|-------------|
 | F1 | Wait in the tray; run a **trigger** on a global shortcut (or from the tray menu) |
-| F2 | Capture the program in focus, the screen, or all screens; or **record** the last seconds when the layout has a Video block |
+| F2 | Capture the program in focus, the screen, or all screens; or **record** the last seconds when the layout has a Video block, showing that it records (an outline, a blinking dot) and following the focus |
 | F3 | Find the program's **project folder** (same name as the program, else one folder above) |
 | F4 | **Data rules**: if a file is found there, add it to the files and read values (after a name, between two pieces, the line with a word); the kind of file is known from its name |
-| F5 | Open a window built from a **layout**: Screenshot (with editor), Video (trim, crop, mark), Text, Dropdown, Files, sharing buttons |
+| F5 | Open a window built from a **layout** (a grid of 12 to 24 columns): Screenshot (with editor and text reading), Video (trim, crop, marks), Text (formatting, tables, pictures in the text), Dropdown, Files, sharing buttons |
 | F6 | Fill dropdowns from the service's API; "where to post" as one path that goes as deep as the service does |
 | F7 | Send to Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip |
 | F8 | Retry a failed send, then keep a zip, so nothing is lost |
@@ -88,7 +88,7 @@ window is granted only the commands it needs (`app/capabilities/`).
 
 ```mermaid
 flowchart BT
-    context & safe & handoff & capture & video
+    context & safe & handoff & capture & video & indicator & ocr
     layout --> context
     rules --> context
     window --> context & handoff & layout
@@ -99,7 +99,7 @@ flowchart BT
     config --> connectors & handoff & layout & rules
     update --> net
     shortcuts --> config & capture
-    app[app] --> config & window & bundle & video & update & rules & shortcuts
+    app[app] --> config & window & bundle & video & update & rules & shortcuts & indicator & ocr
 ```
 
 Leaf crates have no CargoFrame dependencies and are built and tested first. `app` is the only crate that knows Tauri.
@@ -108,7 +108,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 
 | Path | Contents |
 |------|----------|
-| `core/*` | 15 library crates, testable without a display |
+| `core/*` | 17 library crates, testable without a display |
 | `app/` | The program: tray, triggers, commands, sharing, secrets, setup checks, `cargoframe open` |
 | `ui/src/settings` | Settings window: pages, layout builder, connections, guides |
 | `ui/src/capture` | CargoFrame window: blocks, editor, tick boxes, sharing |
@@ -128,14 +128,16 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `safe` | What happens on failure: retry with backoff, failure classes, fallback ladder, zip names | `retry`, `FailureKind`, `SendError` |
 | `handoff` | Claude chat links, clipboard plan, pinned and recent chats | |
 | `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; Wayland focus, portal screenshot and screen sharing | `capture_with`, `wayland.rs`, `screencast.rs` |
-| `video` | Ring of segments, clip edits (trim, crop, mark), the ffmpeg command; Windows loopback sound; a fed picture (Wayland) | `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
-| `layout` | Blocks on a 12-column grid, validation chips, templates | `model.rs`, `templates.rs` |
+| `video` | Ring of segments, clip edits (trim, crop, marks laid over as a picture), the ffmpeg command; Windows loopback sound; a fed picture (Wayland) | `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
+| `indicator` | The sign shown while recording: a red outline and a blinking dot, as native windows (Win32, excluded from capture; X11 with the Shape extension); none on Wayland | `geometry.rs`, `win.rs`, `x11.rs` |
+| `ocr` | Read the text in part of a screenshot on this computer: `Windows.Media.Ocr`, or the `tesseract` program on Linux; the picture is prepared first (grey, larger, light-on-dark turned), three ways to try | `read`, `prepare.rs` |
+| `layout` | Blocks on a grid of 12 to 24 columns (`Layout::columns`), validation chips, templates | `model.rs`, `templates.rs` |
 | `rules` | Data rules: find a file, read values from it | `find.rs` (the three ways to find a value), one module per format |
 | `window` | Everything the CargoFrame window shows for one capture, as one serializable view | `view::SessionView` |
 | `bundle` | The fallback zip and the Files zip, with a manifest | |
 | `net` | The one HTTP client: HTTPS only, checked redirects, size cap, multipart; a mock server | `Http`, `Request`, `mock::MockServer` |
 | `deliver` | Paste into a chat window after checking it is the right window | |
-| `connectors` | One folder per service behind the `Connector` trait; OAuth with PKCE; secret store trait; text converter | `Connector`, `Payload`, `oauth.rs`, `richtext.rs`, `media.rs` |
+| `connectors` | One folder per service behind the `Connector` trait; OAuth with PKCE; secret store trait; text converter (marks, code blocks, tables) and pictures placed in the text (`{{capture.screenshot}}`) | `Connector`, `Payload`, `oauth.rs`, `richtext.rs`, `payload.rs`, `media.rs` |
 | `config` | One versioned JSON file per item; checks; migrations with backup | |
 | `update` | Check GitHub releases, download, verify SHA-256, run the installer | `check`, `fetch`, `install` |
 | `shortcuts` | Wayland: hand each shortcut to the desktop (GNOME settings, sway and Hyprland IPC, the portal's GlobalShortcuts, or a command to copy) | `Route`, `gnome::sync`, `wlroots`, `portal::Portal` |
@@ -149,6 +151,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `lib.rs` | Start-up: plugins, tray, shortcuts, single instance, `cargoframe open` |
 | `tray.rs`, `tray_host.rs` | Tray icon and menu (pause triggers, open settings, quit) |
 | `triggers.rs` | Run a trigger: capture or record, build the session, open a window |
+| `watch.rs` | While recording: show the sign, and note which program has the focus and for how long |
 | `desktop_keys.rs` | Wayland: hand the shortcuts to the desktop, and say how in Settings |
 | `session.rs` | Build the `SessionView`; `records()` (layout has a Video block); apply values from `cargoframe open` |
 | `share.rs` | Build the `Payload` from ticked blocks, call the connector, fall back to a zip |
@@ -158,7 +161,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `video.rs`, `audio.rs` | Recording sessions and sound sources |
 | `setup.rs`, `tools.rs` | What is installed (ffmpeg, Claude app, `xdotool`), winget installs |
 | `cleanup.rs`, `transfer.rs` | The only code that deletes; export and import |
-| `warm.rs`, `windowing.rs`, `timing.rs` | Memory modes, window placement, speed numbers |
+| `warm.rs`, `windowing.rs`, `timing.rs` | Memory modes, window placement and width (wider for more columns), speed numbers |
 | `updates.rs`, `notify.rs`, `logging.rs`, `cli.rs` | Updates, notifications, logs (no content), command line |
 
 </details>
@@ -169,11 +172,11 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | Folder | Job |
 |--------|-----|
 | `settings/pages` | One component per page: Setup, Connections, Layouts, Triggers, Data & fields (Read from files, Fill fields), Recording, General, Your data, About |
-| `settings/layout` | The layout builder: grid, block inspector, sharing routes |
+| `settings/layout` | The layout builder: grid (with its column count), block inspector, the starting-text editor with its list of values (`TextAutomation.svelte`), sharing routes |
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes |
-| `capture/blocks` | Screenshot, Video (trim strip, crop box, mark layer), Text (formatted box: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files, Sharing |
-| `capture/editor` | Picture editor: pen, rectangle, ellipse, text, crop, colour, width |
+| `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files, Sharing |
+| `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
 | `capture/*.ts` | Values, tick boxes, what each button will send, remembered choices |
 | `lib/` | `ipc.ts` (real and in-memory API), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links) |
 
@@ -197,6 +200,7 @@ flowchart LR
     P8 --> P9[9 · Installers and updates]
     P9 --> P9b[9b · Wayland]
     P9b --> P10[10 · Company features]
+    P10 --> P11[11 · Polish]
 ```
 
 | Phase | Build | Done when |
@@ -212,6 +216,7 @@ flowchart LR
 | **9 · Installers and updates** | NSIS one-button installer, AppImage, `update` with SHA-256, release workflow | CI installs, upgrades, uninstalls and clicks the real installer |
 | **9b · Wayland** | Compositor focus (sway, Hyprland, KWin script, XWayland), `grim` and portal screenshots, `shortcuts` crate, screen sharing with GStreamer, clipboard hand-over for Claude | The Wayland end-to-end test passes on headless sway |
 | **10 · Company features** | Cargo feature per connector and `CF_SERVICES`; `cargoframe open`; system certificates and proxy | A build with only `jira` has no other service's code; a script fills a layout |
+| **11 · Polish (0.3.0)** | Recording sign (`indicator`) and focus following; tables and code blocks, pictures in the text; the values list; *Read text* (`ocr`); wider layouts | Each has unit and UI tests; the Windows parts compile on CI |
 
 ---
 

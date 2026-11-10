@@ -131,23 +131,147 @@ function pieces(text: string, list: Piece[], sel: [number, number] | null): stri
   return out;
 }
 
+/** A table: its head and its rows, each a list of cells (as `core/connectors/src/richtext.rs` reads it). */
+export interface Table {
+  head: string[];
+  rows: string[][];
+}
+
+/** The cells of a table line `| a | b |` (a `\|` stays a bar inside a cell). */
+export function cellsOf(line: string): string[] {
+  let t = line.trim();
+  if (t.startsWith('|')) t = t.slice(1);
+  if (t.endsWith('|') && !t.endsWith('\\|')) t = t.slice(0, -1);
+  const out: string[] = [];
+  let cur = '';
+  for (let i = 0; i < t.length; i++) {
+    if (t[i] === '\\' && t[i + 1] === '|') {
+      cur += '|';
+      i++;
+    } else if (t[i] === '|') {
+      out.push(cur);
+      cur = '';
+    } else cur += t[i];
+  }
+  out.push(cur);
+  return out.map((c) => c.trim());
+}
+
+/** `| --- | :---: |`: the line under a table's head. */
+export const isRule = (line: string) => {
+  const t = line.trim();
+  return t.startsWith('|') && t.includes('-') && /^[|\-: ]+$/.test(t);
+};
+
+/** A table written back as text. */
+export function tableText(t: Table): string {
+  const cell = (c: string) => c.replace(/\n/g, ' ').replace(/\|/g, '\\|').trim();
+  const line = (r: string[]) => `| ${t.head.map((_, i) => cell(r[i] ?? '')).join(' | ')} |`;
+  return [line(t.head), `| ${t.head.map(() => '---').join(' | ')} |`, ...t.rows.map(line)].join('\n');
+}
+
+/** The table that `lines` (the head, the rule, the rows) are. */
+export function tableOf(lines: string[]): Table {
+  const head = cellsOf(lines[0] ?? '');
+  const rows = lines.slice(2).map((l) => {
+    const r = cellsOf(l);
+    return head.map((_, i) => r[i] ?? '');
+  });
+  return { head, rows };
+}
+
+/** What each line is: part of a code block, part of a table (by the table's first line), or a line. */
+type Block = { kind: 'line'; line: number } | { kind: 'code'; from: number; to: number } | { kind: 'table'; from: number; to: number };
+
+export function blocksOf(lines: string[]): Block[] {
+  const out: Block[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const t = lines[i]!.trimStart();
+    if (t.startsWith('```')) {
+      let j = i + 1;
+      while (j < lines.length && !lines[j]!.trimStart().startsWith('```')) j++;
+      const to = Math.min(j, lines.length - 1);
+      out.push({ kind: 'code', from: i, to });
+      i = to + 1;
+      continue;
+    }
+    if (t.startsWith('|') && i + 1 < lines.length && isRule(lines[i + 1]!)) {
+      let j = i + 2;
+      while (j < lines.length && lines[j]!.trimStart().startsWith('|')) j++;
+      out.push({ kind: 'table', from: i, to: j - 1 });
+      i = j;
+      continue;
+    }
+    out.push({ kind: 'line', line: i });
+    i++;
+  }
+  return out;
+}
+
+const escAttr = (s: string) => esc(s).replace(/"/g, '&quot;');
+
+/** A table as a grid to type in, with buttons to add and remove rows and columns. */
+function tableHtml(t: Table, raw: string): string {
+  const cell = (c: string, r: number, k: number) =>
+    `<span class="cell" contenteditable="true" data-r="${r}" data-c="${k}" spellcheck="true">${esc(c)}</span>`;
+  const x = (act: string, n: number, title: string) =>
+    `<button type="button" class="tw-x" data-act="${act}" data-n="${n}" title="${title}" aria-label="${title}" tabindex="-1">×</button>`;
+  const tops = t.head.map((_, k) => `<th class="tw-top">${t.head.length > 1 ? x('col', k, `Remove column ${k + 1}`) : ''}</th>`).join('');
+  const head = t.head.map((c, k) => `<th>${cell(c, 0, k)}</th>`).join('');
+  const rows = t.rows
+    .map((r, ri) => `<tr>${r.map((c, k) => `<td>${cell(c, ri + 1, k)}</td>`).join('')}<td class="tw-side">${x('row', ri, `Remove row ${ri + 1}`)}</td></tr>`)
+    .join('');
+  return (
+    `<div class="ln tw" contenteditable="false" data-text="${escAttr(raw)}">` +
+    `<table><thead><tr>${tops}<th class="tw-side"></th></tr><tr>${head}<td class="tw-side"><button type="button" class="tw-add" data-act="addcol" title="Add a column" aria-label="Add a column" tabindex="-1">+</button></td></tr></thead>` +
+    `<tbody>${rows}</tbody></table>` +
+    `<button type="button" class="tw-add row" data-act="addrow" title="Add a row" aria-label="Add a row" tabindex="-1">+</button>` +
+    `</div>`
+  );
+}
+
 /** The box's content for `text`, with the marks at the selection showing their `**`. */
 export function toHtml(text: string, sel: [number, number] | null = null): string {
+  const lines = text.split('\n');
+  const starts: number[] = [];
   let at = 0;
-  return text
-    .split('\n')
-    .map((line) => {
-      const start = at;
-      at += line.length + 1;
-      if (line === '') return '<div class="ln"><br></div>';
-      const { kind, mark } = classify(line);
-      const head = mark > 0 ? `<span class="lm">${esc(line.slice(0, mark))}</span>` : '';
-      // the marks are read on the whole text, so their places are places in the whole text
-      const body = pieces(text, parse(text, start + mark, start + line.length), sel);
-      return `<div class="ln ${kind}">${head}${body}</div>`;
+  for (const l of lines) {
+    starts.push(at);
+    at += l.length + 1;
+  }
+  const line = (i: number) => {
+    const ln = lines[i]!;
+    const start = starts[i]!;
+    if (ln === '') return '<div class="ln"><br></div>';
+    const { kind, mark } = classify(ln);
+    const head = mark > 0 ? `<span class="lm">${esc(ln.slice(0, mark))}</span>` : '';
+    // the marks are read on the whole text, so their places are places in the whole text
+    const body = pieces(text, parse(text, start + mark, start + ln.length), sel);
+    return `<div class="ln ${kind}">${head}${body}</div>`;
+  };
+  return blocksOf(lines)
+    .map((b) => {
+      if (b.kind === 'line') return line(b.line);
+      if (b.kind === 'code') {
+        // a code block: its lines as they are, the fences quiet
+        return lines
+          .slice(b.from, b.to + 1)
+          .map((l, n) => {
+            const fence = (n === 0 || n === b.to - b.from) && l.trimStart().startsWith('```');
+            return `<div class="ln ${fence ? 'fence' : 'codeln'}">${l === '' ? '<br>' : esc(l)}</div>`;
+          })
+          .join('');
+      }
+      const raw = lines.slice(b.from, b.to + 1);
+      return tableHtml(tableOf(raw), raw.join('\n'));
     })
     .join('');
 }
+
+const isTable = (n: Node): n is HTMLElement => n instanceof HTMLElement && n.classList.contains('tw');
+/** The text a node stands for: a table its text, anything else what it shows. */
+const textOfNode = (n: Node) => (isTable(n) ? (n.dataset.text ?? '') : (n.textContent ?? ''));
 
 /** The box's lines: each <div>, or a run of loose text the browser left outside one. */
 function linesOf(root: HTMLElement): Node[][] {
@@ -172,13 +296,13 @@ function linesOf(root: HTMLElement): Node[][] {
   return out;
 }
 
-const lengthOf = (nodes: Node[]) => nodes.reduce((n, x) => n + (x.textContent?.length ?? 0), 0);
+const lengthOf = (nodes: Node[]) => nodes.reduce((n, x) => n + textOfNode(x).length, 0);
 
 /** The text in the box, whatever the browser did to it. */
 export function readText(root: HTMLElement): string {
   const lines = linesOf(root);
   if (lines.length === 0) return '';
-  return lines.map((l) => l.map((n) => n.textContent ?? '').join('')).join('\n');
+  return lines.map((l) => l.map(textOfNode).join('')).join('\n');
 }
 
 /** The place in the text of a place in the box. */
@@ -196,6 +320,8 @@ export function offsetOf(root: HTMLElement, node: Node, offset: number): number 
   }
   for (const l of lines) {
     const top = l.find((n) => n === node || n.contains(node));
+    // a place in a table is the table's start: its cells are edited on their own
+    if (top && isTable(top)) return before + lengthOf(l.slice(0, l.indexOf(top)));
     if (top) {
       let inLine = lengthOf(l.slice(0, l.indexOf(top)));
       const r = document.createRange();
@@ -214,7 +340,14 @@ export function pointAt(root: HTMLElement, offset: number): [Node, number] {
   const lines = Array.from(root.children);
   let left = offset;
   for (const [i, line] of lines.entries()) {
-    const len = line.textContent?.length ?? 0;
+    const len = textOfNode(line).length;
+    if (isTable(line)) {
+      // before the table, or (at its end) after it
+      if (left === 0) return [root, i];
+      if (left <= len) return [root, i + 1];
+      left -= len + 1;
+      continue;
+    }
     if (left <= len || i === lines.length - 1) {
       const walk = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
       let t = walk.nextNode() as Text | null;

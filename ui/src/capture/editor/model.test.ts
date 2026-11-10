@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   add, clampRect, clearAll, emptyState, exportSize, isEdited, isMeaningful, rectOf, redo,
-  resetCrop, setCrop, strokeWidth, textSize, toPicturePoint, undo, unit, visibleRect,
+  resetCrop, setCrop, strokeWidth, takeOut, textAt, textBounds, textSize, toPicturePoint, undo, unit, visibleRect,
   type Annotation,
 } from './model';
 
@@ -85,3 +85,22 @@ describe('annotations', () => {
     expect(isEdited(clearAll())).toBe(false);
   });
 });
+
+describe('text marks', () => {
+  const t: Annotation = { kind: 'text', color: '#fff', size: 20, at: { x: 100, y: 100 }, text: 'Hello\nworld!', box: true };
+  it('know their size, and a click on one finds it to change it', () => {
+    const r = textBounds(t as Extract<Annotation, { kind: 'text' }>, (l) => l.length * 10);
+    expect(r).toEqual({ x: 94, y: 94, w: 72, h: 62 });
+    const s = add(emptyState(), t);
+    expect(textAt(s, { x: 120, y: 110 })).toBe(0);
+    expect(textAt(s, { x: 10, y: 10 })).toBe(-1);
+    const out = takeOut(s, 0);
+    expect(out.mark).toEqual(t);
+    expect(out.state.annotations).toEqual([]);
+  });
+  it('an arrow needs some length', () => {
+    expect(isMeaningful({ kind: 'arrow', color: '#f00', width: 2, a: { x: 0, y: 0 }, b: { x: 3, y: 3 } })).toBe(false);
+    expect(isMeaningful({ kind: 'arrow', color: '#f00', width: 2, a: { x: 0, y: 0 }, b: { x: 30, y: 3 } })).toBe(true);
+  });
+});
+

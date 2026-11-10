@@ -2,7 +2,6 @@
 //! the builder page itself, in `ui/src/settings/layout/model.ts`.)
 
 use crate::model::{Layout, Rect};
-use crate::GRID_COLUMNS;
 
 impl Rect {
     pub fn new(x: u32, y: u32, w: u32, h: u32) -> Self {
@@ -29,8 +28,9 @@ impl Rect {
             && other.y < self.bottom()
     }
 
-    pub fn fits_grid(&self) -> bool {
-        self.w > 0 && self.h > 0 && self.right() <= GRID_COLUMNS
+    /// Whether it is inside a grid of `columns` columns.
+    pub fn fits_grid(&self, columns: u32) -> bool {
+        self.w > 0 && self.h > 0 && self.right() <= columns
     }
 }
 
@@ -38,7 +38,7 @@ impl Layout {
     /// Can `rect` be placed without leaving the grid or overlapping another block?
     /// `ignore` is the block being moved or resized.
     pub fn can_place(&self, rect: &Rect, ignore: Option<&str>) -> bool {
-        rect.fits_grid()
+        rect.fits_grid(self.grid_columns())
             && self
                 .blocks
                 .iter()
@@ -51,6 +51,7 @@ impl Layout {
 mod tests {
     use super::*;
     use crate::model::{Block, BlockKind};
+    use crate::GRID_COLUMNS;
 
     fn block(id: &str, x: u32, y: u32, w: u32, h: u32) -> Block {
         Block {
@@ -71,10 +72,12 @@ mod tests {
 
     #[test]
     fn grid_bounds() {
-        assert!(Rect::new(8, 0, 4, 1).fits_grid());
-        assert!(!Rect::new(9, 0, 4, 1).fits_grid());
-        assert!(!Rect::new(0, 0, 0, 1).fits_grid());
-        assert!(!Rect::new(u32::MAX, 0, 2, 1).fits_grid());
+        assert!(Rect::new(8, 0, 4, 1).fits_grid(GRID_COLUMNS));
+        assert!(!Rect::new(9, 0, 4, 1).fits_grid(GRID_COLUMNS));
+        // a wider grid has room for it
+        assert!(Rect::new(9, 0, 4, 1).fits_grid(16));
+        assert!(!Rect::new(0, 0, 0, 1).fits_grid(GRID_COLUMNS));
+        assert!(!Rect::new(u32::MAX, 0, 2, 1).fits_grid(GRID_COLUMNS));
     }
 
     #[test]

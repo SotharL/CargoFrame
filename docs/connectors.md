@@ -16,6 +16,8 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 | 5 | Required fields asked by the service shown in the layout before the first send | No "field X is required" error after pressing the button | Proposed (Jira first) |
 | 6 | Company sign-in (OAuth with the company's identity provider) | No personal tokens to paste in a large company | Proposed (Jira, Custom API) |
 | 7 | Other programs fill a layout (`cargoframe open`) | A company tool can open CargoFrame with its own data in the blocks | Started (text boxes and dropdowns) |
+| 8 | Tables and code blocks written the service's way | A repro table or a stack trace reads well in Jira, Teams, GitHub and Reddit; aligned lines in a code block where there are no tables | Done (0.3.0) |
+| 9 | The screenshot and the recording placed in the text (`{{capture.screenshot}}`, `{{capture.recording}}`) | A *Repro / Highlight* table with the video and the picture side by side, not two attachments at the end | Done (0.3.0): Jira, GitHub, Teams (picture); proposed: Slack and Discord cannot place files in text |
 
 ## Per connector
 
@@ -44,4 +46,7 @@ goes as deep as the service does, and send without surprises (sizes, required fi
   the repository (`cargoframe-attachments`, made from the main branch the first time) and shows them in the issue; the
   connection can also send text only.
 - **Formatting** (bold, lists) is shown as plain text on X, Bluesky and Instagram: they have none.
+- **Pictures in the text** need a service that shows an attached file inside its text: Jira (`!name!`), GitHub (a link
+  from the attachments branch) and Teams (an inline picture). Slack, Discord, Reddit and Google attach the files after
+  the text, so the two values are left out of their text.
 - **Videos** are not sent to X, Bluesky or Instagram yet: the screenshot (or the still of a recording) is.

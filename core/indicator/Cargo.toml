@@ -1,0 +1,29 @@
+[package]
+name = "cargoframe-indicator"
+description = "CargoFrame core: show that the screen is being recorded (an outline and a blinking dot)"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+# The windows are drawn with the operating system's own calls: no web page, almost no memory.
+# Unsafe code is denied everywhere except the Windows module that needs it.
+[lints.rust]
+unsafe_code = "deny"
+[lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[dependencies]
+tracing.workspace = true
+
+[target.'cfg(target_os = "linux")'.dependencies]
+x11rb = { version = "0.14", features = ["shape"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Graphics_Gdi",
+  "Win32_System_LibraryLoader",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }

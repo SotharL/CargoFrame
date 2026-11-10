@@ -82,7 +82,7 @@ sequenceDiagram
 
 | Step | What happens | Code |
 |------|--------------|------|
-| Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse | `core/capture`, `core/window` |
+| Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse. While recording, a red outline and a blinking dot say so (never in the recording itself), and a change of focus is followed: the program used longest names the capture | `core/capture`, `core/indicator`, `app/src/watch.rs` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
 | Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values (after a name, between two pieces, the line with a word; first, last or all). The kind of file is known from its name: JSON, YAML, TOML, INI and XML are read by key, the rest as text | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
@@ -108,6 +108,23 @@ connect, test, list options, send), so the share flow never names a service.
 | Bluesky | Handle and an app password | Text (300 characters), the screenshot, links marked | |
 | Instagram | Meta token; a picture server the person owns | A post with a caption; the picture is hosted first, because Instagram fetches from a web address | |
 | Custom API | Header or token | Any HTTPS endpoint, with the fields you define | |
+
+<details>
+<summary><b>Formatting, tables and pictures in the text</b></summary>
+
+A Text block that is a service's message is written with a few marks (`**bold**`, `` `code` ``, `> quote`, `- list`,
+code blocks between ```` ``` ```` and tables as `| a | b |`), and `core/connectors/src/richtext.rs` writes them the way
+each service wants: Jira wiki markup, HTML for Teams, Slack's mrkdwn, Markdown for Discord, Reddit and GitHub. A table
+becomes a Jira or HTML table, a Markdown one, or aligned lines in a code block where the service has no tables
+(Slack, Discord). In the window and in the builder a table is a grid to type in, with ＋ for a row or a column and ×
+to take one out.
+
+`{{capture.screenshot}}` and `{{capture.recording}}` put the picture or the recording **where they are in the text**
+instead of as attachments at the end: Jira (`!name!`, the file attached once), GitHub (the picture shown from the
+attachments branch) and Teams (the picture, inline). The builder offers a *Repro | Highlight* table with both. Other
+services leave the two out of the text and attach the files as before.
+
+</details>
 
 <details>
 <summary><b>How "where to post" works</b></summary>
@@ -148,8 +165,15 @@ the desktop for each. The program checks which desktop it is on and picks the wa
 <summary><b>Video</b></summary>
 
 `core/video` runs **ffmpeg** (the one optional program) into a ring of short segments, so the last seconds are kept
-(10 by default). The window plays the clip, trims it, crops it and puts one ring with a text on it; ffmpeg cuts the
-export. Sound: on Linux PulseAudio's monitor of the default output; on Windows WASAPI loopback (everything played, or
+(10 by default). The window plays the clip, trims it, crops it (drag a frame, then *Confirm*, as for a screenshot)
+and draws marks on it with the screenshot's tools (pen, square, circle, arrow, text; colour and size); ffmpeg cuts the
+export and lays the marks over it.
+
+While recording, a red outline around what is recorded and a red dot blinking once a second (in the corner chosen in
+*Recording*) say so. They are drawn by the system itself, not a web page: on Windows they are left out of every screen
+capture, on X11 they sit outside the recorded window; Wayland gives no way to draw them. If the focus moves to
+another program during the recording, the program used longest names the capture and its project folder is the one
+read; the window says which programs were used. Sound: on Linux PulseAudio's monitor of the default output; on Windows WASAPI loopback (everything played, or
 only the program in focus) fed to ffmpeg locally. A missing device is left out and the notification says why.
 
 </details>
@@ -172,15 +196,16 @@ flowchart LR
 ### The Settings window
 
 The sidebar follows that order. Each thing is set on one page only; **Guides** at the bottom walk through any setup by
-opening the page, outlining the field and saying in one sentence what goes in it.
+opening the page, outlining the field and saying in one sentence what goes in it; the guides for connecting each
+service are grouped under *Connect a service*, below the others.
 
 | Group | Page | What it holds |
 |-------|------|---------------|
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
-| Captures | **Layouts** | The window a capture opens, block by block, and what each sharing button sends |
+| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Triggers** | Shortcuts and the layout each opens |
 | | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder) and *Fill fields* (steps that fill a field of the service on each share) |
-| | **Recording** | Where ffmpeg is, quality, a 5-second test |
+| | **Recording** | Where ffmpeg is, quality, a 5-second test, the outline and dot shown while recording |
 | CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
 | | **Your data** | What is kept on this computer, clear or reset, export and import |
 | | **About** | Version, updates, speed and memory numbers |
@@ -193,11 +218,11 @@ opening the page, outlining the field and saying in one sentence what goes in it
 
 | Element | Behaviour |
 |---------|-----------|
-| **Screenshot** | Pen, rectangle, ellipse, text, crop; colour and line width |
-| **Video** | Trim handles, crop, one mark; *Also take a screenshot when the recording ends* |
-| **Text** | *Message of* ticks pick the sharing buttons whose message it is; such a box shows its formatting (bold, italic, underline, code, quote, lists) as it looks, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in |
+| **Screenshot** | Pen, square, circle, arrow, text (bold, italic, on a box; click a text to change it), crop; colour and size. *Read text*: drag over text on the picture, the lines found are marked; copy them all or click the ones to copy, or *Try again* to read it another way |
+| **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends* |
+| **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
-| **Files** | The project folder's files; the ones matching the block's patterns (like `*.log`) are ticked in advance |
+| **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance |
 | **Sharing buttons** | Up to five, in the service's colour. Tick boxes on each block say which button sends it: dashed = cannot take it, ring = required |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">
@@ -237,7 +262,7 @@ flowchart TB
 |-------|-------|-----|
 | Tray program | `app/` | Tray, shortcuts, windows on demand, commands, secrets, `cargoframe open` |
 | Windows | `ui/` | `settings.html` and `capture.html`, built once, loaded on demand |
-| Logic | `core/*` (15 crates) | Everything testable without a display: capture rules, layout, config, rules, connectors, net, video, update… |
+| Logic | `core/*` (17 crates) | Everything testable without a display: capture rules, layout, config, rules, connectors, net, video, update… |
 | Installers | `installers/` | Windows NSIS (one button), Linux AppImage and `install.sh` |
 | CI | `.github/` | Linux on pull requests; Windows and Linux on `main`; installers; release draft; security audit |
 
@@ -325,5 +350,9 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
 - GitHub's API cannot attach a file to an issue: pictures and files go in a branch of the repository (or are left out),
   so the token needs Contents write as well as Issues.
 - Text colour is not offered: only Jira and Teams could show it.
+- *Read text* uses Windows' own reader (in the languages of the person's profile); on Linux it needs `tesseract`
+  installed, and reads English unless more of its languages are installed.
+- The recording sign cannot be drawn on Wayland; on X11 a full-screen recording can include it.
+- Pictures in the text: Jira, GitHub and Teams (the recording in Jira and GitHub only).
 - Next for the connectors (required fields shown before sending, company sign-in):
   [connectors.md](connectors.md).

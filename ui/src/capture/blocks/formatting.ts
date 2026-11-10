@@ -4,7 +4,7 @@
 // code that sends it writes them the way each service wants (core/connectors/src/richtext.rs).
 import type { Block, ServiceKind, SessionView } from '../../lib/types';
 
-export type Mark = 'bold' | 'italic' | 'underline' | 'code' | 'quote' | 'bullets' | 'numbers';
+export type Mark = 'bold' | 'italic' | 'underline' | 'code' | 'quote' | 'bullets' | 'numbers' | 'codeblock' | 'table';
 
 export const MARKS: { mark: Mark; label: string; text: string; hint: string }[] = [
   { mark: 'bold', label: 'Bold', text: 'B', hint: 'Bold (Ctrl+B)' },
@@ -14,6 +14,8 @@ export const MARKS: { mark: Mark; label: string; text: string; hint: string }[] 
   { mark: 'quote', label: 'Quote', text: '❝', hint: 'Quote (Ctrl+Shift+9)' },
   { mark: 'bullets', label: 'Bulleted list', text: '•', hint: 'Bulleted list (Ctrl+Shift+8)' },
   { mark: 'numbers', label: 'Numbered list', text: '1.', hint: 'Numbered list (Ctrl+Shift+7)' },
+  { mark: 'codeblock', label: 'Code block', text: '{ }', hint: 'Code block: lines kept exactly as they are' },
+  { mark: 'table', label: 'Table', text: '▦', hint: 'Table' },
 ];
 
 /** The mark a key press asks for: Ctrl+B, I, U, E, and Ctrl+Shift+9, 8, 7 (as in Slack and Docs). */
@@ -27,6 +29,8 @@ export function shortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'shiftKe
 
 const EVERY = MARKS.map((m) => m.mark);
 const NO_UNDERLINE = EVERY.filter((m) => m !== 'underline');
+/** Slack and Discord have code blocks but no tables. */
+const NO_TABLE = (marks: Mark[]) => marks.filter((m) => m !== 'table');
 
 /**
  * The field of each service that takes a formatted body, and what it can show of the marks (the
@@ -35,9 +39,9 @@ const NO_UNDERLINE = EVERY.filter((m) => m !== 'underline');
  */
 const BODY: Partial<Record<ServiceKind, { field: string; marks: Mark[] }>> = {
   jira: { field: 'description', marks: EVERY },
-  discord: { field: 'message', marks: EVERY },
+  discord: { field: 'message', marks: NO_TABLE(EVERY) },
   teams: { field: 'message', marks: EVERY },
-  slack: { field: 'message', marks: NO_UNDERLINE },
+  slack: { field: 'message', marks: NO_TABLE(NO_UNDERLINE) },
   reddit: { field: 'text', marks: NO_UNDERLINE },
   github: { field: 'body', marks: EVERY },
 };
@@ -139,8 +143,55 @@ function lines(text: string, start: number, end: number, mark: Mark): Edit {
   return { text: text.slice(0, first) + joined + text.slice(last), start: first, end: first + joined.length };
 }
 
+/** A table to start from: a head and one empty row. */
+export const NEW_TABLE = '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |';
+
+/** Put `block` on lines of its own where the cursor is: after the line it is in. */
+export function insertBlock(text: string, at: number, block: string): Edit {
+  const stop = text.indexOf('\n', at);
+  const end = stop < 0 ? text.length : stop;
+  const before = text.slice(0, end);
+  const lead = before.trim() === '' ? '' : '\n';
+  const placed = lead + block;
+  const after = text.slice(end);
+  const tail = after.startsWith('\n') || after === '' ? '' : '\n';
+  const out = before + placed + tail + after;
+  const startAt = before.length + lead.length;
+  return { text: out, start: startAt, end: startAt + block.length };
+}
+
+/** The lines the selection touches put between code fences, or the fences taken off them. */
+function codeBlock(text: string, start: number, end: number): Edit {
+  const first = text.lastIndexOf('\n', start - 1) + 1;
+  const stop = text.indexOf('\n', end);
+  const last = stop < 0 ? text.length : stop;
+  const block = text.slice(first, last).split('\n');
+  // the lines are already between fences (the line before and the line after): take them off
+  const prevStart = first > 0 ? text.lastIndexOf('\n', first - 2) + 1 : -1;
+  const nextStop = last < text.length ? text.indexOf('\n', last + 1) : -1;
+  const prev = prevStart >= 0 ? text.slice(prevStart, first - 1) : null;
+  const next = last < text.length ? text.slice(last + 1, nextStop < 0 ? text.length : nextStop) : null;
+  if (prev !== null && next !== null && prev.trimStart().startsWith('```') && next.trim() === '```') {
+    const inner = block.join('\n');
+    const end = nextStop < 0 ? text.length : nextStop;
+    return { text: text.slice(0, prevStart) + inner + text.slice(end), start: prevStart, end: prevStart + inner.length };
+  }
+  if (block.length >= 2 && block[0]!.trimStart().startsWith('```') && block[block.length - 1]!.trim() === '```') {
+    const inner = block.slice(1, -1).join('\n');
+    return { text: text.slice(0, first) + inner + text.slice(last), start: first, end: first + inner.length };
+  }
+  if (start === end && text.slice(first, last).trim() === '') {
+    const empty = '```\n\n```';
+    return { text: text.slice(0, first) + empty + text.slice(last), start: first + 4, end: first + 4 };
+  }
+  const fenced = ['```', ...block, '```'].join('\n');
+  return { text: text.slice(0, first) + fenced + text.slice(last), start: first + 4, end: first + fenced.length - 4 };
+}
+
 /** What pressing a button does to the text, given the selection. */
 export function applyMark(text: string, start: number, end: number, mark: Mark): Edit {
+  if (mark === 'table') return insertBlock(text, end, NEW_TABLE);
+  if (mark === 'codeblock') return codeBlock(text, start, end);
   const m = WRAP[mark];
   return m ? wrap(text, start, end, m) : lines(text, start, end, mark);
 }

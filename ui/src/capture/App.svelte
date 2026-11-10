@@ -45,6 +45,11 @@
   /** The choices made before in each dropdown block (newest first), read when the capture opens. */
   let recents = $state<Record<string, Recent[]>>({});
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
+  /** Read the text in a part of the screenshot, on this computer. */
+  const readText = (png: Blob, attempt: number) => {
+    if (!api) return Promise.reject(new Error('CargoFrame is not ready yet'));
+    return api.readText(png, attempt);
+  };
   /** With a recording and a screenshot block: the picture taken from it, or `null` while there is none. */
   let still = $state<Blob | null>(null);
   let stillSize = $state({ width: 0, height: 0 });
@@ -141,6 +146,8 @@
     imageEdited = false;
     stillKey++;
   }
+  /** The layout's columns: more than 12 make it wider, with more side by side. */
+  const cols = $derived(Math.min(24, Math.max(12, view?.layout?.columns ?? 12)));
   const rows = $derived(blocks.reduce((m, b) => Math.max(m, b.rect.y + b.rect.h), 0));
   const empty = $derived(view !== null && blocks.length === 0);
   // "This button does not send X" is shown on the block itself, so the header does not repeat it.
@@ -243,19 +250,19 @@
         <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>Edit layout</button>
       </main>
     {:else}
-      <main class="grid" style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
+      <main class="grid" style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
         {#each blocks as b (b.id)}
           <div class="slot" style={place(b)}>
             <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
               <div class="body">
               {#if b.type === 'screenshot' && paired}
                 {#if still}
-                  {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} />{/key}
+                  {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />{/key}
                 {:else}
                   <p class="quiet videonote">No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.</p>
                 {/if}
               {:else if b.type === 'screenshot' && image}
-                <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} />
+                <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />
               {:else if b.type === 'video'}
                 {#if view.video}
                   {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} onshot={paired ? takeShot : undefined} />{/key}

@@ -5,10 +5,12 @@
   import { formatSize } from '../values';
   import TrimStrip from './TrimStrip.svelte';
   import CropBox from './CropBox.svelte';
-  import MarkLayer from './MarkLayer.svelte';
+  import MarkCanvas, { type MarkTool } from './MarkCanvas.svelte';
   import PlayerControls from './PlayerControls.svelte';
+  import StylePicker from '../editor/StylePicker.svelte';
+  import { COLORS, THICKNESS, clearAll, emptyState, redo, undo, type EditorState, type TextStyle, type Thickness } from '../editor/model';
   import { containRect } from './contain';
-  import { drawMark } from './drawMark';
+  import { drawMarks } from './drawMark';
   import { stepRate } from './player';
 
   /**
@@ -56,9 +58,14 @@
   /** The area to keep, in the recording's own pixels. It is live: what the box shows is what is sent. */
   let crop = $state<Box | null>(null);
   let cropBefore: Box | null = null;
-  let markOn = $state(false);
-  let markAt = $state({ x: 0, y: 0 });
-  let markText = $state('');
+  /** The marks drawn over the recording, and the tool, colour and size they are drawn with. */
+  let marks = $state<EditorState>(emptyState());
+  let markTool = $state<MarkTool>('ellipse');
+  let markColor = $state(COLORS[0]!);
+  let markThickness = $state<Thickness>('medium');
+  let markText = $state<TextStyle>({ bold: true, italic: false, box: false });
+  let markCanvas = $state<ReturnType<typeof MarkCanvas>>();
+  const markOn = $derived(marks.annotations.length > 0);
 
   const kept = $derived(Math.max(0, end - start));
   const wholeClip = $derived(start <= 0 && end >= total && crop === null && !markOn);
@@ -81,15 +88,17 @@
   const k = $derived(shown.w > 0 ? shown.w / visible.w : 0);
 
   const even = (n: number) => Math.round(n / 2) * 2;
+  /** Crop as on a screenshot: drag over the picture to draw the part to keep, then apply. */
   function startCrop() {
+    markCanvas?.commitText();
     cropBefore = crop ? { ...crop } : null;
-    if (!crop) {
-      // a box inside the picture, so there is something to see and to drag
-      const w = even(info.width * 0.8);
-      const h = even(info.height * 0.8);
-      crop = { x: even((info.width - w) / 2), y: even((info.height - h) / 2), w, h };
-    }
     mode = 'crop';
+  }
+  /** For the keyboard, or to start from something: a box in the middle, a little smaller than the picture. */
+  function middleBox() {
+    const w = even(info.width * 0.8);
+    const h = even(info.height * 0.8);
+    crop = { x: even((info.width - w) / 2), y: even((info.height - h) / 2), w, h };
   }
   const applyCrop = () => (mode = 'none');
   function cancelCrop() {
@@ -101,25 +110,27 @@
     crop = null;
     if (mode === 'crop') mode = 'none';
   };
-  function startMark() {
-    // starts in the middle of the visible picture, so there is something to see and to move
-    if (!markOn) {
-      markOn = true;
-      const v = crop ?? { x: 0, y: 0, w: info.width, h: info.height };
-      markAt = { x: Math.round(v.x + v.w / 2), y: Math.round(v.y + v.h / 2) };
-    }
-    mode = 'mark';
-  }
-  const doneMark = () => (mode = 'none');
-  function removeMark() {
-    markOn = false;
-    markText = '';
+  const startMark = () => (mode = 'mark');
+  function doneMark() {
+    markCanvas?.commitText();
     mode = 'none';
   }
-  /** The picture of the mark the share uploads, or `null` while there is no mark. */
-  export async function exportMark(): Promise<Blob | null> {
-    return markOn ? drawMark(info.width, info.height, markAt, markText) : null;
+  function removeMarks() {
+    marks = clearAll();
+    if (mode === 'mark') mode = 'none';
   }
+  /** The picture of the marks the share uploads, or `null` while there are none. */
+  export async function exportMark(): Promise<Blob | null> {
+    markCanvas?.commitText();
+    return marks.annotations.length > 0 ? drawMarks(info.width, info.height, marks.annotations) : null;
+  }
+  const MARK_TOOLS: { tool: MarkTool; label: string; path: string }[] = [
+    { tool: 'pen', label: 'Draw', path: 'M4 20l1-4L17 4l3 3L8 19z' },
+    { tool: 'rect', label: 'Square', path: 'M4 5h16v14H4z' },
+    { tool: 'ellipse', label: 'Circle', path: 'M12 5a8 7 0 100 14a8 7 0 100-14' },
+    { tool: 'arrow', label: 'Arrow', path: 'M5 19L19 5M10 5h9v9' },
+    { tool: 'text', label: 'Text', path: 'M5 6V4h14v2M12 4v16M9 20h6' },
+  ];
 
   // The player's own controls are not used, so nothing else changes these.
   $effect(() => {
@@ -196,6 +207,14 @@
     else void stage.requestFullscreen?.()?.catch?.(() => {});
   }
   function onStageKey(e: KeyboardEvent) {
+    // while cropping, Enter applies and Escape puts the crop back as it was
+    if (mode === 'crop' && (e.key === 'Enter' || e.key === 'Escape')) {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Enter' && crop) applyCrop();
+      else if (e.key === 'Escape') cancelCrop();
+      return;
+    }
     // only when the picture itself has focus: the handles and boxes use the arrow keys
     if (e.target !== e.currentTarget || e.ctrlKey || e.metaKey || e.altKey) return;
     const key = e.key.toLowerCase();
@@ -229,8 +248,7 @@
     start = 0;
     end = total;
     crop = null;
-    markOn = false;
-    markText = '';
+    marks = clearAll();
     mode = 'none';
   }
 </script>
@@ -281,8 +299,20 @@
             onpause={() => (playing = false)}
             onerror={() => (cannotPlay = true)}
           ></video>
-          {#if markOn}<MarkLayer width={info.width} height={info.height} bind:at={markAt} text={markText} active={mode === 'mark'} />{/if}
-          {#if mode === 'crop' && crop}<CropBox width={info.width} height={info.height} bind:crop />{/if}
+          {#if markOn || mode === 'mark'}
+            <MarkCanvas
+              bind:this={markCanvas}
+              width={info.width}
+              height={info.height}
+              bind:doc={marks}
+              tool={markTool}
+              bind:color={markColor}
+              thickness={markThickness}
+              bind:textStyle={markText}
+              active={mode === 'mark'}
+            />
+          {/if}
+          {#if mode === 'crop'}<CropBox width={info.width} height={info.height} bind:crop />{/if}
         </div>
         {#if mode !== 'crop'}
           <PlayerControls
@@ -316,21 +346,39 @@
           {crop && mode !== 'crop' ? 'Edit crop' : 'Crop'}
         </button>
         <button type="button" class="small" aria-pressed={mode === 'mark'} onclick={() => (mode === 'mark' ? doneMark() : startMark())}>
-          {markOn && mode !== 'mark' ? 'Edit mark' : 'Mark'}
+          {markOn && mode !== 'mark' ? 'Edit marks' : 'Mark'}
         </button>
         {#if mode === 'crop'}
-          <span class="quiet hint">Drag the box or its corner</span>
-          <button type="button" class="small primary" onclick={applyCrop}>Apply crop</button>
+          <span class="quiet hint">{crop ? 'Drag the box or its corner, or draw a new one' : 'Drag over the picture to choose the part to keep'}</span>
+          {#if !crop}<button type="button" class="small" onclick={middleBox}>Start from the middle</button>{/if}
+          <button type="button" class="small primary" onclick={applyCrop} disabled={!crop}>Apply crop</button>
           <button type="button" class="small" onclick={cancelCrop}>Cancel</button>
         {:else if mode === 'mark'}
-          <input class="marktext" type="text" maxlength="80" placeholder="Text under the mark" aria-label="Text under the mark" bind:value={markText} />
-          <span class="quiet hint">Click the picture to move the ring</span>
+          <span class="tools" role="toolbar" aria-label="Marks on the recording" data-mark-tools>
+            {#each MARK_TOOLS as t (t.tool)}
+              <button type="button" class="tool" aria-label={t.label} title={t.label} aria-pressed={markTool === t.tool} onmousedown={(e) => e.preventDefault()} onclick={() => { markCanvas?.commitText(); markTool = t.tool; }}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={t.path} /></svg>
+              </button>
+            {/each}
+            {#if markTool === 'text'}
+              <button type="button" class="tool letter" aria-label="Bold" title="Bold" aria-pressed={!!markText.bold} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.bold = !markText.bold)}><b>B</b></button>
+              <button type="button" class="tool letter" aria-label="Italic" title="Italic" aria-pressed={!!markText.italic} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.italic = !markText.italic)}><i>I</i></button>
+              <button type="button" class="tool letter" aria-label="On a box" title="On a box: readable on any picture" aria-pressed={!!markText.box} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.box = !markText.box)}>▭</button>
+            {/if}
+            <StylePicker colors={COLORS} thicknesses={THICKNESS} bind:color={markColor} bind:thickness={markThickness} />
+            <button type="button" class="tool" aria-label="Undo" title="Undo" disabled={!markOn} onclick={() => (marks = undo(marks))}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" /></svg>
+            </button>
+            <button type="button" class="tool" aria-label="Redo" title="Redo" disabled={marks.redo.length === 0} onclick={() => (marks = redo(marks))}>
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" /></svg>
+            </button>
+          </span>
+          <span class="quiet hint">{markTool === 'text' ? 'Click to write, click a text to change it' : 'Drag on the picture'}</span>
           <button type="button" class="small primary" onclick={doneMark}>Done</button>
-          <button type="button" class="small" onclick={removeMark}>Remove mark</button>
+          {#if markOn}<button type="button" class="small" onclick={removeMarks}>Remove marks</button>{/if}
         {:else}
           {#if crop}<button type="button" class="small" onclick={resetCrop}>Reset to full capture</button>{/if}
-          {#if markOn}<button type="button" class="small" onclick={removeMark}>Remove mark</button>{/if}
-          {#if markOn && markText}<span class="quiet hint selectable">“{markText}”</span>{/if}
+          {#if markOn}<button type="button" class="small" onclick={removeMarks}>Remove marks</button>{/if}
         {/if}
         {#if onshot}
           <button type="button" class="small" onclick={takeShot} disabled={!url || cannotPlay}>Take screenshot</button>
@@ -366,5 +414,9 @@
   .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .small { padding: 2px 8px; font-size: 12px; }
   .small[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
-  .marktext { font-size: 12px; padding: 2px 6px; width: 170px; }
+  .tools { display: inline-flex; flex-wrap: wrap; gap: 2px; align-items: center; }
+  .tool { width: 26px; height: 26px; padding: 0; display: inline-grid; place-items: center; font-size: 13px; }
+  .tool svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tool[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .tool.letter { font-family: Georgia, serif; }
 </style>

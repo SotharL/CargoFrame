@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import VideoBlock from './VideoBlock.svelte';
 import Harness from './VideoBlock.harness.svelte';
 import type { ClipEdit } from '../../lib/types';
@@ -132,9 +132,13 @@ describe('VideoBlock', () => {
     });
 
     describe('crop', () => {
-      it('starts from a box inside the picture that is already what is sent, and Apply keeps it', async () => {
+      it('waits for a box to be drawn, then what it shows is what is sent, and Apply keeps it', async () => {
         const { last } = await ready();
         await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+        // nothing chosen yet: nothing to apply
+        expect((screen.getByRole('button', { name: 'Apply crop' }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.getByText('Drag over the picture to choose the part to keep')).toBeTruthy();
+        await fireEvent.click(screen.getByRole('button', { name: 'Start from the middle' }));
         expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: { x: 128, y: 72, w: 1024, h: 576 }, mark: false });
         expect(screen.getByText('Keeping all 9.5 s, cropped to 1024×576')).toBeTruthy();
         await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
@@ -146,9 +150,11 @@ describe('VideoBlock', () => {
       it('Cancel puts back what was there before, and Reset goes back to the full capture', async () => {
         const { last } = await ready();
         await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Start from the middle' }));
         await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
         expect(last()).toBeNull();
         await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Start from the middle' }));
         await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
         // change it, then cancel: the applied box stays
         await fireEvent.click(screen.getByRole('button', { name: 'Edit crop' }));
@@ -164,6 +170,7 @@ describe('VideoBlock', () => {
       it('moves and resizes the crop box from the keyboard, in even numbers inside the picture', async () => {
         const { last } = await ready();
         await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Start from the middle' }));
         const box = screen.getByRole('group', { name: /Crop area/ });
         await fireEvent.keyDown(box, { key: 'ArrowLeft', shiftKey: true });
         expect(last()?.crop).toEqual({ x: 78, y: 72, w: 1024, h: 576 });
@@ -193,6 +200,16 @@ describe('VideoBlock', () => {
           await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
           // while the box is set the whole picture is shown
           expect(px(frame(), 'width')).toBeCloseTo(400, 1);
+          // drawn with the mouse: from (100, 100) to (300, 200) of the 400 x 225 picture, 87.5 px down
+          const layer = document.querySelector('.layer') as HTMLElement;
+          layer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 400, height: 400, right: 400, bottom: 400, x: 0, y: 0, toJSON() {} });
+          await fireEvent.mouseDown(layer, { button: 0, clientX: 100, clientY: 87.5 + 50 });
+          await fireEvent.mouseMove(window, { clientX: 300, clientY: 87.5 + 150 });
+          await fireEvent.mouseUp(window);
+          expect(screen.getByText(/cropped to 640×320/)).toBeTruthy();
+          await fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+          await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+          await fireEvent.click(screen.getByRole('button', { name: 'Start from the middle' }));
           const box = screen.getByRole('group', { name: /Crop area/ });
           await fireEvent.keyDown(box, { key: 'ArrowUp', altKey: true, shiftKey: true });
           await fireEvent.keyDown(box, { key: 'ArrowUp', altKey: true, shiftKey: true });
@@ -213,185 +230,64 @@ describe('VideoBlock', () => {
       });
     });
 
-    describe('mark', () => {
-      it('puts a mark in the middle of the picture, with a text, and takes it away again', async () => {
+    describe('marks', () => {
+      /** The marks' canvas laid over the whole 1280 x 720 recording, one CSS pixel per pixel. */
+      function canvasAt() {
+        const c = screen.getByLabelText(/^Picture to mark/) as HTMLCanvasElement;
+        c.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 720, right: 1280, bottom: 720, x: 0, y: 0, toJSON() {} });
+        return c;
+      }
+      async function drag(c: HTMLElement, from: [number, number], to: [number, number]) {
+        await fireEvent.pointerDown(c, { button: 0, clientX: from[0], clientY: from[1], pointerId: 1 });
+        await fireEvent.pointerMove(c, { clientX: to[0], clientY: to[1], pointerId: 1 });
+        await fireEvent.pointerUp(c, { clientX: to[0], clientY: to[1], pointerId: 1 });
+      }
+
+      it('draws circles, arrows and the rest with the chosen tool, and takes them away again', async () => {
         const { last } = await ready();
         await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
+        const bar = screen.getByRole('toolbar', { name: 'Marks on the recording' });
+        for (const name of ['Draw', 'Square', 'Circle', 'Arrow', 'Text', 'Colour and thickness', 'Undo', 'Redo']) {
+          expect(within(bar).getByRole('button', { name })).toBeTruthy();
+        }
+        // nothing drawn yet: nothing changes what is sent
+        expect(last()).toBeNull();
+        await drag(canvasAt(), [500, 300], [700, 420]);
         expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: null, mark: true });
-        expect(screen.getByRole('group', { name: 'Mark at 640,360. Click the picture or use the arrow keys to move it.' })).toBeTruthy();
         expect(screen.getByText('Keeping all 9.5 s, marked')).toBeTruthy();
-        await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'Look here' } });
-        expect(screen.getByText('Look here')).toBeTruthy();
-        await fireEvent.click(screen.getByRole('button', { name: 'Remove mark' }));
+        await fireEvent.click(within(bar).getByRole('button', { name: 'Arrow' }));
+        await drag(canvasAt(), [100, 100], [400, 300]);
+        expect(screen.getByLabelText('Picture to mark, 2 marks')).toBeTruthy();
+        await fireEvent.click(within(bar).getByRole('button', { name: 'Undo' }));
+        expect(screen.getByLabelText('Picture to mark, 1 mark')).toBeTruthy();
+        await fireEvent.click(screen.getByRole('button', { name: 'Remove marks' }));
         expect(last()).toBeNull();
-        expect(screen.queryByLabelText('Text under the mark')).toBeNull();
       });
 
-      it('is placed in the middle of the cropped part when there is one', async () => {
-        await ready();
-        await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
-        await fireEvent.keyDown(screen.getByRole('group', { name: /Crop area/ }), { key: 'ArrowLeft', shiftKey: true });
-        await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
-        await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
-        // the crop is 78..1102 across and 72..648 down: its middle is 590,360
-        expect(screen.getByRole('group', { name: /^Mark at 590,360/ })).toBeTruthy();
-      });
-
-      it('Done keeps the mark, and Edit mark gets it back', async () => {
+      it('writes a text where it is clicked, and Done keeps the marks for Edit marks', async () => {
         const { last } = await ready();
         await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
-        await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'x' } });
-        await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Text' }));
+        await fireEvent.pointerDown(canvasAt(), { button: 0, clientX: 200, clientY: 200, pointerId: 1 });
+        const box = await screen.findByRole('textbox', { name: 'Text to add on the recording' });
+        await fireEvent.input(box, { target: { value: 'Look here' } });
+        await fireEvent.keyDown(box, { key: 'Enter' });
         expect(last()?.mark).toBe(true);
-        expect(screen.queryByLabelText('Text under the mark')).toBeNull();
-        await fireEvent.click(screen.getByRole('button', { name: 'Edit mark' }));
-        expect((screen.getByLabelText('Text under the mark') as HTMLInputElement).value).toBe('x');
+        await fireEvent.click(screen.getByRole('button', { name: 'Done' }));
+        expect(screen.queryByRole('toolbar', { name: 'Marks on the recording' })).toBeNull();
+        await fireEvent.click(screen.getByRole('button', { name: 'Edit marks' }));
+        expect(screen.getByLabelText('Picture to mark, 1 mark')).toBeTruthy();
       });
     });
 
-    describe('crop and mark take turns', () => {
-      it('the mark cannot be moved while the crop box has the mouse, and the box is gone while the mark has it', async () => {
+    describe('crop and marks take turns', () => {
+      it('the marks are not drawn on while the crop box has the mouse', async () => {
         await ready();
         await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
-        const ring = () => screen.getByRole('group', { name: /^Mark at/ });
-        expect(ring().getAttribute('tabindex')).toBe('0');
-        // starting a crop hands the mouse to the box: the ring stays in view but is not touchable
         await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
+        expect(screen.queryByRole('toolbar', { name: 'Marks on the recording' })).toBeNull();
+        await fireEvent.click(screen.getByRole('button', { name: 'Start from the middle' }));
         expect(screen.getByRole('group', { name: /Crop area/ })).toBeTruthy();
-        expect(ring().getAttribute('tabindex')).toBe('-1');
-        expect(document.querySelector('.layer.idle')).not.toBeNull();
-        expect(screen.queryByLabelText('Text under the mark')).toBeNull();
-        await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
-        // and back: the box goes, the ring can be moved again, in the cropped picture
-        await fireEvent.click(screen.getByRole('button', { name: 'Edit mark' }));
-        expect(screen.queryByRole('group', { name: /Crop area/ })).toBeNull();
-        expect(ring().getAttribute('tabindex')).toBe('0');
-      });
-
-      it('starting the mark while the box is open ends the crop mode and keeps the box', async () => {
-        const { last } = await ready();
-        await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
-        await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
-        // starting the mark ended the crop mode with the box kept
-        expect(screen.queryByRole('group', { name: /Crop area/ })).toBeNull();
-        expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: { x: 128, y: 72, w: 1024, h: 576 }, mark: true });
-      });
-
-      it('resets both with one button', async () => {
-        const { last } = await ready();
-        await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
-        await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
-        await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
-        await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'x' } });
-        await fireEvent.click(screen.getByRole('button', { name: 'Reset edits' }));
-        expect(last()).toBeNull();
-        expect(screen.getByRole('button', { name: 'Crop' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Mark' })).toBeTruthy();
-      });
-    });
-
-    describe('playback buttons', () => {
-      const button = (name: string) => screen.getByRole('button', { name });
-
-      it('lie over the picture, with the signs people know', async () => {
-        await ready();
-        const bar = screen.getByRole('toolbar', { name: 'Playback' });
-        expect(bar.closest('.picture')).not.toBeNull();
-        for (const name of ['Play', 'Stop', 'Slower', 'Faster', 'Mute', 'Full screen']) expect(button(name)).toBeTruthy();
-        expect(screen.getByLabelText('Volume')).toBeTruthy();
-      });
-
-      it('play and pause, from the button, a click on the picture and the space bar', async () => {
-        const { video } = await ready();
-        video.play = vi.fn().mockResolvedValue(undefined);
-        video.pause = vi.fn();
-        Object.defineProperty(video, 'paused', { value: true, configurable: true });
-        await fireEvent.click(button('Play'));
-        expect(video.play).toHaveBeenCalledTimes(1);
-        await fireEvent.click(video);
-        expect(video.play).toHaveBeenCalledTimes(2);
-        await fireEvent.keyDown(screen.getByRole('group', { name: 'Recording player' }), { key: ' ' });
-        expect(video.play).toHaveBeenCalledTimes(3);
-        await fireEvent.play(video);
-        expect(button('Pause')).toBeTruthy();
-        Object.defineProperty(video, 'paused', { value: false, configurable: true });
-        await fireEvent.click(button('Pause'));
-        expect(video.pause).toHaveBeenCalled();
-      });
-
-      it('stop pauses and goes back to the start of the part that is kept', async () => {
-        const { video } = await ready();
-        video.pause = vi.fn();
-        await fireEvent.keyDown(startHandle(), { key: 'ArrowRight', shiftKey: true });
-        await playingAt(video, 5, false);
-        await fireEvent.click(button('Stop'));
-        expect(video.pause).toHaveBeenCalled();
-        expect(video.currentTime).toBe(1);
-      });
-
-      it('slower and faster step through the speeds and stop at the ends', async () => {
-        const { video } = await ready();
-        expect(screen.getByText('1×')).toBeTruthy();
-        await fireEvent.click(button('Faster'));
-        expect(video.playbackRate).toBe(1.5);
-        await fireEvent.click(button('Faster'));
-        expect(video.playbackRate).toBe(2);
-        expect((button('Faster') as HTMLButtonElement).disabled).toBe(true);
-        for (let i = 0; i < 4; i++) await fireEvent.click(button('Slower'));
-        expect(video.playbackRate).toBe(0.25);
-        expect((button('Slower') as HTMLButtonElement).disabled).toBe(true);
-        expect(screen.getByText('0.25×')).toBeTruthy();
-      });
-
-      it('mute and the volume go to the player, and unmuting never leaves it silent', async () => {
-        const { video } = await ready();
-        await fireEvent.click(button('Mute'));
-        expect(video.muted).toBe(true);
-        expect(button('Unmute')).toBeTruthy();
-        await fireEvent.click(button('Unmute'));
-        expect(video.muted).toBe(false);
-        await fireEvent.input(screen.getByLabelText('Volume'), { target: { value: '0' } });
-        expect(video.muted).toBe(true);
-        await fireEvent.click(button('Unmute'));
-        expect(video.muted).toBe(false);
-        expect(video.volume).toBe(0.5);
-      });
-
-      it('leave out the volume for a recording without sound, and say so', async () => {
-        setApiForTests(memoryApi());
-        render(Harness, { info: { ...info, audio: false }, onedit: () => {} });
-        await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
-        expect(screen.queryByRole('button', { name: 'Mute' })).toBeNull();
-        expect(screen.queryByLabelText('Volume')).toBeNull();
-        expect(screen.getByText('No sound')).toBeTruthy();
-        // the other buttons stay
-        expect(button('Play')).toBeTruthy();
-        expect(button('Full screen')).toBeTruthy();
-      });
-
-      it('go full screen with the picture and its buttons, and come back', async () => {
-        await ready();
-        const stage = screen.getByRole('group', { name: 'Recording player' }) as HTMLElement;
-        const request = vi.fn().mockResolvedValue(undefined);
-        stage.requestFullscreen = request;
-        await fireEvent.click(button('Full screen'));
-        expect(request).toHaveBeenCalledTimes(1);
-        Object.defineProperty(document, 'fullscreenElement', { value: stage, configurable: true });
-        const exit = vi.fn().mockResolvedValue(undefined);
-        document.exitFullscreen = exit;
-        document.dispatchEvent(new Event('fullscreenchange'));
-        expect(await screen.findByRole('button', { name: 'Leave full screen' })).toBeTruthy();
-        await fireEvent.click(screen.getByRole('button', { name: 'Leave full screen' }));
-        expect(exit).toHaveBeenCalled();
-        Object.defineProperty(document, 'fullscreenElement', { value: null, configurable: true });
-      });
-
-      it('give way to the crop box while it is being set, and come back after', async () => {
-        await ready();
-        await fireEvent.click(screen.getByRole('button', { name: 'Crop' }));
-        expect(screen.queryByRole('toolbar', { name: 'Playback' })).toBeNull();
-        await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
-        expect(screen.getByRole('toolbar', { name: 'Playback' })).toBeTruthy();
       });
 
       it('show where the picture is in the recording', async () => {
@@ -404,17 +300,24 @@ describe('VideoBlock', () => {
 });
 
 describe('VideoBlock mark picture', () => {
-  it('draws the mark the size of the recording, where it is and with its text, and nothing without a mark', async () => {
-    const draw = vi.spyOn(await import('./drawMark'), 'drawMark').mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
+  it('draws the marks the size of the recording, and nothing without a mark', async () => {
+    const draw = vi.spyOn(await import('./drawMark'), 'drawMarks').mockResolvedValue(new Blob(['png'], { type: 'image/png' }));
     setApiForTests(memoryApi());
     const { component } = render(VideoBlock, { info });
     await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
-    expect(await (component as unknown as { exportMark: () => Promise<Blob | null> }).exportMark()).toBeNull();
+    const exportMark = () => (component as unknown as { exportMark: () => Promise<Blob | null> }).exportMark();
+    expect(await exportMark()).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Mark' }));
-    await fireEvent.input(screen.getByLabelText('Text under the mark'), { target: { value: 'Here' } });
-    const blob = await (component as unknown as { exportMark: () => Promise<Blob | null> }).exportMark();
+    const c = screen.getByLabelText(/^Picture to mark/) as HTMLCanvasElement;
+    c.getBoundingClientRect = () => ({ left: 0, top: 0, width: 1280, height: 720, right: 1280, bottom: 720, x: 0, y: 0, toJSON() {} });
+    await fireEvent.pointerDown(c, { button: 0, clientX: 600, clientY: 300, pointerId: 1 });
+    await fireEvent.pointerMove(c, { clientX: 700, clientY: 400, pointerId: 1 });
+    await fireEvent.pointerUp(c, { clientX: 700, clientY: 400, pointerId: 1 });
+    const blob = await exportMark();
     expect(blob?.type).toBe('image/png');
-    expect(draw).toHaveBeenCalledWith(1280, 720, { x: 640, y: 360 }, 'Here');
+    const [w, h, marks] = draw.mock.calls[0]!;
+    expect([w, h]).toEqual([1280, 720]);
+    expect(marks[0]).toMatchObject({ kind: 'ellipse', a: { x: 600, y: 300 }, b: { x: 700, y: 400 } });
     draw.mockRestore();
   });
   describe('Take screenshot', () => {

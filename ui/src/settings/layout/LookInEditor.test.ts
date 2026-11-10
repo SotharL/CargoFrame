@@ -59,8 +59,8 @@ describe('LookInEditor', () => {
   it('keeps the subfolder the person types', async () => {
     const b = block(['program']);
     render(LookInEditor, { block: b });
-    await fireEvent.input(screen.getByPlaceholderText('logs'), { target: { value: 'logs' } });
-    expect(b.look_in).toEqual({ folders: ['program'], subfolder: 'logs' });
+    await fireEvent.input(screen.getByPlaceholderText('logs, crash'), { target: { value: 'logs, crash' } });
+    expect(b.look_in).toEqual({ folders: ['program'], subfolder: 'logs, crash' });
   });
 
   it('shows a live count, per folder, for the program of the last capture', async () => {

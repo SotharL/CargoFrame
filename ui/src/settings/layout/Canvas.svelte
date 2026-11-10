@@ -4,19 +4,22 @@
   import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
   import { lineFor, type Line } from './reach';
   import {
-    BLOCK_TYPES, COLUMNS, MAX_SHARING_BUTTONS, canPlace, makeBlock, moveTo, removeBlock, resizeTo, rowsNeeded, typeLabel,
-    type BlockType,
+    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, canPlace, makeBlock, moveTo, removeBlock, resizeTo,
+    rowsNeeded, typeLabel, usedColumns, type BlockType,
   } from './model';
 
   let {
     blocks = $bindable(),
     selected = $bindable(null),
+    columns = $bindable(),
     issues = [],
     reach = {},
     connections = [],
   }: {
     blocks: Block[];
     selected: string | null;
+    /** Columns in the grid: more make room on the side, for a wider window. */
+    columns?: number;
     issues?: IssueView[];
     /** What each sharing button sends, by button id. */
     reach?: Record<string, Reach>;
@@ -24,6 +27,10 @@
   } = $props();
 
   const ROW = 40;
+  const cols = $derived(Math.min(MAX_COLUMNS, Math.max(MIN_COLUMNS, columns ?? COLUMNS)));
+  /** A column can go only while no block is in the last one. */
+  const canNarrow = $derived(cols > MIN_COLUMNS && usedColumns(blocks) < cols);
+  const canWiden = $derived(cols < MAX_COLUMNS);
   const GAP = 8;
 
   let grid = $state<HTMLDivElement>();
@@ -39,13 +46,13 @@
 
   function pitch() {
     const box = grid!.getBoundingClientRect();
-    const cellW = (box.width - GAP * (COLUMNS - 1)) / COLUMNS;
+    const cellW = (box.width - GAP * (cols - 1)) / cols;
     return { box, x: cellW + GAP, y: ROW + GAP, cellW };
   }
 
   function clampRect(r: Rect): Rect {
-    const w = Math.min(Math.max(1, r.w), COLUMNS);
-    return { x: Math.min(Math.max(0, r.x), COLUMNS - w), y: Math.max(0, r.y), w, h: Math.max(1, r.h) };
+    const w = Math.min(Math.max(1, r.w), cols);
+    return { x: Math.min(Math.max(0, r.x), cols - w), y: Math.max(0, r.y), w, h: Math.max(1, r.h) };
   }
 
   function begin(e: PointerEvent, id: string, kind: 'move' | 'resize') {
@@ -98,7 +105,7 @@
       const x = Math.floor((e.clientX - p.box.left) / p.x);
       const y = Math.floor((e.clientY - p.box.top) / p.y);
       const rect = clampRect({ x, y, w, h });
-      preview = { rect, valid: canPlace(blocks, rect) };
+      preview = { rect, valid: canPlace(blocks, rect, undefined, cols) };
       return;
     }
     const dx = Math.round((e.clientX - drag.startX) / p.x);
@@ -106,8 +113,8 @@
     const o = drag.origin;
     const rect = drag.kind === 'move'
       ? clampRect({ ...o, x: o.x + dx, y: o.y + dy })
-      : clampRect({ ...o, w: Math.min(o.w + dx, COLUMNS - o.x), h: o.h + dy });
-    preview = { rect, valid: canPlace(blocks, rect, drag.id) };
+      : clampRect({ ...o, w: Math.min(o.w + dx, cols - o.x), h: o.h + dy });
+    preview = { rect, valid: canPlace(blocks, rect, drag.id, cols) };
   }
 
   function onUp() {
@@ -120,7 +127,7 @@
         // A click: put it in the first free spot.
         addAt(d.type);
       } else if (pv?.valid) {
-        const b = makeBlock(blocks, d.type, { x: pv.rect.x, y: pv.rect.y });
+        const b = makeBlock(blocks, d.type, { x: pv.rect.x, y: pv.rect.y }, cols);
         if (b) {
           blocks = [...blocks, b];
           selected = b.id;
@@ -129,7 +136,7 @@
       return;
     }
     if (pv?.valid) {
-      const next = d.kind === 'move' ? moveTo(blocks, d.id, pv.rect.x, pv.rect.y) : resizeTo(blocks, d.id, pv.rect.w, pv.rect.h);
+      const next = d.kind === 'move' ? moveTo(blocks, d.id, pv.rect.x, pv.rect.y, cols) : resizeTo(blocks, d.id, pv.rect.w, pv.rect.h, cols);
       if (next) blocks = next;
     }
   }
@@ -144,7 +151,7 @@
   }
 
   export function addAt(type: BlockType) {
-    const b = makeBlock(blocks, type);
+    const b = makeBlock(blocks, type, undefined, cols);
     if (b) {
       blocks = [...blocks, b];
       selected = b.id;
@@ -159,8 +166,8 @@
     if (step) {
       e.preventDefault();
       const next = e.shiftKey
-        ? resizeTo(blocks, b.id, b.rect.w + step[0], b.rect.h + step[1])
-        : moveTo(blocks, b.id, b.rect.x + step[0], b.rect.y + step[1]);
+        ? resizeTo(blocks, b.id, b.rect.w + step[0], b.rect.h + step[1], cols)
+        : moveTo(blocks, b.id, b.rect.x + step[0], b.rect.y + step[1], cols);
       if (next) blocks = next;
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
@@ -205,7 +212,8 @@
   const tag = (l: Line) => (l.state === 'cannot_send' ? '✕ Cannot send' : l.state === 'sent' ? '✓ Sent' : l.state === 'switched_off' ? '– Left out' : '– Not used');
 
   const gridStyle = $derived(
-    `grid-template-columns:repeat(${COLUMNS},minmax(0,1fr));grid-template-rows:repeat(${rows},${ROW}px);gap:${GAP}px;`,
+    `grid-template-columns:repeat(${cols},minmax(0,1fr));grid-template-rows:repeat(${rows},${ROW}px);gap:${GAP}px;` +
+      `min-width:${Math.round((560 * cols) / COLUMNS)}px;background-size:calc((100% + ${GAP}px) / ${cols}) ${ROW + GAP}px;`,
   );
   const cell = (r: Rect) => `grid-column:${r.x + 1} / span ${r.w};grid-row:${r.y + 1} / span ${r.h};`;
   const ghostType = $derived.by(() => {
@@ -229,6 +237,26 @@
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addAt(t.type); } }}
       >＋ {t.label}</button>
     {/each}
+    <span class="cols" role="group" aria-label="Columns">
+      <span class="quiet">Columns:</span>
+      <button
+        type="button"
+        class="step"
+        disabled={!canNarrow}
+        aria-label="Remove the last column"
+        title={canNarrow ? 'Remove the last column' : cols <= MIN_COLUMNS ? `A layout has at least ${MIN_COLUMNS} columns` : 'Move the blocks out of the last column first'}
+        onclick={() => (columns = cols - 1 === COLUMNS ? undefined : cols - 1)}
+      >−</button>
+      <span class="count-cols" aria-live="polite">{cols}</span>
+      <button
+        type="button"
+        class="step"
+        disabled={!canWiden}
+        aria-label="Add a column on the side"
+        title={canWiden ? 'Add a column on the right side: the window opens wider' : `A layout has at most ${MAX_COLUMNS} columns`}
+        onclick={() => (columns = cols + 1)}
+      >＋</button>
+    </span>
   </div>
 
   <div class="scroll">
@@ -288,14 +316,16 @@
   .canvas { display: grid; gap: 8px; min-width: 0; }
   .palette { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .chip { padding: 3px 10px; border-radius: 999px; font-size: 13px; touch-action: none; }
+  .cols { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }
+  .cols .step { width: 24px; height: 24px; padding: 0; display: inline-grid; place-items: center; }
+  .count-cols { min-width: 2ch; text-align: center; font-variant-numeric: tabular-nums; font-weight: 600; }
   .scroll { overflow: auto; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); padding: 10px; }
   .grid {
-    display: grid; position: relative; min-width: 560px;
+    display: grid; position: relative;
     /* Faint cell guides, so it is clear where blocks can go. */
     background-image:
       linear-gradient(to right, color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1px),
       linear-gradient(to bottom, color-mix(in srgb, var(--text) 6%, transparent) 1px, transparent 1px);
-    background-size: calc((100% + 8px) / 12) 48px;
     user-select: none;
   }
   .grid.dragging { cursor: grabbing; }

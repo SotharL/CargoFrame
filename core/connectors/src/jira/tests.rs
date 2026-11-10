@@ -581,3 +581,34 @@ fn the_description_is_written_in_jiras_own_markup() {
         "**not** formatted"
     );
 }
+
+#[test]
+fn the_recording_and_the_screenshot_show_in_a_table_of_the_description() {
+    let mut p = payload();
+    // a recording, with a frame of it as the screenshot
+    p.still = p.image.take();
+    p.image = Some(Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0],
+    });
+    p.fields.push(Field::text(
+        "description",
+        "| Repro | Highlight |\n| --- | --- |\n| {{capture.recording}} | {{capture.screenshot}} |",
+    ));
+    let fields = build_fields(&p, true).unwrap();
+    assert_eq!(
+        fields["description"],
+        "||Repro||Highlight||\n|!recording.mp4!|!screenshot.png!|"
+    );
+    // a screenshot capture has no recording: its place stays empty
+    let mut p = payload();
+    p.fields.push(Field::text(
+        "description",
+        "See {{capture.screenshot}} and {{capture.recording}}.",
+    ));
+    assert_eq!(
+        build_fields(&p, true).unwrap()["description"],
+        "See !screenshot.png|thumbnail! and ."
+    );
+}

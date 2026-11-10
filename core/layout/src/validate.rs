@@ -17,7 +17,6 @@ use crate::model::{
     Block, BlockKind, DropdownBlock, DropdownSource, Layout, SharingButton, TextRole, ValueSource,
 };
 use crate::reach::{reach, Verdict};
-use crate::GRID_COLUMNS;
 use cargoframe_context::template;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -55,6 +54,8 @@ pub enum Code {
     CannotSend,
     /// More than [`MAX_SHARING_BUTTONS`] sharing buttons: the window has room for five boxes.
     TooManySharingButtons,
+    /// A grid with fewer than [`crate::MIN_COLUMNS`] or more than [`crate::MAX_COLUMNS`] columns.
+    BadColumns,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -323,12 +324,12 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
             }
             BlockKind::Files(f) => {
                 check_variables(block, &f.title, reg, &mut out);
-                if f.look_in.clean_subfolder().is_err() {
+                if f.look_in.clean_subfolders().is_err() {
                     out.push(issue(
                         block,
                         Severity::Warning,
                         Code::BadSubfolder,
-                        "The subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
+                        "Each subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
                     ));
                 }
             }
@@ -543,6 +544,19 @@ fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry)
 }
 
 fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
+    if !(crate::MIN_COLUMNS..=crate::MAX_COLUMNS).contains(&layout.columns) {
+        out.push(Issue {
+            block_id: None,
+            severity: Severity::Warning,
+            code: Code::BadColumns,
+            message: format!(
+                "A grid has {} to {} columns: {} is used",
+                crate::MIN_COLUMNS,
+                crate::MAX_COLUMNS,
+                layout.grid_columns()
+            ),
+        });
+    }
     for (i, block) in layout.blocks.iter().enumerate() {
         if layout.blocks[..i].iter().any(|b| b.id == block.id) {
             out.push(issue(
@@ -559,7 +573,7 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
                 Code::EmptySize,
                 "Block has no size",
             ));
-        } else if block.rect.right() > GRID_COLUMNS {
+        } else if block.rect.right() > layout.grid_columns() {
             out.push(issue(
                 block,
                 Severity::Error,
@@ -662,6 +676,7 @@ mod tests {
     fn layout(blocks: Vec<Block>) -> Layout {
         Layout {
             accepts_input: false,
+            columns: crate::GRID_COLUMNS,
             id: "l".into(),
             name: "L".into(),
             blocks,
@@ -1090,6 +1105,36 @@ mod tests {
         assert!(c.contains(&Code::Overlap));
         assert!(c.contains(&Code::OutOfBounds));
         assert!(c.contains(&Code::EmptySize));
+    }
+
+    #[test]
+    fn a_wider_grid_has_room_on_the_side_and_its_column_count_is_checked() {
+        let mut wide = at("wide", 0, BlockKind::Screenshot);
+        wide.rect = Rect::new(12, 0, 4, 1);
+        let mut l = layout(vec![wide]);
+        assert!(codes(&validate(&l, &Reg::default())).contains(&Code::OutOfBounds));
+        l.columns = 16;
+        let c = codes(&validate(&l, &Reg::default()));
+        assert!(!c.contains(&Code::OutOfBounds), "{c:?}");
+        assert!(!c.contains(&Code::BadColumns));
+        assert!(l.can_place(&Rect::new(14, 1, 2, 1), None));
+        l.columns = 40;
+        assert!(codes(&validate(&l, &Reg::default())).contains(&Code::BadColumns));
+        assert_eq!(l.grid_columns(), crate::MAX_COLUMNS);
+    }
+
+    #[test]
+    fn the_column_count_is_written_only_when_it_is_not_twelve() {
+        let mut l = layout(vec![]);
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(!json.contains("columns"), "{json}");
+        l.columns = 18;
+        let json = serde_json::to_string(&l).unwrap();
+        assert!(json.contains("\"columns\":18"), "{json}");
+        let back: Layout = serde_json::from_str(&json).unwrap();
+        assert_eq!(back.columns, 18);
+        let old: Layout = serde_json::from_str("{\"blocks\":[]}").unwrap();
+        assert_eq!(old.columns, 12);
     }
 
     fn files_block() -> BlockKind {

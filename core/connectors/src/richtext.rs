@@ -253,10 +253,258 @@ fn classify(line: &str) -> (Kind, &str) {
     (Kind::Plain, line)
 }
 
+/// A part of the text: a line, a fenced code block, or a table.
+enum Part<'a> {
+    Line(&'a str),
+    Code {
+        lang: &'a str,
+        lines: Vec<&'a str>,
+    },
+    Table {
+        head: Vec<String>,
+        rows: Vec<Vec<String>>,
+    },
+}
+
+/// The cells of a table line `| a | b |` (a `\|` stays a bar inside a cell).
+fn cells(line: &str) -> Vec<String> {
+    let t = line.trim();
+    let t = t.strip_prefix('|').unwrap_or(t);
+    let t = t.strip_suffix('|').unwrap_or(t);
+    let mut out = vec![String::new()];
+    let mut chars = t.chars().peekable();
+    while let Some(c) = chars.next() {
+        match c {
+            '\\' if chars.peek() == Some(&'|') => {
+                out.last_mut().unwrap().push('|');
+                chars.next();
+            }
+            '|' => out.push(String::new()),
+            c => out.last_mut().unwrap().push(c),
+        }
+    }
+    out.into_iter().map(|c| c.trim().to_string()).collect()
+}
+
+/// `| --- | :---: |`: the line under a table's head.
+fn is_rule(line: &str) -> bool {
+    let t = line.trim();
+    t.starts_with('|') && t.contains('-') && t.chars().all(|c| matches!(c, '|' | '-' | ':' | ' '))
+}
+
+/// The text cut into lines, code blocks and tables.
+fn parts(text: &str) -> Vec<Part<'_>> {
+    let lines: Vec<&str> = text.trim_end().lines().collect();
+    let mut out = Vec::new();
+    let mut i = 0;
+    while i < lines.len() {
+        let line = lines[i];
+        let t = line.trim_start();
+        if let Some(lang) = t.strip_prefix("```") {
+            // to the closing fence, or to the end when there is none
+            let close = lines[i + 1..]
+                .iter()
+                .position(|l| l.trim_start().starts_with("```"))
+                .map(|p| i + 1 + p);
+            let end = close.unwrap_or(lines.len());
+            out.push(Part::Code {
+                lang: lang.trim(),
+                lines: lines[i + 1..end].to_vec(),
+            });
+            i = close.map_or(end, |c| c + 1);
+            continue;
+        }
+        if t.starts_with('|') && lines.get(i + 1).is_some_and(|l| is_rule(l)) {
+            let head = cells(line);
+            let mut rows = Vec::new();
+            let mut j = i + 2;
+            while j < lines.len() && lines[j].trim_start().starts_with('|') {
+                let mut row = cells(lines[j]);
+                row.resize(head.len(), String::new());
+                rows.push(row);
+                j += 1;
+            }
+            out.push(Part::Table { head, rows });
+            i = j;
+            continue;
+        }
+        out.push(Part::Line(line));
+        i += 1;
+    }
+    out
+}
+
+/// A table written for `style`. Where the service has no tables (Slack, Discord) it is a code
+/// block with its columns lined up; in plain text, one line per row.
+fn table(head: &[String], rows: &[Vec<String>], style: Style) -> Vec<String> {
+    let cell = |c: &str| inline(&spans(c), style);
+    let plain = |c: &str| inline(&spans(c), Style::Plain);
+    match style {
+        Style::Jira => {
+            let mut out = vec![format!(
+                "||{}||",
+                head.iter().map(|h| cell(h)).collect::<Vec<_>>().join("||")
+            )];
+            out.extend(rows.iter().map(|r| {
+                // an empty cell is a space, or Jira joins it to the next
+                let r: Vec<String> = r
+                    .iter()
+                    .map(|c| if c.is_empty() { " ".into() } else { cell(c) })
+                    .collect();
+                format!("|{}|", r.join("|"))
+            }));
+            out
+        }
+        Style::Html => {
+            let th: String = head
+                .iter()
+                .map(|h| format!("<th>{}</th>", cell(h)))
+                .collect();
+            let trs: String = rows
+                .iter()
+                .map(|r| {
+                    format!(
+                        "<tr>{}</tr>",
+                        r.iter()
+                            .map(|c| format!("<td>{}</td>", cell(c)))
+                            .collect::<String>()
+                    )
+                })
+                .collect();
+            vec![format!("<table><tr>{th}</tr>{trs}</table>")]
+        }
+        Style::Github | Style::Reddit => {
+            let line = |r: &[String]| {
+                format!(
+                    "| {} |",
+                    r.iter()
+                        .map(|c| cell(c).replace('|', "\\|"))
+                        .collect::<Vec<_>>()
+                        .join(" | ")
+                )
+            };
+            let mut out = vec![
+                line(head),
+                format!("|{}|", vec![" --- "; head.len()].join("|")),
+            ];
+            out.extend(rows.iter().map(|r| line(r)));
+            out
+        }
+        Style::Slack | Style::Discord => {
+            let all: Vec<Vec<String>> = std::iter::once(head.to_vec())
+                .chain(rows.iter().cloned())
+                .map(|r| r.iter().map(|c| plain(c)).collect())
+                .collect();
+            let widths: Vec<usize> = (0..head.len())
+                .map(|k| {
+                    all.iter()
+                        .map(|r| r.get(k).map_or(0, |c| c.chars().count()))
+                        .max()
+                        .unwrap_or(0)
+                })
+                .collect();
+            let line = |r: &Vec<String>| {
+                r.iter()
+                    .enumerate()
+                    .map(|(k, c)| format!("{c:<w$}", w = widths[k]))
+                    .collect::<Vec<_>>()
+                    .join(" | ")
+                    .trim_end()
+                    .to_string()
+            };
+            let mut out = vec!["```".to_string(), line(&all[0])];
+            out.push(
+                widths
+                    .iter()
+                    .map(|w| "-".repeat((*w).max(1)))
+                    .collect::<Vec<_>>()
+                    .join("-+-"),
+            );
+            out.extend(all[1..].iter().map(line));
+            out.push("```".into());
+            out
+        }
+        Style::Plain => std::iter::once(head)
+            .chain(rows.iter().map(|r| r.as_slice()))
+            .map(|r| r.iter().map(|c| plain(c)).collect::<Vec<_>>().join(" | "))
+            .collect(),
+    }
+}
+
+/// A fenced code block written for `style`: its lines as they are.
+fn code_block(lang: &str, lines: &[&str], style: Style) -> Vec<String> {
+    match style {
+        Style::Jira => {
+            let mut out = vec![if lang.is_empty() {
+                "{code}".to_string()
+            } else {
+                format!("{{code:{lang}}}")
+            }];
+            out.extend(lines.iter().map(|l| l.to_string()));
+            out.push("{code}".into());
+            out
+        }
+        Style::Html => vec![format!(
+            "<pre><code>{}</code></pre>",
+            escape_html(&lines.join("\n"))
+        )],
+        Style::Plain => lines.iter().map(|l| l.to_string()).collect(),
+        _ => {
+            let mut out = vec![format!("```{lang}")];
+            out.extend(lines.iter().map(|l| l.to_string()));
+            out.push("```".into());
+            out
+        }
+    }
+}
+
 /// Write `text` the way `style` wants it.
 pub fn render(text: &str, style: Style) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut lines: Vec<&str> = Vec::new();
+    let spaced = matches!(style, Style::Reddit | Style::Github);
+    let flush = |lines: &mut Vec<&str>, out: &mut Vec<String>| {
+        if !lines.is_empty() {
+            let text = lines.join("\n");
+            out.extend(render_lines(&text, style));
+            lines.clear();
+        }
+    };
+    for part in parts(text) {
+        match part {
+            Part::Line(l) => lines.push(l),
+            Part::Code { lang, lines: code } => {
+                flush(&mut lines, &mut out);
+                if spaced && out.last().is_some_and(|l| !l.is_empty()) {
+                    out.push(String::new());
+                }
+                out.extend(code_block(lang, &code, style));
+                if spaced {
+                    out.push(String::new());
+                }
+            }
+            Part::Table { head, rows } => {
+                flush(&mut lines, &mut out);
+                if spaced && out.last().is_some_and(|l| !l.is_empty()) {
+                    out.push(String::new());
+                }
+                out.extend(table(&head, &rows, style));
+                if spaced {
+                    out.push(String::new());
+                }
+            }
+        }
+    }
+    flush(&mut lines, &mut out);
+    while out.last().is_some_and(|l| l.is_empty()) {
+        out.pop();
+    }
+    out.join(if style == Style::Html { "" } else { "\n" })
+}
+
+/// The lines that are neither code nor a table.
+fn render_lines(text: &str, style: Style) -> Vec<String> {
     let lines: Vec<(Kind, String)> = text
-        .trim_end()
         .lines()
         .map(|l| {
             let (kind, rest) = classify(l.trim_end());
@@ -318,7 +566,7 @@ pub fn render(text: &str, style: Style) -> String {
         }
         i = end;
     }
-    out.join(if style == Style::Html { "" } else { "\n" })
+    out
 }
 
 #[cfg(test)]

@@ -25,5 +25,8 @@ pub const SCHEMA_VERSION: u32 = 1;
 /// Sharing buttons a window shows. Each block carries one box per button, and five fit.
 pub const MAX_SHARING_BUTTONS: usize = 5;
 
-/// Columns in the builder grid.
+/// Columns in the grid of a layout that does not say (it can have more, to be wider).
 pub const GRID_COLUMNS: u32 = 12;
+/// The fewest and the most columns a layout can have.
+pub const MIN_COLUMNS: u32 = 12;
+pub const MAX_COLUMNS: u32 = 24;

@@ -195,6 +195,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
             ID_STOP_RECORDING => {
                 if let Some(state) = app.try_state::<AppState>() {
                     state.recording.cancel();
+                    drop(state.take_watch());
                     tracing::info!("recording discarded from the tray");
                 }
                 refresh_menu(app);

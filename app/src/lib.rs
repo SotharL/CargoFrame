@@ -29,6 +29,7 @@ mod triggers;
 mod updates;
 mod video;
 mod warm;
+mod watch;
 mod windowing;
 
 use cargoframe_config::{Dirs, Store};
@@ -147,6 +148,7 @@ pub fn run() {
             commands::remove_chat,
             commands::fetch_options,
             commands::set_edited_image,
+            commands::read_text,
             commands::set_clip_mark,
             commands::share,
             commands::open_link,
@@ -235,6 +237,7 @@ pub fn run() {
             RunEvent::Exit => {
                 if let Some(state) = app.try_state::<AppState>() {
                     state.recording.cancel();
+                    drop(state.take_watch());
                 }
             }
             _ => {}
@@ -516,6 +519,7 @@ mod shipped_config_tests {
             "allow-report-painted",
             "allow-set-clip-mark",
             "allow-set-edited-image",
+            "allow-read-text",
             "allow-share",
             "core:event:allow-listen",
             "core:event:allow-unlisten",

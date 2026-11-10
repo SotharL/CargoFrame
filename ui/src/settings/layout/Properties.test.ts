@@ -8,7 +8,7 @@ afterEach(cleanup);
 const rect = (y: number) => ({ x: 0, y, w: 4, h: 2 });
 const jira = {
   id: 'work', name: 'Work', kind: 'jira', kind_label: 'Jira', enabled: true, state: 'connected', secrets: [],
-  describe: { summary: '', fields: [], lists: [{ id: 'projects', label: 'Projects', param: null }] },
+  describe: { summary: '', fields: [{ key: 'summary', label: 'Summary', hint: '', list: null }, { key: 'description', label: 'Description', hint: '', list: null }], lists: [{ id: 'projects', label: 'Projects', param: null }] },
   capabilities: { text: true, files: true, screenshot: true, video: true },
 } as unknown as ConnectionView;
 
@@ -105,7 +105,7 @@ describe('Properties: a text block', () => {
     expect(block.formatting).toBe(true);
   });
 
-  it('makes the box the message of a sharing button, one message per button', async () => {
+  it('sends the box in the field chosen for each sharing button, one box per field', async () => {
     const box = { ...title, id: 'notes' } as Block;
     const other = { ...title, id: 'other' } as Block;
     const send = {
@@ -114,20 +114,25 @@ describe('Properties: a text block', () => {
       on_success: 'close_window',
     } as unknown as Extract<Block, { type: 'sharing_button' }>;
     open(box, [box, other, send]);
-    const tick = screen.getByRole('checkbox', { name: /Send to Jira/ }) as HTMLInputElement;
-    expect(tick.checked).toBe(false);
-    await fireEvent.click(tick);
+    const field = screen.getByRole('combobox', { name: 'Field of Send to Jira' }) as HTMLSelectElement;
+    expect(field.value).toBe('');
+    // the message field is marked: that is where formatting goes
+    expect([...field.options].find((o) => o.value === 'description')?.textContent).toBe('Description (formatted)');
+    await fireEvent.change(field, { target: { value: 'summary' } });
     expect(send.mappings).toEqual([
-      { field: 'summary', source: { kind: 'block', value: 'other' } },
-      { field: 'description', source: { kind: 'block', value: 'notes' } },
+      { field: 'description', source: { kind: 'block', value: 'other' } },
+      { field: 'summary', source: { kind: 'block', value: 'notes' } },
     ]);
-    await fireEvent.click(tick);
-    expect(send.mappings).toEqual([{ field: 'summary', source: { kind: 'block', value: 'other' } }]);
+    // moved to the description: out of the summary, and the description's box gives way
+    await fireEvent.change(field, { target: { value: 'description' } });
+    expect(send.mappings).toEqual([{ field: 'description', source: { kind: 'block', value: 'notes' } }]);
+    await fireEvent.change(field, { target: { value: '' } });
+    expect(send.mappings).toEqual([]);
   });
 
-  it('says when no button takes a formatted message', () => {
+  it('says how to send the box when the layout has no sharing button', () => {
     open({ ...title } as Block);
-    expect(screen.getByText(/No sharing button to Jira, Slack, Discord, Reddit or Teams/)).toBeTruthy();
+    expect(screen.getByText(/Add a sharing button to the layout/)).toBeTruthy();
   });
 
   it('has no formatting for a prompt or a zip name', () => {

@@ -1,10 +1,21 @@
 /**
  * The layout builder's rules, kept apart from the screen so they can be tested on their own. They
- * mirror core/layout/grid.rs: a 12-column grid, whole cells, blocks never overlap.
+ * mirror core/layout/grid.rs: a grid of 12 columns (or more, up to 24, for a wider window), whole
+ * cells, blocks never overlap.
  */
 import type { Block, BlockContent, Layout, Rect } from '../../lib/types';
 
+/** The columns of a layout that does not say, and the fewest and most a layout can have. */
 export const COLUMNS = 12;
+export const MIN_COLUMNS = 12;
+export const MAX_COLUMNS = 24;
+
+/** A layout's columns, within what a layout can have. */
+export const columnsOf = (l: Pick<Layout, 'columns'>): number =>
+  Math.min(MAX_COLUMNS, Math.max(MIN_COLUMNS, Math.round(l.columns ?? COLUMNS)));
+
+/** The columns the blocks reach: the grid cannot be narrower. */
+export const usedColumns = (blocks: readonly Block[]): number => blocks.reduce((m, b) => Math.max(m, b.rect.x + b.rect.w), 0);
 /** The canvas always shows at least this many rows, plus a spare row to drop into. */
 export const MIN_ROWS = 10;
 
@@ -28,12 +39,12 @@ export function overlaps(a: Rect, b: Rect): boolean {
   return a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 }
 
-export function fits(r: Rect): boolean {
-  return r.w >= 1 && r.h >= 1 && r.x >= 0 && r.y >= 0 && r.x + r.w <= COLUMNS;
+export function fits(r: Rect, cols = COLUMNS): boolean {
+  return r.w >= 1 && r.h >= 1 && r.x >= 0 && r.y >= 0 && r.x + r.w <= cols;
 }
 
-export function canPlace(blocks: readonly Block[], rect: Rect, ignoreId?: string): boolean {
-  return fits(rect) && !blocks.some((b) => b.id !== ignoreId && overlaps(b.rect, rect));
+export function canPlace(blocks: readonly Block[], rect: Rect, ignoreId?: string, cols = COLUMNS): boolean {
+  return fits(rect, cols) && !blocks.some((b) => b.id !== ignoreId && overlaps(b.rect, rect));
 }
 
 /** Rows to draw: everything placed, plus a spare row, never fewer than [`MIN_ROWS`]. */
@@ -43,12 +54,12 @@ export function rowsNeeded(blocks: readonly Block[]): number {
 }
 
 /** The first spot (reading order) where a `w` by `h` block fits. Always exists: rows are unbounded. */
-export function firstFree(blocks: readonly Block[], w: number, h: number): Rect {
-  const width = Math.min(Math.max(1, w), COLUMNS);
+export function firstFree(blocks: readonly Block[], w: number, h: number, cols = COLUMNS): Rect {
+  const width = Math.min(Math.max(1, w), cols);
   for (let y = 0; ; y++) {
-    for (let x = 0; x + width <= COLUMNS; x++) {
+    for (let x = 0; x + width <= cols; x++) {
       const r = { x, y, w: width, h };
-      if (canPlace(blocks, r)) return r;
+      if (canPlace(blocks, r, undefined, cols)) return r;
     }
   }
 }
@@ -94,39 +105,39 @@ function content(type: BlockType): BlockContent {
 }
 
 /** A new block of `type` placed at `at` (or the first free spot), with a fresh id. */
-export function makeBlock(blocks: readonly Block[], type: BlockType, at?: { x: number; y: number }): Block | null {
+export function makeBlock(blocks: readonly Block[], type: BlockType, at?: { x: number; y: number }, cols = COLUMNS): Block | null {
   if (type === 'sharing_button' && blocks.filter((b) => b.type === 'sharing_button').length >= MAX_SHARING_BUTTONS) return null;
   const [w, h] = BLOCK_TYPES.find((b) => b.type === type)!.size;
   let rect: Rect;
   if (at) {
-    const x = Math.min(Math.max(0, at.x), COLUMNS - w);
+    const x = Math.min(Math.max(0, at.x), cols - w);
     rect = { x, y: Math.max(0, at.y), w, h };
-    if (!canPlace(blocks, rect)) return null;
+    if (!canPlace(blocks, rect, undefined, cols)) return null;
   } else {
-    rect = firstFree(blocks, w, h);
+    rect = firstFree(blocks, w, h, cols);
   }
   return { id: newBlockId(blocks, type), rect, ...content(type) } as Block;
 }
 
-function replaceRect(blocks: readonly Block[], id: string, rect: Rect): Block[] | null {
-  if (!canPlace(blocks, rect, id)) return null;
+function replaceRect(blocks: readonly Block[], id: string, rect: Rect, cols: number): Block[] | null {
+  if (!canPlace(blocks, rect, id, cols)) return null;
   return blocks.map((b) => (b.id === id ? { ...b, rect } : b));
 }
 
 /** Move to a cell, keeping the block inside the grid. `null` when something is in the way. */
-export function moveTo(blocks: readonly Block[], id: string, x: number, y: number): Block[] | null {
+export function moveTo(blocks: readonly Block[], id: string, x: number, y: number, cols = COLUMNS): Block[] | null {
   const b = blocks.find((k) => k.id === id);
   if (!b) return null;
-  const nx = Math.min(Math.max(0, x), COLUMNS - b.rect.w);
-  return replaceRect(blocks, id, { ...b.rect, x: nx, y: Math.max(0, y) });
+  const nx = Math.min(Math.max(0, x), cols - b.rect.w);
+  return replaceRect(blocks, id, { ...b.rect, x: nx, y: Math.max(0, y) }, cols);
 }
 
 /** Resize, at least one cell, within the grid. `null` when something is in the way. */
-export function resizeTo(blocks: readonly Block[], id: string, w: number, h: number): Block[] | null {
+export function resizeTo(blocks: readonly Block[], id: string, w: number, h: number, cols = COLUMNS): Block[] | null {
   const b = blocks.find((k) => k.id === id);
   if (!b) return null;
-  const nw = Math.min(Math.max(1, w), COLUMNS - b.rect.x);
-  return replaceRect(blocks, id, { ...b.rect, w: nw, h: Math.max(1, h) });
+  const nw = Math.min(Math.max(1, w), cols - b.rect.x);
+  return replaceRect(blocks, id, { ...b.rect, w: nw, h: Math.max(1, h) }, cols);
 }
 
 /**
@@ -149,9 +160,9 @@ export function removeBlock(blocks: readonly Block[], id: string): Block[] {
 
 /** Where the pointer is, as a grid cell, given the grid's pixel size and the row height. */
 export function cellAt(
-  px: number, py: number, gridWidth: number, rowHeight: number, gap: number,
+  px: number, py: number, gridWidth: number, rowHeight: number, gap: number, cols = COLUMNS,
 ): { x: number; y: number } {
-  const cellW = (gridWidth - gap * (COLUMNS - 1)) / COLUMNS;
+  const cellW = (gridWidth - gap * (cols - 1)) / cols;
   return {
     x: Math.floor(px / (cellW + gap)),
     y: Math.floor(py / (rowHeight + gap)),
@@ -161,5 +172,9 @@ export function cellAt(
 /** A copy of the layout with its blocks in reading order, so saved files diff cleanly. */
 export function tidy(layout: Layout): Layout {
   const blocks = [...layout.blocks].sort((a, b) => a.rect.y - b.rect.y || a.rect.x - b.rect.x);
-  return { ...layout, blocks };
+  const out: Layout = { ...layout, blocks };
+  // 12 is what a layout has when it does not say
+  if (out.columns === undefined || columnsOf(out) === COLUMNS) delete out.columns;
+  else out.columns = columnsOf(out);
+  return out;
 }

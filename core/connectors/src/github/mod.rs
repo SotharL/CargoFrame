@@ -242,14 +242,19 @@ impl GithubConnector {
         Ok(format!("{html}?raw=true"))
     }
 
-    /// The lines that show the picture and link the files, each file put at most once.
+    /// The lines that show the picture and link the files, each file put at most once: the
+    /// screenshot and the recording where the text has a place for them, the rest at the end.
     fn files_part(
         &self,
         ctx: &Ctx,
         repo: &str,
         payload: &Payload,
-    ) -> Result<Vec<String>, SendError> {
+        text: &str,
+    ) -> Result<(String, Vec<String>), SendError> {
+        let (shot_place, rec_place) = crate::payload::media_places(text);
         let mut lines = Vec::new();
+        let mut shot = String::new();
+        let mut rec = String::new();
         let items = [
             ("github.att.image", payload.image.as_ref()),
             ("github.att.still", payload.still.as_ref()),
@@ -266,13 +271,22 @@ impl GithubConnector {
                     u
                 }
             };
-            lines.push(if att.mime.starts_with("image/") {
+            let shown = if att.mime.starts_with("image/") {
                 format!("![{}]({url})", att.name)
             } else {
                 format!("[{}]({url})", att.name)
-            });
+            };
+            let is_shot = payload.screenshot().is_some_and(|s| std::ptr::eq(s, att));
+            let is_rec = payload.recording().is_some_and(|r| std::ptr::eq(r, att));
+            if is_shot && shot_place {
+                shot = shown;
+            } else if is_rec && rec_place {
+                rec = shown;
+            } else {
+                lines.push(shown);
+            }
         }
-        Ok(lines)
+        Ok((crate::payload::place_media(text, &shot, &rec), lines))
     }
 }
 
@@ -445,22 +459,7 @@ impl Connector for GithubConnector {
         };
         let labels = payload.value("labels").map(split_list).unwrap_or_default();
 
-        // 1. the pictures and files, in their branch
-        let mut notes = Vec::new();
-        let files = match self.settings.files {
-            GithubFiles::Branch => self.files_part(ctx, &repo, payload)?,
-            GithubFiles::None => {
-                if payload.image.is_some() || payload.files_zip.is_some() {
-                    notes.push(
-                        "The picture and files were not sent: the connection sends text only"
-                            .to_string(),
-                    );
-                }
-                Vec::new()
-            }
-        };
-
-        // 2. the text, written the way GitHub shows it, then the files
+        // 1. the text, written the way GitHub shows it
         let text = payload
             .value("body")
             .map(str::to_string)
@@ -468,7 +467,22 @@ impl Connector for GithubConnector {
             .filter(|t| !t.trim().is_empty())
             .map(|t| render(&t, Style::Github))
             .unwrap_or_default();
-        let body = match (text.is_empty(), files.is_empty()) {
+
+        // 2. the pictures and files, in their branch: shown where the text says, or at the end
+        let mut notes = Vec::new();
+        let (text, files) = match self.settings.files {
+            GithubFiles::Branch => self.files_part(ctx, &repo, payload, &text)?,
+            GithubFiles::None => {
+                if payload.image.is_some() || payload.files_zip.is_some() {
+                    notes.push(
+                        "The picture and files were not sent: the connection sends text only"
+                            .to_string(),
+                    );
+                }
+                (crate::payload::place_media(&text, "", ""), Vec::new())
+            }
+        };
+        let body = match (text.trim().is_empty(), files.is_empty()) {
             (_, true) => text,
             (true, false) => files.join("\n\n"),
             (false, false) => format!("{text}\n\n{}", files.join("\n\n")),

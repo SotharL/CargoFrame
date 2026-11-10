@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { cleanup, render } from '@testing-library/svelte';
+import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import Canvas from './Canvas.svelte';
 import type { Block, ConnectionView, Reach } from '../../lib/types';
 import { demoCapabilities } from '../../lib/demoReach';
@@ -108,5 +108,39 @@ describe('Layout canvas: the limit of sharing buttons', () => {
     render(Canvas, { blocks: [0, 1, 2, 3, 4].map(button), selected: null });
     expect(add().disabled).toBe(true);
     expect(add().title).toBe('A window has room for 5 sharing buttons. Remove one to add another.');
+  });
+});
+
+describe('Canvas columns', () => {
+  afterEach(cleanup);
+  const shot = (x: number, w: number): Block => ({ id: 'shot', type: 'screenshot', rect: { x, y: 0, w, h: 2 } });
+
+  it('adds a column on the side, and takes the last one off only while it is empty', async () => {
+    const { component, container } = render(Canvas, { blocks: [shot(0, 12)], selected: null });
+    const grid = () => container.querySelector<HTMLElement>('.grid')!;
+    const add = () => screen.getByRole('button', { name: 'Add a column on the side' }) as HTMLButtonElement;
+    const remove = () => screen.getByRole('button', { name: 'Remove the last column' }) as HTMLButtonElement;
+    expect(grid().style.gridTemplateColumns).toBe('repeat(12,minmax(0,1fr))');
+    expect(remove().disabled).toBe(true);
+    await fireEvent.click(add());
+    expect(grid().style.gridTemplateColumns).toBe('repeat(13,minmax(0,1fr))');
+    expect(screen.getByRole('group', { name: 'Columns' }).textContent).toContain('13');
+    // the last column is empty: it can go again, and 12 is written as no column count at all
+    expect(remove().disabled).toBe(false);
+    await fireEvent.click(remove());
+    expect(grid().style.gridTemplateColumns).toBe('repeat(12,minmax(0,1fr))');
+    void component;
+  });
+
+  it('keeps a column a block is in', () => {
+    render(Canvas, { blocks: [shot(10, 6)], selected: null, columns: 16 });
+    const remove = screen.getByRole('button', { name: 'Remove the last column' }) as HTMLButtonElement;
+    expect(remove.disabled).toBe(true);
+    expect(remove.title).toContain('Move the blocks out of the last column');
+  });
+
+  it('stops at 24 columns', () => {
+    render(Canvas, { blocks: [], selected: null, columns: 24 });
+    expect((screen.getByRole('button', { name: 'Add a column on the side' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });

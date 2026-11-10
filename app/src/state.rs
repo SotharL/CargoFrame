@@ -30,6 +30,8 @@ pub struct AppState {
     pub timings: Timings,
     /// The screen recording that is running, if any.
     pub recording: crate::video::Recording,
+    /// While a trigger records: the sign on screen and the program in focus.
+    watch: Mutex<Option<crate::watch::Watch>>,
     /// Looking for, downloading and installing a newer version.
     pub updates: std::sync::Arc<Updates>,
     /// The program that had focus at the last capture, so the layout builder can show what a
@@ -53,6 +55,16 @@ pub struct AppState {
 }
 
 impl AppState {
+    /// Keep the watch of the recording that has just started.
+    pub fn set_watch(&self, w: crate::watch::Watch) {
+        *self.watch.lock().unwrap_or_else(|e| e.into_inner()) = Some(w);
+    }
+
+    /// The watch of the recording, taken away (its sign goes when it is finished or dropped).
+    pub fn take_watch(&self) -> Option<crate::watch::Watch> {
+        self.watch.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
+
     pub fn new(store: Store, tray_available: bool, connections: Connections) -> Self {
         let workspace = Workspace::new(store.dirs().data().join("captures"));
         Self {
@@ -66,6 +78,7 @@ impl AppState {
             warm: Warm::new(),
             timings: Timings::new(),
             recording: crate::video::Recording::new(),
+            watch: Mutex::new(None),
             updates: std::sync::Arc::new(Updates::new(
                 std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
                 std::sync::Arc::new(crate::secrets::KeyringStore),

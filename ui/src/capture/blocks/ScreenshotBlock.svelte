@@ -1,18 +1,22 @@
 <script lang="ts">
   import Editor from '../editor/Editor.svelte';
   import { afterPaint } from '../../lib/paint';
+  import type { TextReading } from '../../lib/types';
 
   let {
     original,
     size,
     edited = $bindable(false),
     onpainted,
+    reader,
   }: {
     original: Blob;
     size: { width: number; height: number };
     edited?: boolean;
     /** Called once the picture is on screen. */
     onpainted?: () => void;
+    /** Reads the text in a part of the picture (the "Read text" tool). */
+    reader?: (png: Blob, attempt: number) => Promise<TextReading>;
   } = $props();
 
   let bitmap = $state<ImageBitmap | null>(null);
@@ -42,7 +46,7 @@
 
 <div class="shot">
   {#if bitmap}
-    <Editor bind:this={editor} image={bitmap} {original} {size} bind:edited />
+    <Editor bind:this={editor} image={bitmap} {original} {size} bind:edited {reader} />
   {:else if failed}
     <p class="quiet">The screenshot could not be shown: {failed}</p>
   {:else}

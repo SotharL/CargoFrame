@@ -231,3 +231,52 @@ fn github_writes_markdown_with_ins_for_underline_and_space_around_blocks() {
         "Seen in `maya.exe` **(Robot)** on *Monday*, <ins>twice</ins>\n\n> it froze\n\nthen:\n\n- open\n- save\n\nend"
     );
 }
+
+#[test]
+fn a_table_is_a_table_where_the_service_has_them_and_lined_up_where_it_does_not() {
+    let text =
+        "Steps:\n| Repro | **Highlight** |\n| --- | --- |\n| open | save |\n|  | crash |\nend";
+    assert_eq!(
+        render(text, Style::Jira),
+        "Steps:\n||Repro||*Highlight*||\n|open|save|\n| |crash|\nend"
+    );
+    assert_eq!(
+        render(text, Style::Github),
+        "Steps:\n\n| Repro | **Highlight** |\n| --- | --- |\n| open | save |\n|  | crash |\n\nend"
+    );
+    assert_eq!(
+        render(text, Style::Html),
+        "<p>Steps:</p><table><tr><th>Repro</th><th><b>Highlight</b></th></tr><tr><td>open</td><td>save</td></tr><tr><td></td><td>crash</td></tr></table><p>end</p>"
+    );
+    assert_eq!(
+        render(text, Style::Slack),
+        "Steps:\n```\nRepro | Highlight\n------+----------\nopen  | save\n      | crash\n```\nend"
+    );
+    assert_eq!(
+        render(text, Style::Plain),
+        "Steps:\nRepro | Highlight\nopen | save\n | crash\nend"
+    );
+}
+
+#[test]
+fn a_code_block_keeps_its_lines_as_they_are() {
+    let text = "Log:\n```rust\nlet **x** = 1;\n```\nafter";
+    assert_eq!(
+        render(text, Style::Jira),
+        "Log:\n{code:rust}\nlet **x** = 1;\n{code}\nafter"
+    );
+    assert_eq!(
+        render(text, Style::Discord),
+        "Log:\n```rust\nlet **x** = 1;\n```\nafter"
+    );
+    assert_eq!(
+        render(text, Style::Reddit),
+        "Log:\n\n```rust\nlet **x** = 1;\n```\n\nafter"
+    );
+    assert_eq!(
+        render(text, Style::Html),
+        "<p>Log:</p><pre><code>let **x** = 1;</code></pre><p>after</p>"
+    );
+    // a fence never closed runs to the end
+    assert_eq!(render("```\na\nb", Style::Plain), "a\nb");
+}
