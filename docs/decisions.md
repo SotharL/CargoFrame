@@ -1216,3 +1216,11 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
 - **Wider layouts.** A layout has 12 columns unless it says more, up to 24: *Columns ＋* beside the blocks adds one on
   the right side, *−* takes the last one away while no block is in it. A layout with more columns opens a wider
   window (no wider than the screen). A layout of 12 columns is saved as before, without the count.
+
+### 0.3.1, 10 Nov 2026: a patch
+
+- **Fixed: a Text block's settings could not be opened in the layout builder** once a data rule read a value from a
+  file. The app lists those values among its variables and the values list added them again from the rules, so the
+  same value was listed twice and the panel stopped drawing. Each value is now listed once (with the name its rule
+  gives it), and a test covers the variables as the app sends them. The fields a sharing button offers are also
+  listed once each.

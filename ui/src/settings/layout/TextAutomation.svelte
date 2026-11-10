@@ -48,21 +48,33 @@
   const forWhom = $derived(services.map((k) => KIND_NAME[k]).join(', '));
 
   type Value = { name: string; label: string; about: string; group: string };
-  /** Every value on offer: the built-in ones, then each one read from a file. */
-  const all = $derived<Value[]>([
-    ...variables
-      // a picture in the text only where a service the text goes to shows it there
-      .filter((v) => !MEDIA_SERVICES[v.name] || services.some((k) => MEDIA_SERVICES[v.name]!.includes(k)))
-      .map((v) => ({ name: v.name, label: quickLabel(v.name), about: v.description, group: groupOf(v.name) })),
-    ...rules.flatMap((r) =>
+  /** Every value on offer, each once: the built-in ones, then each one read from a file. The list of
+   *  variables already holds the values read from files (`rule.…`); the rules give them their names. */
+  const all = $derived.by<Value[]>(() => {
+    const fromFiles: Value[] = rules.flatMap((r) =>
       valuesOf(r.id, r.item).map((v) => ({
         name: `rule.${v.key}`,
         label: v.name || v.key,
         about: `Read from ${r.item.file || 'a file'} by “${r.item.name || r.id}”`,
         group: 'From files',
       })),
-    ),
-  ]);
+    );
+    const out: Value[] = [];
+    const seen = new Set<string>();
+    const add = (v: Value) => {
+      if (seen.has(v.name)) return;
+      seen.add(v.name);
+      out.push(v);
+    };
+    for (const v of variables) {
+      // a picture in the text only where a service the text goes to shows it there
+      if (MEDIA_SERVICES[v.name] && !services.some((k) => MEDIA_SERVICES[v.name]!.includes(k))) continue;
+      const named = fromFiles.find((f) => f.name === v.name);
+      add(named ?? { name: v.name, label: quickLabel(v.name), about: v.description, group: groupOf(v.name) });
+    }
+    fromFiles.forEach(add);
+    return out;
+  });
   const fileValues = $derived(all.filter((v) => v.group === 'From files'));
   const quick = $derived(QUICK_VARIABLES.filter((n) => variables.some((v) => v.name === n)));
   const pictures = $derived(all.filter((v) => v.group === 'In the text'));
