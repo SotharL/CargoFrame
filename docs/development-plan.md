@@ -1,6 +1,6 @@
 # Development plan
 
-How to make CargoFrame as it is in version 0.3.0: what it must do, the stack, the architecture, each module, the
+How to make CargoFrame as it is in version 0.3.1: what it must do, the stack, the architecture, each module, the
 order to build them in, and the gates every change passes. For what the app is and how it is used, read the
 [design](design.md).
 

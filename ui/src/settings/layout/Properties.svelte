@@ -120,7 +120,8 @@
   /** Fields to suggest for a connection: what the service offers, then the person's info types. */
   const fieldsFor = (connection: string | null) => {
     const known = connectionOf(connection)?.describe.fields ?? [];
-    const out = known.map((f) => ({ key: f.key, label: f.label }));
+    const out: { key: string; label: string }[] = [];
+    for (const f of known) if (!out.some((o) => o.key === f.key)) out.push({ key: f.key, label: f.label });
     for (const i of infoTypes) {
       if (connection && i.item.connection_id !== connection) continue;
       if (!out.some((o) => o.key === i.item.field)) out.push({ key: i.item.field, label: i.item.name });

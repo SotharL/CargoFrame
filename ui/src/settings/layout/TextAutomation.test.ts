@@ -58,6 +58,17 @@ describe('TextAutomation', () => {
     expect(screen.getByText('No value matches “nothing like it”.')).toBeTruthy();
   });
 
+  it('lists a value read from a file once, though the app lists it among the variables too', async () => {
+    // the app's variable list holds the values read from files as well (`rule.build`): each is listed once,
+    // with the name its rule gives it
+    const withRules = [...variables, { name: 'rule.build', description: 'From a file: Build number, build' }];
+    render(TextAutomation, { value: '', variables: withRules, rules });
+    const files = within(screen.getByRole('group', { name: 'From files' })).getAllByRole('button');
+    expect(files).toHaveLength(1);
+    await fireEvent.click(files[0]!);
+    expect(area().value).toBe('{{rule.build}}');
+  });
+
   it('has no file group when no value is read from files', () => {
     render(TextAutomation, { value: '', variables, rules: [] });
     expect(screen.queryByRole('group', { name: 'From files' })).toBeNull();

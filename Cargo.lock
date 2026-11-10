@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-bundle",
  "cargoframe-capture",
@@ -537,7 +537,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-bundle"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-safe",
  "serde",
@@ -550,7 +550,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-capture"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "png",
  "serde_json",
@@ -565,7 +565,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-config"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-connectors",
  "cargoframe-handoff",
@@ -580,7 +580,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-connectors"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "base64 0.23.1",
  "cargoframe-context",
@@ -599,11 +599,11 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-context"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "cargoframe-deliver"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "arboard",
  "cargoframe-capture",
@@ -616,7 +616,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-handoff"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -624,7 +624,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-indicator"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "tracing",
  "windows",
@@ -633,7 +633,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-layout"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-context",
  "serde",
@@ -642,7 +642,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-net"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-net",
  "getrandom 0.4.3",
@@ -653,7 +653,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-ocr"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "png",
  "serde",
@@ -664,7 +664,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-rules"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-context",
  "chrono",
@@ -682,11 +682,11 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-safe"
-version = "0.3.0"
+version = "0.3.1"
 
 [[package]]
 name = "cargoframe-shortcuts"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-capture",
  "cargoframe-config",
@@ -699,7 +699,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-update"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-net",
  "semver",
@@ -712,7 +712,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-video"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -723,7 +723,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-window"
-version = "0.3.0"
+version = "0.3.1"
 dependencies = [
  "cargoframe-context",
  "cargoframe-handoff",
