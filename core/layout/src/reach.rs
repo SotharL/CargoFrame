@@ -496,6 +496,7 @@ mod tests {
         all.push(block("go", BlockKind::SharingButton(button)));
         Layout {
             accepts_input: false,
+            columns: crate::GRID_COLUMNS,
             id: "l".into(),
             name: "L".into(),
             blocks: all,

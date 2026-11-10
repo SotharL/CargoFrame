@@ -230,6 +230,7 @@ mod tests {
     fn layout(blocks: Vec<Block>) -> Layout {
         Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: "l".into(),
             name: "L".into(),
             blocks,

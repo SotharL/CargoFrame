@@ -146,6 +146,8 @@
     imageEdited = false;
     stillKey++;
   }
+  /** The layout's columns: more than 12 make it wider, with more side by side. */
+  const cols = $derived(Math.min(24, Math.max(12, view?.layout?.columns ?? 12)));
   const rows = $derived(blocks.reduce((m, b) => Math.max(m, b.rect.y + b.rect.h), 0));
   const empty = $derived(view !== null && blocks.length === 0);
   // "This button does not send X" is shown on the block itself, so the header does not repeat it.
@@ -248,7 +250,7 @@
         <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>Edit layout</button>
       </main>
     {:else}
-      <main class="grid" style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
+      <main class="grid" style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
         {#each blocks as b (b.id)}
           <div class="slot" style={place(b)}>
             <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>

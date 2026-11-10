@@ -7,7 +7,7 @@
   import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Reach, Rule, Trigger, VariableInfo } from '../../lib/types';
   import Canvas from '../layout/Canvas.svelte';
   import Properties from '../layout/Properties.svelte';
-  import { canPlace, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
+  import { canPlace, columnsOf, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
   import { offersFor, type TemplateOffer } from '../layout/templates';
   import { go, route } from '../route.svelte';
 
@@ -167,9 +167,10 @@
 
   function setRect(rect: { x: number; y: number; w: number; h: number }): boolean {
     if (!draft || !block) return false;
-    if (!canPlace(draft.blocks, rect, block.id)) return false;
-    const moved = moveTo(draft.blocks, block.id, rect.x, rect.y);
-    const sized = moved && resizeTo(moved, block.id, rect.w, rect.h);
+    const cols = columnsOf(draft);
+    if (!canPlace(draft.blocks, rect, block.id, cols)) return false;
+    const moved = moveTo(draft.blocks, block.id, rect.x, rect.y, cols);
+    const sized = moved && resizeTo(moved, block.id, rect.w, rect.h, cols);
     if (!sized) return false;
     draft.blocks = sized;
     return true;
@@ -336,7 +337,7 @@
     </details>
 
     <div class="workspace">
-      <Canvas bind:blocks={draft.blocks} bind:selected {issues} {reach} {connections} />
+      <Canvas bind:blocks={draft.blocks} bind:selected bind:columns={draft.columns} {issues} {reach} {connections} />
       <aside class="side" aria-label="Block settings">
         {#if block}
           {#key block.id}
@@ -346,6 +347,7 @@
               rules={rules.items}
               infoTypes={infos.items}
               layoutId={draft.id ?? null}
+              columns={columnsOf(draft)}
               onfills={() => void infos.reload()}
               {connections}
               {variables}

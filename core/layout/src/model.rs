@@ -24,6 +24,17 @@ pub struct Layout {
     /// (`cargoframe open --trigger <id> --set <block>=<text>`). Off unless the person turns it on.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub accepts_input: bool,
+    /// Columns in its grid: 12, or more for a wider window with more side by side.
+    #[serde(default = "twelve", skip_serializing_if = "is_twelve")]
+    pub columns: u32,
+}
+
+fn twelve() -> u32 {
+    crate::GRID_COLUMNS
+}
+
+fn is_twelve(n: &u32) -> bool {
+    *n == crate::GRID_COLUMNS
 }
 
 impl Layout {
@@ -34,7 +45,13 @@ impl Layout {
             name: name.into(),
             blocks: Vec::new(),
             accepts_input: false,
+            columns: crate::GRID_COLUMNS,
         }
+    }
+
+    /// Its columns, kept within what a layout can have.
+    pub fn grid_columns(&self) -> u32 {
+        self.columns.clamp(crate::MIN_COLUMNS, crate::MAX_COLUMNS)
     }
 
     pub fn block(&self, id: &str) -> Option<&Block> {
@@ -477,6 +494,7 @@ mod serde_tests {
     fn layout_round_trips_with_a_flat_block_shape() {
         let layout = Layout {
             accepts_input: false,
+            columns: crate::GRID_COLUMNS,
             id: "bugs".into(),
             name: "Bug report".into(),
             blocks: vec![

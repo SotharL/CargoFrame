@@ -519,6 +519,7 @@ mod shipped_config_tests {
             "allow-report-painted",
             "allow-set-clip-mark",
             "allow-set-edited-image",
+            "allow-read-text",
             "allow-share",
             "core:event:allow-listen",
             "core:event:allow-unlisten",

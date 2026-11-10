@@ -88,6 +88,32 @@ pub fn open_capture(app: &AppHandle, label: String) {
     });
 }
 
+/// The window's usual width, for a layout of 12 columns.
+const CAPTURE_WIDTH: f64 = 1120.0;
+
+/// How wide the window for `label` is opened: wider for a layout with more columns, never wider
+/// than the screen.
+fn capture_width(app: &AppHandle, label: &str) -> f64 {
+    let columns = app
+        .try_state::<AppState>()
+        .and_then(|s| s.sessions.for_label(label))
+        .and_then(|s| s.view.layout.as_ref().map(|l| l.grid_columns()))
+        .unwrap_or(cargoframe_layout::GRID_COLUMNS);
+    let screen = app
+        .primary_monitor()
+        .ok()
+        .flatten()
+        .map(|m| m.size().to_logical::<f64>(m.scale_factor()).width - 40.0)
+        .unwrap_or(f64::MAX);
+    wanted_width(columns, screen)
+}
+
+/// `columns` as wide as the usual 12, within `screen`.
+pub(crate) fn wanted_width(columns: u32, screen: f64) -> f64 {
+    let w = CAPTURE_WIDTH * f64::from(columns) / f64::from(cargoframe_layout::GRID_COLUMNS);
+    w.min(screen).max(CAPTURE_WIDTH.min(screen))
+}
+
 fn open_capture_now(app: &AppHandle, label: &str) -> tauri::Result<()> {
     shown(app, label);
     // The capture flow began at the shortcut; only say whether the window was ready.
@@ -100,6 +126,14 @@ fn open_capture_now(app: &AppHandle, label: &str) -> tauri::Result<()> {
     if let Some(win) = app.get_webview_window(label) {
         // only this window reloads its capture; the others keep theirs
         app.emit_to(label.to_string(), "session-changed", ())?;
+        // a layout with more columns wants a wider window than the one kept
+        let want = capture_width(app, label);
+        if let (Ok(size), Ok(scale)) = (win.inner_size(), win.scale_factor()) {
+            let now = size.to_logical::<f64>(scale);
+            if now.width + 1.0 < want {
+                let _ = win.set_size(tauri::LogicalSize::new(want, now.height));
+            }
+        }
         let _ = win.unminimize();
         win.show()?;
         win.set_focus()?;
@@ -113,7 +147,7 @@ fn open_capture_now(app: &AppHandle, label: &str) -> tauri::Result<()> {
         } else {
             format!("CargoFrame {}", label.trim_start_matches("capture-"))
         })
-        .inner_size(1120.0, 760.0)
+        .inner_size(capture_width(app, label), 760.0)
         .min_inner_size(640.0, 420.0)
         .focused(true);
     if first {
@@ -203,5 +237,19 @@ pub fn close_requested(window: &tauri::Window, api: &tauri::CloseRequestApi) {
         if let Err(e) = spawned {
             tracing::warn!("could not schedule releasing a hidden window: {e}");
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::wanted_width;
+
+    #[test]
+    fn a_layout_with_more_columns_opens_a_wider_window_within_the_screen() {
+        assert_eq!(wanted_width(12, 3000.0), 1120.0);
+        assert_eq!(wanted_width(18, 3000.0), 1680.0);
+        assert_eq!(wanted_width(24, 1880.0), 1880.0);
+        // a small screen: no wider than it
+        assert_eq!(wanted_width(12, 1000.0), 1000.0);
     }
 }

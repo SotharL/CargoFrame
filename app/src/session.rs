@@ -742,6 +742,7 @@ pub(crate) mod tests {
         let store = Store::new(Dirs::under(dir.path()));
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "Clip".into(),
             blocks: vec![Block {
@@ -841,6 +842,7 @@ pub(crate) mod tests {
 
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "L".into(),
             blocks: vec![
@@ -914,6 +916,7 @@ pub(crate) mod tests {
         std::fs::write(project.join("other.log"), "OTHER").unwrap();
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {
@@ -968,6 +971,7 @@ pub(crate) mod tests {
         w("dev/foo/readme.log", "README");
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "L".into(),
             blocks,
@@ -1205,6 +1209,7 @@ pub(crate) mod tests {
             .unwrap();
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {
@@ -1283,6 +1288,7 @@ pub(crate) mod tests {
         store.save_item(Kind::Rules, "machine", &rule).unwrap();
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {
@@ -1328,6 +1334,7 @@ pub(crate) mod tests {
         let store = Store::new(Dirs::under(dir.path()));
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: "L".into(),
             blocks: vec![Block {

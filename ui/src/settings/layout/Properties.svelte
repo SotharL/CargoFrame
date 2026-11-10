@@ -25,6 +25,7 @@
     issues,
     reach = {},
     layoutId = null,
+    columns = COLUMNS,
     onfills,
     onrect,
     onremove,
@@ -41,6 +42,8 @@
     reach?: Record<string, Reach>;
     /** The layout's id, once it has one: the fields filled in it. */
     layoutId?: string | null;
+    /** Columns in the layout's grid. */
+    columns?: number;
     /** The field fills changed (one was made from this button). */
     onfills?: () => void;
     /** Try to give the block a new position and size; returns false when it does not fit. */
@@ -379,9 +382,9 @@
 
   <fieldset class="rect">
     <legend>Position and size</legend>
-    <label>Column<input type="number" min="1" max={COLUMNS} value={block.rect.x + 1} onchange={(e) => setRect({ x: Number(e.currentTarget.value) - 1 })} /></label>
+    <label>Column<input type="number" min="1" max={columns} value={block.rect.x + 1} onchange={(e) => setRect({ x: Number(e.currentTarget.value) - 1 })} /></label>
     <label>Row<input type="number" min="1" value={block.rect.y + 1} onchange={(e) => setRect({ y: Number(e.currentTarget.value) - 1 })} /></label>
-    <label>Width<input type="number" min="1" max={COLUMNS} value={block.rect.w} onchange={(e) => setRect({ w: Number(e.currentTarget.value) })} /></label>
+    <label>Width<input type="number" min="1" max={columns} value={block.rect.w} onchange={(e) => setRect({ w: Number(e.currentTarget.value) })} /></label>
     <label>Height<input type="number" min="1" value={block.rect.h} onchange={(e) => setRect({ h: Number(e.currentTarget.value) })} /></label>
   </fieldset>
   {#if rectError}<p class="error" role="alert">{rectError}</p>{/if}

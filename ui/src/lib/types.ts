@@ -268,6 +268,8 @@ export interface Layout {
   blocks: Block[];
   /** Other programs may fill its text boxes and dropdowns (`cargoframe open`). Off when absent. */
   accepts_input?: boolean;
+  /** Columns in its grid: 12 when absent, up to 24 for a wider window. */
+  columns?: number;
 }
 
 // ----- the CargoFrame window's data (mirror core/window::view) -----

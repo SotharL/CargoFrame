@@ -231,6 +231,7 @@ mod tests {
         };
         let layout = Layout {
             accepts_input: false,
+            columns: cargoframe_layout::GRID_COLUMNS,
             id: String::new(),
             name: String::new(),
             blocks: vec![
