@@ -121,7 +121,12 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 ### 3. Press the shortcut
 
 In any program, press your shortcut. Check the window, draw on the picture, type your note, pick where to post, and
-press the sharing button. A layout with a Video block starts recording on the first press and stops on the second.
+press the sharing button. A layout with a Video block starts recording on the first press and stops on the second;
+while it records, a red outline and a blinking dot say so (they are not in the recording).
+
+Need the text that is on the screenshot? Pick **Read text** and drag over it: the lines found are marked, copy them all
+or click the ones you want. *Try again* reads it another way. It is read on your computer (on Linux, install
+`tesseract-ocr` first).
 
 <details>
 <summary><b>The words to know</b></summary>
@@ -129,7 +134,7 @@ press the sharing button. A layout with a Video block starts recording on the fi
 | Word | Meaning |
 |------|---------|
 | **Trigger** | A shortcut, and the layout it opens |
-| **Layout** | The window a capture opens: blocks on a grid |
+| **Layout** | The window a capture opens: blocks on a grid of 12 columns, or more (up to 24) for a wider window |
 | **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, or a sharing button |
 | **Connection** | A service you signed in to (Jira, Slack…) |
 | **Where to post** | One dropdown that goes as deep as the service does: project, or server, channel, thread |
@@ -152,8 +157,9 @@ it; a ring means the button needs it. Pointing at a button outlines everything i
 
 <img alt="The CargoFrame window with a recording: trim handles, crop and mark" src="docs/images/capture-recording.png" width="640">
 
-Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles to trim, use **Crop** and
-**Mark** (one red ring with a text). Click the Video block in the layout builder to choose the screen or the window in
+Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles to trim, drag a frame to
+**Crop** (then *Confirm*), and draw **marks** with the same tools as on a screenshot (pen, square, circle, arrow, text).
+If you switch programs while recording, the one you used longest names the capture and gives the project folder. Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording
 ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Save locally; the other services get the still.
 
@@ -162,12 +168,16 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
 <details>
 <summary><b>In the window: formatting, values from files, filled fields</b></summary>
 
-- **Formatting:** in the layout builder, tick *Message of* on a Text block to make it the message of a Jira, GitHub,
-  Slack, Discord, Reddit or Teams button. The box then shows bold, italic, underline, code, quotes and lists as they
-  look, with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U, Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8
-  bullets, Ctrl+Shift+7 numbers), only the ones that service can show. The block's starting text in the layout builder
-  has the same buttons, so `Seen in `{{app.exe}}` **({{project.name}})**` is written formatted once and filled in on
-  every capture. CargoFrame writes the marks the way each service wants.
+- **Formatting:** in the layout builder, choose in *Sent in* the field each sharing button sends a Text block in (a
+  Jira summary or description, a Slack message…). When it is a message, the box shows bold, italic, underline, code,
+  quotes, lists, code blocks and tables as they look, with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U,
+  Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8 bullets, Ctrl+Shift+7 numbers), only the ones that service can
+  show. A table is a grid: type in its cells, ＋ adds a row or a column, × removes one. The block's starting text in
+  the layout builder has the same buttons, and every value is listed on its right with a search box, so
+  `Seen in `{{app.exe}}` **({{project.name}})**` is written formatted once and filled in on every capture.
+  CargoFrame writes the marks the way each service wants.
+- **Pictures in the text:** for Jira, GitHub and Teams, put *Screenshot* or *Recording* from the values list (or the
+  *Repro | Highlight* table) in the text, and the picture shows right there instead of as an attachment at the end.
 - **Read from files** (*Settings, Data & fields*): *If this file is found* (its name or part of it, no format to choose), *add it to the
   files* and/or *read* values: the value written after a name (`GPU: …`), the text between two pieces (or to the end of
   the line), or the whole line with a word; the first, the last or all of them. Each value is a variable such as
@@ -176,6 +186,7 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
   a value (from a file, the program, the project) *is found / is / contains…*, *add* or *set* a text, *and* more. Add
   puts one more label in a list, a new line in a description. For every layout that shares there, or only some. A
   block of the window is still sent in a field from the sharing button.
+- **Files from several folders:** a Files block can look in several subfolders, separated by commas (`logs, build/out`).
 - **Last choices:** each dropdown starts on what you used last and lists the last five.
 - **Several windows:** a shortcut pressed while a window is open opens another, up to ten.
 

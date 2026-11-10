@@ -1172,3 +1172,47 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   quotes and lists get the empty lines GitHub needs. Two templates: *GitHub issue* and *GitHub comment on an issue*,
   and a guide.
 
+
+### 0.3.0, 10 Nov 2026: the polish round
+
+- **Fixes.** The guide menu no longer adds a second scroll bar (the sidebar scrolls on its own, the page does not).
+  The layout builder gives the grid and the block settings half the width each when there is room, one below the
+  other when there is not. Text on a screenshot can be typed again (a click no longer took the focus away from the
+  box it had just opened) and has bold, italic and *On a box*; clicking a text brings it back to change.
+- **The guides are grouped.** The usage guides come first; the ones for connecting a service sit under *Connect a
+  service*, below them.
+- **A sign while recording.** A red outline around what is recorded and a red dot blinking once a second (each can be
+  switched off in *Recording*, the dot's corner chosen). They are native windows, not web pages, so they cost almost
+  nothing: on Windows left out of every capture, so never in the recording; on X11 drawn outside the recorded window;
+  on Wayland not possible. This needs `unsafe` Win32 calls, kept in one file of its own crate (`core/indicator`).
+- **The recording follows the focus.** While recording, which program is in front is noted about once a second; when
+  it ends, the one used longest names the capture and gives the project folder, and the window says which programs
+  were used. Nothing is read from a program that was only passed through.
+- **Video crop and marks like the screenshot's.** Crop is a frame dragged on the picture, then *Confirm*; the single
+  ring became marks drawn with the screenshot editor's tools (pen, square, circle, arrow, text, colour, size), laid
+  over the export by ffmpeg.
+- **Several subfolders in a Files block**, separated by commas, with a note under the box.
+- **Text sent in a field.** A Text block says in which field of each sharing button it is sent (*Sent in*: a Jira
+  summary or description, a Slack message…); the formatted box follows from the field that is a message.
+- **The values list.** The starting text of a Text block is written with every value listed on its right (one above
+  the other when the panel is narrow): a search box, the most used first (date, time, program, project, window
+  title), then the program, the project, the capture, values from files, pictures in the text and links. The quick
+  buttons and the two drop downs are gone, as they listed the same values twice.
+- **Tables and code blocks.** Each service that can show them gets them its own way (a Jira table and `{code}`, an
+  HTML table for Teams, Markdown for GitHub and Reddit); Slack and Discord get code blocks, and a table as aligned
+  lines in one. In the box a table is a grid: type in a cell, Tab to the next, ＋ for a row or a column, × at the top
+  of a column or the end of a row to take it out, as in Jira. The text keeps it as `| a | b |`, so nothing else
+  changes.
+- **Pictures in the text.** `{{capture.screenshot}}` and `{{capture.recording}}` put the picture or the recording where
+  they are in the text, for the services whose API allows it: Jira (attached once, shown with `!name!`, even inside a
+  table), GitHub (from the attachments branch) and Teams (the picture). The builder offers a *Repro | Highlight* table
+  with both. Elsewhere they are left out of the text and the files are attached as before, so one layout works for
+  every button.
+- **Read text.** A tool on the screenshot: drag over text, the lines found are marked on the picture, copy them all or
+  click the ones to copy, or *Try again*, which reads it another way (larger, more contrast, black and white, and
+  for tesseract another page mode). Reading is done on the computer: Windows' own reader (no download, in the
+  languages of the profile) or tesseract on Linux, which the person installs; nothing is sent. A crate of its own,
+  `core/ocr`, so the capture window gets one command and no new permission.
+- **Wider layouts.** A layout has 12 columns unless it says more, up to 24: *Columns ＋* beside the blocks adds one on
+  the right side, *−* takes the last one away while no block is in it. A layout with more columns opens a wider
+  window (no wider than the screen). A layout of 12 columns is saved as before, without the count.
