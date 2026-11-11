@@ -359,8 +359,9 @@
   /* A block never paints over its neighbour; the padding keeps focus rings from being clipped. */
   .cell { min-width: 0; min-height: 0; overflow: auto; padding: 3px; margin: -3px; display: grid; grid-template-rows: minmax(0, 1fr); border-radius: var(--radius); }
   .body { min-width: 0; min-height: 0; }
-  /* The blocks the hovered button sends. A ring, so layout never shifts. */
-  .cell.lit { box-shadow: 0 0 0 2px var(--kind-line, var(--accent)); }
+  /* The blocks the hovered button sends: a ring around what the block holds (each block marks it
+     with data-content), not its title. A ring, so layout never shifts. */
+  .cell.lit :global([data-content]) { box-shadow: 0 0 0 2px var(--kind-line, var(--accent)); border-radius: var(--radius-sm); }
   .center {
     display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center;
     padding: 24px;

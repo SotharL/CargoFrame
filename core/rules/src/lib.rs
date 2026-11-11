@@ -4,6 +4,7 @@
 //! file's kind is worked out from its name. Each value is used in text as `{{rule.<key>}}`.
 //!
 //! * [`model`]: the rule as stored in `rules/<id>.json`.
+//! * [`combine`]: values made from other values ("if the shelf is found, stream_change_shelf").
 //! * [`details`]: facts about a file itself (size, modified date, line count, fingerprint).
 //! * [`extract`]: apply a rule to the text of a file (JSON, YAML, TOML, INI, CSV, XML, regex, and plain text or log files).
 //! * [`run`]: find the file safely inside the project folder, read it with a size limit, and run
@@ -11,6 +12,7 @@
 //!
 //! Rules only ever read. Nothing here can write, run a program, or leave the project folder.
 
+pub mod combine;
 pub mod details;
 pub mod extract;
 pub mod find;
@@ -19,9 +21,10 @@ pub mod path;
 pub mod run;
 pub mod text;
 
+pub use combine::combine_values;
 pub use extract::{check, extract, RuleError};
 pub use model::{
-    Find, Format, Multiple, ReadMode, Rule, Several, ValueStep, Which, DEFAULT_MAX_BYTES,
-    HARD_MAX_BYTES,
+    Choice, Cond, CondTest, Find, Format, Multiple, ReadMode, Rule, Several, ValueStep, Which,
+    DEFAULT_MAX_BYTES, HARD_MAX_BYTES,
 };
 pub use run::{peek, run_all, run_rules, FsFiles, Outcome, Peek, ProjectFiles, Report};

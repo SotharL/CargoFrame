@@ -457,10 +457,25 @@ export type RuleFind =
   | { type: 'between'; start: string; end: string | null }
   /** The whole line that holds a text. */
   | { type: 'line_with'; text: string }
+  /** Made from other values: the first choice that fits gives the value (core/rules/src/combine.rs). */
+  | { type: 'combine'; choices: RuleChoice[] }
   /** A rule made before 0.3.0: its own `format` and `query`. */
   | { type: 'advanced' };
 
 /** One value a data rule reads, used in text as `{{rule.<key>}}`. */
+export type RuleCondTest = 'found' | 'missing' | 'is' | 'is_not' | 'contains';
+/** "{{rule.shelf}} is found": `value` is a variable's name. */
+export interface RuleCond {
+  value: string;
+  test: RuleCondTest;
+  text?: string;
+}
+/** One way to make a combined value: with no condition, it fits when every value it names is found. */
+export interface RuleChoice {
+  when?: RuleCond[];
+  text: string;
+}
+
 export interface RuleValue {
   key: string;
   name: string;

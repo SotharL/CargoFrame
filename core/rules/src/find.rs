@@ -155,6 +155,8 @@ pub fn all(
         Find::Between { start, end } => between(text, start, end.as_deref()),
         Find::LineWith { text: needle } => lines_with(text, needle),
         Find::Advanced => vec![extract(rule, text)?],
+        // made from other values, after the files are read (see `combine`)
+        Find::Combine { .. } => Vec::new(),
     })
 }
 
@@ -186,6 +188,7 @@ pub fn check(find: &Find) -> Result<(), String> {
         Find::LineWith { text } if text.trim().is_empty() => {
             Err("Write a piece of text the line holds".into())
         }
+        Find::Combine { choices } => crate::combine::check(choices),
         _ => Ok(()),
     }
 }

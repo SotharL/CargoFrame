@@ -44,7 +44,7 @@
   }
 </script>
 
-<div class="shot">
+<div class="shot" data-content>
   {#if bitmap}
     <Editor bind:this={editor} image={bitmap} {original} {size} bind:edited {reader} />
   {:else if failed}

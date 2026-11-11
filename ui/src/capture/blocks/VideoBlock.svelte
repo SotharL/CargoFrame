@@ -253,7 +253,7 @@
   }
 </script>
 
-<div class="clip">
+<div class="clip" data-content>
   {#if problem}
     <p class="problem" role="alert">{problem}</p>
   {:else if cannotPlay}

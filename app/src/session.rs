@@ -572,10 +572,22 @@ pub fn prepare_with(
     let mut notes = captured.notes.clone();
     let mut added_files: Vec<String> = Vec::new();
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
-        let report = run_rules(
+        let mut report = run_rules(
             loaded.items.iter().map(|(id, r)| (id.as_str(), r)),
             project.as_ref().map(|p| Path::new(&p.folder)),
             &FsFiles,
+        );
+        // values made from other values, once every file was read
+        let mut known = variables.clone();
+        for (key, outcome) in &report.values {
+            if let Some(v) = &outcome.value {
+                known.insert(format!("rule.{key}"), v.clone());
+            }
+        }
+        cargoframe_rules::combine_values(
+            loaded.items.iter().map(|(id, r)| (id.as_str(), r)),
+            &mut report,
+            &mut known,
         );
         let used = layout
             .as_ref()

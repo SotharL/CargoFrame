@@ -2,14 +2,16 @@
   // Data from files: "If this file is found, read these values (and add it to the files)".
   // The file is named by its name or part of it; its kind (JSON, a log…) is worked out from its
   // name, so nobody chooses a format. Each value is used in text as {{rule.<key>}}.
+  // A value can also be made from other values ("{{rule.stream}}_{{rule.config}}"), with choices
+  // tried from the top; a rule of only such values reads no file.
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import { layoutsUsingRule, usedIn } from '../usage';
-  import { blankRule, describe, keysOfOthers, newValue, slug, unique, valuesOf } from '../ruleValues';
-  import type { Layout, Rule, RuleFind, RuleTest, RuleValue } from '../../lib/types';
+  import { blankCombined, blankRule, describe, keysOfOthers, newValue, onlyCombines, slug, unique, valuesOf } from '../ruleValues';
+  import type { Layout, Rule, RuleChoice, RuleCondTest, RuleFind, RuleTest, RuleValue, VariableInfo } from '../../lib/types';
 
   const rules = createItems<Rule>('rule');
   const layouts = createItems<Layout>('layout');
@@ -23,13 +25,43 @@
   let testing = $state(false);
   let copied = $state<string | null>(null);
 
-  onMount(() => Promise.all([rules.reload(), layouts.reload()]));
+  /** The values a condition can look at. */
+  let variables = $state<VariableInfo[]>([]);
+  onMount(async () => {
+    await Promise.all([rules.reload(), layouts.reload()]);
+    variables = await (await getApi()).listVariables().catch(() => []);
+  });
 
   const FINDS: { type: RuleFind['type']; label: string }[] = [
     { type: 'value_of', label: 'the value written after' },
     { type: 'between', label: 'the text between' },
     { type: 'line_with', label: 'the whole line with' },
+    { type: 'combine', label: 'made from other values' },
   ];
+  const COND_TESTS: { value: RuleCondTest; label: string; needsText: boolean }[] = [
+    { value: 'found', label: 'is found', needsText: false },
+    { value: 'missing', label: 'is not found', needsText: false },
+    { value: 'is', label: 'is', needsText: true },
+    { value: 'is_not', label: 'is not', needsText: true },
+    { value: 'contains', label: 'contains', needsText: true },
+  ];
+  const needsText = (t: RuleCondTest) => COND_TESTS.find((x) => x.value === t)?.needsText ?? false;
+
+  /** A rule of values made from other values only, with no file: the editor has no file step. */
+  const reads = $derived(!draft || !(onlyCombines(draft.value) && !draft.value.file.trim()));
+
+  function addCombined() {
+    formError = '';
+    test = null;
+    const value = blankCombined(keysOfOthers(rules.items, null));
+    draft = { id: null, value, auto: { [value.values![0]!.key]: true } };
+  }
+
+  function moveChoice(choices: RuleChoice[], i: number, by: number) {
+    const j = i + by;
+    if (j < 0 || j >= choices.length) return;
+    [choices[i], choices[j]] = [choices[j]!, choices[i]!];
+  }
 
   function add() {
     formError = '';
@@ -81,6 +113,7 @@
     v.find =
       type === 'value_of' ? { type, name: near }
       : type === 'between' ? { type, start: near, end: null }
+      : type === 'combine' ? { type, choices: [{ text: '' }] }
       : { type: 'line_with', text: near };
   }
 
@@ -108,7 +141,7 @@
     const rule = $state.snapshot(draft.value) as Rule;
     const folder = testFolder.trim() || null;
     const mine = ++latest;
-    if (!rule.file.trim()) {
+    if (!rule.file.trim() && !onlyCombines(rule)) {
       test = null;
       testing = false;
       return;
@@ -168,7 +201,10 @@
         Example: if <code>system_info</code> is found, read the value after <code>GPU</code> and write
         <code>{'{{rule.gpu}}'}</code> in the description.
       </p>
-      <button class="primary" data-tour="rules.add" onclick={add}>Add data from a file</button>
+      <div class="buttons">
+        <button class="primary" data-tour="rules.add" onclick={add}>Add data from a file</button>
+        <button onclick={addCombined}>Make a value from other values</button>
+      </div>
     </div>
   {/if}
 
@@ -177,11 +213,15 @@
     <article class="card">
       <div class="main">
         <h2>{item.name}</h2>
-        <p class="quiet">
-          If <span class="mono">{item.file}</span> is found{#if item.several === 'all'} (all of them){/if}:
-          {#if item.add_to_files}add it to the files{#if values.length}, and {/if}{/if}
-          {#if values.length}read {values.length === 1 ? 'one value' : `${values.length} values`}{/if}
-        </p>
+        {#if onlyCombines(item) && !item.file.trim()}
+          <p class="quiet">Made from other values, no file read</p>
+        {:else}
+          <p class="quiet">
+            If <span class="mono">{item.file}</span> is found{#if item.several === 'all'} (all of them){/if}:
+            {#if item.add_to_files}add it to the files{#if values.length}, and {/if}{/if}
+            {#if values.length}read {values.length === 1 ? 'one value' : `${values.length} values`}{/if}
+          </p>
+        {/if}
         <ul class="values">
           {#each values as v (v.key)}
             <li><code class="selectable">{`{{rule.${v.key}}}`}</code> <span class="quiet">{v.name}: {describe(v.find, item)}</span></li>
@@ -202,16 +242,20 @@
   {/each}
 
   {#if rules.items.length > 0 && !draft}
-    <div><button class="primary" data-tour="rules.add" onclick={add}>Add data from a file</button></div>
+    <div class="buttons">
+      <button class="primary" data-tour="rules.add" onclick={add}>Add data from a file</button>
+      <button onclick={addCombined}>Make a value from other values</button>
+    </div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit data from a file' : 'New data from a file'}</h2>
+      <h2>{!reads ? (draft.id ? 'Edit values made from other values' : 'New value made from other values') : draft.id ? 'Edit data from a file' : 'New data from a file'}</h2>
       <Field label="Name" hint="What this is, like Machine config. Shown when something cannot be found." tour="rules.name">
         <input type="text" bind:value={draft.value.name} placeholder="Machine config" />
       </Field>
 
+      {#if reads}
       <section class="step">
         <h3>If this file is found</h3>
         <div class="line" data-tour="rules.file">
@@ -232,13 +276,16 @@
           <code>.log</code>, <code>package.json</code>. Or a path: <code>logs/*.log</code>.
         </p>
       </section>
+      {/if}
 
       <section class="step">
-        <h3>Then</h3>
-        <label class="check" data-tour="rules.add_files">
-          <input type="checkbox" bind:checked={draft.value.add_to_files} />
-          <span>Add it to the files <span class="quiet">(ticked in the window's Files box, ready to send)</span></span>
-        </label>
+        <h3>{reads ? 'Then' : 'Values'}</h3>
+        {#if reads}
+          <label class="check" data-tour="rules.add_files">
+            <input type="checkbox" bind:checked={draft.value.add_to_files} />
+            <span>Add it to the files <span class="quiet">(ticked in the window's Files box, ready to send)</span></span>
+          </label>
+        {/if}
 
         <div class="list" data-tour="rules.values">
           {#each draft.value.values ?? [] as v, i (i)}
@@ -266,11 +313,13 @@
                 </p>
               {:else}
                 <div class="line">
-                  <select bind:value={v.which} aria-label="Which one">
-                    <option value="first">the first</option>
-                    <option value="last">the last</option>
-                    <option value="all">all</option>
-                  </select>
+                  {#if v.find.type !== 'combine'}
+                    <select bind:value={v.which} aria-label="Which one">
+                      <option value="first">the first</option>
+                      <option value="last">the last</option>
+                      <option value="all">all</option>
+                    </select>
+                  {/if}
                   <select value={v.find.type} onchange={(e) => setFind(v, e.currentTarget.value as RuleFind['type'])} aria-label="How to find it">
                     {#each FINDS as f (f.type)}<option value={f.type}>{f.label}</option>{/each}
                   </select>
@@ -290,6 +339,41 @@
                     <input type="text" class="grow" bind:value={v.find.text} placeholder="ERROR" aria-label="A text the line holds" />
                   {/if}
                 </div>
+                {#if v.find.type === 'combine'}
+                  {@const choices = v.find.choices}
+                  <div class="choices" role="group" aria-label={`Choices for ${v.name || 'this value'}`}>
+                    <p class="hint quiet small">
+                      Tried from the top: the first that fits gives the value. A choice with no condition fits
+                      when every value it names is found, so put the one with the most values first.
+                    </p>
+                    {#each choices as c, ci (ci)}
+                      <div class="choice">
+                        <div class="line">
+                          <span class="word">{ci === 0 ? 'Use' : 'else'}</span>
+                          <input type="text" class="grow mono" bind:value={c.text} list="rule-variables" placeholder={'{{rule.stream}}_{{rule.change}}_{{rule.config}}'} aria-label={`Choice ${ci + 1}`} />
+                          <button type="button" class="tiny" aria-label={`Move choice ${ci + 1} up`} disabled={ci === 0} onclick={() => moveChoice(choices, ci, -1)}>↑</button>
+                          <button type="button" class="tiny" aria-label={`Move choice ${ci + 1} down`} disabled={ci === choices.length - 1} onclick={() => moveChoice(choices, ci, 1)}>↓</button>
+                          <button type="button" class="tiny" aria-label={`Remove choice ${ci + 1}`} disabled={choices.length === 1} onclick={() => choices.splice(ci, 1)}>×</button>
+                        </div>
+                        {#each c.when ?? [] as w, wi (wi)}
+                          <div class="line cond">
+                            <span class="word quiet">{wi === 0 ? 'if' : 'and'}</span>
+                            <input type="text" class="name mono" bind:value={w.value} list="rule-variables" placeholder="rule.shelf" aria-label={`Value condition ${wi + 1} of choice ${ci + 1} looks at`} />
+                            <select bind:value={w.test} aria-label={`Test of condition ${wi + 1} of choice ${ci + 1}`}>
+                              {#each COND_TESTS as t (t.value)}<option value={t.value}>{t.label}</option>{/each}
+                            </select>
+                            {#if needsText(w.test)}
+                              <input type="text" class="grow" bind:value={w.text} placeholder="Release" aria-label={`Text of condition ${wi + 1} of choice ${ci + 1}`} />
+                            {/if}
+                            <button type="button" class="tiny" aria-label={`Remove condition ${wi + 1} of choice ${ci + 1}`} onclick={() => c.when?.splice(wi, 1)}>×</button>
+                          </div>
+                        {/each}
+                        <div><button type="button" class="link" onclick={() => (c.when = [...(c.when ?? []), { value: '', test: 'found', text: '' }])}>Add a condition</button></div>
+                      </div>
+                    {/each}
+                    <div><button type="button" onclick={() => choices.push({ text: '' })}>Add a choice</button></div>
+                  </div>
+                {/if}
                 {#if v.find.type === 'value_of'}
                   <p class="hint quiet small">Finds <code>GPU: …</code>, <code>GPU = …</code>, or the key GPU in a JSON, YAML, TOML, INI or XML file (<code>build.number</code> reaches inside).</p>
                 {/if}
@@ -322,13 +406,19 @@
         </div>
       </section>
 
+      <datalist id="rule-variables">
+        {#each variables as x (x.name)}<option value={`{{${x.name}}}`}>{x.description}</option>{/each}
+      </datalist>
+
       <div class="test" aria-live="polite">
         <h3>Preview{#if testing}<span class="quiet small"> updating…</span>{/if}</h3>
         <div class="row">
           <input type="text" bind:value={testFolder} placeholder="Project folder (empty: the last capture's)" aria-label="Project folder to test against" />
           <button type="button" onclick={choose}>Choose…</button>
         </div>
-        {#if !draft.value.file.trim()}
+        {#if !reads}
+          <p class="quiet small">Made with the values of the last capture and the other data from files.</p>
+        {:else if !draft.value.file.trim()}
           <p class="quiet small">Write a file name above to see what is found.</p>
         {:else if test}
           {#if test.problem}<Chip kind="warn" label={test.problem} />{/if}
@@ -392,6 +482,10 @@
   .shown { white-space: pre-wrap; }
   .excerpt { margin: 4px 0 0; padding: 8px; max-height: 180px; overflow: auto; font: 12px var(--mono); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm); white-space: pre; }
   .small { font-size: 12px; }
+  .choices { display: grid; gap: 6px; }
+  .choice { display: grid; gap: 4px; padding: 8px; border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); }
+  .cond { padding-left: 18px; }
+  .tiny { width: 26px; height: 26px; padding: 0; }
   .buttons { display: flex; gap: 8px; }
   .error { color: var(--err); font-size: 13px; }
   .danger { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }

@@ -39,7 +39,7 @@
       Looked in: {info.places.map((p) => `${p.label} (${p.exists ? p.found : 'not found'})`).join(', ')}
     </p>
   {/if}
-  <ul>
+  <ul data-content>
     {#each visible as f (f.path)}
       <li>
         <label>

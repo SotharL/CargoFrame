@@ -116,7 +116,7 @@
 <div class="dd">
   <label for={id}>{block.title}</label>
   {#if asCombo}
-    <div class="row">
+    <div class="row" data-content>
       {#if showServer}
         <select class="step" aria-label="Server" value={server ?? ''} onchange={(e) => pickServer(e.currentTarget.value)}>
           {#each servers as s (s)}<option value={s}>{s}</option>{/each}
@@ -143,7 +143,7 @@
       />
     </div>
   {:else}
-    <select {id} bind:value disabled={info.status !== 'ready'}>
+    <select {id} bind:value disabled={info.status !== 'ready'} data-content>
       {#if info.status === 'loading'}
         <option value={null}>Loading…</option>
       {:else if info.status === 'needs_connection'}

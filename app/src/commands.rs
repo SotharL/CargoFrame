@@ -544,8 +544,19 @@ pub async fn test_rule(
                 .and_then(|p| cargoframe_context::climb::resolve_project_folder(&p))
                 .map(|r| r.folder)
         });
+    // values made from other values are previewed with the saved rules and the last capture's
+    let others: Vec<(String, Rule)> = state
+        .store
+        .load_all::<Rule>(cargoframe_config::Kind::Rules)
+        .map(|l| l.items)
+        .unwrap_or_default();
+    let known = state
+        .sessions
+        .latest()
+        .map(|s| s.view.variables.clone())
+        .unwrap_or_default();
     // Reading a big file can take a moment: not on the thread that draws the window.
-    blocking(move || tools::test_rule(&rule, folder.as_deref())).await
+    blocking(move || tools::test_rule(&rule, folder.as_deref(), &others, &known)).await
 }
 
 /// What a Files block would find. Without a program, the one of the last capture is used.

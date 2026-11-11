@@ -379,7 +379,15 @@ pub fn run_rules<'a>(
     // Rules that read the same part of the same file share one read.
     let mut cache: BTreeMap<(String, u64, u8), Result<String, RuleError>> = BTreeMap::new();
     for (id, rule) in rules {
-        let steps = rule.steps(id);
+        // values made from other values are made afterwards, by `combine_values`
+        let steps: Vec<_> = rule
+            .steps(id)
+            .into_iter()
+            .filter(|s| !s.find.is_combine())
+            .collect();
+        if rule.only_combines() && rule.file.trim().is_empty() {
+            continue;
+        }
         // the details of a file itself (size, date…) keep the reader they had before 0.3.0
         if rule.values.is_empty() && rule.format == Format::File {
             legacy.push((id, rule));
