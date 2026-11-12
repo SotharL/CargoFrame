@@ -1,8 +1,10 @@
 <script lang="ts">
-  // A log viewer: one of the files the window offers, line by line. The search box on top shows
-  // only the lines with its words in them (case aside); Copy all copies those. When the lines
-  // say when they were written, the time row keeps the ones of a moment: during the recording
-  // (or around the capture), or between two times. A line picked is shown whole under the list,
+  // A log viewer: one of the files the window offers, line by line. The search row shows only the
+  // lines with its words in them (case aside); Copy all copies those. When the lines say when
+  // they were written, the button at the start of the row turns it from a text search (the
+  // magnifier) into a time search (the clock), which keeps the lines of a moment: during the
+  // recording (or around the capture), or between two times. Both searches keep applying; the
+  // button shows a dot while the one not shown is on. A line picked is shown whole under the list,
   // to read and copy. "Open large" fills the window with it. Nothing of it is sent: the files go
   // as the Files blocks say.
   import { untrack } from 'svelte';
@@ -61,6 +63,9 @@
   const day = $derived(view.video?.started_at_ms ?? view.captured_at_ms ?? Date.now());
   let utc = $state(untrack(() => block.utc === true));
   let when = $state<'all' | 'moment' | 'between'>(untrack(() => (block.during ? 'moment' : 'all')));
+  /** Which search the row shows: the words (always at first, even when the block starts on the
+   *  recording: the time search then applies, and the clock says so with its dot), or the time. */
+  let mode = $state<'text' | 'time'>('text');
   let fromText = $state('');
   let toText = $state('');
 
@@ -100,6 +105,14 @@
   });
   const byTime = $derived(timed && span ? during(all, times, span) : all);
   const lines = $derived(matching(byTime, query));
+
+  /** The time search starts on the moment of the capture, when there is one. */
+  function switchMode() {
+    mode = mode === 'text' ? 'time' : 'text';
+    if (mode === 'time' && when === 'all' && moment) when = 'moment';
+  }
+  /** The search not shown is on: the button says so with a dot. */
+  const otherOn = $derived(mode === 'text' ? !!(timed && span) : query.trim() !== '');
 
   /** Between two times: it starts on the moment of the capture, or on the file's own first and last. */
   function pickBetween() {
@@ -164,13 +177,23 @@
     <button type="button" class="small" onclick={() => (large = !large)} aria-pressed={large}>{large ? 'Close' : 'Open large'}</button>
   </div>
   <div class="bar">
-    <input type="search" class="search" bind:value={query} placeholder="Show only lines with…" aria-label="Show only the lines with these words" />
-    <button type="button" class="small" disabled={lines.length === 0} onclick={() => copy(lines.map((l) => l.text).join('\n'), 'all')}>
-      {copied === 'all' ? 'Copied' : query.trim() || (timed && span) ? `Copy ${lines.length} lines` : 'Copy all'}
+    <button
+      type="button"
+      class="mode"
+      class:other={otherOn}
+      onclick={switchMode}
+      aria-label={mode === 'text' ? 'Search by time' : 'Search by text'}
+      title={mode === 'text' ? 'Searching by text: click to search by time' : 'Searching by time: click to search by text'}
+    >
+      {#if mode === 'text'}
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" /><path d="M10 10l4.5 4.5" /></svg>
+      {:else}
+        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 4v4.2l2.8 1.8" /></svg>
+      {/if}
     </button>
-  </div>
-  {#if loaded && timed}
-    <div class="bar">
+    {#if mode === 'text'}
+      <input type="search" class="search" bind:value={query} placeholder="Show only lines with…" aria-label="Show only the lines with these words" />
+    {:else}
       <select class="when" bind:value={when} onchange={() => when === 'between' && pickBetween()} aria-label="Lines written">
         <option value="all">Written any time</option>
         {#if moment}
@@ -183,11 +206,15 @@
         <span class="quiet">to</span>
         <input type="time" step="1" class="time" bind:value={toText} aria-label="To" />
       {/if}
+      {#if loaded && !timed}<span class="quiet none">No times in this file</span>{/if}
       <label class="utc quiet" title="The times written in this file are UTC, not this computer's time (Unreal Engine's logs are, by default)">
         <input type="checkbox" bind:checked={utc} /> UTC
       </label>
-    </div>
-  {/if}
+    {/if}
+    <button type="button" class="small" disabled={lines.length === 0} onclick={() => copy(lines.map((l) => l.text).join('\n'), 'all')}>
+      {copied === 'all' ? 'Copied' : query.trim() || (timed && span) ? `Copy ${lines.length} lines` : 'Copy all'}
+    </button>
+  </div>
   {#if offered.length === 0}
     <p class="quiet note">No file to show: the Files blocks of this capture list none.</p>
   {:else if problem}
@@ -208,7 +235,7 @@
       {/each}
     </ol>
     <p class="quiet foot">
-      {query.trim() || (timed && span) ? `${lines.length} of ${total} lines` : `${total} lines`}{timed && span ? `, written ${hms(span.from)} to ${hms(span.to)}` : ''}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}{!timed && when !== 'all' && total > 0 ? ' · no times CargoFrame can read in this file, so every line shows' : ''}
+      {query.trim() || (timed && span) ? `${lines.length} of ${total} lines` : `${total} lines`}{query.trim() ? ` with “${query.trim()}”` : ''}{timed && span ? `, written ${hms(span.from)} to ${hms(span.to)}` : ''}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}{!timed && (mode === 'time' || when !== 'all') && total > 0 ? ' · no times CargoFrame can read in this file, so every line shows' : ''}
     </p>
     {#if pickedLine}
       <div class="picked" role="group" aria-label={`Line ${pickedLine.n}`}>
@@ -231,7 +258,16 @@
   .bar select { min-width: 0; flex: 1; font-size: 12.5px; }
   .one { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .search { flex: 1; min-width: 0; font-size: 13px; }
-  .bar select.when { flex: 0 1 auto; }
+  .bar select.when { flex: 0 1 auto; min-width: 0; }
+  .none { font-size: 12px; white-space: nowrap; }
+  .mode {
+    position: relative; flex: none; width: 28px; height: 26px; padding: 0; display: grid; place-items: center;
+  }
+  .mode svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
+  /* the search not shown is on */
+  .mode.other::after {
+    content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
+  }
   .time { font-size: 12.5px; padding: 1px 4px; }
   .utc { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; margin-left: auto; white-space: nowrap; }
   .small { padding: 2px 8px; font-size: 12.5px; white-space: nowrap; }

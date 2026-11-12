@@ -173,7 +173,8 @@ when it was pressed ("Ctrl+S", "hello ⏎"). Drag the keys where you want them, 
 typed while it records shows, passwords too; not on Wayland. **A window that is moved:** with *Follow the window when
 it is moved* on (*Settings, Recording*), the whole screen is recorded and the clip stays on the window as it moves.
 **The time:** *Time* under a recording shows the time of each moment over it (2026-11-12 14:03:27), sent the same way;
-a Log viewer's time row keeps the lines written during the recording, or between two times.
+in a Log viewer, the clock at the start of the search row keeps the lines written during the recording, or between
+two times (the magnifier brings the text search back).
 
 Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording
