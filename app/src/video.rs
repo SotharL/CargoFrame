@@ -468,6 +468,8 @@ pub struct Extras {
     /// How a sound CargoFrame listens to itself is opened. `None` is the real one (the Windows
     /// sound system); a test gives a stand-in.
     pub listen: Option<Listen>,
+    /// The most it may run, in seconds; `None` is the recorder's own limit (an hour).
+    pub max_run_secs: Option<u32>,
 }
 
 /// Open a sound CargoFrame listens to itself: the computer's (`None`), or one program's.
@@ -793,6 +795,8 @@ pub enum Step {
     Start,
     /// A recording this trigger family started is running: stop it and open the window.
     Stop,
+    /// A continuous recording is running: open the window with its last seconds, and go on.
+    Snapshot,
     /// Something else is going on; this is what to tell the person.
     Refuse(&'static str),
     /// The recording ended by itself: say why (and the next press starts a new one).
@@ -800,11 +804,12 @@ pub enum Step {
 }
 
 /// Decide what a press of a video trigger does, from where the recording stands.
-pub fn step(view: &RecordingView, started_by_trigger: bool) -> Step {
+pub fn step(view: &RecordingView, started_by_trigger: bool, continuous: bool) -> Step {
     match view {
         RecordingView::Idle => Step::Start,
         RecordingView::Failed { message } if started_by_trigger => Step::Report(message.clone()),
         RecordingView::Failed { .. } => Step::Start,
+        RecordingView::Recording { .. } if started_by_trigger && continuous => Step::Snapshot,
         RecordingView::Recording { .. } if started_by_trigger => Step::Stop,
         RecordingView::Recording { .. } => {
             Step::Refuse("A test recording started from Settings is running. Stop it there first.")
@@ -819,6 +824,11 @@ pub struct Recording {
     /// The running recording was started by a trigger: it is not stopped after ten minutes (the
     /// person stops it with the shortcut, and only the last seconds are kept anyway).
     by_trigger: std::sync::atomic::AtomicBool,
+    /// The running recording goes on until a shortcut is held again: a press hands out its last
+    /// seconds instead of stopping it.
+    continuous: std::sync::atomic::AtomicBool,
+    /// Counts the copies handed out, so each has a folder of its own.
+    snapshots: std::sync::atomic::AtomicU64,
 }
 
 impl Default for Recording {
@@ -832,6 +842,101 @@ impl Recording {
         Self {
             slot: Mutex::new(Slot::Idle { failure: None }),
             by_trigger: std::sync::atomic::AtomicBool::new(false),
+            continuous: std::sync::atomic::AtomicBool::new(false),
+            snapshots: std::sync::atomic::AtomicU64::new(0),
+        }
+    }
+
+    /// Is a continuous recording running (one that a press does not stop)?
+    pub fn is_continuous(&self) -> bool {
+        self.continuous.load(std::sync::atomic::Ordering::SeqCst)
+            && matches!(&*self.lock(), Slot::Running(_))
+    }
+
+    /// Like `start_for_trigger`, for a recording that goes on until a shortcut is held again.
+    pub fn start_continuous(
+        &self,
+        video: &Video,
+        os: Os,
+        session: &Session,
+        work: &Path,
+        wish: &Wish,
+    ) -> Result<Started, String> {
+        let started = self.start_wanting_for(
+            video,
+            os,
+            session,
+            work,
+            video.window_secs,
+            wish,
+            Some(Video::MAX_CONTINUOUS_SECS),
+        )?;
+        self.by_trigger
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        self.continuous
+            .store(true, std::sync::atomic::Ordering::SeqCst);
+        Ok(started)
+    }
+
+    /// The last seconds of the running recording as a clip of their own, while it goes on.
+    pub fn snapshot(&self) -> Trial {
+        let n = self
+            .snapshots
+            .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        // copy the pieces under the lock (a few files), join them without it
+        let taken = {
+            let mut slot = self.lock();
+            let Slot::Running(a) = &mut *slot else {
+                return Trial::failed("No recording is running.", None);
+            };
+            let dir = a.work.join(format!("snapshot-{n}"));
+            let _ = std::fs::remove_dir_all(&dir);
+            a.recorder.snapshot(&dir).map(|segments| {
+                (
+                    segments,
+                    dir,
+                    a.found.clone(),
+                    a.choice.clone(),
+                    a.keep_secs,
+                )
+            })
+        };
+        let (segments, dir, found, choice, _keep) = match taken {
+            Ok(t) => t,
+            Err(e) => return Trial::failed(e.to_string(), None),
+        };
+        let clip = dir.join(TRIAL_CLIP);
+        let joined = recorder::assemble(&found.ffmpeg, &segments, &dir, &clip, &|| false);
+        drop(segments);
+        if let Err(e) = joined {
+            let _ = std::fs::remove_dir_all(&dir);
+            return Trial::failed(e.to_string(), Some(&choice));
+        }
+        let info = match probe(&found.ffprobe, &clip) {
+            Ok(i) => i,
+            Err(e) => {
+                let _ = std::fs::remove_dir_all(&dir);
+                return Trial::failed(
+                    format!("The clip could not be read back: {e}"),
+                    Some(&choice),
+                );
+            }
+        };
+        Trial {
+            ok: true,
+            message: format!(
+                "The last {:.1} s of the recording.",
+                info.duration_ms as f64 / 1000.0
+            ),
+            capture: Some(choice.capture),
+            encoder: Some(choice.encoder),
+            width: info.width,
+            height: info.height,
+            clip_ms: info.duration_ms,
+            clip_bytes: std::fs::metadata(&clip).map(|m| m.len()).unwrap_or(0),
+            clip_audio: info.has_audio,
+            took_ms: 0,
+            clip: Some(clip.display().to_string()),
         }
     }
 
@@ -884,11 +989,27 @@ impl Recording {
         keep_secs: u32,
         wish: &Wish,
     ) -> Result<Started, String> {
+        self.start_wanting_for(video, os, session, work, keep_secs, wish, None)
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn start_wanting_for(
+        &self,
+        video: &Video,
+        os: Os,
+        session: &Session,
+        work: &Path,
+        keep_secs: u32,
+        wish: &Wish,
+        max_run_secs: Option<u32>,
+    ) -> Result<Started, String> {
         validate(video)?;
         // a recording started by hand has the ten-minute limit (see `view`)
         let idle = matches!(&*self.lock(), Slot::Idle { .. });
         if idle {
             self.by_trigger
+                .store(false, std::sync::atomic::Ordering::SeqCst);
+            self.continuous
                 .store(false, std::sync::atomic::Ordering::SeqCst);
         }
         // refuse early, before looking for ffmpeg, so the message is the right one
@@ -919,6 +1040,7 @@ impl Recording {
             sources,
             patience: SOUND_PATIENCE,
             listen: None,
+            max_run_secs,
         };
         let mut started =
             self.start_with_extras(found, choice, video, session, work, keep_secs, &extras)?;
@@ -982,6 +1104,9 @@ impl Recording {
         let mut cfg = recorder_config(&found, &choice, video, session, &ring);
         cfg.window = Window::seconds(keep_secs);
         cfg.area = extras.area;
+        if let Some(secs) = extras.max_run_secs {
+            cfg.max_run_secs = secs;
+        }
         let mut notes = Vec::new();
         let (inputs, feeds) = open_sounds(
             &extras.sources,

@@ -222,6 +222,7 @@ impl Session {
             duration_ms: clip.duration_ms,
             bytes: clip.bytes,
             audio: clip.has_audio,
+            crop: None,
         });
         self.clip = Some(clip);
         self

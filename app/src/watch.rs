@@ -31,6 +31,10 @@ pub struct Watched {
 pub struct Watch {
     stop: Arc<AtomicBool>,
     thread: Option<JoinHandle<Watched>>,
+    /// What was seen so far and when watching began, to look at while it goes on (a continuous
+    /// recording hands out its last seconds without stopping).
+    seen: Arc<std::sync::Mutex<Vec<Seen>>>,
+    began: Instant,
 }
 
 pub fn look_of(sign: &RecordingSign) -> Look {
@@ -91,6 +95,42 @@ fn screens(app: &AppHandle, area: Option<Rect>) -> Option<(Rect, Rect)> {
     Some((desktop, screen))
 }
 
+/// The whole desktop (every monitor as one rectangle).
+pub fn desktop_of(app: &AppHandle) -> Option<Rect> {
+    screens(app, None).map(|(desktop, _)| desktop)
+}
+
+/// The part of a recording of the whole screen (`size`, in its pixels) that `window` (on the
+/// desktop) covers: the recording covers the desktop, or a screen of its size at the origin.
+/// `None` when it cannot be placed, or is (nearly) all of it.
+pub fn crop_in(
+    window: Rect,
+    desktop: Option<&Rect>,
+    size: (u32, u32),
+) -> Option<cargoframe_window::view::CropView> {
+    let (w, h) = (i64::from(size.0), i64::from(size.1));
+    // where the recording's top-left corner is on the desktop
+    let origin = match desktop {
+        Some(d) if i64::from(d.w) == w && i64::from(d.h) == h => (i64::from(d.x), i64::from(d.y)),
+        _ => (0, 0),
+    };
+    let x0 = (i64::from(window.x) - origin.0).clamp(0, w);
+    let y0 = (i64::from(window.y) - origin.1).clamp(0, h);
+    let x1 = (i64::from(window.x) + i64::from(window.w) - origin.0).clamp(0, w);
+    let y1 = (i64::from(window.y) + i64::from(window.h) - origin.1).clamp(0, h);
+    // even sides, as the video needs them
+    let (cw, ch) = ((x1 - x0) & !1, (y1 - y0) & !1);
+    if cw < 16 || ch < 16 || (cw >= w - 1 && ch >= h - 1) {
+        return None;
+    }
+    Some(cargoframe_window::view::CropView {
+        x: (x0 & !1) as u32,
+        y: (y0 & !1) as u32,
+        w: cw as u32,
+        h: ch as u32,
+    })
+}
+
 impl Watch {
     /// Start watching a recording of `area` (a window), or of the whole desktop.
     pub fn start(
@@ -99,14 +139,35 @@ impl Watch {
         area: Option<Rect>,
         wayland: bool,
     ) -> Watch {
+        Self::begin(app, sign, area, wayland, None)
+    }
+
+    /// Start watching a continuous recording of the whole screen: the outline goes around the
+    /// window in focus, and follows it as the focus changes; only the last `keep_ms` (twice
+    /// over) of what was seen is kept.
+    pub fn start_following(
+        app: &AppHandle,
+        sign: &RecordingSign,
+        wayland: bool,
+        keep_ms: u64,
+    ) -> Watch {
+        Self::begin(app, sign, None, wayland, Some(keep_ms))
+    }
+
+    fn begin(
+        app: &AppHandle,
+        sign: &RecordingSign,
+        area: Option<Rect>,
+        wayland: bool,
+        follow: Option<u64>,
+    ) -> Watch {
         // a Wayland desktop shows its own sign, and does not let windows be placed like this
-        let shown = if wayland {
+        let look = look_of(sign);
+        let mut shown = if wayland {
             Indicator::none()
         } else {
             match screens(app, area) {
-                Some((desktop, screen)) => {
-                    Indicator::show(area.unwrap_or(desktop), screen, look_of(sign))
-                }
+                Some((desktop, screen)) => Indicator::show(area.unwrap_or(desktop), screen, look),
                 None => Indicator::none(),
             }
         };
@@ -114,12 +175,13 @@ impl Watch {
         let flag = stop.clone();
         let app = app.clone();
         let own = std::process::id();
+        let seen_shared: Arc<std::sync::Mutex<Vec<Seen>>> = Arc::default();
+        let seen_out = seen_shared.clone();
+        let began = Instant::now();
         let thread = std::thread::Builder::new()
             .name("recording-watch".into())
             .spawn(move || {
-                let _sign = shown;
-                let began = Instant::now();
-                let mut seen = Vec::new();
+                let mut followed: Option<Rect> = None;
                 let mut next = Duration::ZERO;
                 loop {
                     if flag.load(Ordering::SeqCst) {
@@ -137,22 +199,60 @@ impl Watch {
                         }
                         if let Ok(Some(f)) = cargoframe_capture::focused_app() {
                             if f.pid != Some(own) {
+                                let b = f.bounds;
+                                let at = Rect {
+                                    x: b.x,
+                                    y: b.y,
+                                    w: b.w,
+                                    h: b.h,
+                                };
+                                // the outline moves with the window in focus
+                                if follow.is_some() && !wayland && followed != Some(at) {
+                                    followed = Some(at);
+                                    shown = Indicator::none();
+                                    if let Some((_, screen)) = screens(&app, Some(at)) {
+                                        shown = Indicator::show(at, screen, look);
+                                    }
+                                }
+                                let mut seen =
+                                    seen_shared.lock().unwrap_or_else(|e| e.into_inner());
+                                let now_ms = ran.as_millis() as u64;
                                 seen.push(Seen {
-                                    at_ms: ran.as_millis() as u64,
+                                    at_ms: now_ms,
                                     app: f,
                                 });
+                                if let Some(keep) = follow {
+                                    let from = now_ms.saturating_sub(keep * 2);
+                                    seen.retain(|s| s.at_ms >= from);
+                                }
                             }
                         }
                     }
                     std::thread::sleep(Duration::from_millis(100));
                 }
+                drop(shown);
+                let seen =
+                    std::mem::take(&mut *seen_shared.lock().unwrap_or_else(|e| e.into_inner()));
                 Watched {
                     seen,
                     ran_ms: began.elapsed().as_millis() as u64,
                 }
             })
             .ok();
-        Watch { stop, thread }
+        Watch {
+            stop,
+            thread,
+            seen: seen_out,
+            began,
+        }
+    }
+
+    /// What was seen so far, while watching goes on.
+    pub fn peek(&self) -> Watched {
+        Watched {
+            seen: self.seen.lock().unwrap_or_else(|e| e.into_inner()).clone(),
+            ran_ms: self.began.elapsed().as_millis() as u64,
+        }
     }
 
     /// Stop watching: the sign goes, and what was seen is handed back.
@@ -279,5 +379,60 @@ mod tests {
                 corner: Corner::BottomLeft
             }
         );
+    }
+
+    #[test]
+    fn the_window_in_focus_is_placed_in_a_recording_of_the_whole_screen() {
+        let desktop = Rect {
+            x: -1920,
+            y: 0,
+            w: 3840,
+            h: 1080,
+        };
+        let window = Rect {
+            x: -1000,
+            y: 101,
+            w: 801,
+            h: 600,
+        };
+        // a recording of the whole desktop: its corner is the desktop's
+        let c = crop_in(window, Some(&desktop), (3840, 1080)).unwrap();
+        assert_eq!((c.x, c.y, c.w, c.h), (920, 100, 800, 600));
+        // a recording of one screen at the origin
+        let c = crop_in(
+            Rect {
+                x: 10,
+                y: 10,
+                w: 400,
+                h: 300,
+            },
+            Some(&desktop),
+            (1920, 1080),
+        )
+        .unwrap();
+        assert_eq!((c.x, c.y, c.w, c.h), (10, 10, 400, 300));
+        // the whole of it, or nothing of it: no crop
+        assert!(crop_in(
+            Rect {
+                x: 0,
+                y: 0,
+                w: 1920,
+                h: 1080
+            },
+            None,
+            (1920, 1080)
+        )
+        .is_none());
+        assert!(crop_in(
+            Rect {
+                x: 5000,
+                y: 0,
+                w: 100,
+                h: 100
+            },
+            None,
+            (1920, 1080)
+        )
+        .is_none());
     }
 }

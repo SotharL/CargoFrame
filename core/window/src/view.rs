@@ -51,6 +51,18 @@ pub struct VideoView {
     pub bytes: u64,
     /// The recording has a sound track (the player shows its volume only then).
     pub audio: bool,
+    /// The part the window starts cropped to (the window in focus, in a continuous recording of
+    /// the whole screen), in the recording's pixels. The person can change it or take it away.
+    pub crop: Option<CropView>,
+}
+
+/// A part of a recording, in its pixels.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct CropView {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]

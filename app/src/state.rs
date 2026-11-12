@@ -32,6 +32,8 @@ pub struct AppState {
     pub recording: crate::video::Recording,
     /// While a trigger records: the sign on screen and the program in focus.
     watch: Mutex<Option<crate::watch::Watch>>,
+    /// The shortcuts held down right now (see `hold`).
+    pub holds: crate::hold::Holds,
     /// Looking for, downloading and installing a newer version.
     pub updates: std::sync::Arc<Updates>,
     /// The program that had focus at the last capture, so the layout builder can show what a
@@ -60,6 +62,15 @@ impl AppState {
         *self.watch.lock().unwrap_or_else(|e| e.into_inner()) = Some(w);
     }
 
+    /// What the watch of the recording has seen so far, leaving it running.
+    pub fn peek_watch(&self) -> Option<crate::watch::Watched> {
+        self.watch
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .map(|w| w.peek())
+    }
+
     /// The watch of the recording, taken away (its sign goes when it is finished or dropped).
     pub fn take_watch(&self) -> Option<crate::watch::Watch> {
         self.watch.lock().unwrap_or_else(|e| e.into_inner()).take()
@@ -79,6 +90,7 @@ impl AppState {
             timings: Timings::new(),
             recording: crate::video::Recording::new(),
             watch: Mutex::new(None),
+            holds: crate::hold::Holds::default(),
             updates: std::sync::Arc::new(Updates::new(
                 std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
                 std::sync::Arc::new(crate::secrets::KeyringStore),

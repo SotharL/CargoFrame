@@ -347,6 +347,8 @@ export interface VideoClipInfo {
   width: number;
   height: number;
   duration_ms: number;
+  /** The part the window starts cropped to: the window in focus, in a continuous recording. */
+  crop?: { x: number; y: number; w: number; h: number } | null;
   bytes: number;
   /** The recording has a sound track; without one the player shows no volume. */
   audio: boolean;
@@ -617,6 +619,8 @@ export interface Video {
   max_height: number;
   /** What shows on screen while a trigger records. */
   sign?: RecordingSign;
+  /** Holding a shortcut 2 seconds starts (and stops) a recording that goes on; a press then opens the last seconds. */
+  continuous?: boolean;
 }
 
 /** The corner of the recorded area the blinking dot is in. */

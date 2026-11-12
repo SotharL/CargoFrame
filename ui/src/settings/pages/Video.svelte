@@ -283,6 +283,31 @@
   </Section>
 
   <Section
+    title="Continuous recording"
+    hint="Record all the time, and keep only the last seconds: nothing is missed when something happens."
+  >
+    <label class="check" data-tour="video.continuous">
+      <input
+        type="checkbox"
+        checked={video.continuous === true}
+        onchange={(e) => {
+          video.continuous = e.currentTarget.checked;
+          void save();
+        }}
+      />
+      Hold a shortcut for 2 seconds to record continuously
+    </label>
+    {#if video.continuous}
+      <ul class="quiet how">
+        <li>Holding a shortcut for 2 seconds asks to start; holding one again stops it. The tray menu does the same.</li>
+        <li>Each short press opens that shortcut's window with the last {video.window_secs} seconds, and recording goes on.</li>
+        <li>The whole screen is recorded. When the layout records the window in focus, the window opens cropped to the one in focus the longest, and the red outline follows the window in focus.</li>
+        <li>With this on, a shortcut acts when it is let go, not when it is pressed. On Wayland, use the tray menu to start and stop.</li>
+      </ul>
+    {/if}
+  </Section>
+
+  <Section
     title="While recording"
     hint="Besides the notification and the tray icon, so nobody forgets a recording is running. Clicks go through them, and they are not in the recording: Windows leaves them out; on Linux they sit just outside a recorded window, so only a whole-screen recording shows them. Wayland desktops show their own sign instead."
   >
@@ -340,6 +365,7 @@
 {/if}
 
 <style>
+  .how { margin: 4px 0 0; padding-left: 20px; font-size: 13px; display: grid; gap: 2px; }
   .check { display: flex; gap: 8px; align-items: center; }
   .row { display: flex; gap: 8px; }
   .row.wrap { flex-wrap: wrap; }

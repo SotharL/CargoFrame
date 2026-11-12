@@ -3362,10 +3362,7 @@ mod tests {
         let log = w.session.read_offered("run.log").unwrap();
         assert_eq!((log.text.as_str(), log.cut), ("LOGLINE", false));
         assert_eq!(
-            w.session
-                .read_offered("added/notes.txt")
-                .unwrap()
-                .text,
+            w.session.read_offered("added/notes.txt").unwrap().text,
             "first\nsecond"
         );
         assert!(w.session.read_offered("../secret.txt").is_err());

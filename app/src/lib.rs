@@ -11,6 +11,7 @@ mod commands;
 mod connections;
 mod desktop;
 mod desktop_keys;
+mod hold;
 mod items;
 mod logging;
 mod notify;

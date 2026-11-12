@@ -45,9 +45,9 @@ describe('TagsBlock', () => {
       tags: ['ui'],
       recent: [{ value: 'ui', label: 'ui' }, { value: 'perf', label: 'perf' }],
       suggest: async () => [
-        { value: 'gpu', label: 'gpu' },
-        { value: 'gpu-driver', label: 'gpu-driver' },
-        { value: 'audio', label: 'audio' },
+        { value: 'gpu', label: 'gpu', group: null },
+        { value: 'gpu-driver', label: 'gpu-driver', group: null },
+        { value: 'audio', label: 'audio', group: null },
       ],
     });
     const last = screen.getByRole('group', { name: 'Last tags used' });

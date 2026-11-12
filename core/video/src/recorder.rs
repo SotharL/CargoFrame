@@ -492,6 +492,21 @@ impl Recorder {
             .collect()
     }
 
+    /// The segments finished so far, copied into `into`, while recording goes on. The segment
+    /// being written is not in it: the copy ends at most a second before now.
+    pub fn snapshot(&mut self, into: &Path) -> Result<Vec<Segment>, RecordError> {
+        self.poll()?;
+        let segments = self
+            .ring
+            .snapshot(into)
+            .map_err(|e| RecordError::Join(e.to_string()))?;
+        if segments.is_empty() {
+            Err(RecordError::NothingRecorded)
+        } else {
+            Ok(segments)
+        }
+    }
+
     /// How long the recorder has been running.
     pub fn elapsed(&self) -> Duration {
         self.started.elapsed()
