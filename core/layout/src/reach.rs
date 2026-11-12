@@ -479,6 +479,7 @@ mod tests {
                 role,
                 default_text: String::new(),
                 formatting: true,
+                one_line: false,
             }),
         )
     }

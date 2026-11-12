@@ -1491,6 +1491,7 @@ fn a_video_capture_cut_in_the_window_sends_only_the_part_that_was_kept() {
         end_ms: Some(3_000),
         crop: None,
         mark: false,
+        ..Default::default()
     });
     let (r, _) = go(&w, &req, vec![]);
     let ShareResult::SavedLocally { path, .. } = r else {
@@ -1530,12 +1531,14 @@ fn a_cut_that_keeps_everything_sends_the_recording_as_it_is() {
             end_ms: None,
             crop: None,
             mark: false,
+            ..Default::default()
         },
         crate::video::ClipEdit {
             start_ms: 0,
             end_ms: Some(9_000),
             crop: None,
             mark: false,
+            ..Default::default()
         },
     ] {
         let mut req = request();
@@ -1564,6 +1567,7 @@ fn a_cut_that_cannot_be_made_stops_the_share_and_says_why() {
         end_ms: Some(2_000),
         crop: None,
         mark: false,
+        ..Default::default()
     });
     let (r, _) = go(&w, &req, vec![]);
     let ShareResult::Blocked { reasons } = r else {
@@ -1589,6 +1593,7 @@ fn changing_nothing_is_told_from_cutting_or_cropping_something() {
         end_ms,
         crop: None,
         mark: false,
+        ..Default::default()
     };
     assert!(t(0, None).changes_nothing(5_000));
     assert!(t(0, Some(5_000)).changes_nothing(5_000));
@@ -1610,6 +1615,17 @@ fn changing_nothing_is_told_from_cutting_or_cropping_something() {
         ..t(0, None)
     };
     assert!(!marked.changes_nothing(5_000));
+    // keys shown need an export; a crop told to follow without a crop changes nothing
+    let keyed = ClipEdit {
+        keys: Some(crate::video::KeysAt { x: 0, y: 0 }),
+        ..t(0, None)
+    };
+    assert!(!keyed.changes_nothing(5_000));
+    let follow = ClipEdit {
+        follow: true,
+        ..t(0, None)
+    };
+    assert!(follow.changes_nothing(5_000));
 }
 
 #[test]
@@ -1642,6 +1658,7 @@ fn a_video_capture_cropped_in_the_window_sends_the_cropped_picture_for_the_whole
             h: 101,
         }),
         mark: false,
+        ..Default::default()
     });
     let (r, _) = go(&w, &req, vec![]);
     let ShareResult::SavedLocally { path, .. } = r else {
@@ -1717,6 +1734,7 @@ fn a_video_capture_with_a_mark_sends_the_recording_with_the_mark_on_it() {
         end_ms: None,
         crop: None,
         mark: true,
+        ..Default::default()
     });
     let (r, _) = go(&w, &req, vec![]);
     let ShareResult::SavedLocally { path, .. } = r else {
@@ -1751,6 +1769,87 @@ fn a_video_capture_with_a_mark_sends_the_recording_with_the_mark_on_it() {
 }
 
 #[test]
+fn a_video_capture_shows_the_keys_pressed_where_the_window_placed_them() {
+    let tmp = tempfile::tempdir().unwrap();
+    let source = tmp.path().join("source.mp4");
+    if real_clip(&source, 3).is_none() || seconds_of(&source).is_none() {
+        eprintln!("skipped: ffmpeg or ffprobe is not installed");
+        return;
+    }
+    let mut w = world(|_| MockResponse::json(200, json!({})));
+    make_video(&mut w, b"placeholder");
+    let mut clip = w.session.clip.clone().unwrap();
+    clip.path = source;
+    clip.duration_ms = 3_000;
+    w.session.clip = Some(clip);
+    w.session.view.video.as_mut().unwrap().keys = vec![cargoframe_window::view::KeyLine {
+        from_ms: 0,
+        to_ms: 2_000,
+        text: "Ctrl+S".into(),
+    }];
+    // what the window draws: a blank picture and a green one for the line, the same size
+    let picture = |rgba: [u8; 4]| {
+        cargoframe_capture::Frame::new(40, 20, rgba.repeat(40 * 20))
+            .unwrap()
+            .to_png()
+            .unwrap()
+    };
+    let body = |pics: &[Vec<u8>]| {
+        let mut b = Vec::new();
+        for p in pics {
+            b.extend((p.len() as u32).to_be_bytes());
+            b.extend(p);
+        }
+        b
+    };
+    let pictures = vec![picture([0, 0, 0, 0]), picture([0, 255, 0, 255])];
+    assert_eq!(
+        crate::commands::split_frames(&body(&pictures)).unwrap(),
+        pictures
+    );
+    w.session.set_clip_keys(Some(pictures));
+    let dir = w.out.path().join("zips");
+    fs::create_dir_all(&dir).unwrap();
+    set_safe(&w, Some(&dir.display().to_string()), 0);
+    disconnect(&w);
+    let mut req = request();
+    req.clip_edit = Some(crate::video::ClipEdit {
+        keys: Some(crate::video::KeysAt { x: 10, y: 30 }),
+        ..Default::default()
+    });
+    let (r, _) = go(&w, &req, vec![]);
+    let ShareResult::SavedLocally { path, .. } = r else {
+        panic!("{r:?}");
+    };
+    let mut z = zip::ZipArchive::new(fs::File::open(&path).unwrap()).unwrap();
+    let mut bytes = Vec::new();
+    z.by_name("recording.mp4")
+        .unwrap()
+        .read_to_end(&mut bytes)
+        .unwrap();
+    let sent = tmp.path().join("sent.mp4");
+    fs::write(&sent, &bytes).unwrap();
+    let frame = first_frame(&sent, 320).expect("a picture");
+    let at = |x: usize, y: usize| {
+        let i = (y * 320 + x) * 3;
+        (frame[i], frame[i + 1], frame[i + 2])
+    };
+    let (r, g, b) = at(25, 40);
+    assert!(
+        g > 180 && r < 90 && b < 90,
+        "the keys are drawn there: {:?}",
+        at(25, 40)
+    );
+    // without the pictures, the share stops and says why
+    w.session.set_clip_keys(None);
+    let (r, _) = go(&w, &req, vec![]);
+    let ShareResult::Blocked { reasons } = r else {
+        panic!("{r:?}");
+    };
+    assert_eq!(reasons, ["The keys pressed were not drawn: try again"]);
+}
+
+#[test]
 fn a_mark_that_was_not_uploaded_stops_the_share_and_says_so() {
     let mut w = world(|_| MockResponse::json(200, json!({})));
     make_video(&mut w, b"MP4 BYTES");
@@ -1764,6 +1863,7 @@ fn a_mark_that_was_not_uploaded_stops_the_share_and_says_so() {
         end_ms: None,
         crop: None,
         mark: true,
+        ..Default::default()
     });
     let (r, _) = go(&w, &req, vec![]);
     let ShareResult::Blocked { reasons } = r else {

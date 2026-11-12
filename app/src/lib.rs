@@ -153,6 +153,7 @@ pub fn run() {
             commands::add_files,
             commands::read_offered_file,
             commands::set_clip_mark,
+            commands::set_clip_keys,
             commands::share,
             commands::open_link,
             commands::report_painted,
@@ -485,6 +486,7 @@ mod shipped_config_tests {
             "allow-get-session-clip",
             "allow-set-edited-image",
             "allow-set-clip-mark",
+            "allow-set-clip-keys",
             "allow-share",
         ] {
             assert!(
@@ -521,6 +523,7 @@ mod shipped_config_tests {
             "allow-open-settings",
             "allow-report-painted",
             "allow-set-clip-mark",
+            "allow-set-clip-keys",
             "allow-set-edited-image",
             "allow-read-text",
             "allow-add-files",

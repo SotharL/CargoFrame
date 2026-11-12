@@ -18,6 +18,7 @@
   import Chip from '../lib/components/Chip.svelte';
   import Logo from '../lib/components/Logo.svelte';
   import { getApi } from '../lib/ipc';
+  import { hasAll, pagesNamed, placeOf, search, wordsOf, type Finding } from './search';
 
   let trayAvailable = $state(true);
   const page = $derived(route.page);
@@ -48,6 +49,90 @@
   const current = $derived(PAGES.find((p) => p.id === page)!);
   const groups = (['start', 'capture', 'app'] as PageGroup[]).map((g) => ({ id: g, pages: PAGES.filter((p) => p.group === g) }));
 
+  // Search: while there are words in the box, the sidebar lists only what has them, and the
+  // sections of the page shown that do not are greyed out.
+  let query = $state('');
+  let searchBox = $state<HTMLInputElement>();
+  const words = $derived(wordsOf(query));
+  const found = $derived(search(query));
+  const results = $derived.by(() => {
+    const named = pagesNamed(query);
+    return PAGES.map((p) => ({ page: p, findings: found.filter((f) => f.page === p.id) })).filter(
+      (r) => r.findings.length > 0 || named.includes(r.page.id),
+    );
+  });
+  let mainEl = $state<HTMLElement>();
+
+  /** What a section says: its text, and the names its controls carry (a switch's label…). */
+  function said(sec: HTMLElement): string {
+    const names = [...sec.querySelectorAll('[aria-label], [title], [placeholder]')].map(
+      (e) => `${e.getAttribute('aria-label') ?? ''} ${e.getAttribute('title') ?? ''} ${e.getAttribute('placeholder') ?? ''}`,
+    );
+    return `${sec.textContent ?? ''} ${names.join(' ')}`;
+  }
+
+  /** Grey out the sections of the page shown that do not have the words (in what they say, or
+   *  in the words the search knows them by). */
+  function dim() {
+    if (!mainEl) return;
+    const known = found.filter((f) => f.page === page && f.section).map((f) => f.section);
+    for (const sec of mainEl.querySelectorAll<HTMLElement>('section')) {
+      const title = sec.querySelector('h2')?.textContent?.trim() ?? '';
+      const keep = words.length === 0 || known.includes(title) || hasAll(said(sec), words);
+      sec.classList.toggle('search-dim', !keep);
+    }
+  }
+  $effect(() => {
+    void found;
+    void page;
+    if (!mainEl) return;
+    dim();
+    if (words.length === 0) return;
+    // the page fills in as it loads: look again when it changes, at most once a frame
+    let queued = false;
+    const watch = new MutationObserver(() => {
+      if (queued) return;
+      queued = true;
+      requestAnimationFrame(() => {
+        queued = false;
+        dim();
+      });
+    });
+    watch.observe(mainEl, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  });
+
+  /** Go to a finding and show it: the page, scrolled to it, which lights up a moment. */
+  async function show(f: Finding) {
+    go(f.page, f.arg ?? null);
+    for (let i = 0; i < 20; i++) {
+      await tick();
+      const el = placeOf(f);
+      if (el) {
+        el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
+        el.classList.remove('search-found');
+        void el.offsetWidth;
+        el.classList.add('search-found');
+        setTimeout(() => el.classList.remove('search-found'), 1800);
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 50));
+    }
+  }
+
+  function clearSearch() {
+    query = '';
+    searchBox?.focus();
+  }
+
+  function onWindowKey(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'f') {
+      e.preventDefault();
+      searchBox?.focus();
+      searchBox?.select();
+    }
+  }
+
   function onNavKey(e: KeyboardEvent) {
     if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
     e.preventDefault();
@@ -58,9 +143,47 @@
   }
 </script>
 
+<svelte:window onkeydown={onWindowKey} />
+
 <div class="shell">
   <nav aria-label="Settings sections">
     <div class="brand"><Logo variant="wordmark" size={26} /></div>
+    <div class="search" role="search">
+      <input
+        bind:this={searchBox}
+        bind:value={query}
+        type="text"
+        placeholder="Search settings"
+        aria-label="Search settings"
+        title="Search settings (Ctrl+F)"
+        autocomplete="off"
+        spellcheck="false"
+        onkeydown={(e) => {
+          if (e.key === 'Escape' && query) {
+            e.preventDefault();
+            clearSearch();
+          } else if (e.key === 'Enter' && found[0]) {
+            e.preventDefault();
+            void show(found[0]);
+          }
+        }}
+      />
+      {#if query}
+        <button type="button" class="clear" aria-label="Clear the search" title="Clear the search" onclick={clearSearch}>×</button>
+      {/if}
+    </div>
+    {#if words.length > 0}
+      <div class="results" aria-live="polite">
+        {#each results as r (r.page.id)}
+          <button type="button" class="item" class:on={page === r.page.id} aria-current={page === r.page.id ? 'page' : undefined} onclick={() => go(r.page.id)}>{r.page.title}</button>
+          {#each r.findings as f (f.title)}
+            <button type="button" class="found" onclick={() => show(f)}>{f.title}</button>
+          {/each}
+        {:else}
+          <p class="quiet none">No setting has these words.</p>
+        {/each}
+      </div>
+    {:else}
     {#each groups as g (g.id)}
       <p class="group" id="group-{g.id}">{GROUP_TITLES[g.id]}</p>
       <div role="group" aria-labelledby="group-{g.id}" class="pages">
@@ -78,10 +201,11 @@
         {/each}
       </div>
     {/each}
+    {/if}
     <GuideMenu />
   </nav>
 
-  <main class:wide={page === 'layouts'}>
+  <main class:wide={page === 'layouts'} bind:this={mainEl}>
     {#if !trayAvailable}
       <div class="banner" role="status">
         <Chip kind="warn" label="No tray icon" />
@@ -133,7 +257,28 @@
     display: flex; flex-direction: column; gap: 2px;
     min-height: 0; overflow-y: auto; scrollbar-gutter: stable;
   }
-  .brand { padding: 4px 10px 16px; }
+  .brand { padding: 4px 10px 12px; }
+  .search { position: relative; margin: 0 0 10px; }
+  .search input { width: 100%; padding: 6px 28px 6px 10px; font-size: 13px; }
+  .search .clear {
+    position: absolute; right: 4px; top: 50%; transform: translateY(-50%); width: 22px; height: 22px; padding: 0;
+    border: 0; border-radius: 999px; background: transparent; color: var(--quiet); font-size: 16px; line-height: 1; cursor: pointer;
+  }
+  .search .clear:hover { background: color-mix(in srgb, var(--text) 10%, transparent); color: var(--text); }
+  .results { display: flex; flex-direction: column; gap: 2px; }
+  .found {
+    text-align: left; border: 0; background: transparent; padding: 5px 10px 5px 22px; border-radius: var(--radius-sm);
+    font-size: 13px; color: var(--quiet);
+  }
+  .found:hover { background: color-mix(in srgb, var(--text) 7%, transparent); color: var(--text); }
+  .none { margin: 6px 10px; font-size: 13px; }
+  /* the parts of the page shown without the words looked for */
+  main :global(section.search-dim) { opacity: 0.35; filter: grayscale(1); transition: opacity 120ms; }
+  main :global(.search-found) { animation: found 1.8s ease-out; }
+  @keyframes found {
+    0%, 30% { box-shadow: 0 0 0 3px var(--accent); }
+    100% { box-shadow: 0 0 0 3px transparent; }
+  }
   .group {
     margin: 14px 10px 4px; font-size: 11.5px; font-weight: 600; letter-spacing: 0.04em;
     text-transform: uppercase; color: var(--quiet);

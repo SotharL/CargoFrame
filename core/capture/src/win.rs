@@ -22,8 +22,8 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextW,
-    GetWindowThreadProcessId, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN,
-    SM_YVIRTUALSCREEN,
+    GetWindowThreadProcessId, IsIconic, IsWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
+    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
 
 pub struct Windows;
@@ -35,6 +35,31 @@ fn rect_of(r: RECT) -> PixelRect {
         u32::try_from(r.right - r.left).unwrap_or(0),
         u32::try_from(r.bottom - r.top).unwrap_or(0),
     )
+}
+
+/// Where a window is now (by the handle `FocusedApp::window` gave), or `None` when it is gone or
+/// minimised.
+pub fn window_bounds(window: u64) -> Option<PixelRect> {
+    let hwnd = windows::Win32::Foundation::HWND(window as usize as *mut c_void);
+    // SAFETY: plain Win32 calls on a handle that may be stale; IsWindow checks it, and each call
+    // reports failure instead of faulting.
+    unsafe {
+        if !IsWindow(Some(hwnd)).as_bool() || IsIconic(hwnd).as_bool() {
+            return None;
+        }
+        let mut rect = RECT::default();
+        let framed = DwmGetWindowAttribute(
+            hwnd,
+            DWMWA_EXTENDED_FRAME_BOUNDS,
+            (&mut rect as *mut RECT).cast::<c_void>(),
+            std::mem::size_of::<RECT>() as u32,
+        )
+        .is_ok();
+        if !framed {
+            GetWindowRect(hwnd, &mut rect).ok()?;
+        }
+        Some(rect_of(rect))
+    }
 }
 
 fn process_path(pid: u32) -> Option<PathBuf> {

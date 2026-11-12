@@ -12,6 +12,7 @@
   import { containRect } from './contain';
   import { drawMarks } from './drawMark';
   import { stepRate } from './player';
+  import { KEY_SIZE, KEY_START, drawKeys, lineAt, placeAt } from './keyLayer';
 
   /**
    * `edit` is what the person chose: the part to keep and perhaps an area to crop to. It is
@@ -68,8 +69,32 @@
   let markCanvas = $state<ReturnType<typeof MarkCanvas>>();
   const markOn = $derived(marks.annotations.length > 0);
 
+  /** The crop follows the recorded window as it was moved (the places the capture noted). */
+  // the block is made again for each capture, so these are read once
+  const canFollow = untrack(() => (info.follow?.length ?? 0) > 1 && !!info.crop);
+  let followOn = $state(canFollow);
+  /** The keys pressed show over the clip, where the person put them (parts of the picture). */
+  const hasKeys = untrack(() => (info.keys?.length ?? 0) > 0);
+  let keysOn = $state(hasKeys);
+  let keysAt = $state({ ...KEY_START });
+  const showKeys = $derived(keysOn && hasKeys);
+
   const kept = $derived(Math.max(0, end - start));
-  const wholeClip = $derived(start <= 0 && end >= total && crop === null && !markOn);
+  const wholeClip = $derived(start <= 0 && end >= total && crop === null && !markOn && !showKeys);
+  /** Nothing changed from how the window opened: Reset edits has nothing to do. */
+  const pristine = $derived(
+    start <= 0 &&
+      end >= total &&
+      !markOn &&
+      followOn === canFollow &&
+      keysOn === hasKeys &&
+      keysAt.fx === KEY_START.fx &&
+      keysAt.fy === KEY_START.fy &&
+      JSON.stringify(crop) === JSON.stringify(info.crop ?? null),
+  );
+
+  /** The size of the picture as it is sent: the crop, or the whole recording (made even). */
+  const sent = $derived(crop ? { w: crop.w, h: crop.h } : { w: info.width & ~1, h: info.height & ~1 });
 
   $effect(() => {
     edit = wholeClip
@@ -79,12 +104,20 @@
           end_ms: end >= total ? null : Math.round(end * 1000),
           crop: crop ? { ...crop } : null,
           mark: markOn,
+          // said only when on, so a plain edit stays as it was
+          ...(followOn && crop ? { follow: true } : {}),
+          ...(showKeys ? { keys: { x: Math.round(keysAt.fx * sent.w), y: Math.round(keysAt.fy * sent.h) } } : {}),
         };
   });
 
+  /** Where the crop is at this moment: it moves with the window when it follows it. */
+  const liveCrop = $derived<Box | null>(crop && followOn && info.follow ? { ...crop, ...placeAt(info.follow, now * 1000) } : crop);
+  /** The line of keys showing now. */
+  const keyLine = $derived(showKeys ? lineAt(info.keys, now * 1000) : null);
+
   // What is on screen: the whole picture while the crop box is being set, else the part that
   // will be sent. The picture is laid out so that part fills the space, and the rest is clipped.
-  const visible = $derived<Box>(mode === 'crop' || !crop ? { x: 0, y: 0, w: info.width, h: info.height } : crop);
+  const visible = $derived<Box>(mode === 'crop' || !liveCrop ? { x: 0, y: 0, w: info.width, h: info.height } : liveCrop);
   const shown = $derived(containRect(space, visible.w, visible.h));
   const k = $derived(shown.w > 0 ? shown.w / visible.w : 0);
 
@@ -92,8 +125,21 @@
   /** Crop as on a screenshot: drag over the picture to draw the part to keep, then apply. */
   function startCrop() {
     markCanvas?.commitText();
+    // a crop set by hand stays where it is put: it starts from where the window is now
+    if (followOn && liveCrop) crop = { ...liveCrop };
+    followOn = false;
     cropBefore = crop ? { ...crop } : null;
     mode = 'crop';
+  }
+  /** Follow the window again, from the crop the capture started with. */
+  function toggleFollow() {
+    if (followOn) {
+      if (liveCrop) crop = { ...liveCrop };
+      followOn = false;
+    } else if (info.crop) {
+      crop = { ...info.crop };
+      followOn = true;
+    }
   }
   /** For the keyboard, or to start from something: a box in the middle, a little smaller than the picture. */
   function middleBox() {
@@ -109,6 +155,7 @@
   /** Back to the whole capture. */
   const resetCrop = () => {
     crop = null;
+    followOn = false;
     if (mode === 'crop') mode = 'none';
   };
   const startMark = () => (mode = 'mark');
@@ -120,6 +167,45 @@
     marks = clearAll();
     if (mode === 'mark') mode = 'none';
   }
+  /** The pictures of the keys the share uploads (a blank one, then one per line), or `null`. */
+  export async function exportKeys(): Promise<Blob[] | null> {
+    return showKeys && info.keys ? drawKeys(info.keys, sent.h) : null;
+  }
+
+  // Dragging the keys to where they show; they stay inside the picture.
+  let keysBox = $state<HTMLElement | null>(null);
+  let dragFrom: { x: number; y: number; fx: number; fy: number } | null = null;
+  function keysDown(e: PointerEvent) {
+    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
+    e.preventDefault();
+    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+    dragFrom = { x: e.clientX, y: e.clientY, ...keysAt };
+  }
+  function keysMove(e: PointerEvent) {
+    if (!dragFrom || shown.w <= 0) return;
+    const box = keysBox?.getBoundingClientRect();
+    const maxX = Math.max(0, 1 - (box?.width ?? 0) / shown.w);
+    const maxY = Math.max(0, 1 - (box?.height ?? 0) / shown.h);
+    keysAt = {
+      fx: Math.min(maxX, Math.max(0, dragFrom.fx + (e.clientX - dragFrom.x) / shown.w)),
+      fy: Math.min(maxY, Math.max(0, dragFrom.fy + (e.clientY - dragFrom.y) / shown.h)),
+    };
+  }
+  const keysUp = () => (dragFrom = null);
+  function keysKey(e: KeyboardEvent) {
+    const step = e.shiftKey ? 0.05 : 0.01;
+    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
+    const m = moves[e.key];
+    if (e.key === 'Delete' || e.key === 'Backspace') {
+      e.preventDefault();
+      keysOn = false;
+    } else if (m) {
+      e.preventDefault();
+      e.stopPropagation();
+      keysAt = { fx: Math.min(0.97, Math.max(0, keysAt.fx + m[0])), fy: Math.min(0.95, Math.max(0, keysAt.fy + m[1])) };
+    }
+  }
+
   /** The picture of the marks the share uploads, or `null` while there are none. */
   export async function exportMark(): Promise<Blob | null> {
     markCanvas?.commitText();
@@ -184,6 +270,15 @@
   function played() {
     if (player && (player.currentTime < start || player.currentTime >= end - 0.05)) seek(start);
   }
+  // while it plays, the keys and a following crop keep up with every picture
+  $effect(() => {
+    if (!playing || !player || typeof requestAnimationFrame === 'undefined') return;
+    let id = requestAnimationFrame(function step() {
+      tick();
+      id = requestAnimationFrame(step);
+    });
+    return () => cancelAnimationFrame(id);
+  });
   function playOrPause() {
     if (!player) return;
     if (player.paused) void player.play();
@@ -245,10 +340,14 @@
     }
   }
 
+  /** Back to how the window opened: all of it, the crop it started with, the keys where they were. */
   function resetEdits() {
     start = 0;
     end = total;
-    crop = null;
+    crop = info.crop ? { ...info.crop } : null;
+    followOn = canFollow;
+    keysOn = hasKeys;
+    keysAt = { ...KEY_START };
     marks = clearAll();
     mode = 'none';
   }
@@ -315,6 +414,30 @@
           {/if}
           {#if mode === 'crop'}<CropBox width={info.width} height={info.height} bind:crop />{/if}
         </div>
+        {#if showKeys && mode !== 'crop'}
+          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
+          <div
+            class="keys"
+            class:empty={!keyLine}
+            class:hot
+            bind:this={keysBox}
+            style:left="{keysAt.fx * shown.w}px"
+            style:top="{keysAt.fy * shown.h}px"
+            style:font-size="{Math.max(9, shown.h * KEY_SIZE)}px"
+            role="group"
+            tabindex="0"
+            aria-label="Keys pressed: drag, or use the arrow keys, to move them; Delete takes them off"
+            title="Drag to move the keys"
+            onpointerdown={keysDown}
+            onpointermove={keysMove}
+            onpointerup={keysUp}
+            onpointercancel={keysUp}
+            onkeydown={keysKey}
+          >
+            <span class="line">{keyLine?.text ?? 'Keys'}</span>
+            <button type="button" class="off" aria-label="Take the keys off the recording" title="Take the keys off" onclick={() => (keysOn = false)}>×</button>
+          </div>
+        {/if}
         {#if mode !== 'crop'}
           <PlayerControls
             {playing}
@@ -349,6 +472,12 @@
         <button type="button" class="small" aria-pressed={mode === 'mark'} onclick={() => (mode === 'mark' ? doneMark() : startMark())}>
           {markOn && mode !== 'mark' ? 'Edit marks' : 'Mark'}
         </button>
+        {#if hasKeys && mode === 'none'}
+          <button type="button" class="small" aria-pressed={keysOn} title="The keys pressed while it recorded" onclick={() => (keysOn = !keysOn)}>Keys</button>
+        {/if}
+        {#if canFollow && mode === 'none'}
+          <button type="button" class="small" aria-pressed={followOn} title="The crop moves with the window as it was moved" onclick={toggleFollow}>Follow window</button>
+        {/if}
         {#if mode === 'crop'}
           <span class="quiet hint">{crop ? 'Drag the box or its corner, or draw a new one' : 'Drag over the picture to choose the part to keep'}</span>
           {#if !crop}<button type="button" class="small" onclick={middleBox}>Start from the middle</button>{/if}
@@ -384,13 +513,13 @@
         {#if onshot}
           <button type="button" class="small" onclick={takeShot} disabled={!url || cannotPlay}>Take screenshot</button>
         {/if}
-        <button type="button" class="small" onclick={resetEdits} disabled={wholeClip}>Reset edits</button>
+        <button type="button" class="small" onclick={resetEdits} disabled={pristine}>Reset edits</button>
         {#if shotProblem}<span class="error" role="alert">{shotProblem}</span>{/if}
         <span class="quiet meta" aria-live="polite">
           {#if wholeClip}
             {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
           {:else}
-            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{/if}{#if markOn}, marked{/if}
+            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{#if followOn}{' following the window'}{/if}{/if}{#if markOn}, marked{/if}{#if showKeys}, with the keys{/if}
           {/if}
         </span>
       </div>
@@ -420,4 +549,22 @@
   .tool svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tool[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .tool.letter { font-family: Georgia, serif; }
+  /* black letters with a white outline, as the sent clip has them */
+  .keys {
+    position: absolute; display: inline-flex; align-items: center; gap: 0.35em; padding: 0.1em 0.25em; line-height: 1.4;
+    font-weight: 700; font-family: system-ui, 'Segoe UI', 'DejaVu Sans', sans-serif; color: #000; white-space: pre;
+    cursor: grab; touch-action: none; user-select: none; border-radius: 4px; border: 1px dashed transparent;
+    text-shadow: -0.08em -0.08em 0 #fff, 0.08em -0.08em 0 #fff, -0.08em 0.08em 0 #fff, 0.08em 0.08em 0 #fff,
+      0 -0.11em 0 #fff, 0 0.11em 0 #fff, -0.11em 0 0 #fff, 0.11em 0 0 #fff;
+  }
+  .keys:active { cursor: grabbing; }
+  .keys.hot, .keys:focus-visible { border-color: rgb(255 255 255 / 0.7); }
+  /* where they go, while no key shows: only when the mouse is over the picture */
+  .keys.empty .line { opacity: 0; }
+  .keys.empty.hot .line, .keys.empty:focus-visible .line { opacity: 0.45; }
+  .keys .off {
+    font: 600 12px/1 system-ui, sans-serif; padding: 1px 4px; border-radius: 999px; text-shadow: none; opacity: 0;
+    background: rgb(0 0 0 / 0.6); color: #fff; border: 0; cursor: pointer;
+  }
+  .keys.hot .off, .keys:focus-within .off { opacity: 1; }
 </style>

@@ -1265,6 +1265,30 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   recording.
 - **The sharing boxes and the ring.** The boxes of the sharing buttons start at the block's top-right corner, their top
   on the block's top; the ring of the hovered button goes around what the block holds, not its title.
+- **The keys pressed, over a recording** (a switch on the Video block, off by default). While it records, a thread
+  looks at the keyboard fifty times a second, the way the system answers "is this key down" (`GetAsyncKeyState` on
+  Windows, `QueryKeymap` on X11), not with a hook into other programs' input; presses stay in memory with their time,
+  as long as the recording keeps pictures. Keys pressed close together make one line ("hello ⏎", "Ctrl+S"), shown from
+  each press until 1.5 s after the last. The window plays them over the clip where the person puts them (or takes them
+  off); for the share it draws each line as a picture, all the same size, black with a white outline, and ffmpeg lays
+  them over the sent picture at their times from one list (`concat`), after the crop, so they stay where they were
+  put. Wayland does not let a program see other programs' keys: the recording says so and goes on. Every key shows,
+  passwords too, and the switch says it.
+- **A window that is moved** (*Settings, Recording*, off by default). A recording of a region cannot move, so with
+  this on the whole screen is recorded and where the window is gets noted ten times a second (`WindowPlace`, one
+  connection kept, the window asked by its own id, so another window taking the focus changes nothing). The clip opens
+  cropped to it and the crop slides from place to place as it plays and in the sent clip (a sum of ramps ffmpeg works
+  out for each frame). It costs a larger picture to encode, hence the switch. A crop set by hand stops following;
+  *Follow window* brings it back. The same places serve a continuous recording that has the setting on. Recordings
+  made smaller (the height setting) now crop at that scale too: the crop to the window in focus was off on screens
+  taller than the setting.
+- **Text blocks keep one line.** In a short window a block's share of the height could leave its box a few pixels high;
+  the box now keeps at least one line (the block scrolls instead), and *One line high* keeps it at exactly that.
+- **Searching the settings.** A box above Setup (Ctrl+F). While it has words, the sidebar lists only the pages and
+  settings that have them, and the sections of the page shown that do not are greyed out rather than hidden, so
+  nothing moves under the mouse; a result opens its page and lights the setting up. What can be found is a list
+  (`settings/search.ts`) checked against the pages' own section titles and `data-tour` names, so it cannot point at
+  something that was renamed; the page shown is also matched by what it says on screen.
 - **Tidying, kept to safe steps.** Slack, Teams and Discord share one function for the words of a message; the tests of
   `share.rs` and `session.rs` moved to files of their own (3,000 lines); the trigger code reads the recording settings
   in one place; an unused style went.

@@ -38,6 +38,17 @@ describe('VideoOptions', () => {
     expect(seen.now.screenshot_at_end).toBe(true);
   });
 
+  it('shows the keys pressed only when asked, and says that passwords show too', async () => {
+    const seen = open(fresh());
+    const box = screen.getByRole('switch', { name: 'Show the keys pressed on the recording' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.getByText(/passwords too/)).toBeTruthy();
+    await fireEvent.click(box);
+    expect(seen.now.keys).toBe(true);
+    await fireEvent.click(box);
+    expect(seen.now.keys).toBeUndefined();
+  });
+
   it('records the window in focus when asked, and says what happens when it cannot be found', async () => {
     const seen = open(fresh());
     await fireEvent.change(select('Record'), { target: { value: 'focused_window' } });

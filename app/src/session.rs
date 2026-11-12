@@ -45,6 +45,9 @@ pub struct Session {
     /// For a recording: the mark the window drew on a see-through picture the size of the
     /// recording (a PNG), sent just before a share. `None` while there is no mark.
     clip_mark: Mutex<Option<Vec<u8>>>,
+    /// The pictures of the keys pressed the window drew for the recording: a see-through blank
+    /// one first, then one for each line of `view.video.keys`, all the same size.
+    clip_keys: Mutex<Option<Vec<Vec<u8>>>>,
     /// The folder the ticked files are read from, as worked out at capture time: the highest
     /// folder any Files block looks in (the project folder unless a block looks higher). Every
     /// file path the window shows is relative to it. Kept here so a share never trusts a folder
@@ -109,6 +112,7 @@ impl Session {
             clip: None,
             edited: Mutex::new(None),
             clip_mark: Mutex::new(None),
+            clip_keys: Mutex::new(None),
             files_root,
             dir: Mutex::new(None),
             added: Mutex::new(BTreeMap::new()),
@@ -223,6 +227,8 @@ impl Session {
             bytes: clip.bytes,
             audio: clip.has_audio,
             crop: None,
+            follow: Vec::new(),
+            keys: Vec::new(),
         });
         self.clip = Some(clip);
         self
@@ -328,6 +334,18 @@ impl Session {
 
     pub fn set_clip_mark(&self, png: Option<Vec<u8>>) {
         *self.clip_mark.lock().unwrap_or_else(|e| e.into_inner()) = png;
+    }
+
+    pub fn set_clip_keys(&self, pictures: Option<Vec<Vec<u8>>>) {
+        *self.clip_keys.lock().unwrap_or_else(|e| e.into_inner()) = pictures;
+    }
+
+    /// The pictures of the keys the window drew (the blank one first), if it sent them.
+    pub fn clip_keys(&self) -> Option<Vec<Vec<u8>>> {
+        self.clip_keys
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// The mark the window drew for the recording, if there is one.

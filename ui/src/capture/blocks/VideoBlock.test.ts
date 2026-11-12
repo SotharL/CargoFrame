@@ -91,6 +91,90 @@ describe('VideoBlock', () => {
       expect(seen[seen.length - 1]).toEqual({ start_ms: 0, end_ms: null, crop: { x: 100, y: 50, w: 640, h: 360 }, mark: false });
     });
 
+    describe('keys and a window that moved', () => {
+      const keys = [
+        { from_ms: 1_000, to_ms: 2_000, text: 'Ctrl+S' },
+        { from_ms: 3_000, to_ms: 4_500, text: 'hello ⏎' },
+      ];
+      async function open(more: object) {
+        setApiForTests(memoryApi());
+        const seen: (ClipEdit | null)[] = [];
+        render(Harness, { info: { ...info, ...more }, onedit: (t: ClipEdit | null) => seen.push(t) });
+        const video = await waitFor(() => {
+          const v = document.querySelector('video');
+          expect(v).not.toBeNull();
+          return v as HTMLVideoElement;
+        });
+        return { video, last: () => seen[seen.length - 1] };
+      }
+      const keysBox = () => screen.getByRole('group', { name: /Keys pressed/ });
+
+      it('shows each line of keys at its time, near the bottom-left corner, and sends them', async () => {
+        const { video, last } = await open({ keys });
+        // they go on the sent picture, where they are shown: 3% across, 84% down
+        expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: null, mark: false, keys: { x: 38, y: 605 } });
+        expect(screen.getByText('Keeping all 9.5 s, with the keys')).toBeTruthy();
+        for (const [at, text] of [[1.5, 'Ctrl+S'], [3.2, 'hello ⏎']] as const) {
+          Object.defineProperty(video, 'currentTime', { value: at, configurable: true });
+          await fireEvent.timeUpdate(video);
+          expect(keysBox().textContent).toContain(text);
+        }
+        // between two lines nothing shows but the place, while the mouse is over it
+        Object.defineProperty(video, 'currentTime', { value: 2.5, configurable: true });
+        await fireEvent.timeUpdate(video);
+        expect(keysBox().classList.contains('empty')).toBe(true);
+      });
+
+      it('moves with the arrow keys, comes off with its ×, and back with the Keys button', async () => {
+        const { last } = await open({ keys });
+        await fireEvent.keyDown(keysBox(), { key: 'ArrowUp', shiftKey: true });
+        await fireEvent.keyDown(keysBox(), { key: 'ArrowRight' });
+        expect(last()?.keys).toEqual({ x: 51, y: 569 });
+        await fireEvent.click(screen.getByRole('button', { name: 'Take the keys off the recording' }));
+        expect(last()).toBeNull();
+        expect(screen.queryByRole('group', { name: /Keys pressed/ })).toBeNull();
+        const button = screen.getByRole('button', { name: 'Keys' });
+        expect(button.getAttribute('aria-pressed')).toBe('false');
+        await fireEvent.click(button);
+        expect(last()?.keys).toBeTruthy();
+        // Reset edits puts them back where they started
+        await fireEvent.click(screen.getByRole('button', { name: 'Reset edits' }));
+        expect(last()?.keys).toEqual({ x: 38, y: 605 });
+        expect((screen.getByRole('button', { name: 'Reset edits' }) as HTMLButtonElement).disabled).toBe(true);
+      });
+
+      it('has no keys button when no key was pressed', async () => {
+        const { last } = await open({ keys: [] });
+        expect(last()).toBeNull();
+        expect(screen.queryByRole('button', { name: 'Keys' })).toBeNull();
+      });
+
+      it('follows the window as it was moved, until the crop is set by hand', async () => {
+        const follow = [
+          { at_ms: 0, x: 100, y: 50 },
+          { at_ms: 2_000, x: 100, y: 50 },
+          { at_ms: 3_000, x: 300, y: 150 },
+        ];
+        const { video, last } = await open({ crop: { x: 100, y: 50, w: 640, h: 360 }, follow });
+        expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: { x: 100, y: 50, w: 640, h: 360 }, mark: false, follow: true });
+        expect(document.querySelector('.meta')?.textContent).toMatch(/cropped to 640×360 following the window/);
+        const follows = screen.getByRole('button', { name: 'Follow window' });
+        expect(follows.getAttribute('aria-pressed')).toBe('true');
+        // half-way through the move, the crop is half-way; turned off, it stays there
+        Object.defineProperty(video, 'currentTime', { value: 2.5, configurable: true });
+        await fireEvent.timeUpdate(video);
+        await fireEvent.click(follows);
+        expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: { x: 200, y: 100, w: 640, h: 360 }, mark: false });
+        await fireEvent.click(follows);
+        expect(last()?.follow).toBe(true);
+        // a crop set by hand does not follow
+        await fireEvent.click(screen.getByRole('button', { name: 'Edit crop' }));
+        expect(follows.isConnected).toBe(false);
+        await fireEvent.click(screen.getByRole('button', { name: 'Apply crop' }));
+        expect(last()?.follow).toBeUndefined();
+      });
+    });
+
     it('keeps all of the recording until a handle is moved, and says what is kept after', async () => {
       const { last } = await ready();
       expect(last()).toBeNull();

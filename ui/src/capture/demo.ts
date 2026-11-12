@@ -136,7 +136,7 @@ export async function demoSession(): Promise<SessionView> {
       },
       proj: { status: 'loading', selected: null, options: [], message: null },
     },
-    ...(video ? { video: both ? { width: 640, height: 400, duration_ms: 1_300, bytes: 40_000, audio: false } : { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true } } : {}),
+    ...(video ? { video: both ? { width: 640, height: 400, duration_ms: 1_300, bytes: 40_000, audio: false } : { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true, ...demoExtras(params) } } : {}),
     issues: [],
     sharing: {
       ...(local
@@ -251,4 +251,24 @@ export function demoShare(kind: string | null): ShareResult {
         notes: ['1 file was skipped: logs/old.log could not be read'], close: false,
       };
   }
+}
+
+/** `&keys=1` adds keys pressed to the demo recording, `&follow=1` a window that was moved. */
+function demoExtras(params: URLSearchParams) {
+  const keys = params.get('keys') === '1'
+    ? [
+        { from_ms: 500, to_ms: 1_200, text: 'Ctrl+S' },
+        { from_ms: 2_000, to_ms: 2_200, text: 'h' },
+        { from_ms: 2_200, to_ms: 2_400, text: 'hi' },
+        { from_ms: 2_400, to_ms: 3_900, text: 'hi ⏎' },
+      ]
+    : undefined;
+  const follow = params.get('follow') === '1'
+    ? [
+        { at_ms: 0, x: 100, y: 80 },
+        { at_ms: 3_000, x: 100, y: 80 },
+        { at_ms: 5_000, x: 500, y: 240 },
+      ]
+    : undefined;
+  return { ...(keys ? { keys } : {}), ...(follow ? { follow, crop: { x: 100, y: 80, w: 640, h: 400 } } : {}) };
 }

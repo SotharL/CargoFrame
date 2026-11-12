@@ -22,6 +22,8 @@ pub struct Segment {
     pub bytes: u64,
     /// How long it is, as ffmpeg reported.
     pub length_ms: u64,
+    /// Where it ends on the recording's own timeline (0 is its first picture).
+    pub end_ms: u64,
 }
 
 impl Drop for Segment {
@@ -120,6 +122,7 @@ impl Ring {
                 path,
                 bytes: meta.len(),
                 length_ms: ((e.end - e.start) * 1000.0).round() as u64,
+                end_ms,
             };
             let weight = usize::try_from(seg.bytes).unwrap_or(usize::MAX);
             // a segment out of order is dropped (and its file with it)
@@ -164,6 +167,7 @@ impl Ring {
                 path: copy,
                 bytes: s.bytes,
                 length_ms: s.length_ms,
+                end_ms: s.end_ms,
             });
         }
         Ok(out)

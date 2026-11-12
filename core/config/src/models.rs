@@ -230,6 +230,10 @@ pub struct Video {
     /// Holding a shortcut for two seconds starts (and stops) a recording that goes on: each
     /// short press then opens the window with the last seconds, and recording carries on.
     pub continuous: bool,
+    /// A recording of the window in focus follows it when it is moved: the whole screen is
+    /// recorded and the clip is cropped to where the window is, moment by moment. It costs more
+    /// (a larger picture to encode), so it is off unless asked for.
+    pub follow_window: bool,
 }
 
 impl Video {
@@ -254,6 +258,7 @@ impl Default for Video {
             max_height: 1080,
             sign: RecordingSign::default(),
             continuous: false,
+            follow_window: false,
         }
     }
 }

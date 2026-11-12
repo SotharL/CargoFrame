@@ -199,6 +199,17 @@ change or remove the crop). With the setting on, a shortcut acts when it is let 
 press; the tray menu starts and stops it too, which is the way on Wayland (the desktop does not say when a key is
 let go).
 
+**Keys pressed** (a switch on the Video block, off by default): while it records, the keyboard is asked fifty times a
+second which keys are down (no hook into other programs), and the presses are kept in memory with their time. Keys
+close together make one line ("hello ⏎", "Ctrl+S") shown from each press until 1.5 s after the last; the window plays
+them over the clip where the person drags them, and the share lays them over the sent picture at the same times
+(black letters, white outline). Not on Wayland, which does not show other programs' keys.
+
+**A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the whole
+screen is recorded and the window's place is noted ten times a second; the clip opens cropped to the window and the
+crop slides with it, in the window and in the sent clip. A crop set by hand stays put; *Follow window* follows again.
+It costs a larger picture to encode.
+
 </details>
 
 ---
@@ -218,7 +229,9 @@ flowchart LR
 
 ### The Settings window
 
-The sidebar follows that order. Each thing is set on one page only; **Guides** at the bottom walk through any setup by
+The sidebar follows that order, under a **search** box (Ctrl+F): while it has words, the sidebar lists only the pages
+and settings that have them (a click opens the page and lights the setting up), and the sections of the page shown
+that do not are greyed out; × clears it. Each thing is set on one page only; **Guides** at the bottom walk through any setup by
 opening the page, outlining the field and saying in one sentence what goes in it; the guides for connecting each
 service are grouped under *Connect a service*, below the others.
 
@@ -228,7 +241,7 @@ service are grouped under *Connect a service*, below the others.
 | Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Triggers** | Shortcuts and the layout each opens |
 | | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder, and values made from other values) and *Fill fields* (steps that fill a field of the service on each share) |
-| | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, the outline and dot shown while recording |
+| | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, following a window that is moved, the outline and dot shown while recording |
 | CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
 | | **Your data** | What is kept on this computer, clear or reset, export and import |
 | | **About** | Version, updates, speed and memory numbers |
@@ -242,8 +255,8 @@ service are grouped under *Connect a service*, below the others.
 | Element | Behaviour |
 |---------|-----------|
 | **Screenshot** | Pen, square, circle, arrow, text (bold, italic, on a box; click a text to change it), crop; colour and size. *Read text*: drag over text on the picture, the lines found are marked; copy them all or click the ones to copy, or *Try again* to read it another way |
-| **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends* |
-| **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in |
+| **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends*; the keys pressed (dragged where they go, × takes them off, *Keys* brings them back); *Follow window* when the window was moved |
+| **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in. The box keeps at least one line; *One line high* keeps it at that |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
@@ -384,5 +397,7 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   Reddit flairs are not set from them.
 - Continuous recording cannot tell a held shortcut on Wayland: the tray menu starts and stops it there. It stops by
   itself after 12 hours.
+- The keys pressed and following a moved window: Windows and X11, not Wayland. A key tapped faster than the keyboard is
+  looked at (20 ms) can be missed on X11. Every key typed while recording shows, passwords too.
 - Next for the connectors (required fields shown before sending, company sign-in):
   [connectors.md](connectors.md).

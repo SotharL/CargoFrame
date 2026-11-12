@@ -1077,6 +1077,69 @@ pub fn set_clip_mark(state: State<'_, AppState>, request: Request<'_>) -> Result
     Ok(())
 }
 
+/// The most bytes of key pictures one share may send (a few hundred small pictures).
+const MAX_KEYS_BYTES: usize = 64 * 1024 * 1024;
+
+/// The pictures of the keys pressed the window drew over a recording, sent just before a share:
+/// each is a PNG after its length (four bytes, big-endian); a see-through blank one first, then
+/// one for each line of keys of the capture. An empty body clears them. Named by
+/// `x-session-id` like the mark.
+#[tauri::command]
+pub fn set_clip_keys(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+    let InvokeBody::Raw(bytes) = request.body() else {
+        return Err("Expected pictures".into());
+    };
+    let id: u64 = request
+        .headers()
+        .get("x-session-id")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse().ok())
+        .ok_or("The capture is not named")?;
+    let session = state
+        .sessions
+        .by_id(id)
+        .ok_or("This capture is no longer open")?;
+    let lines = session
+        .view
+        .video
+        .as_ref()
+        .map(|v| v.keys.len())
+        .ok_or("This capture has no recording")?;
+    if bytes.is_empty() {
+        session.set_clip_keys(None);
+        return Ok(());
+    }
+    if bytes.len() > MAX_KEYS_BYTES {
+        return Err("The pictures of the keys are too large".into());
+    }
+    let pictures = split_frames(bytes)?;
+    if pictures.len() != lines + 1 {
+        return Err("The pictures of the keys do not match the keys pressed".into());
+    }
+    for p in &pictures {
+        check_png(p)?;
+    }
+    session.set_clip_keys(Some(pictures));
+    Ok(())
+}
+
+/// Pieces each written after their length (four bytes, big-endian).
+pub fn split_frames(mut bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
+    let mut out = Vec::new();
+    while !bytes.is_empty() {
+        let (len, rest) = bytes
+            .split_first_chunk::<4>()
+            .ok_or("The pictures of the keys are cut short")?;
+        let len = u32::from_be_bytes(*len) as usize;
+        if rest.len() < len {
+            return Err("The pictures of the keys are cut short".into());
+        }
+        out.push(rest[..len].to_vec());
+        bytes = &rest[len..];
+    }
+    Ok(out)
+}
+
 /// The picture as edited (crop, drawings), sent just before a share. An empty body clears it.
 /// The capture is named in the `x-session-id` header so a late call cannot reach a newer one.
 #[tauri::command]
@@ -1410,4 +1473,25 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
 #[tauri::command]
 pub async fn set_update_token(app: AppHandle, value: String) -> Result<(), String> {
     blocking(move || app.state::<AppState>().updates.set_token(&value)).await?
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::split_frames;
+
+    #[test]
+    fn pictures_are_read_one_after_the_other_and_a_short_body_is_refused() {
+        let mut body = Vec::new();
+        for p in [&b"one"[..], b"", b"three"] {
+            body.extend((p.len() as u32).to_be_bytes());
+            body.extend(p);
+        }
+        assert_eq!(
+            split_frames(&body).unwrap(),
+            vec![b"one".to_vec(), Vec::new(), b"three".to_vec()]
+        );
+        assert!(split_frames(&body[..body.len() - 1]).is_err());
+        assert!(split_frames(&[0, 0]).is_err());
+        assert!(split_frames(&[]).unwrap().is_empty());
+    }
 }

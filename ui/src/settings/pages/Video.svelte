@@ -308,6 +308,30 @@
   </Section>
 
   <Section
+    title="A window that is moved"
+    hint="For layouts that record the window in focus."
+  >
+    <label class="check" data-tour="video.follow-window">
+      <input
+        type="checkbox"
+        checked={video.follow_window === true}
+        onchange={(e) => {
+          video.follow_window = e.currentTarget.checked;
+          void save();
+        }}
+      />
+      Follow the window when it is moved
+    </label>
+    <p class="quiet said">
+      {#if video.follow_window}
+        The whole screen is recorded, and the clip opens cropped to where the window is, moment by moment (“Follow window” under the recording turns it off). Recording the whole screen uses more of the computer than one window. Not on Wayland, where the desktop shares the window itself.
+      {:else}
+        Off, the recording keeps the place and size the window had when it started. On, it records the whole screen and follows the window, which uses more of the computer.
+      {/if}
+    </p>
+  </Section>
+
+  <Section
     title="While recording"
     hint="Besides the notification and the tray icon, so nobody forgets a recording is running. Clicks go through them, and they are not in the recording: Windows leaves them out; on Linux they sit just outside a recorded window, so only a whole-screen recording shows them. Wayland desktops show their own sign instead."
   >
@@ -366,6 +390,7 @@
 
 <style>
   .how { margin: 4px 0 0; padding-left: 20px; font-size: 13px; display: grid; gap: 2px; }
+  .said { margin: 4px 0 0; font-size: 13px; }
   .check { display: flex; gap: 8px; align-items: center; }
   .row { display: flex; gap: 8px; }
   .row.wrap { flex-wrap: wrap; }

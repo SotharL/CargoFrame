@@ -162,6 +162,11 @@ pub(crate) fn exe_of(pid: u32) -> Option<std::path::PathBuf> {
 }
 
 impl X11 {
+    /// Where a window is now (by the id `FocusedApp::window` gave), or `None` when it is gone.
+    pub fn window_bounds(&self, window: u64) -> Option<PixelRect> {
+        self.bounds(u32::try_from(window).ok()?).ok()
+    }
+
     /// Under Wayland, the XWayland window in focus. The compositor marks an XWayland window
     /// active only while it has the focus and clears the mark when a Wayland window takes it,
     /// so only that mark is trusted here (the X input focus can be left on an old window).

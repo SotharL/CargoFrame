@@ -177,7 +177,7 @@ export interface AudioDevices {
 
 export type BlockContent =
   | { type: 'screenshot' }
-  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio; screenshot_at_end?: boolean }
+  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio; screenshot_at_end?: boolean; keys?: boolean }
   | {
       type: 'text';
       title: string;
@@ -186,6 +186,8 @@ export type BlockContent =
       default_text: string;
       /** Formatting buttons above a plain text box, for the services that can show them. Absent: on. */
       formatting?: boolean;
+      /** The box is one line high, whatever the size of the block. */
+      one_line?: boolean;
     }
   | {
       type: 'sharing_button';
@@ -352,6 +354,24 @@ export interface VideoClipInfo {
   bytes: number;
   /** The recording has a sound track; without one the player shows no volume. */
   audio: boolean;
+  /** With `crop`: where its corner goes as the recorded window was moved (it slides between them). */
+  follow?: ClipPlace[];
+  /** The keys pressed, each line with when it shows (the Video block asks for them). */
+  keys?: KeyLine[];
+}
+
+/** Where a following crop's corner is at a moment, in the recording's pixels. */
+export interface ClipPlace {
+  at_ms: number;
+  x: number;
+  y: number;
+}
+
+/** A line of keys shown over a recording ("Ctrl+S", "hello ⏎"), on its timeline. */
+export interface KeyLine {
+  from_ms: number;
+  to_ms: number;
+  text: string;
 }
 
 export interface SessionView {
@@ -621,6 +641,8 @@ export interface Video {
   sign?: RecordingSign;
   /** Holding a shortcut 2 seconds starts (and stops) a recording that goes on; a press then opens the last seconds. */
   continuous?: boolean;
+  /** A recording of the window in focus follows it when it is moved (the whole screen is recorded). */
+  follow_window?: boolean;
 }
 
 /** The corner of the recorded area the blinking dot is in. */
@@ -915,6 +937,10 @@ export interface ClipEdit {
   crop?: { x: number; y: number; w: number; h: number } | null;
   /** A mark was drawn: the window uploads it just before the share. */
   mark?: boolean;
+  /** The crop follows the recorded window as it was moved. */
+  follow?: boolean;
+  /** Show the keys pressed, their top-left corner here on the sent picture (the window uploads them). */
+  keys?: { x: number; y: number } | null;
 }
 
 // ----- updates (Settings, General) -----

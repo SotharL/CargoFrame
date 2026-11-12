@@ -244,6 +244,7 @@ mod tests {
                         role: Default::default(),
                         default_text: "{{rule.build}} {{project.name}} {{rule.build}}".into(),
                         formatting: true,
+                        one_line: false,
                     }),
                 },
                 Block {

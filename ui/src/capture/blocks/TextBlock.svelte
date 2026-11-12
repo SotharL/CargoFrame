@@ -49,7 +49,7 @@
   {/if}
   <!-- Title "inside the box" saves a row: it sits in the empty box like a hint and goes away as soon as
        there is text. The title is still the box's tooltip, so hovering the box tells what it is. -->
-  <div class="field" class:inside title={inside ? block.title : undefined} data-content>
+  <div class="field" class:inside class:one={block.one_line} title={inside ? block.title : undefined} data-content>
     {#if inside && value === ''}
       <div class="inner" aria-hidden="true">{block.title}{#if tag}<span class="role">{tag}</span>{/if}</div>
     {/if}
@@ -96,9 +96,12 @@
     border: 1px solid var(--accent); color: var(--text);
     background: color-mix(in srgb, var(--accent) 16%, transparent);
   }
-  .field { position: relative; min-height: 0; display: grid; }
+  /* never less than one line of text, however small the block's share of the window gets; the
+     cell scrolls instead. "One line high" keeps it at that. */
+  .field { --one-line: calc(1.4em + 18px); position: relative; min-height: var(--one-line); display: grid; }
+  .field.one { height: var(--one-line); align-self: start; }
   textarea {
-    width: 100%; height: 100%; min-height: 0; resize: none;
+    width: 100%; height: 100%; min-height: 0; resize: none; line-height: 1.4;
     background: var(--surface); border: 1px solid var(--border-strong);
     border-radius: var(--radius-sm); padding: 8px; font: inherit; color: inherit;
   }
