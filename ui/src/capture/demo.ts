@@ -57,6 +57,15 @@ export async function demoSession(): Promise<SessionView> {
           : b,
       );
   }
+  // `?demo=tags` swaps the chat for a Tags block and adds a log viewer, to look at them.
+  if (params.get('demo') === 'tags') {
+    layout.blocks = layout.blocks.map((b) =>
+      b.id === 'chat'
+        ? ({ id: 'labels', type: 'tags', rect: { x: 8, y: 5, w: 4, h: 2 }, title: 'Labels', tags: ['crash', '{{rule.build}}'] } as typeof b)
+        : b,
+    );
+    layout.blocks.push({ id: 'log', type: 'log_view', rect: { x: 0, y: 12, w: 12, h: 4 }, title: 'Log', filter: '' });
+  }
   // `?buttons=3` adds buttons to Claude, Slack and Reddit (up to 5 with Google and a zip), to look at the boxes.
   const extra: [string, ServiceKind | null][] = [['claude', 'claude'], ['slack', 'slack'], ['reddit', 'reddit'], ['google', 'google']];
   const more = Math.max(1, Math.min(5, Number(params.get('buttons')) || 1)) - 1;
@@ -97,6 +106,7 @@ export async function demoSession(): Promise<SessionView> {
       prompt: { value: 'What is wrong in Foo?', unresolved: [] },
       note: { value: 'Seen on 2026-10-23 {{rule.build}}', unresolved: ['rule.build'] },
     },
+    tags: { labels: { tags: ['crash'], over: 0 } },
     files: {
       logs: {
         truncated: false,

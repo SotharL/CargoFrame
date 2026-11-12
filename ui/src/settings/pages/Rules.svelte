@@ -89,6 +89,8 @@
   function addValue() {
     if (!draft) return;
     const v = newValue(taken());
+    // in a rule that reads no file, a new value is made from others too
+    if (!reads) v.find = { type: 'combine', choices: [{ text: '' }] };
     draft.value.values = [...(draft.value.values ?? []), v];
     draft.auto[v.key] = true;
   }
@@ -292,7 +294,7 @@
             {@const result = found(v.key)}
             <div class="value">
               <div class="line">
-                <span class="word">Read</span>
+                <span class="word">{v.find.type === 'combine' ? 'Make' : 'Read'}</span>
                 <input
                   type="text"
                   class="name"
@@ -402,7 +404,7 @@
               {/if}
             </div>
           {/each}
-          <div><button type="button" onclick={addValue}>Add a value to read</button></div>
+          <div><button type="button" onclick={addValue}>{reads ? 'Add a value to read' : 'Add a value'}</button></div>
         </div>
       </section>
 
@@ -411,7 +413,7 @@
       </datalist>
 
       <div class="test" aria-live="polite">
-        <h3>Preview{#if testing}<span class="quiet small"> updating…</span>{/if}</h3>
+        <h3>Preview{#if testing}<span class="quiet small updating">updating…</span>{/if}</h3>
         <div class="row">
           <input type="text" bind:value={testFolder} placeholder="Project folder (empty: the last capture's)" aria-label="Project folder to test against" />
           <button type="button" onclick={choose}>Choose…</button>
@@ -476,6 +478,7 @@
   .check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
   .test { display: grid; gap: 8px; padding: 12px; background: var(--surface-2); border-radius: var(--radius-sm); }
   .test h3 { font-size: 13px; }
+  .updating { margin-left: 6px; font-weight: 400; }
   .row { display: flex; gap: 8px; }
   .row input { flex: 1; min-width: 0; }
   .result { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
