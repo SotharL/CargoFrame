@@ -490,21 +490,7 @@ pub fn compose(payload: &Payload, with_image: bool, subject: bool) -> Composed {
         .value("title")
         .map(one_line)
         .filter(|t| !t.is_empty());
-    let body = payload
-        .value("message")
-        .map(str::to_string)
-        .or_else(|| {
-            payload
-                .prompt
-                .as_deref()
-                .map(|p| p.trim().to_string())
-                .filter(|p| !p.is_empty())
-        })
-        .or_else(|| {
-            Some(payload.title.trim().to_string())
-                .filter(|t| !t.is_empty() && payload.value("title").is_none())
-        });
-    let body = crate::payload::with_tags_line(body, payload);
+    let body = payload.message(payload.value("title").is_some());
     let mut html = String::new();
     let mut headline = None;
     if let Some(t) = title {

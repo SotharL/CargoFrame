@@ -333,21 +333,7 @@ pub fn escape(s: &str) -> String {
 /// was written) the window title.
 pub fn compose(payload: &Payload) -> String {
     let one_line = |s: &str| s.split_whitespace().collect::<Vec<_>>().join(" ");
-    let body = payload
-        .value("message")
-        .map(str::to_string)
-        .or_else(|| {
-            payload
-                .prompt
-                .as_deref()
-                .map(|p| p.trim().to_string())
-                .filter(|p| !p.is_empty())
-        })
-        .or_else(|| {
-            Some(payload.title.trim().to_string())
-                .filter(|t| !t.is_empty() && payload.value("title").is_none())
-        });
-    let body = crate::payload::with_tags_line(body, payload);
+    let body = payload.message(payload.value("title").is_some());
     let mut parts = Vec::new();
     if let Some(t) = payload.value("title") {
         let t = one_line(t).replace('*', "");

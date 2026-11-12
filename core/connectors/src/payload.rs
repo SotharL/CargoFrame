@@ -152,6 +152,22 @@ impl Payload {
             .filter(|v| !v.is_empty())
     }
 
+    /// The words of a chat message: the `message` field, else the prompt, else the window title
+    /// (unless a title of its own is shown above it, `titled`), then the tags as a last line.
+    pub fn message(&self, titled: bool) -> Option<String> {
+        let body = self
+            .value("message")
+            .map(str::to_string)
+            .or_else(|| {
+                self.prompt
+                    .as_deref()
+                    .map(|p| p.trim().to_string())
+                    .filter(|p| !p.is_empty())
+            })
+            .or_else(|| Some(self.title.trim().to_string()).filter(|t| !t.is_empty() && !titled));
+        with_tags_line(body, self)
+    }
+
     /// The values of a field that takes several (`crash, gpu`), each once, in order.
     pub fn list(&self, key: &str) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();

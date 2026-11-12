@@ -492,21 +492,7 @@ pub fn compose(payload: &Payload, with_title: bool) -> (String, bool) {
         .map(one_line)
         .map(|t| t.replace('*', ""))
         .filter(|t| !t.is_empty());
-    let body = payload
-        .value("message")
-        .map(str::to_string)
-        .or_else(|| {
-            payload
-                .prompt
-                .as_deref()
-                .map(|p| p.trim().to_string())
-                .filter(|p| !p.is_empty())
-        })
-        .or_else(|| {
-            Some(payload.title.trim().to_string())
-                .filter(|t| !t.is_empty() && !(with_title && explicit_title.is_some()))
-        });
-    let body = crate::payload::with_tags_line(body, payload);
+    let body = payload.message(with_title && explicit_title.is_some());
     let mut parts = Vec::new();
     if with_title {
         if let Some(t) = &explicit_title {
