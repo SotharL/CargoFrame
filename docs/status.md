@@ -8,7 +8,7 @@ those is true for each piece.
 
 ## What is verified
 
-- **Unit and integration tests:** about 1,030 Rust tests and 525 UI tests pass. `cargo clippy -D warnings`,
+- **Unit and integration tests:** about 1,050 Rust tests and 544 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
 - **The 7 November round** (Discord webhooks and bot, dependent dropdowns, last five choices, get-token buttons, the
   Claude app line, screenshot with video, the guides): unit tests on each piece, connector tests against the mock
