@@ -1305,11 +1305,12 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
 - **Log lines by time.** The log viewer reads the time at the start of each line (ISO dates with or without a zone,
   `2026/11/12 14:03:27,123`, Unreal Engine's `[2026.11.12-14.03.27:123]`, syslog's `Nov 12 14:03:27`, or the time
   alone on the capture's day); a line without one (the rest of a message, a stack trace) has the time of the line
-  before. One row holds both searches: a switch at its start turns it from the words (shown first) to the time, its free side showing the icon of the search it turns to (a clock, or a magnifier); both keep applying, a dot on it saying when the one not shown is on.
-  The time
-  search keeps the lines written *during the recording* (5 s either side, as the program's
-  clock and the recording may not agree to the second), *around the capture* for a screenshot (the minute before), or
-  *between* two times typed (a block can start on the recording; the row still opens on the words). Times without a zone are the computer's own, or UTC when the block or the person says
-  (Unreal Engine writes UTC by default). A file whose lines carry no time it can read says so and shows every line;
-  nothing else is guessed (a day written 12/11/2026 could be either way round, so it is not read).
+  before. One row holds both searches: a switch at its start turns it from the words (shown first) to the time, its
+  free side showing the icon of the search it turns to (a clock, or a magnifier); both keep applying, and a dot on the
+  switch says when the one not shown is on. The time search keeps the lines written *during the recording* (5 s either
+  side, as the program's clock and the recording may not agree to the second), *around the capture* for a screenshot
+  (the minute before), or *between* two times typed (a block can start on the recording; the row still opens on the
+  words). Times without a zone are the computer's own, or UTC when the block or the person says (Unreal Engine writes
+  UTC by default). A file whose lines carry no time it can read says so and shows every line; nothing else is guessed
+  (a day written 12/11/2026 could be either way round, so it is not read).
 
