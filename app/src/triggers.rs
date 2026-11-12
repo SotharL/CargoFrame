@@ -164,12 +164,7 @@ pub fn held(app: &AppHandle, trigger_id: &str) {
         );
         return;
     }
-    let keep = state
-        .store
-        .load_or_default::<Video>()
-        .map(video::normalized)
-        .unwrap_or_default()
-        .window_secs;
+    let keep = video_settings(&state).window_secs;
     let app2 = app.clone();
     let id = trigger_id.to_string();
     // the question waits for an answer: not on the thread that got the key
@@ -196,11 +191,7 @@ pub fn held(app: &AppHandle, trigger_id: &str) {
 /// the whole screen, so the window in focus can change while it runs.
 pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
     let state = app.state::<AppState>();
-    let settings = state
-        .store
-        .load_or_default::<Video>()
-        .map(video::normalized)
-        .unwrap_or_default();
+    let settings = video_settings(&state);
     let layout = layout_of(&state, trigger_id);
     let (mut wish, mut notes) = video::wish_for(layout.as_ref(), &focus);
     // the window in focus changes while it runs: the whole screen is recorded, and the window
@@ -252,6 +243,20 @@ pub fn stop_continuous(app: &AppHandle) {
         "Continuous recording stopped",
         "Nothing more is recorded.",
     );
+}
+
+/// The recording settings, as they are used (numbers kept in their bounds).
+fn video_settings(state: &AppState) -> Video {
+    state
+        .store
+        .load_or_default::<Video>()
+        .map(video::normalized)
+        .unwrap_or_default()
+}
+
+/// How much of the end of a recording is kept, in milliseconds.
+fn keep_ms(state: &AppState) -> u64 {
+    u64::from(video_settings(state).window_secs) * 1000
 }
 
 /// The layout a trigger opens.
@@ -454,11 +459,7 @@ fn focus() -> Option<video::Focus> {
 }
 
 fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
-    let settings = state
-        .store
-        .load_or_default::<Video>()
-        .map(video::normalized)
-        .unwrap_or_default();
+    let settings = video_settings(state);
     let work = crate::video::work_dir(&state.store);
     // the layout this trigger opens says what to record: the screen or the window in focus, and
     // which sounds go in
@@ -520,14 +521,7 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     let trial = state.recording.stop();
     let watched = state.take_watch().map(|w| w.finish());
     tray::refresh_menu(app);
-    let keep_ms = u64::from(
-        state
-            .store
-            .load_or_default::<Video>()
-            .map(video::normalized)
-            .unwrap_or_default()
-            .window_secs,
-    ) * 1000;
+    let keep_ms = keep_ms(state);
     let made = session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms);
     state.end_capture();
     match made {
@@ -551,14 +545,7 @@ fn snapshot_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     }
     let trial = state.recording.snapshot();
     let watched = state.peek_watch();
-    let keep_ms = u64::from(
-        state
-            .store
-            .load_or_default::<Video>()
-            .map(video::normalized)
-            .unwrap_or_default()
-            .window_secs,
-    ) * 1000;
+    let keep_ms = keep_ms(state);
     let made =
         session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms).map(|s| {
             crop_to_focus(
