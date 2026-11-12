@@ -105,6 +105,17 @@ describe('Properties: a text block', () => {
     expect(block.formatting).toBe(true);
   });
 
+  it('locks the box to one line high when ticked, for any role', async () => {
+    const block = { ...title, role: 'prompt' } as Block & { one_line?: boolean };
+    open(block);
+    const box = screen.getByRole('switch', { name: 'One line high' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(block.one_line).toBe(true);
+    await fireEvent.click(box);
+    expect(block.one_line).toBeUndefined();
+  });
+
   it('sends the box in the field chosen for each sharing button, one box per field', async () => {
     const box = { ...title, id: 'notes' } as Block;
     const other = { ...title, id: 'other' } as Block;

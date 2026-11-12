@@ -18,14 +18,14 @@ order to build them in, and the gates every change passes. For what the app is a
 | # | Requirement |
 |---|-------------|
 | F1 | Wait in the tray; run a **trigger** on a global shortcut (or from the tray menu) |
-| F2 | Capture the program in focus, the screen, or all screens; or **record** the last seconds when the layout has a Video block, showing that it records (an outline, a blinking dot) and following the focus; or record **continuously** and hand out the last seconds on each press |
+| F2 | Capture the program in focus, the screen, or all screens; or **record** the last seconds when the layout has a Video block, showing that it records (an outline, a blinking dot), following the focus and a window that is moved, with the keys pressed over it; or record **continuously** and hand out the last seconds on each press |
 | F3 | Find the program's **project folder** (same name as the program, else one folder above) |
 | F4 | **Data rules**: if a file is found there, add it to the files and read values (after a name, between two pieces, the line with a word); the kind of file is known from its name; values made from other values, with choices |
 | F5 | Open a window built from a **layout** (a grid of 12 to 24 columns): Screenshot (with editor and text reading), Video (trim, crop, marks), Text (formatting, tables, pictures in the text), Dropdown, Files (and files added by hand), Tags, Log viewer, sharing buttons |
 | F6 | Fill dropdowns from the service's API; "where to post" as one path that goes as deep as the service does |
 | F7 | Send to Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip |
 | F8 | Retry a failed send, then keep a zip, so nothing is lost |
-| F9 | Settings window for everything; in-app guides; templates; export, import, reset |
+| F9 | Settings window for everything, with a search; in-app guides; templates; export, import, reset |
 | F10 | Other programs fill a layout through `cargoframe open` |
 
 ### How well it must do it
@@ -127,8 +127,9 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `context` | Climb to the project folder; `{{variable}}` templates; the read allow-list | pure string logic |
 | `safe` | What happens on failure: retry with backoff, failure classes, fallback ladder, zip names | `retry`, `FailureKind`, `SendError` |
 | `handoff` | Claude chat links, clipboard plan, pinned and recent chats | |
-| `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; Wayland focus, portal screenshot and screen sharing | `capture_with`, `wayland.rs`, `screencast.rs` |
-| `video` | Ring of segments (and a copy of it while it goes on, for continuous recording), clip edits (trim, crop, marks laid over as a picture), the ffmpeg command; Windows loopback sound; a fed picture (Wayland) | `segments.rs`, `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
+| `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; where a window is (`WindowPlace`); Wayland focus, portal screenshot and screen sharing | `capture_with`, `wayland.rs`, `screencast.rs` |
+| `video` | Ring of segments (and a copy of it while it goes on, for continuous recording), clip edits (trim, crop that may follow a window, marks laid over as a picture, keys laid over the sent picture), the ffmpeg command; Windows loopback sound; a fed picture (Wayland) | `segments.rs`, `export.rs` (`keys_list`), `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
+| `keys` | The keys pressed while recording: the keyboard asked which keys are down (Windows `GetAsyncKeyState`, X11 `QueryKeymap`), each press with its time; lines of keys with when they show | `Tracker`, `captions` |
 | `indicator` | The sign shown while recording: a red outline and a blinking dot, as native windows (Win32, excluded from capture; X11 with the Shape extension); none on Wayland | `geometry.rs`, `win.rs`, `x11.rs` |
 | `ocr` | Read the text in part of a screenshot on this computer: `Windows.Media.Ocr`, or the `tesseract` program on Linux; the picture is prepared first (grey, larger, light-on-dark turned), three ways to try | `read`, `prepare.rs` |
 | `layout` | Blocks on a grid of 12 to 24 columns (`Layout::columns`), validation chips, templates; tags kept clean and at most 25 (`split_tags`) | `model.rs`, `templates.rs` |
@@ -151,7 +152,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `lib.rs` | Start-up: plugins, tray, shortcuts, single instance, `cargoframe open` |
 | `tray.rs`, `tray_host.rs` | Tray icon and menu (pause triggers, open settings, quit) |
 | `triggers.rs` | Run a trigger: capture or record, build the session, open a window |
-| `watch.rs` | While recording: show the sign (following the window in focus in a continuous recording), and note which program has the focus and for how long |
+| `watch.rs` | While recording: show the sign (following the window in focus in a continuous recording), note which program has the focus and for how long, where a followed window is, and the keys pressed; the crop that follows a window and the lines of keys for a clip |
 | `hold.rs` | A shortcut held two seconds (continuous recording) told from a press |
 | `desktop_keys.rs` | Wayland: hand the shortcuts to the desktop, and say how in Settings |
 | `session.rs` | Build the `SessionView`; `records()` (layout has a Video block); apply values from `cargoframe open` |
@@ -176,6 +177,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `settings/layout` | The layout builder: grid (with its column count), block inspector, the starting-text editor with its list of values (`TextAutomation.svelte`), sharing routes |
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes |
+| `settings/search.ts` | What the settings search finds: each setting's page, section title or `data-tour` name, and the words it is found by (checked against the pages' code by `search.test.ts`) |
 | `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files (＋ to add by hand), Tags, Log viewer (`logLines.ts`), Sharing |
 | `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
 | `capture/*.ts` | Values, tick boxes, what each button will send, remembered choices |
@@ -219,7 +221,7 @@ flowchart LR
 | **9b · Wayland** | Compositor focus (sway, Hyprland, KWin script, XWayland), `grim` and portal screenshots, `shortcuts` crate, screen sharing with GStreamer, clipboard hand-over for Claude | The Wayland end-to-end test passes on headless sway |
 | **10 · Company features** | Cargo feature per connector and `CF_SERVICES`; `cargoframe open`; system certificates and proxy | A build with only `jira` has no other service's code; a script fills a layout |
 | **11 · Polish (0.3.0)** | Recording sign (`indicator`) and focus following; tables and code blocks, pictures in the text; the values list; *Read text* (`ocr`); wider layouts | Each has unit and UI tests; the Windows parts compile on CI |
-| **12 · Tags, logs, continuous (0.4.0)** | Tags block and its fields per service; log viewer; files added by hand; values made from other values; continuous recording with hold-to-start | Each has unit and UI tests; a real continuous recording on a virtual screen hands out two clips |
+| **12 · Tags, logs, continuous (0.4.0)** | Tags block and its fields per service; log viewer; files added by hand; values made from other values; continuous recording with hold-to-start; keys pressed over a recording; a recording that follows a moved window; settings search; Text blocks that keep one line | Each has unit and UI tests; a real continuous recording on a virtual screen hands out two clips; a real export shows the keys at their time and follows a moved window |
 
 ---
 
@@ -376,7 +378,8 @@ listed. Branches merge with a **merge commit**.
 2. Its settings in `model.rs`, a `Kind`, and a Cargo feature in `core/connectors` and `app`.
 3. Its kind and settings in `ui/src/lib/types.ts` and `connector.ts`, its fields in `ConnectionForm.svelte` (with
    `tour` names), its get-token links in `ui/src/lib/connectorHelp.ts`, its colour in `tokens.css`.
-4. A template in `core/layout/src/templates.rs` and a guide in `ui/src/settings/guide/tours.ts`.
+4. A template in `core/layout/src/templates.rs`, a guide in `ui/src/settings/guide/tours.ts`, and its settings in
+   `ui/src/settings/search.ts`.
 5. A row in the design's service table and in the README.
 
 </details>

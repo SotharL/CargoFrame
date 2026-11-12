@@ -702,4 +702,35 @@ fn a_real_export_follows_the_moved_window_and_shows_the_keys_in_time() {
             "a key at {at} s"
         );
     }
+    // with the first second cut, both keep time with the picture
+    std::fs::write(
+        p("keys.txt"),
+        keys_list(
+            &p("blank.png"),
+            &[(p("key.png"), 1_000, 2_000)],
+            1_000,
+            4_000,
+        ),
+    )
+    .unwrap();
+    let cut = Edit {
+        start_ms: 1_000,
+        ..edit
+    };
+    let plan = super::plan(&p("in.mp4"), &p("cut.mp4"), &cut, &info).unwrap();
+    run(&ffmpeg, &plan, &|| false, Duration::from_secs(60)).unwrap();
+    assert!(
+        green(pixel(&ffmpeg, &p("cut.mp4"), "0.5", 80, 20, 70)),
+        "no key at 0.5 s of the cut clip"
+    );
+    assert!(
+        !green(pixel(&ffmpeg, &p("cut.mp4"), "1.5", 80, 20, 70)),
+        "a key at 1.5 s of the cut clip"
+    );
+    for at in ["0.2", "2.0"] {
+        assert!(
+            is_red(pixel(&ffmpeg, &p("cut.mp4"), at, 80, 40, 40)),
+            "the cut clip lost the window at {at} s"
+        );
+    }
 }

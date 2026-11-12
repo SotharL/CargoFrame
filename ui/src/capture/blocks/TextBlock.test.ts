@@ -31,6 +31,17 @@ describe('TextBlock title', () => {
     expect(document.querySelector('.field')?.getAttribute('title')).toBe('Description');
   });
 
+  it('keeps its box one line high when the layout asks, with or without formatting', () => {
+    render(TextBlock, { block: { ...block('above'), one_line: true }, value: '' });
+    expect(document.querySelector('.field')?.classList.contains('one')).toBe(true);
+    cleanup();
+    render(TextBlock, { block: { ...block('above'), one_line: true }, value: '', marks: ['bold'], services: ['jira'] });
+    expect(document.querySelector('.field')?.classList.contains('one')).toBe(true);
+    cleanup();
+    render(TextBlock, { block: block('above'), value: '' });
+    expect(document.querySelector('.field')?.classList.contains('one')).toBe(false);
+  });
+
   it('wears a small tag for the roles that mean something', () => {
     render(TextBlock, { block: block('above', 'zip_name'), value: '' });
     expect(document.querySelector('.role')?.textContent).toBe('Zip name');

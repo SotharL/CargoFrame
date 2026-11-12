@@ -115,6 +115,9 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 </tr>
 </table>
 
+> **Looking for a setting?** Type in the search box at the top of the Settings menu (Ctrl+F): the menu lists only
+> what has your words, and the rest of the page shown is greyed out. The × clears it.
+
 > **Stuck?** **Guides**, at the bottom of the Settings menu, walks you through any setup: it opens the right page,
 > outlines the field and says in one sentence what goes in it.
 
@@ -163,7 +166,14 @@ If you switch programs while recording, the one you used longest names the captu
 
 **Continuous recording** (turn it on in *Settings, Recording*): hold a shortcut for 2 seconds to start recording all
 the time. Each press of a video shortcut then opens its window with the last seconds while the recording goes on; hold
-a shortcut 2 seconds again to stop. The tray menu does the same (on Wayland it is the way to start and stop). Click the Video block in the layout builder to choose the screen or the window in
+a shortcut 2 seconds again to stop. The tray menu does the same (on Wayland it is the way to start and stop).
+
+**Keys pressed:** turn on *Show the keys pressed on the recording* on a Video block, and each key shows over the clip
+when it was pressed ("Ctrl+S", "hello ⏎"). Drag the keys where you want them, or take them off with their ×. Every key
+typed while it records shows, passwords too; not on Wayland. **A window that is moved:** with *Follow the window when
+it is moved* on (*Settings, Recording*), the whole screen is recorded and the clip stays on the window as it moves.
+
+Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording
 ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Save locally; the other services get the still.
 
@@ -200,6 +210,8 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
   lines, pick one to read it whole and copy it, or *Copy all*.
 - **Values made from other values:** in *Data & fields*, *Make a value from other values*: for example a build id
   `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is found, else without it.
+- **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
+  one line, however small the window.
 - **Last choices:** each dropdown starts on what you used last and lists the last five.
 - **Several windows:** a shortcut pressed while a window is open opens another, up to ten.
 

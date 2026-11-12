@@ -324,6 +324,23 @@ pub struct Place {
 /// The most places kept, whatever happens.
 const MAX_PLACES: usize = 20_000;
 
+/// Forget the places older than `from`, but each window's last one before it: that is where
+/// the window was when the kept part starts.
+fn prune(places: &mut Vec<Place>, from: u64) {
+    let mut last_before = std::collections::HashMap::new();
+    for (i, q) in places.iter().enumerate() {
+        if q.at_ms < from {
+            last_before.insert(q.window, i);
+        }
+    }
+    let mut i = 0;
+    places.retain(|q| {
+        let keep = q.at_ms >= from || last_before.get(&q.window) == Some(&i);
+        i += 1;
+        keep
+    });
+}
+
 impl Watch {
     /// Start watching as `plan` says. The keys are read only when it asks; why they cannot be
     /// (Wayland) is in [`Watch::keys_problem`].
@@ -438,18 +455,12 @@ impl Watch {
                                         shown = Indicator::show(here.rect, screen, look);
                                     }
                                 }
-                                let from = plan
-                                    .keep_ms
-                                    .map(|k| now_ms.saturating_sub(k * 2))
-                                    .unwrap_or(0);
-                                // the latest place before the kept part stays: it is where that part starts
-                                let first_kept =
-                                    places.iter().position(|q| q.at_ms >= from).unwrap_or(0);
-                                let cut = first_kept
-                                    .saturating_sub(1)
-                                    .max(places.len().saturating_sub(MAX_PLACES));
-                                if cut > 0 {
-                                    places.drain(..cut);
+                                if let Some(keep) = plan.keep_ms {
+                                    prune(&mut places, now_ms.saturating_sub(keep * 2));
+                                }
+                                if places.len() > MAX_PLACES {
+                                    let over = places.len() - MAX_PLACES;
+                                    places.drain(..over);
                                 }
                             }
                             last_sample = Some(here);
@@ -697,6 +708,20 @@ mod tests {
                 h: 300,
             },
         }
+    }
+
+    #[test]
+    fn old_places_go_but_each_window_keeps_where_it_was() {
+        let mut places = vec![
+            place(0, 1, 0, 0),
+            place(100, 2, 0, 0),
+            place(200, 1, 10, 0),
+            place(5_000, 2, 50, 0),
+        ];
+        prune(&mut places, 1_000);
+        let left: Vec<(u64, u64)> = places.iter().map(|p| (p.at_ms, p.window)).collect();
+        // each window keeps its last place before the kept part: where it was when that starts
+        assert_eq!(left, vec![(100, 2), (200, 1), (5_000, 2)]);
     }
 
     #[test]

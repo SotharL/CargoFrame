@@ -56,6 +56,12 @@ _Reviewed 2026-10-23, on the code merged to `main` in pull request #1. This is a
   the capture's folder when the window closes.
 - **Log viewer (0.4.0):** the window asks for a file by the path it was offered (`read_offered_file`); anything else is
   refused, a path that leads out of the folder too (the same check as for a zip), and only the last 4 MB are read.
+- **Keys pressed (0.4.0):** read only while a recording runs whose layout's Video block asks for them (off by default,
+  and the switch says that passwords typed then show too). The keyboard is asked which keys are down; no hook is put
+  into other programs' input. Presses stay in memory with their time for as long as the recording keeps pictures, and
+  are dropped with it; only the lines the person sends are drawn into the clip. Wayland does not allow it.
+- **A window followed (0.4.0):** where the recorded window is gets asked ten times a second while it records (its
+  place and size only), kept in memory with the capture.
 - **Continuous recording (0.4.0):** off unless turned on; starting asks first (a system dialog) or comes from the tray
   menu, and the tray and the outline say it runs. ffmpeg is told to stop after 12 hours. Only the last seconds are on
   disk, in the recording's own folder, as for any recording; a clip handed out is a copy that moves to the capture's

@@ -551,7 +551,7 @@
   .tool.letter { font-family: Georgia, serif; }
   /* black letters with a white outline, as the sent clip has them */
   .keys {
-    position: absolute; display: inline-flex; align-items: center; gap: 2px; padding: 0.1em 0.25em; line-height: 1.4;
+    position: absolute; display: inline-flex; align-items: center; gap: 0.35em; padding: 0.1em 0.25em; line-height: 1.4;
     font-weight: 700; font-family: system-ui, 'Segoe UI', 'DejaVu Sans', sans-serif; color: #000; white-space: pre;
     cursor: grab; touch-action: none; user-select: none; border-radius: 4px; border: 1px dashed transparent;
     text-shadow: -0.08em -0.08em 0 #fff, 0.08em -0.08em 0 #fff, -0.08em 0.08em 0 #fff, 0.08em 0.08em 0 #fff,
