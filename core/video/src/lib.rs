@@ -18,7 +18,7 @@ pub mod screenfeed;
 pub mod segments;
 
 pub use buffer::{RollingBuffer, Window};
-pub use edit::{resolve, Clip, Crop, Edit, KeysLayer, Overlay, Placed, Problem, Resolved};
+pub use edit::{resolve, Clip, Crop, Edit, Overlay, Placed, Problem, Resolved, TextLayer};
 pub use export::{
     ask, keys_list, locate, locate_in, parse_probe, plan, probe, quiet, run, ExportError, Plan,
 };

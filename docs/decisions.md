@@ -1292,3 +1292,22 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
 - **Tidying, kept to safe steps.** Slack, Teams and Discord share one function for the words of a message; the tests of
   `share.rs` and `session.rs` moved to files of their own (3,000 lines); the trigger code reads the recording settings
   in one place; an unused style went.
+
+### 0.4.1, 12 Nov 2026: the time of a recording, and the log lines written then
+
+- **The time over a recording.** The capture now notes when it was made, and a recording when its clip starts on the
+  computer's clock (the moment it was handed out, less its length and the part a continuous recording had not
+  finished). The window shows the time of each moment over the clip (2026-11-12 14:03:27, the way logs write it), shown
+  or hidden with *Time* under the recording, moved and taken off like the keys; the Video block can start with it
+  shown. The share sends it the same way as the keys: one line per second, drawn as pictures by the window, laid over
+  the sent picture by ffmpeg. Both now go through one command (`set_clip_layer`, with each line's time), so a text over a
+  clip is one thing however many there are.
+- **Log lines by time.** The log viewer reads the time at the start of each line (ISO dates with or without a zone,
+  `2026/11/12 14:03:27,123`, Unreal Engine's `[2026.11.12-14.03.27:123]`, syslog's `Nov 12 14:03:27`, or the time
+  alone on the capture's day); a line without one (the rest of a message, a stack trace) has the time of the line
+  before. A row under the search keeps the lines written *during the recording* (5 s either side, as the program's
+  clock and the recording may not agree to the second), *around the capture* for a screenshot (the minute before), or
+  *between* two times typed. Times without a zone are the computer's own, or UTC when the block or the person says
+  (Unreal Engine writes UTC by default). A file whose lines carry no time it can read says so and shows every line;
+  nothing else is guessed (a day written 12/11/2026 could be either way round, so it is not read).
+

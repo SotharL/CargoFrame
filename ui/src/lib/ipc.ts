@@ -115,8 +115,9 @@ export interface Api {
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
   /** The mark drawn over a recording (a see-through PNG the size of the recording), or none. */
   setClipMark(sessionId: number, png: Blob | null): Promise<void>;
-  /** The pictures of the keys pressed over a recording: a blank one, then one per line; none clears them. */
-  setClipKeys(sessionId: number, pngs: Blob[] | null): Promise<void>;
+  /** A text over a recording (`keys`, `clock`): each line's time and its pictures (a blank one
+   *  first, then one per line); `null` forgets it. */
+  setClipLayer(sessionId: number, name: 'keys' | 'clock', layer: { times: [number, number][]; pictures: Blob[] } | null): Promise<void>;
   /** Read the text in part of the screenshot (a PNG), the `attempt`-th way, on this computer. */
   readText(png: Blob, attempt: number): Promise<TextReading>;
   /** Pick files to add to a Files block by hand; each is copied into the capture now. */
@@ -167,7 +168,7 @@ export interface Api {
   onUpdateChanged(callback: () => void): Promise<() => void>;
 }
 
-/** Pictures in one body, each after its length (four bytes, big-endian), as `set_clip_keys` reads them. */
+/** Pieces in one body, each after its length (four bytes, big-endian), as `set_clip_layer` reads them. */
 export async function frames(blobs: Blob[]): Promise<Uint8Array> {
   const parts = await Promise.all(blobs.map(async (b) => new Uint8Array(await b.arrayBuffer())));
   const out = new Uint8Array(parts.reduce((n, p) => n + 4 + p.length, 0));
@@ -273,8 +274,9 @@ async function tauriApi(): Promise<Api> {
       const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
       await invoke('set_clip_mark', bytes, { headers: { 'x-session-id': String(sessionId) } });
     },
-    setClipKeys: async (sessionId, pngs) => {
-      await invoke('set_clip_keys', await frames(pngs ?? []), { headers: { 'x-session-id': String(sessionId) } });
+    setClipLayer: async (sessionId, name, layer) => {
+      const body = layer ? await frames([new Blob([JSON.stringify(layer.times)]), ...layer.pictures]) : new Uint8Array();
+      await invoke('set_clip_layer', body, { headers: { 'x-session-id': String(sessionId), 'x-layer': name } });
     },
     share: (request) => invoke<ShareResult>('share', { request }),
     openLink: (url) => invoke('open_link', { url }),
@@ -856,7 +858,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           : [{ value: 'P1', label: 'Demo project', group: null }],
     setEditedImage: async () => {},
     setClipMark: async () => {},
-    setClipKeys: async () => {},
+    setClipLayer: async () => {},
     addFiles: async () => opts.addFiles?.() ?? [{ path: 'added/notes.txt', size: 42, selected: true }],
     readOfferedFile: async (_sessionId, path) =>
       opts.readOfferedFile?.(path) ?? {

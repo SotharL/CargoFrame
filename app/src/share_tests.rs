@@ -1617,7 +1617,7 @@ fn changing_nothing_is_told_from_cutting_or_cropping_something() {
     assert!(!marked.changes_nothing(5_000));
     // keys shown need an export; a crop told to follow without a crop changes nothing
     let keyed = ClipEdit {
-        keys: Some(crate::video::KeysAt { x: 0, y: 0 }),
+        keys: Some(crate::video::TextAt { x: 0, y: 0 }),
         ..t(0, None)
     };
     assert!(!keyed.changes_nothing(5_000));
@@ -1802,19 +1802,28 @@ fn a_video_capture_shows_the_keys_pressed_where_the_window_placed_them() {
         }
         b
     };
-    let pictures = vec![picture([0, 0, 0, 0]), picture([0, 255, 0, 255])];
-    assert_eq!(
-        crate::commands::split_frames(&body(&pictures)).unwrap(),
-        pictures
+    let blank = picture([0, 0, 0, 0]);
+    let green = picture([0, 255, 0, 255]);
+    let sent = body(&[b"[[0,2000]]".to_vec(), blank.clone(), green.clone()]);
+    let layer = crate::commands::read_layer(&sent, 3_000).unwrap();
+    assert_eq!(layer.lines, vec![((0, 2_000), green)]);
+    w.session.set_clip_layer("keys", Some(layer.clone()));
+    // the time goes over it, at the top: a blank one, so only the keys show where they are
+    w.session.set_clip_layer(
+        "clock",
+        Some(crate::session::ClipLayer {
+            blank: blank.clone(),
+            lines: vec![((0, 3_000), blank)],
+        }),
     );
-    w.session.set_clip_keys(Some(pictures));
     let dir = w.out.path().join("zips");
     fs::create_dir_all(&dir).unwrap();
     set_safe(&w, Some(&dir.display().to_string()), 0);
     disconnect(&w);
     let mut req = request();
     req.clip_edit = Some(crate::video::ClipEdit {
-        keys: Some(crate::video::KeysAt { x: 10, y: 30 }),
+        keys: Some(crate::video::TextAt { x: 10, y: 30 }),
+        clock: Some(crate::video::TextAt { x: 200, y: 4 }),
         ..Default::default()
     });
     let (r, _) = go(&w, &req, vec![]);
@@ -1841,12 +1850,15 @@ fn a_video_capture_shows_the_keys_pressed_where_the_window_placed_them() {
         at(25, 40)
     );
     // without the pictures, the share stops and says why
-    w.session.set_clip_keys(None);
+    w.session.set_clip_layer("keys", None);
     let (r, _) = go(&w, &req, vec![]);
     let ShareResult::Blocked { reasons } = r else {
         panic!("{r:?}");
     };
-    assert_eq!(reasons, ["The keys pressed were not drawn: try again"]);
+    assert_eq!(
+        reasons,
+        ["The pictures of the keys pressed were not drawn: try again"]
+    );
 }
 
 #[test]

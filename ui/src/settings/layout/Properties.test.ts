@@ -105,6 +105,14 @@ describe('Properties: a text block', () => {
     expect(block.formatting).toBe(true);
   });
 
+  it('sets a log viewer to start on the recording, and to read its times as UTC', async () => {
+    const log = { id: 'l', type: 'log_view', rect: { x: 0, y: 0, w: 4, h: 3 }, title: 'Log' } as Block & { during?: boolean; utc?: boolean };
+    open(log);
+    await fireEvent.click(screen.getByRole('switch', { name: 'Start on the lines written during the recording' }));
+    await fireEvent.click(screen.getByRole('switch', { name: 'The times in the files are UTC' }));
+    expect([log.during, log.utc]).toEqual([true, true]);
+  });
+
   it('locks the box to one line high when ticked, for any role', async () => {
     const block = { ...title, role: 'prompt' } as Block & { one_line?: boolean };
     open(block);

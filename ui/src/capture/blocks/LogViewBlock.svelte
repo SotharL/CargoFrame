@@ -1,13 +1,16 @@
 <script lang="ts">
   // A log viewer: one of the files the window offers, line by line. The search box on top shows
-  // only the lines with its words in them (case aside); Copy all copies those. A line picked is
-  // shown whole under the list, to read and copy. "Open large" fills the window with it. Nothing
-  // of it is sent: the files go as the Files blocks say.
+  // only the lines with its words in them (case aside); Copy all copies those. When the lines
+  // say when they were written, the time row keeps the ones of a moment: during the recording
+  // (or around the capture), or between two times. A line picked is shown whole under the list,
+  // to read and copy. "Open large" fills the window with it. Nothing of it is sent: the files go
+  // as the Files blocks say.
   import { untrack } from 'svelte';
   import type { Api } from '../../lib/ipc';
   import type { Block, LogText, SessionView } from '../../lib/types';
   import { formatSize } from '../values';
   import { matching, splitLines, type LogLine } from './logLines';
+  import { during, hms, onDay, stamps, type Span } from './logTimes';
 
   type LogViewBlock = Extract<Block, { type: 'log_view' }>;
 
@@ -44,6 +47,23 @@
   let large = $state(false);
   let copied = $state<'line' | 'all' | null>(null);
 
+  // The moment of the capture: the recording (a few seconds either side, as the clock and the log
+  // may not agree to the second), or the minute before a screenshot.
+  const MARGIN = 5_000;
+  const recorded = $derived(view.video?.started_at_ms ? { from: view.video.started_at_ms, to: view.video.started_at_ms + view.video.duration_ms } : null);
+  const moment = $derived<Span | null>(
+    recorded
+      ? { from: recorded.from - MARGIN, to: recorded.to + MARGIN }
+      : view.captured_at_ms
+        ? { from: view.captured_at_ms - 60_000, to: view.captured_at_ms + MARGIN }
+        : null,
+  );
+  const day = $derived(view.video?.started_at_ms ?? view.captured_at_ms ?? Date.now());
+  let utc = $state(untrack(() => block.utc === true));
+  let when = $state<'all' | 'moment' | 'between'>(untrack(() => (block.during ? 'moment' : 'all')));
+  let fromText = $state('');
+  let toText = $state('');
+
   // start on the first ticked file (a log, if there is one)
   $effect(() => {
     if (path || offered.length === 0) return;
@@ -66,7 +86,29 @@
   });
 
   const all = $derived<LogLine[]>(loaded ? splitLines(loaded.text) : []);
-  const lines = $derived(matching(all, query));
+  const times = $derived(stamps(all, day, utc));
+  const timed = $derived(times.some((t) => t !== null));
+  /** The part of the day kept, when the lines are kept by time. */
+  const span = $derived.by<Span | null>(() => {
+    if (when === 'moment') return moment;
+    if (when === 'between') {
+      const from = onDay(day, fromText);
+      const to = onDay(day, toText);
+      return from !== null && to !== null ? { from: Math.min(from, to), to: Math.max(from, to) + 999 } : null;
+    }
+    return null;
+  });
+  const byTime = $derived(timed && span ? during(all, times, span) : all);
+  const lines = $derived(matching(byTime, query));
+
+  /** Between two times: it starts on the moment of the capture, or on the file's own first and last. */
+  function pickBetween() {
+    const known = times.filter((t): t is number => t !== null);
+    const from = moment?.from ?? known[0];
+    const to = moment?.to ?? known[known.length - 1];
+    if (!fromText && from !== undefined) fromText = hms(from);
+    if (!toText && to !== undefined) toText = hms(to);
+  }
   const shown = $derived(lines.length > SHOWN ? lines.slice(-SHOWN) : lines);
   const total = $derived(all.length);
   const pickedLine = $derived(picked === null ? null : (lines.find((l) => l.n === picked) ?? null));
@@ -124,9 +166,28 @@
   <div class="bar">
     <input type="search" class="search" bind:value={query} placeholder="Show only lines with…" aria-label="Show only the lines with these words" />
     <button type="button" class="small" disabled={lines.length === 0} onclick={() => copy(lines.map((l) => l.text).join('\n'), 'all')}>
-      {copied === 'all' ? 'Copied' : query.trim() ? `Copy ${lines.length} lines` : 'Copy all'}
+      {copied === 'all' ? 'Copied' : query.trim() || (timed && span) ? `Copy ${lines.length} lines` : 'Copy all'}
     </button>
   </div>
+  {#if loaded && timed}
+    <div class="bar">
+      <select class="when" bind:value={when} onchange={() => when === 'between' && pickBetween()} aria-label="Lines written">
+        <option value="all">Written any time</option>
+        {#if moment}
+          <option value="moment">{recorded ? 'During the recording' : 'Around the capture'} ({hms(moment.from)} to {hms(moment.to)})</option>
+        {/if}
+        <option value="between">Written between…</option>
+      </select>
+      {#if when === 'between'}
+        <input type="time" step="1" class="time" bind:value={fromText} aria-label="From" />
+        <span class="quiet">to</span>
+        <input type="time" step="1" class="time" bind:value={toText} aria-label="To" />
+      {/if}
+      <label class="utc quiet" title="The times written in this file are UTC, not this computer's time (Unreal Engine's logs are, by default)">
+        <input type="checkbox" bind:checked={utc} /> UTC
+      </label>
+    </div>
+  {/if}
   {#if offered.length === 0}
     <p class="quiet note">No file to show: the Files blocks of this capture list none.</p>
   {:else if problem}
@@ -143,11 +204,11 @@
           </button>
         </li>
       {:else}
-        <li class="quiet note">{query.trim() ? 'No line has these words.' : 'The file is empty.'}</li>
+        <li class="quiet note">{query.trim() ? 'No line has these words.' : timed && span ? 'No line was written then.' : 'The file is empty.'}</li>
       {/each}
     </ol>
     <p class="quiet foot">
-      {query.trim() ? `${lines.length} of ${total} lines` : `${total} lines`}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}
+      {query.trim() || (timed && span) ? `${lines.length} of ${total} lines` : `${total} lines`}{timed && span ? `, written ${hms(span.from)} to ${hms(span.to)}` : ''}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}{!timed && when !== 'all' && total > 0 ? ' · no times CargoFrame can read in this file, so every line shows' : ''}
     </p>
     {#if pickedLine}
       <div class="picked" role="group" aria-label={`Line ${pickedLine.n}`}>
@@ -159,7 +220,8 @@
 </div>
 
 <style>
-  .log { display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto auto; gap: 4px; height: 100%; min-height: 0; background: var(--surface); }
+  /* a column: the bars (the time one only when the lines have times), the lines taking the rest */
+  .log { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; background: var(--surface); }
   .log.large {
     position: fixed; inset: 16px; z-index: 50; padding: 12px; border: 1px solid var(--border-strong);
     border-radius: var(--radius); box-shadow: 0 8px 40px rgb(0 0 0 / 0.35);
@@ -169,9 +231,12 @@
   .bar select { min-width: 0; flex: 1; font-size: 12.5px; }
   .one { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .search { flex: 1; min-width: 0; font-size: 13px; }
+  .bar select.when { flex: 0 1 auto; }
+  .time { font-size: 12.5px; padding: 1px 4px; }
+  .utc { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; margin-left: auto; white-space: nowrap; }
   .small { padding: 2px 8px; font-size: 12.5px; white-space: nowrap; }
   .lines {
-    margin: 0; padding: 0; list-style: none; overflow: auto; min-height: 0; font-size: 12px;
+    margin: 0; padding: 0; list-style: none; overflow: auto; min-height: 0; flex: 1 1 auto; font-size: 12px;
     border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
   }
   .line { display: flex; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 0 6px; font: inherit; color: inherit; cursor: pointer; white-space: pre; }

@@ -34,6 +34,8 @@ export const FINDINGS: Finding[] = [
     words: 'grid columns rows window screenshot video recording text dropdown files tags labels log viewer sharing button block',
   },
   { page: 'layouts', title: 'Keys pressed on a recording (Video block)', words: 'keyboard keystrokes shortcuts typing overlay video block' },
+  { page: 'layouts', title: 'Time on a recording (Video block)', words: 'clock timestamp date hour overlay video block' },
+  { page: 'layouts', title: 'Log lines by time (Log viewer block)', words: 'timestamp during recording utc between times filter log viewer' },
   { page: 'layouts', title: 'One line high (Text block)', words: 'text block height single line size' },
   { page: 'layouts', title: 'Formatting buttons (Text block)', words: 'bold italic code lists tables markdown text block' },
   { page: 'layouts', title: 'Tags block', words: 'labels hashtags tag container jira github' },

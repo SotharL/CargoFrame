@@ -3,9 +3,9 @@
   import VideoBlock from './VideoBlock.svelte';
   import type { ClipEdit, VideoClipInfo } from '../../lib/types';
 
-  let { info, onedit }: { info: VideoClipInfo; onedit: (e: ClipEdit | null) => void } = $props();
+  let { info, onedit, clockShown = false }: { info: VideoClipInfo; onedit: (e: ClipEdit | null) => void; clockShown?: boolean } = $props();
   let edit = $state<ClipEdit | null>(null);
   $effect(() => onedit($state.snapshot(edit) as ClipEdit | null));
 </script>
 
-<VideoBlock {info} bind:edit />
+<VideoBlock {info} bind:edit {clockShown} />

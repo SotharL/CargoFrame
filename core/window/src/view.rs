@@ -61,6 +61,10 @@ pub struct VideoView {
     /// The keys pressed, each line with when it shows (the layout's Video block asks for them).
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub keys: Vec<KeyLine>,
+    /// When the clip starts, on the computer's clock (milliseconds since 1970, UTC): the window
+    /// shows the time of each moment over it, and a log viewer can keep the lines written then.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub started_at_ms: Option<u64>,
 }
 
 /// Where a following crop's corner is at a moment, in the recording's pixels.
@@ -185,6 +189,9 @@ pub struct SessionView {
     pub dropdowns: BTreeMap<String, DropdownState>,
     pub issues: Vec<IssueView>,
     pub sharing: BTreeMap<String, SharingView>,
+    /// When the capture was made (milliseconds since 1970, UTC); a log viewer can show the lines
+    /// written around then.
+    pub captured_at_ms: u64,
 }
 
 /// The tags a Tags block starts with, from its own list and the capture's values.
@@ -354,6 +361,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
         dropdowns: BTreeMap::new(),
         issues: Vec::new(),
         sharing: BTreeMap::new(),
+        captured_at_ms: 0,
     };
 
     let layout = match &inputs.layout {

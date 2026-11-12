@@ -10,6 +10,30 @@ import type { ClipPlace, KeyLine } from '../../lib/types';
 export const KEY_SIZE = 0.055;
 /** Where the keys start, as parts of the picture: near the bottom-left corner. */
 export const KEY_START = { fx: 0.03, fy: 0.84 };
+/** Where the time starts: above the keys, clear of the player's buttons at the top. */
+export const CLOCK_START = { fx: 0.03, fy: 0.72 };
+
+const two = (n: number) => String(n).padStart(2, '0');
+
+/** A moment on this computer's clock, as logs write it: 2026-11-12 14:03:27. */
+export function clockText(ms: number): string {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${two(d.getMonth() + 1)}-${two(d.getDate())} ${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`;
+}
+
+/** The time over a clip that started at `startedAt` (ms since 1970): one line per second of the
+ *  clock, each from when that second starts on the clip. */
+export function clockLines(startedAt: number, durationMs: number): KeyLine[] {
+  const out: KeyLine[] = [];
+  let t = 0;
+  while (t < durationMs && out.length < 400) {
+    const wall = startedAt + t;
+    const next = Math.min(durationMs, t + (1000 - (((wall % 1000) + 1000) % 1000)));
+    out.push({ from_ms: Math.round(t), to_ms: Math.round(next), text: clockText(wall) });
+    t = next;
+  }
+  return out;
+}
 
 /** The line showing at `ms` on the clip's timeline, if any. */
 export function lineAt(lines: readonly KeyLine[] | undefined, ms: number): KeyLine | null {

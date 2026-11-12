@@ -99,6 +99,14 @@
   </p>
 </div>
 
+<div class="end" data-tour="layout.video-clock">
+  <Toggle label="Show the time on the recording" checked={block.clock === true} onchange={(v) => (block.clock = v || undefined)} />
+  <p class="quiet small">
+    The time of each moment, on this computer's clock (2026-11-12 14:03:27), over the clip from the start. Off, the
+    person can still show it with Time under the recording. Either way it can be moved, or taken off before sending.
+  </p>
+</div>
+
 {#if note}<p class="quiet small" role="note">{note}</p>{/if}
 
 <style>

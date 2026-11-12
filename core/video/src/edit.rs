@@ -60,11 +60,14 @@ pub struct Placed {
     pub y: u32,
 }
 
-/// The keys pressed, laid over the clip as it is sent (after the crop): a list of pictures for
-/// ffmpeg's concat reader (see [`crate::export::keys_list`]), all the same size, and where their
-/// top-left corner goes on the sent picture.
+/// The most text layers over one clip (the keys pressed, the time).
+pub const MAX_LAYERS: usize = 4;
+
+/// Text laid over the clip as it is sent (after the crop), such as the keys pressed or the time:
+/// a list of pictures for ffmpeg's concat reader (see [`crate::export::keys_list`]), all the
+/// same size, and where their top-left corner goes on the sent picture.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct KeysLayer {
+pub struct TextLayer {
     pub list: PathBuf,
     pub x: i32,
     pub y: i32,
@@ -82,7 +85,8 @@ pub struct Edit {
     /// With a crop: where it is over time, so it follows a window that was moved. Its size stays
     /// the crop's; the crop's own corner is where it starts.
     pub follow: Vec<Placed>,
-    pub keys: Option<KeysLayer>,
+    /// Laid over the sent picture, in order (the last on top).
+    pub layers: Vec<TextLayer>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -105,6 +109,7 @@ pub enum Problem {
     OverlayEndsBeforeItStarts(usize),
     /// The places a crop follows are out of order, too many, or come without a crop.
     BadFollow,
+    TooManyLayers,
 }
 
 impl fmt::Display for Problem {
@@ -142,6 +147,9 @@ impl fmt::Display for Problem {
                 write!(f, "Mark {} ends before it starts", i + 1)
             }
             Problem::BadFollow => write!(f, "The crop cannot follow the window as it moved"),
+            Problem::TooManyLayers => {
+                write!(f, "At most {MAX_LAYERS} texts can be laid over a clip")
+            }
         }
     }
 }
@@ -169,7 +177,7 @@ pub struct Resolved {
     pub dropped_overlays: usize,
     /// Where the crop goes over time (even, inside the picture); empty when it stays put.
     pub follow: Vec<Placed>,
-    pub keys: Option<KeysLayer>,
+    pub layers: Vec<TextLayer>,
 }
 
 impl Resolved {
@@ -281,6 +289,10 @@ pub fn resolve(edit: &Edit, clip: &Clip) -> Result<Resolved, Vec<Problem>> {
         }
     }
 
+    if edit.layers.len() > MAX_LAYERS {
+        problems.push(Problem::TooManyLayers);
+    }
+
     if problems.is_empty() {
         Ok(Resolved {
             start_ms,
@@ -289,7 +301,7 @@ pub fn resolve(edit: &Edit, clip: &Clip) -> Result<Resolved, Vec<Problem>> {
             overlays,
             dropped_overlays: dropped,
             follow,
-            keys: edit.keys.clone(),
+            layers: edit.layers.clone(),
         })
     } else {
         Err(problems)
@@ -526,11 +538,11 @@ mod tests {
                 x: 10,
                 y: 12,
             }],
-            keys: Some(KeysLayer {
+            layers: vec![TextLayer {
                 list: "keys.txt".into(),
                 x: 4,
                 y: 200,
-            }),
+            }],
         };
         let json = serde_json::to_string(&edit).unwrap();
         assert_eq!(serde_json::from_str::<Edit>(&json).unwrap(), edit);

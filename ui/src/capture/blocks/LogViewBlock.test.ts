@@ -61,3 +61,66 @@ describe('LogViewBlock', () => {
     expect(screen.getByText(/No file to show/)).toBeTruthy();
   });
 });
+
+describe('LogViewBlock by time', () => {
+  afterEach(cleanup);
+  const local = (h: number, mi: number, s: number) => new Date(2026, 10, 12, h, mi, s).getTime();
+  const text = ['12:00:00 boot', '12:00:10 [info] load', '12:00:20 [error] crash', '  at Foo.bar', '12:00:30 [info] quit'].join('\n');
+  const api = () => memoryApi({ readOfferedFile: () => ({ text, size: text.length, cut: false }) });
+  async function recorded(): Promise<SessionView> {
+    const v = await view();
+    // recorded from 12:00:18 for 4 s
+    v.video = { width: 640, height: 360, duration_ms: 4_000, bytes: 1, audio: false, started_at_ms: local(12, 0, 18) };
+    v.captured_at_ms = local(12, 0, 22);
+    return v;
+  }
+  const shownLines = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/^\d+/, '').trim());
+
+  it('keeps the lines written during the recording, a few seconds either side, with the rest of their message', async () => {
+    render(LogViewBlock, { block, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    expect(within(list).getAllByRole('button')).toHaveLength(5);
+    const when = screen.getByRole('combobox', { name: 'Lines written' }) as HTMLSelectElement;
+    expect([...when.options].map((o) => o.text)).toEqual(['Written any time', 'During the recording (12:00:13 to 12:00:27)', 'Written between…']);
+    await fireEvent.change(when, { target: { value: 'moment' } });
+    await waitFor(() => expect(shownLines(list)).toEqual(['12:00:20 [error] crash', 'at Foo.bar']));
+    expect(screen.getByText(/2 of 5 lines, written 12:00:13 to 12:00:27/)).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Copy 2 lines' })).toBeTruthy();
+    // with the words searched too
+    await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'foo' } });
+    await waitFor(() => expect(shownLines(list)).toEqual(['at Foo.bar']));
+  });
+
+  it('keeps the lines between two times typed, starting on the recording', async () => {
+    render(LogViewBlock, { block, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Lines written' }), { target: { value: 'between' } });
+    const from = screen.getByLabelText('From') as HTMLInputElement;
+    const to = screen.getByLabelText('To') as HTMLInputElement;
+    expect([from.value, to.value]).toEqual(['12:00:13', '12:00:27']);
+    await fireEvent.input(from, { target: { value: '12:00:00' } });
+    await fireEvent.input(to, { target: { value: '12:00:10' } });
+    await waitFor(() => expect(shownLines(list)).toEqual(['12:00:00 boot', '12:00:10 [info] load']));
+  });
+
+  it('reads the times as UTC when the block says, and starts on the recording when asked', async () => {
+    const offset = new Date(local(12, 0, 0)).getTimezoneOffset();
+    render(LogViewBlock, { block: { ...block, utc: true, during: true }, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    const utc = screen.getByRole('checkbox', { name: 'UTC' }) as HTMLInputElement;
+    expect(utc.checked).toBe(true);
+    // in UTC, 12:00:20 is this computer's 12:00:20 only where the two are the same
+    await waitFor(() => expect(within(list).queryAllByRole('button').length > 0 || offset !== 0).toBe(true));
+    await fireEvent.click(utc);
+    await waitFor(() => expect(shownLines(list)).toEqual(['12:00:20 [error] crash', 'at Foo.bar']));
+  });
+
+  it('says when a file has no times it can read, and shows every line', async () => {
+    const plain = memoryApi({ readOfferedFile: () => ({ text: 'a\nb', size: 3, cut: false }) });
+    render(LogViewBlock, { block: { ...block, during: true }, view: await recorded(), files: { logs: ['run.log'] }, api: plain });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    expect(within(list).getAllByRole('button')).toHaveLength(2);
+    expect(screen.queryByRole('combobox', { name: 'Lines written' })).toBeNull();
+    expect(screen.getByText(/no times CargoFrame can read in this file/)).toBeTruthy();
+  });
+});
