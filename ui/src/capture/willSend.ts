@@ -8,7 +8,7 @@ type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function titleOf(b: Block): string {
-  if (b.type === 'text' || b.type === 'dropdown' || b.type === 'files') return b.title || b.id;
+  if (b.type === 'text' || b.type === 'dropdown' || b.type === 'files' || b.type === 'tags' || b.type === 'log_view') return b.title || b.id;
   return b.id;
 }
 

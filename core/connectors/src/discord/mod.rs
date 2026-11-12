@@ -506,6 +506,7 @@ pub fn compose(payload: &Payload, with_title: bool) -> (String, bool) {
             Some(payload.title.trim().to_string())
                 .filter(|t| !t.is_empty() && !(with_title && explicit_title.is_some()))
         });
+    let body = crate::payload::with_tags_line(body, payload);
     let mut parts = Vec::new();
     if with_title {
         if let Some(t) = &explicit_title {
@@ -682,6 +683,7 @@ impl Connector for DiscordConnector {
                 ),
                 f("message", "Message", "Defaults to the prompt text, then the window title. 2000 characters at most", None),
                 f("title", "Title", "The name of a forum post; a bold first line in a channel. Defaults to the window title for a forum", None),
+                f("tags", "Tags", "Added as a last line. Separate several with commas", None),
             ],
             lists: vec![
                 ListSpec {

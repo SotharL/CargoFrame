@@ -76,7 +76,7 @@
       {#each verdicts as v (v.b.id)}
         {#if v.line}
           {@const l = lineFor(v.line, block, kind)}
-          {@const choosable = kind !== null && (v.b.type === 'text' || v.b.type === 'dropdown')}
+          {@const choosable = kind !== null && (v.b.type === 'text' || v.b.type === 'dropdown' || v.b.type === 'tags')}
           <li class="send {l.state}">
             <span class="icon" aria-hidden="true">{l.icon}</span>
             {#if choosable}

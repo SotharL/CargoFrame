@@ -155,6 +155,46 @@ pub fn link_facets(text: &str) -> Vec<Value> {
     out
 }
 
+/// The hashtags of a post (`#crash`), so Bluesky shows them as tags: a word that starts with `#`
+/// after a space or at the start, made of letters, digits and `_`.
+pub fn tag_facets(text: &str) -> Vec<Value> {
+    let mut out = Vec::new();
+    for (at, _) in text.match_indices('#') {
+        let before = text[..at].chars().next_back();
+        if before.is_some_and(|c| !c.is_whitespace()) {
+            continue;
+        }
+        let rest = &text[at + 1..];
+        let len = rest
+            .find(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .unwrap_or(rest.len());
+        let tag = &rest[..len];
+        // a tag of digits only is not one (`#1`)
+        if tag.is_empty() || tag.chars().all(|c| c.is_ascii_digit()) {
+            continue;
+        }
+        out.push(json!({
+            "index": {"byteStart": at, "byteEnd": at + 1 + len},
+            "features": [{"$type": "app.bsky.richtext.facet#tag", "tag": tag}],
+        }));
+    }
+    out
+}
+
+#[cfg(test)]
+#[test]
+fn hashtags_are_marked_as_tags_by_their_bytes() {
+    let f = tag_facets("Crash é #gpu_1 and#not #123 #ui");
+    let tags: Vec<&str> = f
+        .iter()
+        .map(|v| v["features"][0]["tag"].as_str().unwrap())
+        .collect();
+    assert_eq!(tags, ["gpu_1", "ui"]);
+    // é is two bytes
+    assert_eq!(f[0]["index"]["byteStart"], 9);
+    assert_eq!(f[0]["index"]["byteEnd"], 15);
+}
+
 /// `at://did:plc:abc/app.bsky.feed.post/3k4` and a handle make the post's web address.
 pub fn post_url(uri: &str, handle: &str) -> Option<String> {
     let rkey = uri.rsplit('/').next().filter(|k| !k.is_empty())?;
@@ -174,6 +214,7 @@ impl Connector for BlueskyConnector {
             fields: vec![
                 f("text", "Text", "The post, at most 300 characters. Defaults to the prompt, then the window title"),
                 f("alt", "Picture description", "Read out to people who cannot see the picture. Defaults to the window title"),
+                f("hashtags", "Hashtags", "Added at the end as #tags. Separate several with commas"),
             ],
             lists: Vec::new(),
             summary: "Posts the text and the screenshot (made smaller when it is over 1 MB) to your Bluesky account. Links become links; formatting is shown as plain text. Files and videos are not sent.".into(),
@@ -220,7 +261,7 @@ impl Connector for BlueskyConnector {
             .map(str::to_string)
             .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
             .unwrap_or_else(|| payload.title.clone());
-        let (text, cut) = plain_text(&source, MAX_TEXT);
+        let (text, cut) = crate::payload::with_hashtags(&source, payload, MAX_TEXT);
         if cut {
             notes.push(format!(
                 "The text was cut to {MAX_TEXT} characters, the most Bluesky shows"
@@ -294,7 +335,8 @@ impl Connector for BlueskyConnector {
             "text": text,
             "createdAt": iso_time((ctx.now)()),
         });
-        let facets = link_facets(&text);
+        let mut facets = link_facets(&text);
+        facets.extend(tag_facets(&text));
         if !facets.is_empty() {
             record["facets"] = Value::Array(facets);
         }

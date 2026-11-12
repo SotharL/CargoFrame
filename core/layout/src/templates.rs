@@ -8,7 +8,8 @@
 
 use crate::model::{
     Block, BlockKind, Deeper, DropdownBlock, DropdownSource, FilesBlock, InfoMapping, Layout,
-    OnSuccess, Rect, SharingButton, TextBlock, TextRole, TitlePlacement, ValueSource,
+    OnSuccess, Rect, SharingButton, TagList, TagsBlock, TextBlock, TextRole, TitlePlacement,
+    ValueSource,
 };
 use crate::validate::ConnectionKind;
 
@@ -213,6 +214,17 @@ fn path_list(
     BlockKind::Dropdown(d)
 }
 
+/// Tags that suggest the connection's list as they are typed.
+fn tags(title: &str, connection_id: &str, options_id: &str) -> BlockKind {
+    BlockKind::Tags(TagsBlock {
+        suggest: Some(TagList {
+            connection_id: connection_id.to_string(),
+            options_id: options_id.to_string(),
+        }),
+        ..TagsBlock::new(title, &[])
+    })
+}
+
 fn from_block(field: &str, block_id: &str) -> InfoMapping {
     InfoMapping {
         field: field.to_string(),
@@ -310,8 +322,9 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 text("Description", TextRole::Plain, SEEN_IN),
             ),
             block("files", rect(0, 8, 7, 3), files("Attach files")),
+            block("labels", rect(7, 7, 5, 1), tags("Labels", c, "labels")),
             button(
-                rect(7, 7, 5, 1),
+                rect(7, 8, 5, 1),
                 "Create issue",
                 Some(c),
                 None,
@@ -320,6 +333,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                     from_block("issuetype", "type"),
                     from_block("summary", "summary"),
                     from_block("description", "description"),
+                    from_block("labels", "labels"),
                 ],
             ),
         ],
@@ -354,7 +368,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 rect(7, 0, 5, 2),
                 text("Title", TextRole::Plain, WHERE),
             ),
-            block("labels", rect(7, 2, 5, 1), web_list("Label", c, "labels")),
+            block("labels", rect(7, 2, 5, 1), tags("Labels", c, "labels")),
             block(
                 "description",
                 rect(7, 3, 5, 4),

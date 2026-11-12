@@ -53,6 +53,9 @@ pub struct Request {
     pub texts: BTreeMap<String, String>,
     /// The chosen option of each dropdown (its value), by block id.
     pub dropdowns: BTreeMap<String, Option<String>>,
+    /// The tags of each Tags block, by block id. Checked again here: at most 25, cleaned.
+    #[serde(default)]
+    pub tags: BTreeMap<String, Vec<String>>,
     /// For a dropdown that goes deeper (a channel, then a thread in it): the second choice, by
     /// block id. Empty or missing is "nothing inside it".
     pub deeper: BTreeMap<String, Option<String>>,
@@ -205,8 +208,14 @@ pub fn options_asked(
     block_id: &str,
     parent: Option<&str>,
 ) -> Option<(String, String)> {
-    let BlockKind::Dropdown(d) = &layout.block(block_id)?.kind else {
-        return None;
+    let d = match &layout.block(block_id)?.kind {
+        BlockKind::Dropdown(d) => d,
+        // a Tags block may suggest from one list, never a list inside a choice
+        BlockKind::Tags(t) => {
+            let list = t.suggest.as_ref().filter(|_| parent.is_none())?;
+            return Some((list.connection_id.clone(), list.options_id.clone()));
+        }
+        _ => return None,
     };
     let DropdownSource::WebApi {
         connection_id,
@@ -248,6 +257,18 @@ fn text_value(view: &SessionView, req: &Request, id: &str) -> String {
         .unwrap_or_default()
 }
 
+/// The tags of a Tags block now (the window's, else the capture's), cleaned, at most 25.
+fn tags_value(view: &SessionView, req: &Request, id: &str) -> Vec<String> {
+    let given: Vec<String> = req
+        .tags
+        .get(id)
+        .cloned()
+        .or_else(|| view.tags.get(id).map(|t| t.tags.clone()))
+        .unwrap_or_default();
+    // a tag never holds a comma: it would split in two
+    cargoframe_layout::split_tags(given.iter().map(|t| t.as_str())).0
+}
+
 /// One mapped value: the text, and whether it was picked from a list the service supplied.
 fn source_value(
     layout: &Layout,
@@ -258,6 +279,7 @@ fn source_value(
     match source {
         ValueSource::Block(id) => match layout.block(id).map(|b| &b.kind) {
             Some(BlockKind::Text(_)) => (text_value(view, req, id), false, false),
+            Some(BlockKind::Tags(_)) => (tags_value(view, req, id).join(", "), false, false),
             Some(BlockKind::Dropdown(d)) => {
                 let value = req.dropdowns.get(id).cloned().flatten().unwrap_or_default();
                 (
@@ -387,11 +409,16 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             let name = info.map(|t| t.name.as_str()).unwrap_or(&mapping.field);
             reasons.push(format!("\u{201c}{name}\u{201d} needs a value"));
         }
+        let is_tags = matches!(
+            &mapping.source,
+            ValueSource::Block(id) if matches!(layout.block(id).map(|b| &b.kind), Some(BlockKind::Tags(_)))
+        );
         let (kind, from_list) = match info.or_else(|| info_for(&mapping.field)) {
             Some(t) => (
                 field_kind(t.kind),
                 from_dropdown_list || matches!(t.options, InfoOptions::Api { .. }),
             ),
+            None if is_tags => (FieldKind::MultiChoice, false),
             None if is_dropdown => (FieldKind::Choice, from_dropdown_list),
             None => (FieldKind::Text, false),
         };
@@ -508,13 +535,9 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         let Some(wanted) = req.files.get(&block.id) else {
             continue;
         };
-        let offered: BTreeSet<&str> = view
-            .files
-            .get(&block.id)
-            .map(|f| f.entries.iter().map(|e| e.path.as_str()).collect())
-            .unwrap_or_default();
         for path in wanted {
-            if !offered.contains(path.as_str()) {
+            // found in the project, or added by hand (then already copied into the capture's folder)
+            if !session.offers(&block.id, path) {
                 reasons.push(format!(
                     "\u{201c}{path}\u{201d} is not one of the files offered for this capture"
                 ));
@@ -523,7 +546,8 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             }
         }
     }
-    if !selected.is_empty() && session.files_root.is_none() {
+    let added_by_hand = |p: &String| p.starts_with(&format!("{}/", crate::session::ADDED));
+    if selected.iter().any(|p| !added_by_hand(p)) && session.files_root.is_none() {
         reasons.push("There is no folder to read the ticked files from".to_string());
     }
     if !reasons.is_empty() {
@@ -724,13 +748,16 @@ fn manifest_info(svc: &Services, p: &Prepared, notes: Vec<String>) -> ManifestIn
 /// that cannot be copied is read from the project as before, so it is skipped or reported
 /// the way it always was.
 fn adopt_staged(svc: &Services, session: &Session, p: &mut Prepared) {
-    let Some(root) = p.files_root.as_deref().map(PathBuf::from) else {
-        return;
-    };
     if p.selected.is_empty() {
         return;
     }
     let found = session.with_dir(svc.workspace, |dir| {
+        // with no project folder only files added by hand are ticked: they are copies already
+        let root = p
+            .files_root
+            .as_deref()
+            .map(PathBuf::from)
+            .unwrap_or_else(|| dir.path().to_path_buf());
         let files_dir = dir.files_dir();
         let mut staged = BTreeMap::new();
         let mut total = 0u64;
@@ -867,8 +894,10 @@ fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalC
             let mut files = Vec::new();
             let mut total = 0u64;
             for rel in &p.selected {
+                // a file added by hand is in the capture's folder already, whatever the root
                 let root = root
                     .as_deref()
+                    .or_else(|| dir.staged(rel).map(|_| dir.path()))
                     .ok_or("There is no folder to read the ticked files from")?;
                 let copy = dir
                     .stage(root, rel, MAX_FILE_BYTES)
@@ -980,7 +1009,7 @@ fn build_keep_zip(
             kind: "text",
         });
     }
-    if p.files_root.is_some() {
+    if !p.selected.is_empty() {
         for rel in &p.selected {
             items.push(Item {
                 name: format!("files/{rel}"),
@@ -1432,6 +1461,7 @@ mod tests {
             ]
             .into(),
             dropdowns: BTreeMap::new(),
+            tags: BTreeMap::new(),
             deeper: BTreeMap::new(),
             files: [("logs".to_string(), vec!["run.log".to_string()])].into(),
             image_edited: false,
@@ -2281,6 +2311,44 @@ mod tests {
         assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
         let body = w.server.requests_to("/hook")[1].json();
         assert_eq!(body["kind"], "bug in Editor");
+    }
+
+    #[test]
+    fn a_tags_block_sends_its_tags_in_its_field_cleaned_and_at_most_twenty_five() {
+        let mut w = world(|_| MockResponse::json(200, json!({})));
+        set_safe(&w, None, 0);
+        let layout = w.session.view.layout.as_mut().unwrap();
+        layout.blocks.push(cargoframe_layout::Block {
+            id: "labels".into(),
+            rect: cargoframe_layout::Rect {
+                x: 0,
+                y: 4,
+                w: 6,
+                h: 1,
+            },
+            kind: BlockKind::Tags(cargoframe_layout::TagsBlock::new("Labels", &["crash"])),
+        });
+        for b in &mut layout.blocks {
+            if let BlockKind::SharingButton(btn) = &mut b.kind {
+                for m in &mut btn.mappings {
+                    if m.field == "kind" {
+                        m.source = ValueSource::Block("labels".into());
+                    }
+                }
+            }
+        }
+        let mut req = request();
+        let mut sent: Vec<String> = vec!["gpu, driver".into(), " crash ".into(), "Crash".into()];
+        sent.extend((0..40).map(|n| format!("t{n}")));
+        req.tags.insert("labels".into(), sent);
+        let (r, _) = go(&w, &req, vec![]);
+        assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
+        let body = w.server.requests_to("/hook")[0].json();
+        let kind = body["kind"].as_str().unwrap().to_string();
+        let tags: Vec<&str> = kind.split(", ").collect();
+        // a comma inside a tag makes two; each once; 25 at most
+        assert_eq!(&tags[..4], ["gpu", "driver", "crash", "t0"]);
+        assert_eq!(tags.len(), cargoframe_layout::MAX_TAGS);
     }
 
     #[test]
@@ -3252,6 +3320,66 @@ mod tests {
             panic!("{r:?}");
         };
         assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
+    }
+
+    #[test]
+    fn a_file_added_by_hand_is_copied_at_once_listed_and_sent_and_a_log_viewer_reads_offered_files()
+    {
+        let w = world(|_| MockResponse::json(200, json!({})));
+        let dir = w.out.path().join("zips");
+        fs::create_dir_all(&dir).unwrap();
+        set_safe(&w, Some(&dir.display().to_string()), 0);
+        disconnect(&w);
+        let elsewhere = w.out.path().join("elsewhere");
+        fs::create_dir_all(&elsewhere).unwrap();
+        let picked = elsewhere.join("notes.txt");
+        fs::write(&picked, "first\nsecond").unwrap();
+        let e = w.session.add_file(&w.ws, "logs", &picked).unwrap();
+        assert_eq!(
+            (e.path.as_str(), e.size, e.selected),
+            ("added/notes.txt", 12, true)
+        );
+        // the same name again gets a number; a block that is not there is refused
+        let again = w.session.add_file(&w.ws, "logs", &picked).unwrap();
+        assert_eq!(again.path, "added/notes (2).txt");
+        assert!(w.session.add_file(&w.ws, "nope", &picked).is_err());
+        assert!(w.session.add_file(&w.ws, "logs", &elsewhere).is_err());
+        // changed or gone after it was added: the copy is what goes
+        fs::write(&picked, "changed").unwrap();
+        let mut req = request();
+        req.files.insert(
+            "logs".into(),
+            vec!["run.log".into(), "added/notes.txt".into()],
+        );
+        let (r, _) = go(&w, &req, vec![]);
+        let ShareResult::SavedLocally { path, .. } = r else {
+            panic!("{r:?}");
+        };
+        assert_eq!(zip_text(&path, "files/added/notes.txt"), "first\nsecond");
+        assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
+
+        // a log viewer reads what the capture offers, and nothing else
+        let log = w.session.read_offered(&w.ws, "run.log").unwrap();
+        assert_eq!((log.text.as_str(), log.cut), ("LOGLINE", false));
+        assert_eq!(
+            w.session
+                .read_offered(&w.ws, "added/notes.txt")
+                .unwrap()
+                .text,
+            "first\nsecond"
+        );
+        assert!(w.session.read_offered(&w.ws, "../secret.txt").is_err());
+        assert!(w.session.read_offered(&w.ws, "missing.log").is_err());
+    }
+
+    #[test]
+    fn the_end_of_a_large_file_is_read_from_its_first_whole_line() {
+        let dir = tempfile::tempdir().unwrap();
+        let f = dir.path().join("big.log");
+        fs::write(&f, "aaaa\nbbbb\ncccc\n").unwrap();
+        let t = crate::session::read_end(&f, 8).unwrap();
+        assert_eq!((t.text.as_str(), t.cut, t.size), ("cccc\n", true, 15));
+        assert!(!crate::session::read_end(&f, 100).unwrap().cut);
     }
 
     #[test]

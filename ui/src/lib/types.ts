@@ -210,7 +210,27 @@ export type BlockContent =
       /** After the choice, go on to a second list inside it (the threads of a channel). */
       deeper?: Deeper | null;
     }
-  | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
+  | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn }
+  | {
+      type: 'tags';
+      title: string;
+      /** The tags it starts with; each may use {{variables}} and is left out when they are not found. */
+      tags: string[];
+      /** Offer the last five tags used. Absent: on. */
+      remember?: boolean;
+      /** Suggest a list of the service while typing (Jira's labels). */
+      suggest?: { connection_id: string; options_id: string } | null;
+    }
+  | {
+      type: 'log_view';
+      title: string;
+      /** The filter it starts with. */
+      filter?: string;
+    };
+
+/** The most tags a Tags block holds, and the longest a tag may be (core/layout MAX_TAGS). */
+export const MAX_TAGS = 25;
+export const MAX_TAG_CHARS = 100;
 
 /** The second step of a path: a list of what is inside the first choice, and the field it fills. */
 export interface Deeper {
@@ -283,6 +303,14 @@ export interface IssueView {
   message: string;
 }
 
+/** What a log viewer shows of a file (app/src/session.rs LogText). */
+export interface LogText {
+  text: string;
+  /** Only the end is shown: the file is larger than the viewer reads. */
+  cut: boolean;
+  size: number;
+}
+
 export interface FileEntry {
   path: string;
   size: number;
@@ -339,6 +367,8 @@ export interface SessionView {
   video?: VideoClipInfo | null;
   variables: Record<string, string>;
   texts: Record<string, { value: string; unresolved: string[] }>;
+  /** The tags each Tags block starts with (`over`: left out over the limit). */
+  tags?: Record<string, { tags: string[]; over: number }>;
   files: Record<string, FilesState>;
   dropdowns: Record<string, DropdownState>;
   issues: IssueView[];
@@ -853,6 +883,8 @@ export interface ShareRequest {
   dropdowns: Record<string, string | null>;
   /** For a dropdown that goes deeper: the second choice (empty is none: start something new). */
   deeper?: Record<string, string | null>;
+  /** The tags of each Tags block. */
+  tags?: Record<string, string[]>;
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;

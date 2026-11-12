@@ -982,6 +982,71 @@ pub async fn fetch_options(
     fetch(app, connection_id, options_id).await
 }
 
+/// Add files to a Files block by hand: the person picks them, each is copied into the capture's
+/// folder at once and listed ticked. Nothing is read from where they were picked again.
+#[tauri::command]
+pub async fn add_files(
+    app: AppHandle,
+    session_id: u64,
+    block_id: String,
+) -> Result<Vec<cargoframe_window::files::FileEntry>, String> {
+    let picked = {
+        let app = app.clone();
+        blocking(move || {
+            app.dialog()
+                .file()
+                .set_title("Add files to send")
+                .blocking_pick_files()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|p| p.into_path().ok())
+                .collect::<Vec<_>>()
+        })
+        .await?
+    };
+    if picked.is_empty() {
+        return Ok(Vec::new());
+    }
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let session = state
+            .sessions
+            .by_id(session_id)
+            .ok_or("This capture is no longer open")?;
+        let mut added = Vec::new();
+        let mut problems = Vec::new();
+        for path in picked {
+            match session.add_file(&state.workspace, &block_id, &path) {
+                Ok(e) => added.push(e),
+                Err(e) => problems.push(e),
+            }
+        }
+        if added.is_empty() && !problems.is_empty() {
+            return Err(problems.join("; "));
+        }
+        Ok(added)
+    })
+    .await?
+}
+
+/// The text of a file this capture offers, for a log viewer: its end when it is large.
+#[tauri::command]
+pub async fn read_offered_file(
+    app: AppHandle,
+    session_id: u64,
+    path: String,
+) -> Result<crate::session::LogText, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let session = state
+            .sessions
+            .by_id(session_id)
+            .ok_or("This capture is no longer open")?;
+        session.read_offered(&state.workspace, &path)
+    })
+    .await?
+}
+
 /// The mark the window drew over a recording (a PNG the size of the recording, see-through
 /// except for the drawing), sent just before a share. An empty body clears it. Named by
 /// `x-session-id` like the edited picture.

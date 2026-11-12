@@ -78,6 +78,94 @@ pub enum BlockKind {
     SharingButton(SharingButton),
     Dropdown(DropdownBlock),
     Files(FilesBlock),
+    /// Tags, like Jira's labels: a few words the capture starts with (from its values) and the
+    /// person adds to or takes out of; sent in a field that takes several values.
+    Tags(TagsBlock),
+    /// A log viewer: shows a file of the window's Files blocks, line by line, with a filter.
+    /// Nothing of it is sent.
+    LogView(LogViewBlock),
+}
+
+/// The most tags one Tags block holds.
+pub const MAX_TAGS: usize = 25;
+/// The longest a tag may be, in characters.
+pub const MAX_TAG_CHARS: usize = 100;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagsBlock {
+    #[serde(default)]
+    pub title: String,
+    /// The tags it starts with. Each may use `{{variables}}`: one whose values are not found is
+    /// left out, and one that gives several values (`a, b`, or one per line) gives several tags.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Offer the last five tags used in this block.
+    #[serde(default = "yes", skip_serializing_if = "is_true")]
+    pub remember: bool,
+    /// Suggest the service's own list while typing (Jira's labels, a repository's labels).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub suggest: Option<TagList>,
+}
+
+/// A list of a connection that suggests tags.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TagList {
+    pub connection_id: String,
+    pub options_id: String,
+}
+
+impl TagsBlock {
+    pub fn new(title: &str, tags: &[&str]) -> Self {
+        Self {
+            title: title.to_string(),
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            remember: true,
+            suggest: None,
+        }
+    }
+}
+
+/// One tag as it is kept: trimmed, spaces made single, at most [`MAX_TAG_CHARS`] characters, no
+/// control characters. `None` when nothing is left.
+pub fn clean_tag(raw: &str) -> Option<String> {
+    let words: Vec<&str> = raw
+        .split(|c: char| c.is_whitespace() || c.is_control())
+        .filter(|w| !w.is_empty())
+        .collect();
+    let tag: String = words.join(" ").chars().take(MAX_TAG_CHARS).collect();
+    let tag = tag.trim().to_string();
+    (!tag.is_empty()).then_some(tag)
+}
+
+/// The tags in a text: separated by commas or lines, cleaned, each once (case aside), at most
+/// [`MAX_TAGS`]. The second value says how many were left out over the limit.
+pub fn split_tags<'a>(texts: impl IntoIterator<Item = &'a str>) -> (Vec<String>, usize) {
+    let mut out: Vec<String> = Vec::new();
+    let mut over = 0;
+    for text in texts {
+        for part in text.split([',', '\n', ';']) {
+            let Some(tag) = clean_tag(part) else { continue };
+            if out.iter().any(|t| t.eq_ignore_ascii_case(&tag)) {
+                continue;
+            }
+            if out.len() >= MAX_TAGS {
+                over += 1;
+            } else {
+                out.push(tag);
+            }
+        }
+    }
+    (out, over)
+}
+
+/// What a log viewer shows.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct LogViewBlock {
+    pub title: String,
+    /// The filter it starts with (`error`); empty shows every line.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub filter: String,
 }
 
 /// What a video trigger records, set in the layout the trigger opens.
@@ -483,6 +571,46 @@ pub fn clean_subfolder(raw: &str) -> Result<Option<String>, NotASubfolder> {
         Ok(None)
     } else {
         Ok(Some(parts.join("/")))
+    }
+}
+
+#[cfg(test)]
+mod tag_tests {
+    use super::*;
+
+    #[test]
+    fn tags_are_split_cleaned_kept_once_and_at_most_twenty_five() {
+        let (tags, over) = split_tags(["crash,  GPU  driver\nwindows;Crash", "", " , "]);
+        assert_eq!(tags, ["crash", "GPU driver", "windows"]);
+        assert_eq!(over, 0);
+        let many: Vec<String> = (0..30).map(|n| format!("t{n}")).collect();
+        let (tags, over) = split_tags(many.iter().map(String::as_str));
+        assert_eq!(tags.len(), MAX_TAGS);
+        assert_eq!(over, 5);
+        assert_eq!(clean_tag(&"x".repeat(300)).unwrap().len(), MAX_TAG_CHARS);
+        assert_eq!(clean_tag(" \t "), None);
+    }
+
+    #[test]
+    fn a_tags_block_is_written_short_and_read_back() {
+        let b = Block {
+            id: "tags".into(),
+            rect: Rect {
+                x: 0,
+                y: 0,
+                w: 4,
+                h: 1,
+            },
+            kind: BlockKind::Tags(TagsBlock::new("Labels", &["{{rule.gpu}}", "crash"])),
+        };
+        let json = serde_json::to_value(&b).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"id": "tags", "rect": {"x": 0, "y": 0, "w": 4, "h": 1}, "type": "tags", "title": "Labels", "tags": ["{{rule.gpu}}", "crash"]})
+        );
+        assert_eq!(serde_json::from_value::<Block>(json).unwrap(), b);
+        let log: Block = serde_json::from_value(serde_json::json!({"id": "log", "rect": {"x": 0, "y": 0, "w": 4, "h": 3}, "type": "log_view"})).unwrap();
+        assert_eq!(log.kind, BlockKind::LogView(LogViewBlock::default()));
     }
 }
 

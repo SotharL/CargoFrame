@@ -158,36 +158,33 @@ impl CaptureDir {
         if dest.is_file() {
             return Ok(dest);
         }
-        let (mut source, len) = open_project_file(project_root, relative)?;
-        if len > max_bytes {
-            return Err(BundleError::Unreadable {
-                path: relative.into(),
-                reason: format!("larger than {} MB", max_bytes / (1024 * 1024)),
-            });
+        let (source, len) = open_project_file(project_root, relative)?;
+        copy_in(source, len, &dest, relative, max_bytes)
+    }
+
+    /// Copy a file the person chose themselves (outside any project folder) into this folder,
+    /// under `relative`, once. Regular files only, nothing larger than `max_bytes`.
+    pub fn adopt(
+        &self,
+        from: &Path,
+        relative: &str,
+        max_bytes: u64,
+    ) -> Result<PathBuf, BundleError> {
+        let name = safe_name(relative).ok_or_else(|| BundleError::UnsafeName(relative.into()))?;
+        let dest = self.files_dir().join(&name);
+        if dest.is_file() {
+            return Ok(dest);
         }
-        let write_err = |e: io::Error| BundleError::Write(e.to_string());
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent).map_err(write_err)?;
+        let unreadable = |e: &dyn std::fmt::Display| BundleError::Unreadable {
+            path: relative.into(),
+            reason: e.to_string(),
+        };
+        let meta = fs::metadata(from).map_err(|e| unreadable(&e))?;
+        if !meta.is_file() {
+            return Err(unreadable(&"not a regular file"));
         }
-        // Copy to a partial name, then rename, so a half-copied file is never mistaken for a
-        // staged one. Read at most `max_bytes + 1` in case the file grew while it was copied.
-        let part = dest.with_file_name(format!(
-            "{}.part",
-            dest.file_name().and_then(|n| n.to_str()).unwrap_or("file")
-        ));
-        let mut out = fs::File::create(&part).map_err(write_err)?;
-        let copied =
-            io::copy(&mut (&mut source).take(max_bytes + 1), &mut out).map_err(write_err)?;
-        drop(out);
-        if copied > max_bytes {
-            let _ = fs::remove_file(&part);
-            return Err(BundleError::Unreadable {
-                path: relative.into(),
-                reason: format!("larger than {} MB", max_bytes / (1024 * 1024)),
-            });
-        }
-        fs::rename(&part, &dest).map_err(write_err)?;
-        Ok(dest)
+        let source = fs::File::open(from).map_err(|e| unreadable(&e))?;
+        copy_in(source, meta.len(), &dest, relative, max_bytes)
     }
 
     /// The staged copy of a project file, if it was staged.
@@ -196,6 +193,44 @@ impl CaptureDir {
         let p = self.files_dir().join(name);
         p.is_file().then_some(p)
     }
+}
+
+/// Copy `source` (`len` bytes) to `dest` through a partial name, refusing more than `max_bytes`.
+fn copy_in(
+    mut source: fs::File,
+    len: u64,
+    dest: &Path,
+    relative: &str,
+    max_bytes: u64,
+) -> Result<PathBuf, BundleError> {
+    if len > max_bytes {
+        return Err(BundleError::Unreadable {
+            path: relative.into(),
+            reason: format!("larger than {} MB", max_bytes / (1024 * 1024)),
+        });
+    }
+    let write_err = |e: io::Error| BundleError::Write(e.to_string());
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent).map_err(write_err)?;
+    }
+    // Copy to a partial name, then rename, so a half-copied file is never mistaken for a
+    // staged one. Read at most `max_bytes + 1` in case the file grew while it was copied.
+    let part = dest.with_file_name(format!(
+        "{}.part",
+        dest.file_name().and_then(|n| n.to_str()).unwrap_or("file")
+    ));
+    let mut out = fs::File::create(&part).map_err(write_err)?;
+    let copied = io::copy(&mut (&mut source).take(max_bytes + 1), &mut out).map_err(write_err)?;
+    drop(out);
+    if copied > max_bytes {
+        let _ = fs::remove_file(&part);
+        return Err(BundleError::Unreadable {
+            path: relative.into(),
+            reason: format!("larger than {} MB", max_bytes / (1024 * 1024)),
+        });
+    }
+    fs::rename(&part, dest).map_err(write_err)?;
+    Ok(dest.to_path_buf())
 }
 
 impl Drop for CaptureDir {

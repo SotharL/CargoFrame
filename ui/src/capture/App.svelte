@@ -8,6 +8,8 @@
   import TextBlock from './blocks/TextBlock.svelte';
   import DropdownBlock from './blocks/DropdownBlock.svelte';
   import FilesBlock from './blocks/FilesBlock.svelte';
+  import TagsBlock from './blocks/TagsBlock.svelte';
+  import LogViewBlock from './blocks/LogViewBlock.svelte';
   import SharingBlock from './blocks/SharingBlock.svelte';
   import { collectShare, promptIsEmpty } from './collect';
   import { initialValues, type FormValues } from './values';
@@ -27,7 +29,7 @@
   let api = $state<Api>();
   let view = $state<SessionView | null>(null);
   let image = $state<Blob | null>(null);
-  let values = $state<FormValues>({ texts: {}, dropdowns: {}, deeper: {}, files: {} });
+  let values = $state<FormValues>({ texts: {}, dropdowns: {}, deeper: {}, files: {}, tags: {} });
   let imageEdited = $state(false);
   /** The part of the recording to send; `null` sends all of it. */
   let clipEdit = $state<ClipEdit | null>(null);
@@ -45,6 +47,20 @@
   /** The choices made before in each dropdown block (newest first), read when the capture opens. */
   let recents = $state<Record<string, Recent[]>>({});
   let screenshot = $state<ReturnType<typeof ScreenshotBlock>>();
+  /** Files added to a Files block by hand: listed (ticked) with the ones found. */
+  async function addFiles(blockId: string): Promise<string> {
+    if (!api || !view?.files[blockId]) return '';
+    try {
+      const added = await api.addFiles(view.session_id, blockId);
+      if (added.length === 0) return '';
+      view.files[blockId]!.entries = [...view.files[blockId]!.entries, ...added];
+      values.files[blockId] = [...(values.files[blockId] ?? []), ...added.map((e) => e.path)];
+      return '';
+    } catch (e) {
+      return String(e);
+    }
+  }
+
   /** Read the text in a part of the screenshot, on this computer. */
   const readText = (png: Blob, attempt: number) => {
     if (!api) return Promise.reject(new Error('CargoFrame is not ready yet'));
@@ -90,7 +106,7 @@
       ticks = initialTicks(v);
       recents = Object.fromEntries(
         (v.layout?.blocks ?? [])
-          .filter((b) => b.type === 'dropdown')
+          .filter((b) => b.type === 'dropdown' || (b.type === 'tags' && b.remember !== false))
           .map((b) => [b.id, recentChoices(v.layout?.id, b.id)]),
       );
       const sessionId = v.session_id;
@@ -290,7 +306,18 @@
                   bind:deeper={values.deeper[b.id]}
                 />
               {:else if b.type === 'files' && view.files[b.id]}
-                <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} />
+                <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} onadd={api ? () => addFiles(b.id) : undefined} />
+              {:else if b.type === 'tags' && values.tags[b.id]}
+                {@const sessionId = view.session_id}
+                <TagsBlock
+                  block={b}
+                  bind:tags={values.tags[b.id]!}
+                  recent={recents[b.id] ?? []}
+                  over={view.tags?.[b.id]?.over ?? 0}
+                  suggest={b.suggest?.options_id && api ? () => api!.fetchOptions(sessionId, b.id) : undefined}
+                />
+              {:else if b.type === 'log_view'}
+                <LogViewBlock block={b} {view} files={values.files} api={api ?? null} />
               {:else if b.type === 'sharing_button'}
                 <SharingBlock
                   block={b}

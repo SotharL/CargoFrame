@@ -64,3 +64,18 @@ describe('FilesBlock', () => {
     expect(screen.getByText('No file matches the filter.')).toBeTruthy();
   });
 });
+
+describe('FilesBlock: files added by hand', () => {
+  afterEach(cleanup);
+
+  it('has a ＋ only when files can be added, and says what went wrong', async () => {
+    const { unmount } = render(FilesBlock, { block, info: info(2), selected: [] });
+    expect(screen.queryByRole('button', { name: 'Add files by hand' })).toBeNull();
+    unmount();
+    let calls = 0;
+    render(FilesBlock, { block, info: info(2), selected: [], onadd: async () => (calls++, 'too large') });
+    await fireEvent.click(screen.getByRole('button', { name: 'Add files by hand' }));
+    expect(calls).toBe(1);
+    expect((await screen.findByRole('alert')).textContent).toContain('too large');
+  });
+});

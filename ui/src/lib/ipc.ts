@@ -6,6 +6,8 @@ import type {
   VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
   ServiceKind, ShortcutStatus,
   TextReading,
+  FileEntry,
+  LogText,
 } from './types';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
@@ -115,6 +117,10 @@ export interface Api {
   setClipMark(sessionId: number, png: Blob | null): Promise<void>;
   /** Read the text in part of the screenshot (a PNG), the `attempt`-th way, on this computer. */
   readText(png: Blob, attempt: number): Promise<TextReading>;
+  /** Pick files to add to a Files block by hand; each is copied into the capture now. */
+  addFiles(sessionId: number, blockId: string): Promise<FileEntry[]>;
+  /** The text of a file the capture offers (its end when large), for a log viewer. */
+  readOfferedFile(sessionId: number, path: string): Promise<LogText>;
   share(request: ShareRequest): Promise<ShareResult>;
   openLink(url: string): Promise<void>;
   /** Tell the app the window has painted its first usable content (for the timings). */
@@ -241,6 +247,8 @@ async function tauriApi(): Promise<Api> {
       const bytes = png ? new Uint8Array(await png.arrayBuffer()) : new Uint8Array();
       await invoke('set_edited_image', bytes, { headers: { 'x-session-id': String(sessionId) } });
     },
+    addFiles: (sessionId, blockId) => invoke<FileEntry[]>('add_files', { sessionId, blockId }),
+    readOfferedFile: (sessionId, path) => invoke<LogText>('read_offered_file', { sessionId, path }),
     readText: async (png, attempt) => {
       const bytes = new Uint8Array(await png.arrayBuffer());
       return invoke<TextReading>('read_text', bytes, { headers: { 'x-attempt': String(attempt) } });
@@ -317,6 +325,10 @@ export interface MemoryOptions {
   installPolls?: number;
   /** Called by `share`; the default answers with a made-up success. */
   share?: (request: ShareRequest) => ShareResult | Promise<ShareResult>;
+  /** Called by `addFiles`; the default adds one made-up file. */
+  addFiles?: () => FileEntry[];
+  /** Called by `readOfferedFile`; the default gives a short made-up log. */
+  readOfferedFile?: (path: string) => LogText;
   /** Called by `readText`; the default reads one made-up line. */
   readText?: (attempt: number) => TextReading | Promise<TextReading>;
   /** Called by `fetchOptions` (as `<block>:<choice>` for the list inside a choice) and `previewOptions`. */
@@ -825,6 +837,20 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           : [{ value: 'P1', label: 'Demo project', group: null }],
     setEditedImage: async () => {},
     setClipMark: async () => {},
+    addFiles: async () => opts.addFiles?.() ?? [{ path: 'added/notes.txt', size: 42, selected: true }],
+    readOfferedFile: async (_sessionId, path) =>
+      opts.readOfferedFile?.(path) ?? {
+        text: [
+          '12:00:01 [info] Editor started',
+          '12:00:02 [info] Project Foo opened',
+          '12:00:05 [warning] Shader cache is old',
+          '12:00:09 [error] Save failed: disk full',
+          '12:00:10 [info] Retrying save',
+          '12:00:11 [error] Save failed again',
+        ].join('\n'),
+        cut: false,
+        size: 220,
+      },
     readText: async (_png, attempt) =>
       opts.readText
         ? opts.readText(attempt)

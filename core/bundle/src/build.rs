@@ -131,10 +131,9 @@ fn unreadable(path: &str, e: impl std::fmt::Display) -> BundleError {
 }
 
 /// Check a project file and open it.
-pub(crate) fn open_project_file(
-    root: &Path,
-    relative: &str,
-) -> Result<(fs::File, u64), BundleError> {
+/// Where `relative` really is inside `root`, links followed: refused when it is not a plain name
+/// or leads out of `root`.
+pub fn inside(root: &Path, relative: &str) -> Result<PathBuf, BundleError> {
     if safe_name(relative).is_none() {
         return Err(BundleError::UnsafeName(relative.to_string()));
     }
@@ -148,6 +147,14 @@ pub(crate) fn open_project_file(
             path: relative.to_string(),
         });
     }
+    Ok(real)
+}
+
+pub(crate) fn open_project_file(
+    root: &Path,
+    relative: &str,
+) -> Result<(fs::File, u64), BundleError> {
+    let real = inside(root, relative)?;
     let meta = fs::metadata(&real).map_err(|e| unreadable(relative, e))?;
     if !meta.is_file() {
         return Err(unreadable(relative, "not a regular file"));

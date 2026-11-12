@@ -347,6 +347,7 @@ pub fn compose(payload: &Payload) -> String {
             Some(payload.title.trim().to_string())
                 .filter(|t| !t.is_empty() && payload.value("title").is_none())
         });
+    let body = crate::payload::with_tags_line(body, payload);
     let mut parts = Vec::new();
     if let Some(t) = payload.value("title") {
         let t = one_line(t).replace('*', "");
@@ -441,6 +442,7 @@ impl Connector for SlackConnector {
                 f("thread", "Reply in a thread", "A message link (Copy link in Slack) or its timestamp. Empty: a new message", None),
                 f("message", "Message", "Defaults to the prompt text, then the window title", None),
                 f("title", "Bold first line", "Empty: none", None),
+                f("tags", "Tags", "Added as a last line. Separate several with commas", None),
             ],
             lists: vec![ListSpec {
                 id: "channels".into(),

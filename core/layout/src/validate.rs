@@ -56,6 +56,10 @@ pub enum Code {
     TooManySharingButtons,
     /// A grid with fewer than [`crate::MIN_COLUMNS`] or more than [`crate::MAX_COLUMNS`] columns.
     BadColumns,
+    /// A Tags block that starts with more than [`crate::MAX_TAGS`] tags.
+    TooManyTags,
+    /// A log viewer in a layout with no Files block.
+    NoFilesToView,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -330,6 +334,38 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                         Severity::Warning,
                         Code::BadSubfolder,
                         "Each subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
+                    ));
+                }
+            }
+            BlockKind::Tags(t) => {
+                check_variables(block, &t.title, reg, &mut out);
+                for tag in &t.tags {
+                    check_variables(block, tag, reg, &mut out);
+                }
+                if t.tags.len() > crate::MAX_TAGS {
+                    out.push(issue(
+                        block,
+                        Severity::Warning,
+                        Code::TooManyTags,
+                        format!(
+                            "A Tags block holds {} tags at most: the ones after are left out",
+                            crate::MAX_TAGS
+                        ),
+                    ));
+                }
+            }
+            BlockKind::LogView(l) => {
+                check_variables(block, &l.title, reg, &mut out);
+                if !layout
+                    .blocks
+                    .iter()
+                    .any(|b| matches!(b.kind, BlockKind::Files(_)))
+                {
+                    out.push(issue(
+                        block,
+                        Severity::Warning,
+                        Code::NoFilesToView,
+                        "A log viewer shows the files of a Files block: add one to this layout",
                     ));
                 }
             }

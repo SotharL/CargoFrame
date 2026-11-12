@@ -53,6 +53,51 @@ pub struct Session {
     /// The folder this capture keeps copies in (the screenshot, the ticked files), made when a
     /// destination first needs real files. It is deleted when the capture is closed.
     dir: Mutex<Option<CaptureDir>>,
+    /// Files the person added to a Files block by hand, by block id. Each is copied into the
+    /// capture's folder at once, under `added/<name>`: everything that reads a ticked file finds
+    /// that copy first, so the file is never read from where it was chosen again.
+    added: Mutex<BTreeMap<String, Vec<files::FileEntry>>>,
+}
+
+/// The name a file added by hand has in the window and in a zip.
+pub const ADDED: &str = "added";
+/// The largest file that can be added by hand.
+pub const MAX_ADDED_BYTES: u64 = 50 * 1024 * 1024;
+/// The most a log viewer reads of a file: its end, where the latest lines are.
+pub const MAX_LOG_BYTES: u64 = 4 * 1024 * 1024;
+
+/// The end of a file: all of it when it is at most `max` bytes, else its last `max` bytes from
+/// the first whole line. Text that is not UTF-8 is shown as best it can be.
+pub fn read_end(path: &Path, max: u64) -> std::io::Result<LogText> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut f = std::fs::File::open(path)?;
+    let size = f.metadata()?.len();
+    let cut = size > max;
+    if cut {
+        f.seek(SeekFrom::Start(size - max))?;
+    }
+    let mut bytes = Vec::with_capacity(size.min(max) as usize);
+    f.take(max).read_to_end(&mut bytes)?;
+    if cut {
+        // the first line is only part of one
+        if let Some(i) = bytes.iter().position(|&b| b == b'\n') {
+            bytes.drain(..=i);
+        }
+    }
+    Ok(LogText {
+        text: String::from_utf8_lossy(&bytes).into_owned(),
+        cut,
+        size,
+    })
+}
+
+/// What a log viewer shows of a file.
+#[derive(Debug, Clone, serde::Serialize, PartialEq, Eq)]
+pub struct LogText {
+    pub text: String,
+    /// Only the end of the file is shown: it is larger than [`MAX_LOG_BYTES`].
+    pub cut: bool,
+    pub size: u64,
 }
 
 impl Session {
@@ -66,7 +111,107 @@ impl Session {
             clip_mark: Mutex::new(None),
             files_root,
             dir: Mutex::new(None),
+            added: Mutex::new(BTreeMap::new()),
         }
+    }
+
+    /// The files added by hand to Files block `block_id`.
+    pub fn added(&self, block_id: &str) -> Vec<files::FileEntry> {
+        self.added
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(block_id)
+            .cloned()
+            .unwrap_or_default()
+    }
+
+    /// Whether a Files block of this capture offers `path` (found, or added by hand).
+    pub fn offers(&self, block_id: &str, path: &str) -> bool {
+        let found = self
+            .view
+            .files
+            .get(block_id)
+            .is_some_and(|f| f.entries.iter().any(|e| e.path == path));
+        found || self.added(block_id).iter().any(|e| e.path == path)
+    }
+
+    /// Add a file the person chose to Files block `block_id`: copied into the capture's folder
+    /// now, listed as `added/<name>` (a number added when the name is taken). Gives its entry.
+    pub fn add_file(
+        &self,
+        workspace: &Workspace,
+        block_id: &str,
+        from: &Path,
+    ) -> Result<files::FileEntry, String> {
+        if !self.view.files.contains_key(block_id) {
+            return Err("That Files block is not in this capture".into());
+        }
+        let name = from
+            .file_name()
+            .map(|n| n.to_string_lossy().to_string())
+            .filter(|n| !n.trim().is_empty())
+            .ok_or("That is not a file")?;
+        let mut added = self.added.lock().unwrap_or_else(|e| e.into_inner());
+        let taken = |p: &str| {
+            added.values().flatten().any(|e| e.path == p)
+                || self
+                    .view
+                    .files
+                    .values()
+                    .any(|f| f.entries.iter().any(|e| e.path == p))
+        };
+        let (stem, ext) = match name.rfind('.') {
+            Some(i) if i > 0 => (&name[..i], &name[i..]),
+            _ => (name.as_str(), ""),
+        };
+        let mut path = format!("{ADDED}/{name}");
+        let mut n = 2;
+        while taken(&path) {
+            path = format!("{ADDED}/{stem} ({n}){ext}");
+            n += 1;
+        }
+        let copy = self
+            .with_dir(workspace, |dir| dir.adopt(from, &path, MAX_ADDED_BYTES))
+            .map_err(|e| format!("The capture's folder could not be used: {e}"))?
+            .map_err(|e| format!("\u{201c}{name}\u{201d} cannot be added: {e}"))?;
+        let size = std::fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
+        let entry = files::FileEntry {
+            path,
+            size,
+            selected: true,
+        };
+        added
+            .entry(block_id.to_string())
+            .or_default()
+            .push(entry.clone());
+        Ok(entry)
+    }
+
+    /// The text of a file a Files block offers, for a log viewer: this capture's copy if it has
+    /// one, else the file in the project; only its end when it is large. Never a file the
+    /// capture did not offer.
+    pub fn read_offered(&self, workspace: &Workspace, path: &str) -> Result<LogText, String> {
+        let offered = self.view.files.keys().any(|block| self.offers(block, path));
+        if !offered {
+            return Err("That file is not one this capture offers".into());
+        }
+        let copy = self
+            .dir
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .as_ref()
+            .and_then(|d| d.staged(path));
+        let real = match copy {
+            Some(c) => c,
+            None => {
+                let root = self
+                    .files_root
+                    .as_deref()
+                    .ok_or("There is no folder to read the file from")?;
+                cargoframe_bundle::inside(Path::new(root), path).map_err(|e| e.to_string())?
+            }
+        };
+        read_end(&real, MAX_LOG_BYTES).map_err(|e| format!("The file could not be read: {e}"))
     }
 
     /// This capture is a recording: tell the window about it.
@@ -455,12 +600,17 @@ pub fn apply_incoming(view: &mut SessionView, values: &[(String, String)]) {
                     d.selected = Some(value.clone());
                 }
             }
+            // `--set labels=crash,gpu`: the tags, replacing the ones it started with
+            Some(cargoframe_layout::BlockKind::Tags(_)) => {
+                let (tags, over) = cargoframe_layout::split_tags([value.as_str()]);
+                view.tags.insert(id.clone(), view::TagsState { tags, over });
+            }
             _ => unknown.push(id.as_str()),
         }
     }
     if !unknown.is_empty() {
         view.notes.push(format!(
-            "Another program sent values for {}, which this layout has no text box or dropdown for",
+            "Another program sent values for {}, which this layout has no text box, dropdown or tags for",
             unknown.join(", ")
         ));
     }
