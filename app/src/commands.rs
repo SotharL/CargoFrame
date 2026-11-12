@@ -544,8 +544,19 @@ pub async fn test_rule(
                 .and_then(|p| cargoframe_context::climb::resolve_project_folder(&p))
                 .map(|r| r.folder)
         });
+    // values made from other values are previewed with the saved rules and the last capture's
+    let others: Vec<(String, Rule)> = state
+        .store
+        .load_all::<Rule>(cargoframe_config::Kind::Rules)
+        .map(|l| l.items)
+        .unwrap_or_default();
+    let known = state
+        .sessions
+        .latest()
+        .map(|s| s.view.variables.clone())
+        .unwrap_or_default();
     // Reading a big file can take a moment: not on the thread that draws the window.
-    blocking(move || tools::test_rule(&rule, folder.as_deref())).await
+    blocking(move || tools::test_rule(&rule, folder.as_deref(), &others, &known)).await
 }
 
 /// What a Files block would find. Without a program, the one of the last capture is used.
@@ -969,6 +980,71 @@ pub async fn fetch_options(
         });
     };
     fetch(app, connection_id, options_id).await
+}
+
+/// Add files to a Files block by hand: the person picks them, each is copied into the capture's
+/// folder at once and listed ticked. Nothing is read from where they were picked again.
+#[tauri::command]
+pub async fn add_files(
+    app: AppHandle,
+    session_id: u64,
+    block_id: String,
+) -> Result<Vec<cargoframe_window::files::FileEntry>, String> {
+    let picked = {
+        let app = app.clone();
+        blocking(move || {
+            app.dialog()
+                .file()
+                .set_title("Add files to send")
+                .blocking_pick_files()
+                .unwrap_or_default()
+                .into_iter()
+                .filter_map(|p| p.into_path().ok())
+                .collect::<Vec<_>>()
+        })
+        .await?
+    };
+    if picked.is_empty() {
+        return Ok(Vec::new());
+    }
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let session = state
+            .sessions
+            .by_id(session_id)
+            .ok_or("This capture is no longer open")?;
+        let mut added = Vec::new();
+        let mut problems = Vec::new();
+        for path in picked {
+            match session.add_file(&state.workspace, &block_id, &path) {
+                Ok(e) => added.push(e),
+                Err(e) => problems.push(e),
+            }
+        }
+        if added.is_empty() && !problems.is_empty() {
+            return Err(problems.join("; "));
+        }
+        Ok(added)
+    })
+    .await?
+}
+
+/// The text of a file this capture offers, for a log viewer: its end when it is large.
+#[tauri::command]
+pub async fn read_offered_file(
+    app: AppHandle,
+    session_id: u64,
+    path: String,
+) -> Result<crate::session::LogText, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let session = state
+            .sessions
+            .by_id(session_id)
+            .ok_or("This capture is no longer open")?;
+        session.read_offered(&path)
+    })
+    .await?
 }
 
 /// The mark the window drew over a recording (a PNG the size of the recording, see-through

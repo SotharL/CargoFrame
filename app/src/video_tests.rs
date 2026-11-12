@@ -635,12 +635,15 @@ fn a_press_starts_when_nothing_records_and_stops_what_a_trigger_started() {
         squeezed: false,
         keep_secs: 10,
     };
-    assert_eq!(step(&RecordingView::Idle, false), Step::Start);
-    assert_eq!(step(&RecordingView::Idle, true), Step::Start);
-    assert_eq!(step(&recording, true), Step::Stop);
-    assert!(matches!(step(&recording, false), Step::Refuse(m) if m.contains("Settings")));
+    assert_eq!(step(&RecordingView::Idle, false, false), Step::Start);
+    assert_eq!(step(&RecordingView::Idle, true, false), Step::Start);
+    assert_eq!(step(&recording, true, false), Step::Stop);
+    // a continuous recording is not stopped by a press: it hands out its last seconds
+    assert_eq!(step(&recording, true, true), Step::Snapshot);
+    assert_eq!(step(&RecordingView::Idle, true, true), Step::Start);
+    assert!(matches!(step(&recording, false, false), Step::Refuse(m) if m.contains("Settings")));
     assert!(matches!(
-        step(&RecordingView::Finishing, true),
+        step(&RecordingView::Finishing, true, false),
         Step::Refuse(_)
     ));
 }
@@ -651,11 +654,11 @@ fn a_recording_that_ended_by_itself_is_reported_to_the_trigger_that_started_it()
         message: "the screen could not be read".into(),
     };
     assert_eq!(
-        step(&failed, true),
+        step(&failed, true, false),
         Step::Report("the screen could not be read".into())
     );
     // a failure left by a test in Settings is no business of a trigger: it just starts
-    assert_eq!(step(&failed, false), Step::Start);
+    assert_eq!(step(&failed, false, false), Step::Start);
 }
 
 #[test]
@@ -721,7 +724,10 @@ fn a_recording_from_a_trigger_becomes_a_session_whose_clip_plays_back() {
         .store(true, std::sync::atomic::Ordering::SeqCst);
     std::thread::sleep(Duration::from_millis(3_500));
     // the next press stops it
-    assert_eq!(step(&rec.view(), rec.started_by_trigger()), Step::Stop);
+    assert_eq!(
+        step(&rec.view(), rec.started_by_trigger(), rec.is_continuous()),
+        Step::Stop
+    );
     let trial = rec.stop();
     assert!(trial.ok, "{}", trial.message);
 
@@ -1058,6 +1064,7 @@ fn a_window_is_recorded_on_its_own_and_a_missing_sound_device_costs_only_the_sou
         // a sound system that is not there is slow to say so
         patience: Duration::from_secs(8),
         listen: None,
+        max_run_secs: None,
     };
     let rec = Recording::new();
     let started = rec
@@ -1078,4 +1085,71 @@ fn a_window_is_recorded_on_its_own_and_a_missing_sound_device_costs_only_the_sou
     // the window only, with even sides
     assert_eq!((t.width, t.height), (320, 240));
     assert!(!t.clip_audio);
+}
+
+#[test]
+fn a_continuous_recording_hands_out_its_last_seconds_and_goes_on() {
+    let Some(ffmpeg) = locate("ffmpeg", &[]) else {
+        eprintln!("skipped: ffmpeg is not installed");
+        return;
+    };
+    let Some(ffprobe) = locate("ffprobe", &[]) else {
+        eprintln!("skipped: ffprobe is not installed");
+        return;
+    };
+    let _one = one_at_a_time();
+    let Some(screen) = Screen::start(89) else {
+        eprintln!("skipped: no virtual X screen (Xvfb) to record");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let work = dir.path().join("video-recording");
+    let f = Found {
+        ffmpeg,
+        ffprobe: ffprobe.clone(),
+        ..found(&[VideoEncoder::Software], &[VideoCapture::X11])
+    };
+    let session = Session {
+        wayland: false,
+        display: Some(screen.display.clone()),
+    };
+    let choice = Choice {
+        capture: VideoCapture::X11,
+        encoder: VideoEncoder::Software,
+    };
+    let video = Video {
+        fps: 10,
+        window_secs: 2,
+        ..Video::default()
+    };
+    let rec = Recording::new();
+    rec.start_with(f, choice, &video, &session, &work, 2)
+        .unwrap();
+    rec.by_trigger
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    rec.continuous
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    std::thread::sleep(Duration::from_millis(3_500));
+    assert!(rec.is_continuous());
+    // a press hands out the last seconds, and the recording goes on
+    assert_eq!(
+        step(&rec.view(), rec.started_by_trigger(), rec.is_continuous()),
+        Step::Snapshot
+    );
+    let first = rec.snapshot();
+    assert!(first.ok, "{}", first.message);
+    assert!(
+        first.clip_ms >= 1_000 && first.clip_ms <= 4_000,
+        "{}",
+        first.clip_ms
+    );
+    assert!(matches!(rec.view(), RecordingView::Recording { .. }));
+    std::thread::sleep(Duration::from_millis(1_500));
+    let second = rec.snapshot();
+    assert!(second.ok, "{}", second.message);
+    // each has its own file
+    assert_ne!(first.clip, second.clip);
+    assert!(std::path::Path::new(first.clip.as_deref().unwrap()).exists());
+    rec.cancel();
+    assert!(!rec.is_continuous());
 }

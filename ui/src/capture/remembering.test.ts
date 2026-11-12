@@ -18,6 +18,20 @@ async function pathView() {
 describe('rememberChoices', () => {
   beforeEach(() => localStorage.clear());
 
+  it('keeps the tags used, the first on top, and none for a block that does not remember', async () => {
+    const view = await demoSession();
+    view.layout!.blocks.push(
+      { id: 'labels', type: 'tags', rect: { x: 0, y: 20, w: 4, h: 1 }, title: 'Labels', tags: [] },
+      { id: 'quiet', type: 'tags', rect: { x: 4, y: 20, w: 4, h: 1 }, title: 'Quiet', tags: [], remember: false },
+    );
+    const values = initialValues(view);
+    values.tags['labels'] = ['crash', 'gpu'];
+    values.tags['quiet'] = ['x'];
+    rememberChoices(view, values);
+    expect(recentChoices('bug', 'labels').map((r) => r.value)).toEqual(['crash', 'gpu']);
+    expect(recentChoices('bug', 'quiet')).toEqual([]);
+  });
+
   it('keeps the channel chosen, and nothing for a dropdown with nothing chosen', async () => {
     const view = await pathView();
     const values = initialValues(view);

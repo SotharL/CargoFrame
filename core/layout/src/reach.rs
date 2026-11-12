@@ -269,7 +269,7 @@ pub fn select(
                     files_on.insert(r.block_id.clone());
                 }
             }
-            BlockKind::Text(_) | BlockKind::Dropdown(_) => {
+            BlockKind::Text(_) | BlockKind::Dropdown(_) | BlockKind::Tags(_) => {
                 if !goes {
                     if button.prompt_block_id.as_deref() == Some(r.block_id.as_str()) {
                         button.prompt_block_id = None;
@@ -279,7 +279,7 @@ pub fn select(
                     );
                 }
             }
-            BlockKind::SharingButton(_) => {}
+            BlockKind::SharingButton(_) | BlockKind::LogView(_) => {}
         }
     }
     if !reasons.is_empty() {
@@ -316,6 +316,8 @@ fn block_name(b: &Block) -> String {
         BlockKind::Text(t) => format!("\u{201c}{}\u{201d}", titled(&t.title)),
         BlockKind::Dropdown(d) => format!("\u{201c}{}\u{201d}", titled(&d.title)),
         BlockKind::Files(f) => format!("\u{201c}{}\u{201d}", titled(&f.title)),
+        BlockKind::Tags(t) => format!("\u{201c}{}\u{201d}", titled(&t.title)),
+        BlockKind::LogView(l) => format!("\u{201c}{}\u{201d}", titled(&l.title)),
         BlockKind::SharingButton(_) => b.id.clone(),
     }
 }
@@ -394,7 +396,16 @@ fn verdict(
                 Err(why) => Verdict::CannotSend { why },
             },
         },
-        BlockKind::SharingButton(_) => Verdict::NotUsed,
+        // tags go in a field, like a text
+        BlockKind::Tags(_) => match field_of() {
+            None => Verdict::NotUsed,
+            Some(field) => match usable(caps.text) {
+                Ok(()) => sent(Role::Field { field }),
+                Err(why) => Verdict::CannotSend { why },
+            },
+        },
+        // shown in the window only
+        BlockKind::SharingButton(_) | BlockKind::LogView(_) => Verdict::NotUsed,
     }
 }
 

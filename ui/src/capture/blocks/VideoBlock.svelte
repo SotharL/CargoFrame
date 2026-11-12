@@ -56,7 +56,8 @@
    */
   let mode = $state<'none' | 'crop' | 'mark'>('none');
   /** The area to keep, in the recording's own pixels. It is live: what the box shows is what is sent. */
-  let crop = $state<Box | null>(null);
+  // a continuous recording of the whole screen starts on the window that was in focus
+  let crop = $state<Box | null>(untrack(() => (info.crop ? { ...info.crop } : null)));
   let cropBefore: Box | null = null;
   /** The marks drawn over the recording, and the tool, colour and size they are drawn with. */
   let marks = $state<EditorState>(emptyState());
@@ -253,7 +254,7 @@
   }
 </script>
 
-<div class="clip">
+<div class="clip" data-content>
   {#if problem}
     <p class="problem" role="alert">{problem}</p>
   {:else if cannotPlay}

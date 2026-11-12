@@ -11,6 +11,7 @@
   import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Reach, Rect, Rule, VariableInfo } from '../../lib/types';
   import { COLUMNS, typeLabel } from './model';
+  import { MAX_TAGS } from '../../lib/types';
   import { stepLines } from '../fills';
   import { go } from '../route.svelte';
   import { getApi } from '../../lib/ipc';
@@ -130,6 +131,10 @@
   };
   const fieldHint = (connection: string | null, key: string) =>
     connectionOf(connection)?.describe.fields.find((f) => f.key === key)?.hint ?? '';
+  /** A field that takes several values (labels, hashtags, a "several choices" fill). */
+  const takesSeveral = (b: SharingBlock, key: string) =>
+    /separate several/i.test(fieldHint(b.connection_id, key)) ||
+    infoTypes.some((i) => i.item.connection_id === b.connection_id && i.item.field === key && i.item.kind === 'multi_choice');
 
   /** A dropdown's options call is `list` or `list:value` (a list that needs a project key). */
   const splitList = (id: string): [string, string] => {
@@ -164,27 +169,7 @@
       </select>
     </Field>
     {#if block.role === 'plain'}
-      {@const textId = block.id}
-      <fieldset class="message-of" data-tour="props.sent_in">
-        <legend>Sent in</legend>
-        {#each sendingButtons as m (m.button.id)}
-          <label class="sent">
-            <span>{m.button.label || blockName(m.button)} <span class="quiet">({m.kind ? KIND_NAME[m.kind] : 'service'})</span></span>
-            <select
-              aria-label={`Field of ${m.button.label || blockName(m.button)}`}
-              value={fieldOf(m.button, textId)}
-              onchange={(e) => sendIn(m.button, textId, e.currentTarget.value)}
-            >
-              <option value="">Not sent</option>
-              {#each fieldsFor(m.button.connection_id) as f (f.key)}
-                <option value={f.key}>{f.label}{f.key === m.message ? ' (formatted)' : ''}</option>
-              {/each}
-            </select>
-          </label>
-        {:else}
-          <p class="quiet hint">Add a sharing button to the layout to send this box in one of its fields (a Jira summary, a description…).</p>
-        {/each}
-      </fieldset>
+      {@render sentIn(block.id, false)}
       <div class="toggles">
         <Toggle label="Formatting buttons" checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
         <p class="quiet hint">
@@ -282,6 +267,60 @@
         </Field>
       {/if}
     {/if}
+  {:else if block.type === 'tags'}
+    {@const tagsBlock = block}
+    <Field label="Title"><input type="text" bind:value={tagsBlock.title} /></Field>
+    <div class="auto-field">
+      <span class="auto-title">Starting tags</span>
+      <p class="quiet hint">
+        Each line is a tag. Use a value like <code>{'{{rule.gpu}}'}</code>: the tag is there only when the value is
+        found, and a value with several parts (<code>a, b</code>) gives several tags. At most {MAX_TAGS}.
+      </p>
+      {#each tagsBlock.tags as _t, i (i)}
+        <div class="tagline">
+          <input type="text" class="mono" bind:value={tagsBlock.tags[i]} list="tag-variables" aria-label={`Starting tag ${i + 1}`} placeholder={'{{rule.gpu}}'} />
+          <button type="button" aria-label={`Remove starting tag ${i + 1}`} onclick={() => (tagsBlock.tags = tagsBlock.tags.filter((_, n) => n !== i))}>✕</button>
+        </div>
+      {/each}
+      <datalist id="tag-variables">
+        {#each variables as v (v.name)}<option value={`{{${v.name}}}`}>{v.description}</option>{/each}
+      </datalist>
+      <button type="button" class="start" disabled={tagsBlock.tags.length >= MAX_TAGS} onclick={() => (tagsBlock.tags = [...tagsBlock.tags, ''])}>Add a starting tag</button>
+    </div>
+    <div class="toggles">
+      <Toggle label="Remember the last tags" checked={tagsBlock.remember !== false} onchange={(v) => (tagsBlock.remember = v)} />
+      <p class="quiet hint">The last five tags used are offered under the box, one click to add.</p>
+    </div>
+    {@const suggestConn = connectionOf(tagsBlock.suggest?.connection_id ?? null)}
+    <Field label="Suggest from" hint="Tags of the service shown while typing, like Jira's labels or a repository's labels.">
+      <select
+        aria-label="Suggest tags from a connection"
+        value={tagsBlock.suggest?.connection_id ?? ''}
+        onchange={(e) => (tagsBlock.suggest = e.currentTarget.value ? { connection_id: e.currentTarget.value, options_id: '' } : null)}
+      >
+        <option value="">Nothing</option>
+        {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
+      </select>
+    </Field>
+    {#if tagsBlock.suggest && suggestConn}
+      {@const sug = tagsBlock.suggest}
+      <Field label="List">
+        <select aria-label="List the tags come from" bind:value={sug.options_id}>
+          <option value="">Choose…</option>
+          {#each suggestConn.describe.lists.filter((l) => !l.param) as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+        </select>
+      </Field>
+    {/if}
+    {@render sentIn(tagsBlock.id, true)}
+  {:else if block.type === 'log_view'}
+    <Field label="Title"><input type="text" bind:value={block.title} /></Field>
+    <Field label="Start with this filter" hint="Only the lines with this text are shown at first (case aside), like error. Empty: every line.">
+      <input type="text" value={block.filter ?? ''} oninput={(e) => (block.filter = e.currentTarget.value || undefined)} placeholder="error" />
+    </Field>
+    <p class="quiet hint">
+      Shows a file of the window's Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the
+      lines shown. Nothing of it is sent.
+    </p>
   {:else if block.type === 'video'}
     <VideoOptions {block} />
   {:else if block.type === 'files'}
@@ -393,7 +432,40 @@
   <button type="button" class="remove" onclick={onremove}>Remove this block</button>
 </div>
 
+{#snippet sentIn(blockId: string, several: boolean)}
+  <fieldset class="message-of" data-tour="props.sent_in">
+    <legend>Sent in</legend>
+    {#each sendingButtons as m (m.button.id)}
+      {@const fields = fieldsFor(m.button.connection_id)}
+      <label class="sent">
+        <span>{m.button.label || blockName(m.button)} <span class="quiet">({m.kind ? KIND_NAME[m.kind] : 'service'})</span></span>
+        <select
+          aria-label={`Field of ${m.button.label || blockName(m.button)}`}
+          value={fieldOf(m.button, blockId)}
+          onchange={(e) => sendIn(m.button, blockId, e.currentTarget.value)}
+        >
+          <option value="">Not sent</option>
+          <!-- tags go best in a field that takes several values: those come first -->
+          {#each several ? [...fields.filter((f) => takesSeveral(m.button, f.key)), ...fields.filter((f) => !takesSeveral(m.button, f.key))] : fields as f (f.key)}
+            <option value={f.key}>{f.label}{!several && f.key === m.message ? ' (formatted)' : ''}{several && takesSeveral(m.button, f.key) ? ' (several)' : ''}</option>
+          {/each}
+        </select>
+      </label>
+    {:else}
+      <p class="quiet hint">
+        {several
+          ? 'Add a sharing button to the layout to send the tags in one of its fields (Jira labels, hashtags…).'
+          : 'Add a sharing button to the layout to send this box in one of its fields (a Jira summary, a description…).'}
+      </p>
+    {/each}
+  </fieldset>
+{/snippet}
+
 <style>
+  .tagline { display: flex; gap: 6px; }
+  .tagline input { flex: 1; min-width: 0; }
+  .tagline button { padding: 2px 8px; }
+  .start { justify-self: start; }
   .props { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; align-content: start; }
   .head { display: flex; gap: 10px; align-items: baseline; }
   .id { font-size: 12px; }

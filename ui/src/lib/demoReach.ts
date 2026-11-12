@@ -140,6 +140,11 @@ export function demoReach(layout: Layout, button: Extract<Block, { type: 'sharin
       const field = fieldOf(b.id);
       const sentAs = button.prompt_block_id === b.id ? ({ role: 'prompt' } as const) : field ? ({ role: 'field', field } as const) : null;
       blocks.push(!sentAs ? { block_id: b.id, state: 'not_used' } : caps.text.support === 'no' ? { block_id: b.id, state: 'cannot_send', why: caps.text.note } : { block_id: b.id, state: 'sent', ...sentAs, required: needs(sentAs.role, field) });
+    } else if (b.type === 'log_view') {
+      blocks.push({ block_id: b.id, state: 'not_used' });
+    } else if (b.type === 'tags') {
+      const field = fieldOf(b.id);
+      blocks.push(!field ? { block_id: b.id, state: 'not_used' } : caps.text.support === 'no' ? { block_id: b.id, state: 'cannot_send', why: caps.text.note } : { block_id: b.id, state: 'sent', role: 'field', field });
     } else {
       const field = fieldOf(b.id);
       blocks.push(!field ? { block_id: b.id, state: 'not_used' } : caps.dropdown.support === 'no' ? { block_id: b.id, state: 'cannot_send', why: caps.dropdown.note } : { block_id: b.id, state: 'sent', role: 'field', field });

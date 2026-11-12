@@ -137,6 +137,40 @@ describe('Data from files: if a file is found, read values', () => {
 });
 
 describe('Data from files: names', () => {
+  it('makes a value from other values, with choices tried from the top and conditions', async () => {
+    render(Rules);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Make a value from other values' }));
+    // no file to name: it reads none
+    expect(screen.queryByRole('textbox', { name: 'File name, or part of it' })).toBeNull();
+    await type(screen.getByPlaceholderText('Machine config'), 'Build');
+    await type(nameBoxes()[0]!, 'Build id');
+    await type(screen.getByRole('combobox', { name: 'Choice 1' }), '{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}');
+    await fireEvent.click(screen.getByRole('button', { name: 'Add a choice' }));
+    await type(screen.getByRole('combobox', { name: 'Choice 2' }), '{{rule.stream}}_{{rule.config}}');
+    await fireEvent.click(screen.getAllByRole('button', { name: 'Add a condition' })[1]!);
+    await type(screen.getByRole('combobox', { name: 'Value condition 1 of choice 2 looks at' }), 'rule.config');
+    await fireEvent.change(screen.getByRole('combobox', { name: 'Test of condition 1 of choice 2' }), { target: { value: 'is' } });
+    await type(screen.getByRole('textbox', { name: 'Text of condition 1 of choice 2' }), 'Debug');
+    // the more precise one first; the order can be changed
+    await fireEvent.click(screen.getByRole('button', { name: 'Move choice 2 up' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Move choice 1 down' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect((await api.listItems<Rule>('rule')).items.length).toBe(1));
+    const saved = (await api.listItems<Rule>('rule')).items[0]!.item;
+    expect(saved.file).toBe('');
+    expect(saved.values![0]).toMatchObject({
+      key: 'build_id',
+      find: {
+        type: 'combine',
+        choices: [
+          { text: '{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}' },
+          { text: '{{rule.stream}}_{{rule.config}}', when: [{ value: 'rule.config', test: 'is', text: 'Debug' }] },
+        ],
+      },
+    });
+    expect(await screen.findByText('Made from other values, no file read')).toBeTruthy();
+  });
+
   it('makes variable names from what people write, and keeps them apart', () => {
     expect(slug('OS Name')).toBe('os_name');
     expect(slug('Carte graphique (GPU)')).toBe('carte_graphique_gpu');

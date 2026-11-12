@@ -17,6 +17,11 @@ export const remembers = (b: Dropdown) => b.remember !== false && b.source.type 
 export function rememberChoices(view: SessionView, values: FormValues, placed: DropdownOption | null = null) {
   const layout = view.layout?.id;
   for (const b of view.layout?.blocks ?? []) {
+    if (b.type === 'tags' && b.remember !== false) {
+      // the first tag ends on top
+      for (const tag of [...(values.tags?.[b.id] ?? [])].reverse()) remember(layout, b.id, { value: tag, label: tag });
+      continue;
+    }
     if (b.type !== 'dropdown' || !remembers(b)) continue;
     const value = values.dropdowns[b.id];
     const label = view.dropdowns[b.id]?.options.find((o) => o.value === value)?.label;

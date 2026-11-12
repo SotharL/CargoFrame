@@ -30,6 +30,8 @@ export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: 
   { type: 'text', label: 'Text', hint: 'A text box with a title, for notes or a prompt', size: [4, 3] },
   { type: 'dropdown', label: 'Dropdown', hint: 'Choices from a service or from your Claude chats', size: [4, 2] },
   { type: 'files', label: 'Files', hint: 'Files from the project folder (or folders above the program) to tick and zip together', size: [6, 3] },
+  { type: 'tags', label: 'Tags', hint: 'Tags like Jira labels: started from the capture’s values, up to 25, sent in a field', size: [4, 1] },
+  { type: 'log_view', label: 'Log viewer', hint: 'Shows a file of the Files block line by line, with a filter, to copy lines from', size: [6, 4] },
   { type: 'sharing_button', label: 'Sharing button', hint: 'Sends everything to a connection', size: [4, 2] },
 ];
 
@@ -70,6 +72,8 @@ const ID_PREFIX: Record<BlockType, string> = {
   text: 'text',
   dropdown: 'dropdown',
   files: 'files',
+  tags: 'tags',
+  log_view: 'log',
   sharing_button: 'share',
 };
 
@@ -97,6 +101,10 @@ function content(type: BlockType): BlockContent {
       return {
         type, title: 'Files', include: ['**/*.log'], preselect: [], look_in: { folders: ['project'], subfolder: '' },
       };
+    case 'tags':
+      return { type, title: 'Tags', tags: [] };
+    case 'log_view':
+      return { type, title: 'Log' };
     case 'sharing_button':
       return {
         type, label: 'Share', connection_id: null, prompt_block_id: null, mappings: [], on_success: 'close_window',

@@ -52,7 +52,15 @@ pub struct ValueTest {
 /// Run one rule against `folder` (or say there is none). Never writes anything. A rule that is
 /// not finished yet (no name, a value being typed) still shows the file it points at, and every
 /// value that can already be read.
-pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
+///
+/// `others` are the saved rules and `known` the values of the last capture: a value made from
+/// other values is previewed with them.
+pub fn test_rule(
+    rule: &Rule,
+    folder: Option<&str>,
+    others: &[(String, Rule)],
+    known: &std::collections::BTreeMap<String, String>,
+) -> RuleTest {
     let root = folder.map(Path::new).filter(|f| f.is_dir());
     let seen = root
         .map(|f| cargoframe_rules::peek(rule, f, &FsFiles))
@@ -61,7 +69,25 @@ pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
     if named.name.trim().is_empty() {
         named.name = "preview".into();
     }
-    let report = cargoframe_rules::run_rules([("test", &named)], root, &FsFiles);
+    // the other rules first, so the values this one is made from are there
+    let all: Vec<(&str, &Rule)> = others
+        .iter()
+        .map(|(id, r)| (id.as_str(), r))
+        .chain([("test", &named)])
+        .collect();
+    let mut report = if rule.values.iter().any(|v| v.find.is_combine()) {
+        cargoframe_rules::run_rules(all.iter().copied(), root, &FsFiles)
+    } else {
+        cargoframe_rules::run_rules([("test", &named)], root, &FsFiles)
+    };
+    let mut values_known = known.clone();
+    for (key, o) in &report.values {
+        if let Some(v) = &o.value {
+            values_known.insert(format!("rule.{key}"), v.clone());
+        }
+    }
+    cargoframe_rules::combine_values(all.iter().copied(), &mut report, &mut values_known);
+    let reads_no_file = named.only_combines() && named.file.trim().is_empty();
     let values: Vec<ValueTest> = named
         .steps("test")
         .iter()
@@ -81,6 +107,7 @@ pub fn test_rule(rule: &Rule, folder: Option<&str>) -> RuleTest {
         problem: cargoframe_rules::check(&named)
             .err()
             .or_else(|| match (&seen.file, root) {
+                _ if reads_no_file => None,
                 (None, Some(_)) => Some(
                     cargoframe_rules::RuleError::FileNotFound(rule.file.trim().to_string())
                         .to_string(),
@@ -358,7 +385,7 @@ mod tests {
             query: "between: a".into(),
             ..Rule::default()
         };
-        let t = test_rule(&draft, Some(folder));
+        let t = test_rule(&draft, Some(folder), &[], &Default::default());
         assert!(t.problem.unwrap().contains("two texts"));
         assert_eq!(t.file.as_deref(), Some("run.log"));
         assert_eq!(t.excerpt.as_deref(), Some("first\nsecond"));
@@ -367,7 +394,7 @@ mod tests {
             query: "line: -1".into(),
             ..draft.clone()
         };
-        let t = test_rule(&done, Some(folder));
+        let t = test_rule(&done, Some(folder), &[], &Default::default());
         assert_eq!(t.value.as_deref(), Some("second"));
         assert_eq!(t.problem, None);
         assert_eq!(t.file.as_deref(), Some("run.log"));
@@ -377,15 +404,23 @@ mod tests {
             query: "size".into(),
             ..draft
         };
-        assert_eq!(test_rule(&size, Some(folder)).value.as_deref(), Some("13"));
+        assert_eq!(
+            test_rule(&size, Some(folder), &[], &Default::default())
+                .value
+                .as_deref(),
+            Some("13")
+        );
         // No folder, or no such file: nothing to show, and no crash.
-        let none = test_rule(&done, None);
+        let none = test_rule(&done, None, &[], &Default::default());
         assert_eq!((none.file, none.excerpt), (None, None));
         let gone = Rule {
             file: "nothing.log".into(),
             ..done
         };
-        assert_eq!(test_rule(&gone, Some(folder)).file, None);
+        assert_eq!(
+            test_rule(&gone, Some(folder), &[], &Default::default()).file,
+            None
+        );
     }
 
     #[test]
@@ -425,7 +460,7 @@ mod tests {
             ..Rule::default()
         };
         let folder = dir.path().to_str().unwrap();
-        let ok = test_rule(&rule, Some(folder));
+        let ok = test_rule(&rule, Some(folder), &[], &Default::default());
         assert_eq!(ok.value.as_deref(), Some("1.0.0"));
         assert_eq!(ok.problem, None);
 
@@ -433,11 +468,11 @@ mod tests {
             file: "nothing.json".into(),
             ..rule.clone()
         };
-        assert!(test_rule(&missing, Some(folder))
+        assert!(test_rule(&missing, Some(folder), &[], &Default::default())
             .problem
             .unwrap()
             .contains("no file matches"));
-        assert!(test_rule(&rule, None)
+        assert!(test_rule(&rule, None, &[], &Default::default())
             .problem
             .unwrap()
             .contains("no project folder"));
@@ -445,7 +480,9 @@ mod tests {
             query: "a[".into(),
             ..rule
         };
-        assert!(test_rule(&invalid, Some(folder)).problem.is_some());
+        assert!(test_rule(&invalid, Some(folder), &[], &Default::default())
+            .problem
+            .is_some());
     }
 
     #[test]
@@ -481,5 +518,51 @@ mod tests {
         assert_eq!(all.last().unwrap().name, "rule.build");
         assert_eq!(all.last().unwrap().description, "From a file: Build");
         assert!(all.iter().all(|v| !v.description.is_empty()));
+    }
+
+    #[test]
+    fn a_value_made_from_other_values_is_previewed_with_the_saved_rules_and_the_last_capture() {
+        use cargoframe_rules::{Choice, Find, ValueStep, Which};
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::write(
+            dir.path().join("build.txt"),
+            "Stream: main\nConfig: Debug\n",
+        )
+        .unwrap();
+        let read = |key: &str, name: &str| ValueStep {
+            key: key.into(),
+            name: name.into(),
+            find: Find::ValueOf { name: name.into() },
+            which: Which::First,
+            fallback: None,
+        };
+        let saved = Rule {
+            name: "Build".into(),
+            file: "build.txt".into(),
+            values: vec![read("stream", "Stream"), read("config", "Config")],
+            ..Rule::default()
+        };
+        let combined = Rule {
+            name: "Build id".into(),
+            values: vec![ValueStep {
+                key: "build_id".into(),
+                name: "Build id".into(),
+                find: Find::Combine {
+                    choices: vec![Choice {
+                        when: vec![],
+                        text: "{{rule.stream}}_{{rule.config}}_{{app.exe}}".into(),
+                    }],
+                },
+                which: Which::First,
+                fallback: None,
+            }],
+            ..Rule::default()
+        };
+        let known: BTreeMap<String, String> =
+            [("app.exe".to_string(), "Editor.exe".to_string())].into();
+        let folder = dir.path().to_str().unwrap();
+        let t = test_rule(&combined, Some(folder), &[("build".into(), saved)], &known);
+        assert_eq!(t.problem, None, "{t:?}");
+        assert_eq!(t.value.as_deref(), Some("main_Debug_Editor.exe"));
     }
 }

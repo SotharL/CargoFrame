@@ -109,3 +109,14 @@ describe('the boxes under a block', () => {
     expect(boxesFor(view, 'shot', initialTicks(view))[1]).toMatchObject({ label: 'Save locally', kind: null });
   });
 });
+
+describe('boxes of a log viewer', () => {
+  it('has none: nothing of it is sent', async () => {
+    const { demoSession } = await import('./demo');
+    const { initialTicks, boxesFor: boxes } = await import('./ticks');
+    const view = await demoSession();
+    view.layout!.blocks.push({ id: 'log', type: 'log_view', rect: { x: 0, y: 20, w: 6, h: 3 }, title: 'Log' });
+    expect(boxes(view, 'log', initialTicks(view))).toEqual([]);
+    expect(boxes(view, 'note', initialTicks(view)).length).toBeGreaterThan(0);
+  });
+});

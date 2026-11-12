@@ -70,6 +70,8 @@ fn main() {
             "fetch_options",
             "set_edited_image",
             "read_text",
+            "add_files",
+            "read_offered_file",
             "set_clip_mark",
             "share",
             "open_link",

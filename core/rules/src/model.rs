@@ -100,6 +100,52 @@ pub enum Find {
     LineWith { text: String },
     /// A rule made before 0.3.0: its own format and query (the fields of [`Rule`]).
     Advanced,
+    /// Made from other values, not read from a file: the first choice that fits gives the value,
+    /// such as `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is
+    /// found, else `{{rule.stream}}_{{rule.change}}_{{rule.config}}`. See [`crate::combine`].
+    Combine { choices: Vec<Choice> },
+}
+
+/// One way to make a combined value. With no conditions it fits when every value its text names
+/// is found; with conditions, when all of them hold (and the text is not empty).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Choice {
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub when: Vec<Cond>,
+    /// May use any `{{variable}}`: values from files, the program, the project, the capture.
+    pub text: String,
+}
+
+/// "{{rule.shelf}} is found": `value` is a variable's name (`rule.shelf`, braces allowed).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Cond {
+    pub value: String,
+    pub test: CondTest,
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub text: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CondTest {
+    /// Has a value.
+    #[default]
+    Found,
+    /// Has no value.
+    Missing,
+    /// Is this text (case does not matter).
+    Is,
+    IsNot,
+    /// Has this text in it (case does not matter).
+    Contains,
+}
+
+impl Find {
+    pub fn is_combine(&self) -> bool {
+        matches!(self, Find::Combine { .. })
+    }
 }
 
 /// One value a rule reads, used in text as `{{rule.<key>}}`.
@@ -190,6 +236,11 @@ impl Rule {
             which: Which::First,
             fallback: self.fallback.clone(),
         }]
+    }
+
+    /// A rule that reads no file: every value it has is made from other values.
+    pub fn only_combines(&self) -> bool {
+        !self.values.is_empty() && self.values.iter().all(|v| v.find.is_combine())
     }
 
     /// The size limit actually applied.

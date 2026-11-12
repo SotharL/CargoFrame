@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.3.1 (beta)</p>
+Windows 11 and Linux · version 0.4.0 (beta)</p>
 
 <p align="center">
   <picture>
@@ -159,7 +159,11 @@ it; a ring means the button needs it. Pointing at a button outlines everything i
 
 Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles to trim, drag a frame to
 **Crop** (then *Confirm*), and draw **marks** with the same tools as on a screenshot (pen, square, circle, arrow, text).
-If you switch programs while recording, the one you used longest names the capture and gives the project folder. Click the Video block in the layout builder to choose the screen or the window in
+If you switch programs while recording, the one you used longest names the capture and gives the project folder.
+
+**Continuous recording** (turn it on in *Settings, Recording*): hold a shortcut for 2 seconds to start recording all
+the time. Each press of a video shortcut then opens its window with the last seconds while the recording goes on; hold
+a shortcut 2 seconds again to stop. The tray menu does the same (on Wayland it is the way to start and stop). Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording
 ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Save locally; the other services get the still.
 
@@ -187,6 +191,15 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
   puts one more label in a list, a new line in a description. For every layout that shares there, or only some. A
   block of the window is still sent in a field from the sharing button.
 - **Files from several folders:** a Files block can look in several subfolders, separated by commas (`logs, build/out`).
+  Missed one? **＋** adds files by hand; they are copied into the capture and ticked.
+- **Tags:** a Tags block works like Jira's labels: type a tag and press Enter, up to 25. Its starting list can use
+  values (`{{rule.gpu}}` tags the graphics card when it is found), the last five used are offered, and Jira's or a
+  repository's labels are suggested while typing. Send them as Jira or GitHub labels, hashtags on X, Bluesky and
+  Instagram, or a *Tags* line in Slack, Teams and Discord.
+- **Log viewer:** a block that shows a file of the window line by line. Type `error` in its search to see only those
+  lines, pick one to read it whole and copy it, or *Copy all*.
+- **Values made from other values:** in *Data & fields*, *Make a value from other values*: for example a build id
+  `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is found, else without it.
 - **Last choices:** each dropdown starts on what you used last and lists the last five.
 - **Several windows:** a shortcut pressed while a window is open opens another, up to ten.
 

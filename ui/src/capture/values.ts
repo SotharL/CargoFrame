@@ -16,6 +16,8 @@ export interface FormValues {
   deeper: Record<string, DeeperPick>;
   /** Files block id to the ticked file paths. */
   files: Record<string, string[]>;
+  /** Tags block id to its tags. */
+  tags: Record<string, string[]>;
 }
 
 /** Starting values: rendered default texts, first dropdown options, preselected files. */
@@ -34,7 +36,11 @@ export function initialValues(view: SessionView): FormValues {
   for (const [id, f] of Object.entries(view.files)) {
     files[id] = f.entries.filter((e) => e.selected).map((e) => e.path);
   }
-  return { texts, dropdowns, deeper, files };
+  const tags: Record<string, string[]> = {};
+  for (const b of view.layout?.blocks ?? []) {
+    if (b.type === 'tags') tags[b.id] = [...(view.tags?.[b.id]?.tags ?? [])];
+  }
+  return { texts, dropdowns, deeper, files, tags };
 }
 
 export function formatSize(bytes: number): string {

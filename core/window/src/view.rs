@@ -51,6 +51,18 @@ pub struct VideoView {
     pub bytes: u64,
     /// The recording has a sound track (the player shows its volume only then).
     pub audio: bool,
+    /// The part the window starts cropped to (the window in focus, in a continuous recording of
+    /// the whole screen), in the recording's pixels. The person can change it or take it away.
+    pub crop: Option<CropView>,
+}
+
+/// A part of a recording, in its pixels.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct CropView {
+    pub x: u32,
+    pub y: u32,
+    pub w: u32,
+    pub h: u32,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -144,10 +156,43 @@ pub struct SessionView {
     pub video: Option<VideoView>,
     pub variables: BTreeMap<String, String>,
     pub texts: BTreeMap<String, TextState>,
+    /// The tags each Tags block starts with.
+    pub tags: BTreeMap<String, TagsState>,
     pub files: BTreeMap<String, FilesState>,
     pub dropdowns: BTreeMap<String, DropdownState>,
     pub issues: Vec<IssueView>,
     pub sharing: BTreeMap<String, SharingView>,
+}
+
+/// The tags a Tags block starts with, from its own list and the capture's values.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct TagsState {
+    pub tags: Vec<String>,
+    /// How many were left out over the limit.
+    pub over: usize,
+}
+
+/// The tags of a block: each of its entries with the values filled in; one whose values are not
+/// all found is left out ("if the GPU is found, tag it").
+pub fn starting_tags(
+    block: &cargoframe_layout::TagsBlock,
+    variables: &BTreeMap<String, String>,
+) -> TagsState {
+    let lookup = |name: &str| {
+        variables
+            .get(name)
+            .filter(|v| !v.trim().is_empty())
+            .cloned()
+    };
+    let rendered: Vec<String> = block
+        .tags
+        .iter()
+        .map(|t| template::render(t, lookup))
+        .filter(|r| r.unresolved.is_empty())
+        .map(|r| r.text)
+        .collect();
+    let (tags, over) = cargoframe_layout::split_tags(rendered.iter().map(String::as_str));
+    TagsState { tags, over }
 }
 
 pub struct Inputs<'a> {
@@ -281,6 +326,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
         video: None,
         variables: inputs.variables.clone(),
         texts: BTreeMap::new(),
+        tags: BTreeMap::new(),
         files: BTreeMap::new(),
         dropdowns: BTreeMap::new(),
         issues: Vec::new(),
@@ -390,7 +436,11 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                 };
                 view.sharing.insert(block.id.clone(), sv);
             }
-            BlockKind::Screenshot | BlockKind::Video(_) => {}
+            BlockKind::Tags(t) => {
+                view.tags
+                    .insert(block.id.clone(), starting_tags(t, inputs.variables));
+            }
+            BlockKind::Screenshot | BlockKind::Video(_) | BlockKind::LogView(_) => {}
         }
     }
     view
@@ -764,5 +814,30 @@ mod tests {
     fn code_names_are_snake_case() {
         assert_eq!(code_name(Code::PromptBlockMissing), "prompt_block_missing");
         assert_eq!(code_name(Code::Overlap), "overlap");
+    }
+
+    #[test]
+    fn a_tags_block_starts_with_the_tags_whose_values_are_found() {
+        let block = cargoframe_layout::TagsBlock::new(
+            "Labels",
+            &[
+                "crash",
+                "{{rule.gpu}}",
+                "gpu-{{rule.missing}}",
+                "{{rule.platforms}}",
+                "{{rule.empty}}",
+            ],
+        );
+        let vars: BTreeMap<String, String> = [
+            ("rule.gpu", "RTX 4070"),
+            ("rule.platforms", "win64, linux\nwin64"),
+            ("rule.empty", "  "),
+        ]
+        .into_iter()
+        .map(|(k, v)| (k.to_string(), v.to_string()))
+        .collect();
+        let s = starting_tags(&block, &vars);
+        assert_eq!(s.tags, ["crash", "RTX 4070", "win64", "linux"]);
+        assert_eq!(s.over, 0);
     }
 }

@@ -72,10 +72,7 @@ pub fn reload(app: &AppHandle) {
         };
         let trigger_id = id.clone();
         let registered = shortcuts.on_shortcut(parsed, move |app, _shortcut, event| {
-            if event.state == ShortcutState::Pressed {
-                tracing::debug!(trigger = %trigger_id, "shortcut pressed");
-                run(app, trigger_id.clone());
-            }
+            key(app, &trigger_id, event.state == ShortcutState::Pressed);
         });
         match registered {
             Ok(()) => {
@@ -98,6 +95,185 @@ pub fn reload(app: &AppHandle) {
         });
     }
     tray::refresh_menu(app);
+}
+
+/// Continuous recording is on in the settings: a shortcut is then acted on when it comes up, so
+/// holding it can mean something else.
+fn holds_count(app: &AppHandle) -> bool {
+    app.try_state::<AppState>().is_some_and(|s| {
+        s.store
+            .load_or_default::<Video>()
+            .map(|v| v.continuous)
+            .unwrap_or(false)
+    })
+}
+
+/// A shortcut's key went down (`down`) or came up.
+fn key(app: &AppHandle, trigger_id: &str, down: bool) {
+    let Some(state) = app.try_state::<AppState>() else {
+        return;
+    };
+    if !holds_count(app) && !state.recording.is_continuous() {
+        // as always: a press is acted on at once
+        if down {
+            tracing::debug!(trigger = %trigger_id, "shortcut pressed");
+            run(app, trigger_id.to_string());
+        }
+        return;
+    }
+    if down {
+        let now = std::time::Instant::now();
+        if !state.holds.down(trigger_id, now) {
+            return;
+        }
+        let app = app.clone();
+        let id = trigger_id.to_string();
+        let wait = crate::hold::Holds::after(now, Video::HOLD_MS) - now;
+        let _ = std::thread::Builder::new()
+            .name("shortcut-hold".into())
+            .spawn(move || {
+                std::thread::sleep(wait);
+                let state = app.state::<AppState>();
+                if state.holds.held(&id, now) {
+                    held(&app, &id);
+                }
+            });
+        return;
+    }
+    if state.holds.up(trigger_id) == crate::hold::Act::Press {
+        tracing::debug!(trigger = %trigger_id, "shortcut pressed");
+        run(app, trigger_id.to_string());
+    }
+}
+
+/// A shortcut was held: stop the continuous recording, or ask to start one.
+pub fn held(app: &AppHandle, trigger_id: &str) {
+    let state = app.state::<AppState>();
+    if state.recording.is_continuous() {
+        stop_continuous(app);
+        return;
+    }
+    if !matches!(
+        state.recording.view(),
+        video::RecordingView::Idle | video::RecordingView::Failed { .. }
+    ) {
+        notify::problem(
+            app,
+            "CargoFrame is already recording",
+            "Press the shortcut to stop that recording first, then hold it to record continuously.",
+        );
+        return;
+    }
+    let keep = video_settings(&state).window_secs;
+    let app2 = app.clone();
+    let id = trigger_id.to_string();
+    // the question waits for an answer: not on the thread that got the key
+    std::thread::spawn(move || {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
+        let yes = app2
+            .dialog()
+            .message(format!(
+                "CargoFrame records your screen until you hold the shortcut again. Each press of a shortcut then opens its window with the last {keep} seconds, and the recording goes on."
+            ))
+            .title("Record continuously?")
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Start recording".into(),
+                "Not now".into(),
+            ))
+            .blocking_show();
+        if yes {
+            start_continuous(&app2, &id);
+        }
+    });
+}
+
+/// Start a continuous recording, as the layout of `trigger_id` asks (the sounds); it records
+/// the whole screen, so the window in focus can change while it runs.
+pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
+    let state = app.state::<AppState>();
+    let settings = video_settings(&state);
+    let layout = layout_of(&state, trigger_id);
+    let (mut wish, mut notes) = video::wish_for(layout.as_ref(), &focus);
+    // the window in focus changes while it runs: the whole screen is recorded, and the window
+    // the clip is about is chosen when it is handed out
+    wish.area = None;
+    let started = state.recording.start_continuous(
+        &settings,
+        video::Os::current(),
+        &video::Session::current(),
+        &video::work_dir(&state.store),
+        &wish,
+    );
+    match started {
+        Ok(s) => {
+            tracing::info!(sound = s.sound, "continuous recording started");
+            notes.extend(s.notes);
+            let mut body = format!(
+                "Press a shortcut to open its window with the last {} seconds; the recording goes on. Hold it two seconds to stop.",
+                settings.window_secs
+            );
+            for n in &notes {
+                body.push(' ');
+                body.push_str(n);
+            }
+            notify::info(app, "CargoFrame is recording continuously", &body);
+            state.set_watch(crate::watch::Watch::start_following(
+                app,
+                &settings.sign,
+                video::Session::current().wayland,
+                u64::from(settings.window_secs) * 1000,
+            ));
+            tray::refresh_menu(app);
+        }
+        Err(e) => {
+            tracing::error!("continuous recording could not start: {e}");
+            notify::problem(app, "CargoFrame could not start recording", &e);
+        }
+    }
+}
+
+/// Stop the continuous recording and throw it away (what was handed out stays).
+pub fn stop_continuous(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    state.recording.cancel();
+    drop(state.take_watch());
+    tray::refresh_menu(app);
+    notify::info(
+        app,
+        "Continuous recording stopped",
+        "Nothing more is recorded.",
+    );
+}
+
+/// The recording settings, as they are used (numbers kept in their bounds).
+fn video_settings(state: &AppState) -> Video {
+    state
+        .store
+        .load_or_default::<Video>()
+        .map(video::normalized)
+        .unwrap_or_default()
+}
+
+/// How much of the end of a recording is kept, in milliseconds.
+fn keep_ms(state: &AppState) -> u64 {
+    u64::from(video_settings(state).window_secs) * 1000
+}
+
+/// The layout a trigger opens.
+fn layout_of(state: &AppState, trigger_id: &str) -> Option<cargoframe_layout::Layout> {
+    state
+        .store
+        .load_item::<Trigger>(Kind::Triggers, trigger_id)
+        .ok()
+        .flatten()
+        .and_then(|t| t.layout_id)
+        .and_then(|id| {
+            state
+                .store
+                .load_item::<cargoframe_layout::Layout>(Kind::Layouts, &id)
+                .ok()
+                .flatten()
+        })
 }
 
 /// Copy the files ticked by default into the capture's temporary folder, off the thread that
@@ -249,6 +425,7 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
     match video::step(
         &state.recording.view(),
         state.recording.started_by_trigger(),
+        state.recording.is_continuous(),
     ) {
         Step::Refuse(why) => notify::problem(app, "CargoFrame", why),
         Step::Report(why) => {
@@ -259,9 +436,10 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
             notify::problem(app, "The recording stopped by itself", &why);
         }
         // a recording is not started, or finished, when there would be no window to show it in
-        Step::Start | Step::Stop if no_room(app, &state) => {}
+        Step::Start | Step::Stop | Step::Snapshot if no_room(app, &state) => {}
         Step::Start => start_recording(app, &state, trigger_id),
         Step::Stop => stop_recording(app, &state, trigger_id),
+        Step::Snapshot => snapshot_recording(app, &state, trigger_id),
     }
 }
 
@@ -281,27 +459,11 @@ fn focus() -> Option<video::Focus> {
 }
 
 fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
-    let settings = state
-        .store
-        .load_or_default::<Video>()
-        .map(video::normalized)
-        .unwrap_or_default();
+    let settings = video_settings(state);
     let work = crate::video::work_dir(&state.store);
     // the layout this trigger opens says what to record: the screen or the window in focus, and
     // which sounds go in
-    let layout = state
-        .store
-        .load_item::<Trigger>(Kind::Triggers, trigger_id)
-        .ok()
-        .flatten()
-        .and_then(|t| t.layout_id)
-        .and_then(|id| {
-            state
-                .store
-                .load_item::<cargoframe_layout::Layout>(Kind::Layouts, &id)
-                .ok()
-                .flatten()
-        });
+    let layout = layout_of(state, trigger_id);
     let (wish, mut notes) = video::wish_for(layout.as_ref(), &focus);
     let window = wish.area.is_some();
     let started = state.recording.start_for_trigger(
@@ -359,14 +521,7 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     let trial = state.recording.stop();
     let watched = state.take_watch().map(|w| w.finish());
     tray::refresh_menu(app);
-    let keep_ms = u64::from(
-        state
-            .store
-            .load_or_default::<Video>()
-            .map(video::normalized)
-            .unwrap_or_default()
-            .window_secs,
-    ) * 1000;
+    let keep_ms = keep_ms(state);
     let made = session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms);
     state.end_capture();
     match made {
@@ -379,6 +534,78 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
             notify::problem(app, "CargoFrame could not finish the recording", &e);
         }
     }
+}
+
+/// A press during a continuous recording: the window opens with its last seconds, and the
+/// recording goes on. The window in focus the longest in that part is what the capture is about.
+fn snapshot_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
+    if !state.try_begin_capture() {
+        tracing::debug!("a capture is already running");
+        return;
+    }
+    let trial = state.recording.snapshot();
+    let watched = state.peek_watch();
+    let keep_ms = keep_ms(state);
+    let made =
+        session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms).map(|s| {
+            crop_to_focus(
+                app,
+                s,
+                watched.as_ref(),
+                keep_ms,
+                &layout_of(state, trigger_id),
+            )
+        });
+    state.end_capture();
+    match made {
+        Ok(s) => {
+            state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
+            show(app, state, s);
+        }
+        Err(e) => {
+            tracing::error!(trigger = %trigger_id, "the last seconds could not be handed out: {e}");
+            notify::problem(app, "CargoFrame could not open the recording", &e);
+        }
+    }
+}
+
+/// A continuous recording holds the whole screen. When the layout records the window in focus,
+/// the window starts cropped to the one in focus the longest in the clip, which the person can
+/// change or take away.
+fn crop_to_focus(
+    app: &AppHandle,
+    mut s: session::Session,
+    watched: Option<&crate::watch::Watched>,
+    keep_ms: u64,
+    layout: &Option<cargoframe_layout::Layout>,
+) -> session::Session {
+    let wants_window = layout.as_ref().is_some_and(|l| {
+        l.blocks.iter().any(|b| {
+            matches!(&b.kind, cargoframe_layout::BlockKind::Video(v) if v.subject == cargoframe_layout::VideoSubject::FocusedWindow)
+        })
+    });
+    let Some(video) = s.view.video.as_mut() else {
+        return s;
+    };
+    if !wants_window {
+        return s;
+    }
+    let Some((focused, _)) = watched.and_then(|w| crate::watch::longest(w, keep_ms)) else {
+        return s;
+    };
+    let b = focused.bounds;
+    let desktop = crate::watch::desktop_of(app);
+    video.crop = crate::watch::crop_in(
+        cargoframe_indicator::Rect {
+            x: b.x,
+            y: b.y,
+            w: b.w,
+            h: b.h,
+        },
+        desktop.as_ref(),
+        (video.width, video.height),
+    );
+    s
 }
 
 /// The capture the window shows, from a recording that has just been stopped.

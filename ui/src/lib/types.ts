@@ -210,7 +210,27 @@ export type BlockContent =
       /** After the choice, go on to a second list inside it (the threads of a channel). */
       deeper?: Deeper | null;
     }
-  | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn };
+  | { type: 'files'; title: string; include: string[]; preselect: string[]; look_in: LookIn }
+  | {
+      type: 'tags';
+      title: string;
+      /** The tags it starts with; each may use {{variables}} and is left out when they are not found. */
+      tags: string[];
+      /** Offer the last five tags used. Absent: on. */
+      remember?: boolean;
+      /** Suggest a list of the service while typing (Jira's labels). */
+      suggest?: { connection_id: string; options_id: string } | null;
+    }
+  | {
+      type: 'log_view';
+      title: string;
+      /** The filter it starts with. */
+      filter?: string;
+    };
+
+/** The most tags a Tags block holds, and the longest a tag may be (core/layout MAX_TAGS). */
+export const MAX_TAGS = 25;
+export const MAX_TAG_CHARS = 100;
 
 /** The second step of a path: a list of what is inside the first choice, and the field it fills. */
 export interface Deeper {
@@ -283,6 +303,14 @@ export interface IssueView {
   message: string;
 }
 
+/** What a log viewer shows of a file (app/src/session.rs LogText). */
+export interface LogText {
+  text: string;
+  /** Only the end is shown: the file is larger than the viewer reads. */
+  cut: boolean;
+  size: number;
+}
+
 export interface FileEntry {
   path: string;
   size: number;
@@ -319,6 +347,8 @@ export interface VideoClipInfo {
   width: number;
   height: number;
   duration_ms: number;
+  /** The part the window starts cropped to: the window in focus, in a continuous recording. */
+  crop?: { x: number; y: number; w: number; h: number } | null;
   bytes: number;
   /** The recording has a sound track; without one the player shows no volume. */
   audio: boolean;
@@ -339,6 +369,8 @@ export interface SessionView {
   video?: VideoClipInfo | null;
   variables: Record<string, string>;
   texts: Record<string, { value: string; unresolved: string[] }>;
+  /** The tags each Tags block starts with (`over`: left out over the limit). */
+  tags?: Record<string, { tags: string[]; over: number }>;
   files: Record<string, FilesState>;
   dropdowns: Record<string, DropdownState>;
   issues: IssueView[];
@@ -457,10 +489,25 @@ export type RuleFind =
   | { type: 'between'; start: string; end: string | null }
   /** The whole line that holds a text. */
   | { type: 'line_with'; text: string }
+  /** Made from other values: the first choice that fits gives the value (core/rules/src/combine.rs). */
+  | { type: 'combine'; choices: RuleChoice[] }
   /** A rule made before 0.3.0: its own `format` and `query`. */
   | { type: 'advanced' };
 
 /** One value a data rule reads, used in text as `{{rule.<key>}}`. */
+export type RuleCondTest = 'found' | 'missing' | 'is' | 'is_not' | 'contains';
+/** "{{rule.shelf}} is found": `value` is a variable's name. */
+export interface RuleCond {
+  value: string;
+  test: RuleCondTest;
+  text?: string;
+}
+/** One way to make a combined value: with no condition, it fits when every value it names is found. */
+export interface RuleChoice {
+  when?: RuleCond[];
+  text: string;
+}
+
 export interface RuleValue {
   key: string;
   name: string;
@@ -572,6 +619,8 @@ export interface Video {
   max_height: number;
   /** What shows on screen while a trigger records. */
   sign?: RecordingSign;
+  /** Holding a shortcut 2 seconds starts (and stops) a recording that goes on; a press then opens the last seconds. */
+  continuous?: boolean;
 }
 
 /** The corner of the recorded area the blinking dot is in. */
@@ -838,6 +887,8 @@ export interface ShareRequest {
   dropdowns: Record<string, string | null>;
   /** For a dropdown that goes deeper: the second choice (empty is none: start something new). */
   deeper?: Record<string, string | null>;
+  /** The tags of each Tags block. */
+  tags?: Record<string, string[]>;
   files: Record<string, string[]>;
   /** True when the person changed the picture (the edited PNG is uploaded first). */
   image_edited: boolean;

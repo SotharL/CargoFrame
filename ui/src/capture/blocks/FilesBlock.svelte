@@ -8,7 +8,23 @@
     block,
     info,
     selected = $bindable([]),
-  }: { block: FilesBlock; info: FilesState; selected: string[] } = $props();
+    onadd,
+  }: {
+    block: FilesBlock;
+    info: FilesState;
+    selected: string[];
+    /** Pick files to add by hand; gives what went wrong, or ''. Absent: no ＋ button. */
+    onadd?: () => Promise<string>;
+  } = $props();
+
+  let adding = $state(false);
+  let addProblem = $state('');
+  async function add() {
+    if (!onadd) return;
+    adding = true;
+    addProblem = await onadd();
+    adding = false;
+  }
 
   // A long list gets a filter; All and None act on what the filter leaves.
   let filter = $state('');
@@ -27,7 +43,11 @@
     <!-- Next to the title, so the right corner is left to the boxes of the sharing buttons. -->
     <button class="small" onclick={selectAll} disabled={!visible.length}>All</button>
     <button class="small" onclick={selectNone} disabled={!selected.length}>None</button>
+    {#if onadd}
+      <button class="small add" onclick={add} disabled={adding} title="Add files that were not found: they are copied now and ticked" aria-label="Add files by hand">＋</button>
+    {/if}
   </div>
+  {#if addProblem}<p class="quiet from" role="alert">{addProblem}</p>{/if}
   {#if info.entries.length > 6}
     <input type="text" class="filter" bind:value={filter} placeholder="Filter files…" aria-label="Filter files" />
   {/if}
@@ -39,7 +59,7 @@
       Looked in: {info.places.map((p) => `${p.label} (${p.exists ? p.found : 'not found'})`).join(', ')}
     </p>
   {/if}
-  <ul>
+  <ul data-content>
     {#each visible as f (f.path)}
       <li>
         <label>

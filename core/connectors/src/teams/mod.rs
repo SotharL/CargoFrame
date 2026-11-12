@@ -490,20 +490,7 @@ pub fn compose(payload: &Payload, with_image: bool, subject: bool) -> Composed {
         .value("title")
         .map(one_line)
         .filter(|t| !t.is_empty());
-    let body = payload
-        .value("message")
-        .map(str::to_string)
-        .or_else(|| {
-            payload
-                .prompt
-                .as_deref()
-                .map(|p| p.trim().to_string())
-                .filter(|p| !p.is_empty())
-        })
-        .or_else(|| {
-            Some(payload.title.trim().to_string())
-                .filter(|t| !t.is_empty() && payload.value("title").is_none())
-        });
+    let body = payload.message(payload.value("title").is_some());
     let mut html = String::new();
     let mut headline = None;
     if let Some(t) = title {
@@ -552,6 +539,7 @@ impl Connector for TeamsConnector {
                 f("thread", "Reply in a channel thread", "A message link (Copy link in Teams) in a channel. Empty: a new message", None),
                 f("message", "Message", "Defaults to the prompt text, then the window title", None),
                 f("title", "Headline", "Empty: none. The headline of a new channel post, or a bold first line in a chat or a reply", None),
+                f("tags", "Tags", "Added as a last line. Separate several with commas", None),
             ],
             lists: vec![ListSpec {
                 id: "targets".into(),

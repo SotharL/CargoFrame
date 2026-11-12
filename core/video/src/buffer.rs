@@ -142,6 +142,11 @@ impl<T> RollingBuffer<T> {
         self.window
     }
 
+    /// The pieces held, oldest first, without taking them.
+    pub fn items(&self) -> impl Iterator<Item = &T> {
+        self.items.iter().map(|e| &e.item)
+    }
+
     /// The pieces in order, with their times relative to the first one (so the clip starts at 0).
     pub fn take(&mut self) -> Vec<(u64, T)> {
         let start = self.items.front().map(|e| e.at_ms).unwrap_or(0);

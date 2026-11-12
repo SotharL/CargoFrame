@@ -14,7 +14,8 @@ pub mod save;
 pub mod workspace;
 
 pub use build::{
-    build_zip, BundleError, Created, Item, Limits, Manifest, ManifestFile, ManifestInfo, Source,
+    build_zip, inside, BundleError, Created, Item, Limits, Manifest, ManifestFile, ManifestInfo,
+    Source,
 };
 pub use save::copy_atomic;
 pub use workspace::{CaptureDir, Sweep, Workspace};

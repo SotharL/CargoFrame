@@ -83,6 +83,14 @@ describe('VideoBlock', () => {
       await fireEvent.timeUpdate(video);
     }
 
+    it('starts cropped to the window in focus of a continuous recording, which can be taken away', async () => {
+      setApiForTests(memoryApi());
+      const seen: (ClipEdit | null)[] = [];
+      render(Harness, { info: { ...info, crop: { x: 100, y: 50, w: 640, h: 360 } }, onedit: (t: ClipEdit | null) => seen.push(t) });
+      await waitFor(() => expect(document.querySelector('video')).not.toBeNull());
+      expect(seen[seen.length - 1]).toEqual({ start_ms: 0, end_ms: null, crop: { x: 100, y: 50, w: 640, h: 360 }, mark: false });
+    });
+
     it('keeps all of the recording until a handle is moved, and says what is kept after', async () => {
       const { last } = await ready();
       expect(last()).toBeNull();

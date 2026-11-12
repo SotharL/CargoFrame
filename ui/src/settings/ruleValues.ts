@@ -43,6 +43,17 @@ export function blankRule(): Rule {
   };
 }
 
+/** A rule that reads no file: all its values are made from other values. */
+export const onlyCombines = (r: Rule) =>
+  (r.values ?? []).length > 0 && (r.values ?? []).every((v) => v.find.type === 'combine');
+
+/** A rule with one value made from other values, and no file. */
+export function blankCombined(taken: string[]): Rule {
+  const r = blankRule();
+  r.values = [{ ...newValue(taken), find: { type: 'combine', choices: [{ text: '' }] } }];
+  return r;
+}
+
 /** A new value, named so its variable does not clash. */
 export function newValue(taken: string[]): RuleValue {
   return { key: unique('value', taken), name: '', find: { type: 'value_of', name: '' }, which: 'first', fallback: null };
@@ -59,6 +70,10 @@ export function describe(find: RuleFind, r: Rule): string {
       return `the line with “${find.text}”`;
     case 'advanced':
       return `${r.format.toUpperCase()}: ${r.query ?? ''}`;
+    case 'combine':
+      return find.choices.length === 1
+        ? `made of ${find.choices[0]!.text}`
+        : `made of ${find.choices.map((c) => c.text).join(', or ')}`;
   }
 }
 

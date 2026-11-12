@@ -409,7 +409,9 @@ pub fn check(rule: &Rule) -> Result<(), String> {
     if rule.name.trim().is_empty() {
         return Err("Give it a name".into());
     }
-    if !crate::run::pattern_ok(&rule.file) {
+    // a rule whose values are all made from other values reads no file
+    if !(rule.only_combines() && rule.file.trim().is_empty()) && !crate::run::pattern_ok(&rule.file)
+    {
         return Err(
             "Write the file's name or part of it (system_info, .log), or a path inside the project folder (config/*.toml)"
                 .into(),

@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.3.1. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.4.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -84,7 +84,7 @@ sequenceDiagram
 |------|--------------|------|
 | Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse. While recording, a red outline and a blinking dot say so (never in the recording itself), and a change of focus is followed: the program used longest names the capture | `core/capture`, `core/indicator`, `app/src/watch.rs` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
-| Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values (after a name, between two pieces, the line with a word; first, last or all). The kind of file is known from its name: JSON, YAML, TOML, INI and XML are read by key, the rest as text | `core/rules` |
+| Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values (after a name, between two pieces, the line with a word; first, last or all). The kind of file is known from its name: JSON, YAML, TOML, INI and XML are read by key, the rest as text. A value can also be **made from other values**: choices tried from the top (`{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}`, else without the shelf), with conditions when needed | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
 | Share | One `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices), handed to the connector | `app/src/share.rs` |
 | Fallback | Retry with backoff; then a zip of everything is kept. A button with no connection is **Save locally** | `core/safe`, `core/bundle` |
@@ -123,6 +123,20 @@ to take one out.
 instead of as attachments at the end: Jira (`!name!`, the file attached once), GitHub (the picture shown from the
 attachments branch) and Teams (the picture, inline). The builder offers a *Repro | Highlight* table with both. Other
 services leave the two out of the text and attach the files as before.
+
+</details>
+
+<details>
+<summary><b>Tags</b></summary>
+
+A Tags block holds up to 25 tags (`core/layout` `split_tags`: commas, semicolons and new lines separate them, each is
+kept once, case aside, at most 100 characters). It starts with the tags of its list in the layout, where an entry such
+as `{{rule.gpu}}` gives a tag only when the value is found and `{{rule.platforms}}` gives one tag per part. The window
+offers the last five used in the block and, when the block names a list of a connection (Jira's or a repository's
+labels), the matching ones while typing. A sharing button sends them in a field, as several values: labels for Jira
+and GitHub, `hashtags` for X, Bluesky and Instagram (added at the end of the post, the text cut first so they stay),
+`tags` for Slack, Teams and Discord (a last line, `**Tags:**` followed by each in code marks). The Jira and GitHub
+templates start with a Labels block. `cargoframe open --set labels=crash,gpu` fills it from another program.
 
 </details>
 
@@ -176,6 +190,15 @@ another program during the recording, the program used longest names the capture
 read; the window says which programs were used. Sound: on Linux PulseAudio's monitor of the default output; on Windows WASAPI loopback (everything played, or
 only the program in focus) fed to ffmpeg locally. A missing device is left out and the notification says why.
 
+**Continuous recording** (*Recording*, off by default): holding any shortcut for two seconds asks to record all the
+time; holding one again stops. While it runs, a press of a video shortcut opens that shortcut's window with the last
+seconds, copied from the ring while ffmpeg goes on, and the recording carries on; any other shortcut does what it
+always does. The whole screen is recorded, so the focus can move: the red outline follows the window in focus, and a
+layout that records the window in focus opens cropped to the one in focus the longest in the clip (the person can
+change or remove the crop). With the setting on, a shortcut acts when it is let go, so a hold can be told from a
+press; the tray menu starts and stops it too, which is the way on Wayland (the desktop does not say when a key is
+let go).
+
 </details>
 
 ---
@@ -204,8 +227,8 @@ service are grouped under *Connect a service*, below the others.
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
 | Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Triggers** | Shortcuts and the layout each opens |
-| | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder) and *Fill fields* (steps that fill a field of the service on each share) |
-| | **Recording** | Where ffmpeg is, quality, a 5-second test, the outline and dot shown while recording |
+| | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder, and values made from other values) and *Fill fields* (steps that fill a field of the service on each share) |
+| | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, the outline and dot shown while recording |
 | CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
 | | **Your data** | What is kept on this computer, clear or reset, export and import |
 | | **About** | Version, updates, speed and memory numbers |
@@ -222,8 +245,10 @@ service are grouped under *Connect a service*, below the others.
 | **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends* |
 | **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
-| **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance |
-| **Sharing buttons** | Up to five, in the service's colour. Tick boxes on each block say which button sends it: dashed = cannot take it, ring = required |
+| **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
+| **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
+| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown, *Open large* fills the window. Large files show their last 4 MB. Nothing of it is sent |
+| **Sharing buttons** | Up to five, in the service's colour. Tick boxes in each block's top-right corner say which button sends it: dashed = cannot take it, ring = required. Hovering a button or a box rings what each block it sends holds (not the block's title) |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">
 
@@ -354,5 +379,10 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   installed, and reads English unless more of its languages are installed.
 - The recording sign cannot be drawn on Wayland; on X11 a full-screen recording can include it.
 - Pictures in the text: Jira, GitHub and Teams (the recording in Jira and GitHub only).
+- Tags: Jira and GitHub labels (Jira labels cannot hold spaces: a space becomes `-`), hashtags at the end of a post on
+  X, Bluesky (marked as tags) and Instagram, a last *Tags:* line on Slack, Teams and Discord. Discord forum tags and
+  Reddit flairs are not set from them.
+- Continuous recording cannot tell a held shortcut on Wayland: the tray menu starts and stops it there. It stops by
+  itself after 12 hours.
 - Next for the connectors (required fields shown before sending, company sign-in):
   [connectors.md](connectors.md).

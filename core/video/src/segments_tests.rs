@@ -304,3 +304,25 @@ fn a_real_recording_keeps_a_few_seconds_and_joins_into_a_clip() {
     run(&ffmpeg, &p, &|| false, Duration::from_secs(60)).unwrap();
     assert!(out.metadata().unwrap().len() > 0);
 }
+
+#[test]
+fn a_snapshot_copies_the_kept_segments_and_the_recording_keeps_its_own() {
+    let dir = tempfile::tempdir().unwrap();
+    fs::write(dir.path().join("segments.csv"), fake(dir.path(), 6)).unwrap();
+    let mut ring = Ring::new(dir.path(), Window::seconds(3), usize::MAX);
+    let into = dir.path().join("snap");
+    let copies = ring.snapshot(&into).unwrap();
+    // the window's segments, copied, in order
+    assert_eq!(copies.len(), 4);
+    assert!(copies
+        .iter()
+        .all(|c| c.path.starts_with(&into) && c.bytes == 100));
+    // the ring still has its own, and gives them again
+    assert!(exists(dir.path(), 5));
+    assert_eq!(ring.snapshot(&dir.path().join("snap2")).unwrap().len(), 4);
+    // a copy goes when it is dropped; the recording's file stays
+    let first = copies[0].path.clone();
+    drop(copies);
+    assert!(!first.exists());
+    assert!(exists(dir.path(), 5));
+}

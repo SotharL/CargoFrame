@@ -1,5 +1,5 @@
 <script lang="ts">
-  // On the edge of a block: one small box per sharing button, in that button's colour. A ticked
+  // In the top-right corner of a block: one small box per sharing button, in that button's colour. A ticked
   // box (with a ✓, so colour is never the only sign) means that button sends this block; clear it
   // to leave the block out of that button's share. A box that cannot be ticked says why when the
   // pointer rests on it. Hovering or focusing a box lights up its button.
@@ -51,8 +51,9 @@
 {/if}
 
 <style>
+  /* From the block's top-right corner: their top on the block's top edge. */
   .ticks {
-    position: absolute; top: -12px; right: 10px; z-index: 5;
+    position: absolute; top: 0; right: 0; z-index: 5;
     display: flex; align-items: center; gap: 1px; padding: 0 3px;
     background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px;
     box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);

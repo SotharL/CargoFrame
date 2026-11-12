@@ -227,12 +227,19 @@ pub struct Video {
     pub max_height: u32,
     /// What shows on screen while recording.
     pub sign: RecordingSign,
+    /// Holding a shortcut for two seconds starts (and stops) a recording that goes on: each
+    /// short press then opens the window with the last seconds, and recording carries on.
+    pub continuous: bool,
 }
 
 impl Video {
     pub const MIN_FPS: u32 = 5;
     pub const MAX_FPS: u32 = 60;
     pub const MAX_WINDOW_SECS: u32 = 30;
+    /// How long a shortcut is held to start or stop a continuous recording.
+    pub const HOLD_MS: u64 = 2000;
+    /// A continuous recording stops by itself after this long (ffmpeg is told so).
+    pub const MAX_CONTINUOUS_SECS: u32 = 12 * 3600;
 }
 
 impl Default for Video {
@@ -246,6 +253,7 @@ impl Default for Video {
             window_secs: 10,
             max_height: 1080,
             sign: RecordingSign::default(),
+            continuous: false,
         }
     }
 }

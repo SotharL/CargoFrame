@@ -653,7 +653,7 @@ fn refusals_are_explained_and_classified() {
 fn it_describes_what_a_button_can_fill() {
     let d = DiscordConnector::new(model::Discord::default()).describe();
     let keys: Vec<_> = d.fields.iter().map(|f| f.key).collect();
-    assert_eq!(keys, ["channel", "thread", "message", "title"]);
+    assert_eq!(keys, ["channel", "thread", "message", "title", "tags"]);
     assert_eq!(d.fields[0].list, Some("channels"));
     assert_eq!(d.fields[1].list, Some("threads"));
     assert_eq!(d.lists.len(), 2);

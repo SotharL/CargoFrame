@@ -150,6 +150,25 @@ impl Ring {
         self.buffer.take().into_iter().map(|(_, s)| s).collect()
     }
 
+    /// A copy of the segments finished so far, in `into` (an empty folder), while the recording
+    /// goes on: a continuous recording hands out its last seconds this way. The copies are
+    /// deleted when they are dropped, like the segments themselves.
+    pub fn snapshot(&mut self, into: &Path) -> std::io::Result<Vec<Segment>> {
+        self.poll();
+        fs::create_dir_all(into)?;
+        let mut out = Vec::new();
+        for (i, s) in self.buffer.items().enumerate() {
+            let copy = into.join(format!("snap{i:05}.ts"));
+            fs::copy(&s.path, &copy)?;
+            out.push(Segment {
+                path: copy,
+                bytes: s.bytes,
+                length_ms: s.length_ms,
+            });
+        }
+        Ok(out)
+    }
+
     /// Forget everything and delete the files.
     pub fn clear(&mut self) {
         self.buffer.clear();

@@ -97,7 +97,6 @@
   .steps { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px; }
   .steps summary { cursor: pointer; font-weight: 600; font-size: 13px; }
   .steps ol { margin: 8px 0 4px; padding-left: 20px; display: grid; gap: 4px; }
-  .steps p { margin: 4px 0 0; }
   .sub { display: grid; gap: 8px; }
   .sub h3 { font-size: 13.5px; }
   .row { display: flex; gap: 8px; }

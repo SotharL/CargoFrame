@@ -49,7 +49,7 @@
   {/if}
   <!-- Title "inside the box" saves a row: it sits in the empty box like a hint and goes away as soon as
        there is text. The title is still the box's tooltip, so hovering the box tells what it is. -->
-  <div class="field" class:inside title={inside ? block.title : undefined}>
+  <div class="field" class:inside title={inside ? block.title : undefined} data-content>
     {#if inside && value === ''}
       <div class="inner" aria-hidden="true">{block.title}{#if tag}<span class="role">{tag}</span>{/if}</div>
     {/if}

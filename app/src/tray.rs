@@ -13,6 +13,7 @@ const ID_OPEN: &str = "open_settings";
 const ID_PAUSE: &str = "pause";
 const ID_QUIT: &str = "quit";
 const ID_STOP_RECORDING: &str = "stop_recording";
+const ID_CONTINUOUS: &str = "continuous";
 const ID_CAPTURE_PREFIX: &str = "capture:";
 const TRAY_ID: &str = "main";
 
@@ -87,12 +88,37 @@ fn recording_by_trigger(app: &AppHandle) -> bool {
     })
 }
 
-fn tooltip(recording: bool) -> &'static str {
-    if recording {
-        "CargoFrame is recording your screen. Press the video shortcut again to stop."
-    } else {
-        "CargoFrame"
+fn tooltip(recording: bool, continuous: bool) -> &'static str {
+    match (recording, continuous) {
+        (true, true) => "CargoFrame is recording your screen continuously. Press a shortcut for the last seconds; hold it to stop.",
+        (true, false) => "CargoFrame is recording your screen. Press the video shortcut again to stop.",
+        _ => "CargoFrame",
     }
+}
+
+/// Continuous recording is on in the settings, and which trigger starts it from the menu (the
+/// first enabled one whose layout records, else the first enabled one).
+fn continuous_trigger(app: &AppHandle) -> Option<String> {
+    let state = app.try_state::<AppState>()?;
+    let on = state
+        .store
+        .load_or_default::<cargoframe_config::Video>()
+        .map(|v| v.continuous)
+        .unwrap_or(false);
+    if !on {
+        return None;
+    }
+    let loaded = state.store.load_all::<Trigger>(Kind::Triggers).ok()?;
+    let enabled: Vec<_> = loaded
+        .items
+        .into_iter()
+        .filter(|(_, t)| t.enabled)
+        .collect();
+    enabled
+        .iter()
+        .find(|(_, t)| crate::session::records(&state.store, t))
+        .or_else(|| enabled.first())
+        .map(|(id, _)| id.clone())
 }
 
 fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
@@ -115,6 +141,29 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         None::<&str>,
     )?;
     let sep_recording = PredefinedMenuItem::separator(app)?;
+    // continuous recording from the menu too: on Wayland, holding a shortcut cannot be told
+    let continuous_now = app
+        .try_state::<AppState>()
+        .is_some_and(|s| s.recording.is_continuous());
+    let continuous = if continuous_now {
+        Some(MenuItem::with_id(
+            app,
+            ID_CONTINUOUS,
+            "Stop continuous recording",
+            true,
+            None::<&str>,
+        )?)
+    } else if !recording_now && continuous_trigger(app).is_some() {
+        Some(MenuItem::with_id(
+            app,
+            ID_CONTINUOUS,
+            "Record continuously",
+            true,
+            None::<&str>,
+        )?)
+    } else {
+        None
+    };
 
     let mut captures = Vec::new();
     if let Some(state) = app.try_state::<AppState>() {
@@ -141,8 +190,13 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         }
     }
     let mut items: Vec<&dyn tauri::menu::IsMenuItem<tauri::Wry>> = Vec::new();
-    if recording_now {
+    if let Some(c) = &continuous {
+        items.push(c);
+    }
+    if recording_now && !continuous_now {
         items.push(&stop_recording);
+    }
+    if recording_now || continuous.is_some() {
         items.push(&sep_recording);
     }
     for c in &captures {
@@ -164,7 +218,10 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
 /// Rebuild the menu after triggers change, and say in the tooltip when the screen is being recorded.
 pub fn refresh_menu(app: &AppHandle) {
     if let Some(tray) = app.tray_by_id(TRAY_ID) {
-        let _ = tray.set_tooltip(Some(tooltip(recording_by_trigger(app))));
+        let continuous = app
+            .try_state::<AppState>()
+            .is_some_and(|s| s.recording.is_continuous());
+        let _ = tray.set_tooltip(Some(tooltip(recording_by_trigger(app), continuous)));
         match menu(app) {
             Ok(m) => {
                 let _ = tray.set_menu(Some(m));
@@ -179,7 +236,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
 
     TrayIconBuilder::with_id(TRAY_ID)
         .icon(icon_with_accent(chosen_accent(app)))
-        .tooltip(tooltip(false))
+        .tooltip(tooltip(false, false))
         .menu(&menu)
         .show_menu_on_left_click(false)
         .on_menu_event(move |app, event| match event.id().as_ref() {
@@ -192,6 +249,18 @@ pub fn build(app: &AppHandle) -> tauri::Result<TrayIcon> {
                 }
             }
             ID_QUIT => app.exit(0),
+            ID_CONTINUOUS => {
+                let running = app
+                    .try_state::<AppState>()
+                    .is_some_and(|s| s.recording.is_continuous());
+                if running {
+                    triggers::stop_continuous(app);
+                } else if let Some(id) = continuous_trigger(app) {
+                    // asked from the menu: no question needed
+                    let app = app.clone();
+                    std::thread::spawn(move || triggers::start_continuous(&app, &id));
+                }
+            }
             ID_STOP_RECORDING => {
                 if let Some(state) = app.try_state::<AppState>() {
                     state.recording.cancel();
@@ -226,8 +295,9 @@ mod tests {
 
     #[test]
     fn the_tray_says_when_the_screen_is_being_recorded() {
-        assert_eq!(tooltip(false), "CargoFrame");
-        let t = tooltip(true);
+        assert_eq!(tooltip(false, false), "CargoFrame");
+        assert!(tooltip(true, true).contains("continuously"));
+        let t = tooltip(true, false);
         assert!(t.contains("recording your screen"), "{t}");
         assert!(t.contains("again to stop"), "{t}");
     }

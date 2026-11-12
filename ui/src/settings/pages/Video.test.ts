@@ -30,6 +30,17 @@ describe('Video settings', () => {
     expect(screen.queryByRole('combobox', { name: 'Dot in the corner' })).toBeNull();
   });
 
+  it('turns on continuous recording, saved, and says how it works', async () => {
+    const api = open();
+    await screen.findByText('ffmpeg found');
+    const box = screen.getByRole('checkbox', { name: /record continuously/ }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.queryByText(/acts when it is let go/)).toBeNull();
+    await fireEvent.click(box);
+    await waitFor(async () => expect((await api.getVideo()).continuous).toBe(true));
+    expect(screen.getByText(/acts when it is let go/)).toBeTruthy();
+  });
+
   it('looks for ffmpeg when the page opens and says what it found and what Automatic would use', async () => {
     open();
     await screen.findByText('ffmpeg found');

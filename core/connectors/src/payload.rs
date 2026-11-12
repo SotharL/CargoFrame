@@ -152,11 +152,108 @@ impl Payload {
             .filter(|v| !v.is_empty())
     }
 
+    /// The words of a chat message: the `message` field, else the prompt, else the window title
+    /// (unless a title of its own is shown above it, `titled`), then the tags as a last line.
+    pub fn message(&self, titled: bool) -> Option<String> {
+        let body = self
+            .value("message")
+            .map(str::to_string)
+            .or_else(|| {
+                self.prompt
+                    .as_deref()
+                    .map(|p| p.trim().to_string())
+                    .filter(|p| !p.is_empty())
+            })
+            .or_else(|| Some(self.title.trim().to_string()).filter(|t| !t.is_empty() && !titled));
+        with_tags_line(body, self)
+    }
+
+    /// The values of a field that takes several (`crash, gpu`), each once, in order.
+    pub fn list(&self, key: &str) -> Vec<String> {
+        let mut out: Vec<String> = Vec::new();
+        for v in self.value(key).unwrap_or("").split([',', '\n']) {
+            let v = v.trim();
+            if !v.is_empty() && !out.iter().any(|o| o.eq_ignore_ascii_case(v)) {
+                out.push(v.to_string());
+            }
+        }
+        out
+    }
+
     pub fn field(&self, key: &str) -> Option<&Field> {
         self.fields
             .iter()
             .find(|f| f.key == key && !f.value.trim().is_empty())
     }
+}
+
+/// A tag as a hashtag: `gpu driver` → `#gpuDriver`, `C++` → `#C`. Letters, digits and `_` only;
+/// `None` when none is left.
+pub fn hashtag(tag: &str) -> Option<String> {
+    let mut out = String::from("#");
+    for (i, word) in tag.split_whitespace().enumerate() {
+        let word: String = word
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '_')
+            .collect();
+        let mut chars = word.chars();
+        if let Some(first) = chars.next() {
+            if i > 0 && out.len() > 1 {
+                out.extend(first.to_uppercase());
+            } else {
+                out.push(first);
+            }
+            out.extend(chars);
+        }
+    }
+    (out.len() > 1).then_some(out)
+}
+
+/// The tags as hashtags, one space apart (each once).
+pub fn hashtags(tags: &[String]) -> String {
+    let mut out: Vec<String> = Vec::new();
+    for t in tags.iter().filter_map(|t| hashtag(t)) {
+        if !out.iter().any(|o| o.eq_ignore_ascii_case(&t)) {
+            out.push(t);
+        }
+    }
+    out.join(" ")
+}
+
+/// A message with its tags (the `tags` field) as a last line, written with marks the services
+/// turn into their own: "**Tags:** `crash` `gpu`".
+pub fn with_tags_line(body: Option<String>, payload: &Payload) -> Option<String> {
+    let tags = payload.list("tags");
+    if tags.is_empty() {
+        return body;
+    }
+    let line = format!(
+        "**Tags:** {}",
+        tags.iter()
+            .map(|t| format!("`{}`", t.replace('`', "'")))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    Some(match body {
+        Some(b) if !b.trim().is_empty() => format!("{}\n\n{line}", b.trim_end()),
+        _ => line,
+    })
+}
+
+/// A post's text with its hashtags (the `hashtags` field) at the end, within `max` characters:
+/// the text is cut first, so the hashtags stay. Whether the text was cut is the second value.
+pub fn with_hashtags(source: &str, payload: &Payload, max: usize) -> (String, bool) {
+    let tags = hashtags(&payload.list("hashtags"));
+    if tags.is_empty() {
+        return crate::media::plain_text(source, max);
+    }
+    let room = max.saturating_sub(tags.chars().count() + 2);
+    let (text, cut) = crate::media::plain_text(source, room);
+    if text.is_empty() {
+        let all: String = tags.chars().take(max).collect();
+        return (all, cut);
+    }
+    (format!("{text}\n\n{tags}"), cut)
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -260,5 +357,37 @@ mod tests {
         p.set("k", "v");
         assert_eq!(p.get("k").as_deref(), Some("v"));
         assert!(p.done("k"));
+    }
+
+    fn with(fields: &[(&str, &str)]) -> Payload {
+        Payload {
+            fields: fields.iter().map(|(k, v)| Field::text(k, v)).collect(),
+            ..Payload::default()
+        }
+    }
+
+    #[test]
+    fn tags_become_hashtags_and_a_last_line_of_a_message() {
+        assert_eq!(hashtag("gpu driver").as_deref(), Some("#gpuDriver"));
+        assert_eq!(hashtag("C++").as_deref(), Some("#C"));
+        assert_eq!(hashtag("!!"), None);
+        let p = with(&[
+            ("tags", "crash, gpu, Crash"),
+            ("hashtags", "bug report, ui"),
+        ]);
+        assert_eq!(p.list("tags"), ["crash", "gpu"]);
+        assert_eq!(
+            with_tags_line(Some("It broke".into()), &p).as_deref(),
+            Some("It broke\n\n**Tags:** `crash` `gpu`")
+        );
+        assert_eq!(with_tags_line(None, &with(&[])), None);
+        let (text, cut) = with_hashtags("x".repeat(300).as_str(), &p, 280);
+        assert!(cut);
+        assert!(text.ends_with("\n\n#bugReport #ui"), "{text}");
+        assert!(text.chars().count() <= 280);
+        assert_eq!(
+            with_hashtags("Hi", &with(&[]), 280),
+            ("Hi".to_string(), false)
+        );
     }
 }

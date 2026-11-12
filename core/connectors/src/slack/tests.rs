@@ -569,7 +569,7 @@ fn problems_in_the_layout_are_caught_before_anything_is_sent() {
 fn it_describes_what_a_button_can_fill() {
     let d = SlackConnector::new(model::Slack {}).describe();
     let keys: Vec<_> = d.fields.iter().map(|f| f.key).collect();
-    assert_eq!(keys, ["channel", "thread", "message", "title"]);
+    assert_eq!(keys, ["channel", "thread", "message", "title", "tags"]);
     assert_eq!(d.fields[0].list, Some("channels"));
     assert_eq!(d.lists[0].id, "channels");
 }
@@ -585,4 +585,17 @@ fn the_message_is_written_in_slacks_own_marks_and_stays_escaped() {
         compose(&p),
         "*Crash* on _save_? _twice_ with `x < y` &lt;!channel&gt;\n• one\n1. first\nno underline"
     );
+}
+
+#[test]
+fn the_tags_go_on_a_last_line_of_the_message() {
+    let p = Payload {
+        fields: vec![
+            Field::text("message", "It broke"),
+            Field::text("tags", "crash, gpu"),
+        ],
+        ..Payload::default()
+    };
+    let text = compose(&p);
+    assert!(text.ends_with("*Tags:* `crash` `gpu`"), "{text}");
 }

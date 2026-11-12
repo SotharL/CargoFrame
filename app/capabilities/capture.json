@@ -17,6 +17,8 @@
     "allow-fetch-options",
     "allow-set-edited-image",
     "allow-read-text",
+    "allow-add-files",
+    "allow-read-offered-file",
     "allow-set-clip-mark",
     "allow-share",
     "allow-open-link",

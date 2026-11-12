@@ -125,6 +125,7 @@ impl Connector for XConnector {
             fields: vec![
                 f("text", "Text", "The post, at most 280 characters. Defaults to the prompt, then the window title"),
                 f("alt", "Picture description", "Read out to people who cannot see the picture"),
+                f("hashtags", "Hashtags", "Added at the end as #tags. Separate several with commas"),
             ],
             lists: Vec::new(),
             summary: "Posts the text and the screenshot (made smaller when it is over 5 MB) to your X account. Formatting is shown as plain text. Files and videos are not sent.".into(),
@@ -188,7 +189,7 @@ impl Connector for XConnector {
             .map(str::to_string)
             .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
             .unwrap_or_else(|| payload.title.clone());
-        let (text, cut) = plain_text(&source, MAX_TEXT);
+        let (text, cut) = crate::payload::with_hashtags(&source, payload, MAX_TEXT);
         if cut {
             notes.push(format!(
                 "The text was cut to {MAX_TEXT} characters, the most X shows"

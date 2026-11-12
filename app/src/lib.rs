@@ -11,6 +11,7 @@ mod commands;
 mod connections;
 mod desktop;
 mod desktop_keys;
+mod hold;
 mod items;
 mod logging;
 mod notify;
@@ -149,6 +150,8 @@ pub fn run() {
             commands::fetch_options,
             commands::set_edited_image,
             commands::read_text,
+            commands::add_files,
+            commands::read_offered_file,
             commands::set_clip_mark,
             commands::share,
             commands::open_link,
@@ -520,6 +523,8 @@ mod shipped_config_tests {
             "allow-set-clip-mark",
             "allow-set-edited-image",
             "allow-read-text",
+            "allow-add-files",
+            "allow-read-offered-file",
             "allow-share",
             "core:event:allow-listen",
             "core:event:allow-unlisten",

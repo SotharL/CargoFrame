@@ -50,6 +50,16 @@ _Reviewed 2026-10-23, on the code merged to `main` in pull request #1. This is a
   it. Following the focus during a recording asks only which program is in front, about once a second, and keeps the
   program names and times in memory for that capture; the program used longest picks the project folder, which is
   then read as for a screenshot.
+- **Files added by hand (0.4.0):** a file is picked with the system's dialog (the window cannot name a path), copied
+  into the capture's own folder at once (regular files, 50 MB at most) and offered under `added/<name>`. Every read of
+  a ticked file finds that copy first, and a share still refuses a file the capture did not offer. The copy goes with
+  the capture's folder when the window closes.
+- **Log viewer (0.4.0):** the window asks for a file by the path it was offered (`read_offered_file`); anything else is
+  refused, a path that leads out of the folder too (the same check as for a zip), and only the last 4 MB are read.
+- **Continuous recording (0.4.0):** off unless turned on; starting asks first (a system dialog) or comes from the tray
+  menu, and the tray and the outline say it runs. ffmpeg is told to stop after 12 hours. Only the last seconds are on
+  disk, in the recording's own folder, as for any recording; a clip handed out is a copy that moves to the capture's
+  folder.
 - **Read text (0.3.0):** the part of the screenshot the person drags over is read **on this computer**: Windows' own
   reader (`Windows.Media.Ocr`) or, on Linux, the `tesseract` program run with an argument list (never a shell), the
   picture handed over on its input (no file), stopped after 20 seconds. Nothing is sent anywhere and nothing is kept:

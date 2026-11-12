@@ -11,7 +11,7 @@
 
 use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
-use crate::media::{plain_text, to_jpeg};
+use crate::media::to_jpeg;
 use crate::model;
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
@@ -209,12 +209,20 @@ fn refusal(resp: &cargoframe_net::Response, what: &str) -> SendError {
 impl Connector for InstagramConnector {
     fn describe(&self) -> Describe {
         Describe {
-            fields: vec![FieldSpec {
-                key: "caption",
-                label: "Caption",
-                hint: "Up to 2,200 characters. Defaults to the prompt, then the window title",
-                list: None,
-            }],
+            fields: vec![
+                FieldSpec {
+                    key: "caption",
+                    label: "Caption",
+                    hint: "Up to 2,200 characters. Defaults to the prompt, then the window title",
+                    list: None,
+                },
+                FieldSpec {
+                    key: "hashtags",
+                    label: "Hashtags",
+                    hint: "Added at the end of the caption as #tags. Separate several with commas",
+                    list: None,
+                },
+            ],
             lists: Vec::new(),
             summary: "Posts the screenshot with a caption to your Instagram professional account. The picture is first put on your own picture server, because Instagram only takes pictures from a public address. Files and videos are not sent.".into(),
         }
@@ -273,7 +281,7 @@ impl Connector for InstagramConnector {
             .map(str::to_string)
             .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
             .unwrap_or_else(|| payload.title.clone());
-        let (caption, cut) = plain_text(&source, MAX_CAPTION);
+        let (caption, cut) = crate::payload::with_hashtags(&source, payload, MAX_CAPTION);
         if cut {
             notes.push(format!("The caption was cut to {MAX_CAPTION} characters"));
         }

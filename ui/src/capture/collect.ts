@@ -39,6 +39,7 @@ export function collectShare(
     texts,
     dropdowns: keep(values.dropdowns),
     deeper: deeperOf(view, values),
+    tags: keep(values.tags ?? {}),
     files: keep(values.files),
     image_edited: imageEdited,
     still,
