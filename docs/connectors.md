@@ -18,6 +18,7 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 | 7 | Other programs fill a layout (`cargoframe open`) | A company tool can open CargoFrame with its own data in the blocks | Started (text boxes and dropdowns) |
 | 8 | Tables and code blocks written the service's way | A repro table or a stack trace reads well in Jira, Teams, GitHub and Reddit; aligned lines in a code block where there are no tables | Done (0.3.0) |
 | 9 | The screenshot and the recording placed in the text (`{{capture.screenshot}}`, `{{capture.recording}}`) | A *Repro / Highlight* table with the video and the picture side by side, not two attachments at the end | Done (0.3.0): Jira, GitHub, Teams (picture); proposed: Slack and Discord cannot place files in text |
+| 10 | Tags sent where each service keeps them | Jira and GitHub labels, hashtags on X, Bluesky and Instagram, a tags line in Slack, Teams and Discord | Done (0.4.0); proposed: Discord forum tags (by the forum's ids), Reddit flair from a tag |
 
 ## Per connector
 

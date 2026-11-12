@@ -1224,3 +1224,47 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   same value was listed twice and the panel stopped drawing. Each value is now listed once (with the name its rule
   gives it), and a test covers the variables as the app sends them. The fields a sharing button offers are also
   listed once each.
+
+### 0.4.0, 12 Nov 2026: tags, logs, files by hand, combined values, continuous recording
+
+- **A Tags block**, like Jira's labels. At most 25 per block (and 100 characters a tag), kept once each whatever the
+  case, so a field never gets the same label twice. It starts from a list in the layout where each entry may use a
+  value: `{{rule.gpu}}` tags the graphics card when it is found and gives nothing otherwise, and a value with several
+  parts gives several tags. Conditional tags ("if this, tag that") come from values made from other values (below),
+  so the Tags block itself stays a plain list. The last five tags used are offered under the box, kept on this
+  computer like the last dropdown choices. A block can suggest a list of a connection while typing (Jira's labels,
+  a repository's labels); the Jira and GitHub templates start with one.
+- **Where tags go, per service.** In a field that takes several values. Jira and GitHub have *Labels*; X, Bluesky and
+  Instagram get a *Hashtags* field (added at the end, the text cut first so they stay; Bluesky marks them as tags);
+  Slack, Teams and Discord get a *Tags* field, written as a last line. Discord forum tags need the forum's own ids and
+  Reddit has one flair, so neither is set from tags yet.
+- **A log viewer block.** It reads only a file the capture offers (found by a Files block or added by hand), from the
+  capture's copy when there is one, and only the last 4 MB of a larger file. The search keeps the lines with all its
+  words, case aside, and marks them; the last 2,000 matching lines are drawn. Nothing of it is sent: copying is the
+  way out. It has no sharing boxes.
+- **Files added by hand.** The ＋ of a Files block picks files with the system's dialog. Each is copied into the
+  capture's own folder at once and listed under `added/`: everything that reads a ticked file finds that copy first,
+  so a file chosen anywhere on the computer is never read from there again, and a share checks that a ticked file is
+  one the capture offered, as before. 50 MB at most per file.
+- **Values made from other values.** Data from files had one value per thing found. A value can now be made of others,
+  with choices tried from the top: with no condition a choice fits when every value it names is found, so
+  `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` then `{{rule.stream}}_{{rule.change}}_{{rule.config}}`
+  covers "with a shelf, else without" without a condition; conditions (is found, is not found, is, is not, contains)
+  are there when needed. They are made after every file is read, with every value the capture knows, in order, so one
+  can use another. A rule of only such values reads no file.
+- **Continuous recording** (off by default). Holding a shortcut for two seconds asks to record all the time; holding
+  one again stops. A press of a video shortcut then hands out the last seconds: the finished one-second pieces are
+  copied while ffmpeg goes on (at most a second is not in it yet) and joined into a clip the window opens. Any other
+  shortcut does what it always does, and each opens its own layout, whatever started the recording. With the setting
+  on, shortcuts act when let go; with it off nothing changes and a press acts at once. Wayland does not say when a key
+  is let go, so the tray menu starts and stops it there (and everywhere).
+- **The focus in a continuous recording.** A window's place and size can change while it runs, and pieces of
+  different sizes cannot be joined without encoding again, so the whole screen is recorded. The red outline follows
+  the window in focus, and a layout that records the window in focus opens cropped to the one in focus the longest in
+  the clip, a crop the person can change or take away. The program in focus the longest gives the data, as for any
+  recording.
+- **The sharing boxes and the ring.** The boxes of the sharing buttons start at the block's top-right corner, their top
+  on the block's top; the ring of the hovered button goes around what the block holds, not its title.
+- **Tidying, kept to safe steps.** Slack, Teams and Discord share one function for the words of a message; the tests of
+  `share.rs` and `session.rs` moved to files of their own (3,000 lines); the trigger code reads the recording settings
+  in one place; an unused style went.
