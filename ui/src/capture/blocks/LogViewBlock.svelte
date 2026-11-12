@@ -4,7 +4,10 @@
   // they were written, the button at the start of the row turns it from a text search (the
   // magnifier) into a time search (the clock), which keeps the lines of a moment: during the
   // recording (or around the capture), or between two times. Both searches keep applying; the
-  // button shows a dot while the one not shown is on. A line picked is shown whole under the list,
+  // button shows a dot while the one not shown is on. The time of each line is found by itself, or
+  // read with a format the person writes the way the log does ([YYYY-MM-DD HH:mm]); a data rule
+  // can say it for the file it finds, and the last one used for a file of that name comes back
+  // next time (logFormat.ts, logFormats.ts). A line picked is shown whole under the list,
   // to read and copy. "Open large" fills the window with it. Nothing of it is sent: the files go
   // as the Files blocks say.
   import { untrack } from 'svelte';
@@ -13,6 +16,8 @@
   import { formatSize } from '../values';
   import { matching, splitLines, type LogLine } from './logLines';
   import { during, hms, onDay, stamps, type Span } from './logTimes';
+  import { COMMON_FORMATS, FORMAT_HELP, compile, example, isFormat } from './logFormat';
+  import { formatFor, keepFormat, recentFormats, sameFile } from './logFormats';
 
   type LogViewBlock = Extract<Block, { type: 'log_view' }>;
 
@@ -91,7 +96,25 @@
   });
 
   const all = $derived<LogLine[]>(loaded ? splitLines(loaded.text) : []);
-  const times = $derived(stamps(all, day, utc));
+  /** The data rule that says how the file shown writes its time, if one found it. */
+  const ruled = $derived(view.log_times?.find((t) => sameFile(path, t.file)) ?? null);
+  /** How the lines write their time: the rule's, the block's, or the last one used for a file of
+   *  this name; empty, it is found by itself. Set again for each file shown. */
+  let formatText = $state('');
+  $effect(() => {
+    const p = path;
+    if (!p) return;
+    formatText = untrack(() => ruled?.format ?? (block.time_format?.trim() || formatFor(p) || ''));
+  });
+  const compiled = $derived(formatText.trim() ? compile(formatText) : null);
+  const format = $derived(compiled && isFormat(compiled) ? compiled : null);
+  const formatProblem = $derived(compiled && !isFormat(compiled) ? compiled.problem : '');
+  const offeredFormats = $derived([...new Set([...(ruled ? [ruled.format] : []), ...recentFormats(), ...COMMON_FORMATS])]);
+  /** A format that reads the file's times is kept for files of this name. */
+  function formatChosen() {
+    if (path && (!formatText.trim() || (format && timed))) keepFormat(path, formatText);
+  }
+  const times = $derived(stamps(all, day, utc, format));
   const timed = $derived(times.some((t) => t !== null));
   /** The part of the day kept, when the lines are kept by time. */
   const span = $derived.by<Span | null>(() => {
@@ -116,7 +139,7 @@
 
   /** Between two times: it starts on the moment of the capture, or on the file's own first and last. */
   function pickBetween() {
-    const known = times.filter((t): t is number => t !== null);
+    const known = times.flatMap((t) => (t ? [t.at] : []));
     const from = moment?.from ?? known[0];
     const to = moment?.to ?? known[known.length - 1];
     if (!fromText && from !== undefined) fromText = hms(from);
@@ -208,7 +231,22 @@
         <span class="quiet">to</span>
         <input type="time" step="1" class="time" bind:value={toText} aria-label="To" />
       {/if}
-      {#if loaded && !timed}<span class="quiet none">No times in this file</span>{/if}
+      <input
+        type="text"
+        class="format mono"
+        class:bad={!!formatProblem || (!!format && loaded && !timed)}
+        bind:value={formatText}
+        onchange={formatChosen}
+        list={`formats-${block.id}`}
+        placeholder="Time format: found by itself"
+        aria-label="How the lines write their time"
+        title={`${ruled ? `Set by the data rule “${ruled.rule}”. ` : ''}Write it the way the log does, e.g. [YYYY-MM-DD HH:mm]: ${FORMAT_HELP}. Empty: found by itself.`}
+        autocomplete="off"
+        spellcheck="false"
+      />
+      <datalist id={`formats-${block.id}`}>
+        {#each offeredFormats as f (f)}<option value={f}></option>{/each}
+      </datalist>
       <label class="utc quiet" title="The times written in this file are UTC, not this computer's time (Unreal Engine's logs are, by default)">
         <input type="checkbox" bind:checked={utc} /> UTC
       </label>
@@ -237,7 +275,7 @@
       {/each}
     </ol>
     <p class="quiet foot">
-      {query.trim() || (timed && span) ? `${lines.length} of ${total} lines` : `${total} lines`}{query.trim() ? ` with “${query.trim()}”` : ''}{timed && span ? `, written ${hms(span.from)} to ${hms(span.to)}` : ''}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}{!timed && (mode === 'time' || when !== 'all') && total > 0 ? ' · no times CargoFrame can read in this file, so every line shows' : ''}
+      {query.trim() || (timed && span) ? `${lines.length} of ${total} lines` : `${total} lines`}{query.trim() ? ` with “${query.trim()}”` : ''}{timed && span ? `, written ${hms(span.from)} to ${hms(span.to)}` : ''}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}{!timed && (mode === 'time' || when !== 'all') && total > 0 ? (format ? ` · no line has a time written as ${example(format, day, utc)}, so every line shows` : ' · no times CargoFrame can read in this file, so every line shows') : ''}{formatProblem && mode === 'time' ? ` · ${formatProblem}` : ''}{format && timed && mode === 'time' ? ` · times read as ${example(format, day, utc)}${ruled ? ` (data rule “${ruled.rule}”)` : ''}` : ''}
     </p>
     {#if pickedLine}
       <div class="picked" role="group" aria-label={`Line ${pickedLine.n}`}>
@@ -261,7 +299,6 @@
   .one { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .search { flex: 1; min-width: 0; font-size: 13px; }
   .bar select.when { flex: 0 1 auto; min-width: 0; }
-  .none { font-size: 12px; white-space: nowrap; }
   .mode { position: relative; flex: none; width: 28px; height: 26px; padding: 0; display: grid; place-items: center; }
   .mode svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
   /* the search not shown is on */
@@ -269,6 +306,8 @@
     content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   }
   .time { font-size: 12.5px; padding: 1px 4px; }
+  .format { flex: 1 1 120px; min-width: 90px; max-width: 220px; font-size: 12px; padding: 2px 6px; }
+  .format.bad { border-color: var(--err); }
   .utc { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; margin-left: auto; white-space: nowrap; }
   .small { padding: 2px 8px; font-size: 12.5px; white-space: nowrap; }
   .lines {

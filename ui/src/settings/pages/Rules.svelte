@@ -7,6 +7,7 @@
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
+  import TimeFormatField from '../../lib/components/TimeFormatField.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import { layoutsUsingRule, usedIn } from '../usage';
@@ -76,7 +77,7 @@
     formError = '';
     test = null;
     // a rule from before 0.3.0 shows its one value, named as it always was
-    const value: Rule = { ...r, several: r.several ?? 'newest', add_to_files: r.add_to_files ?? false, values: valuesOf(id, r).map((v) => ({ ...v })) };
+    const value: Rule = { ...r, several: r.several ?? 'newest', add_to_files: r.add_to_files ?? false, log_time: r.log_time ?? '', values: valuesOf(id, r).map((v) => ({ ...v })) };
     draft = { id, value, auto: {} };
   }
 
@@ -220,8 +221,9 @@
         {:else}
           <p class="quiet">
             If <span class="mono">{item.file}</span> is found{#if item.several === 'all'} (all of them){/if}:
-            {#if item.add_to_files}add it to the files{#if values.length}, and {/if}{/if}
-            {#if values.length}read {values.length === 1 ? 'one value' : `${values.length} values`}{/if}
+            {#if item.add_to_files}add it to the files{#if values.length || item.log_time}, and {/if}{/if}
+            {#if values.length}read {values.length === 1 ? 'one value' : `${values.length} values`}{#if item.log_time}, and {/if}{/if}
+            {#if item.log_time}read its lines' time as <span class="mono">{item.log_time}</span> in log viewers{/if}
           </p>
         {/if}
         <ul class="values">
@@ -287,6 +289,9 @@
             <input type="checkbox" bind:checked={draft.value.add_to_files} />
             <span>Add it to the files <span class="quiet">(ticked in the window's Files box, ready to send)</span></span>
           </label>
+          <div class="logtime" data-tour="rules.log_time">
+            <TimeFormatField id="rule-log-time" label="In a log viewer, its lines' time looks like" bind:value={draft.value.log_time} />
+          </div>
         {/if}
 
         <div class="list" data-tour="rules.values">
@@ -475,6 +480,7 @@
   .remove { margin-left: auto; width: 28px; padding: 0; }
   .eol { font-size: 12.5px; padding: 2px 8px; border-style: dashed; }
   .link { border: 0; background: transparent; color: var(--accent); padding: 0; text-decoration: underline; font-size: 12.5px; }
+  .logtime { margin: 4px 0 10px; max-width: 420px; }
   .check { display: flex; gap: 8px; align-items: center; font-size: 13px; }
   .test { display: grid; gap: 8px; padding: 12px; background: var(--surface-2); border-radius: var(--radius-sm); }
   .test h3 { font-size: 13px; }

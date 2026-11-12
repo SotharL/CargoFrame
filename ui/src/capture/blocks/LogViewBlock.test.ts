@@ -145,9 +145,71 @@ describe('LogViewBlock by time', () => {
     // times while every line shows
     expect(screen.getByRole('searchbox')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
-    expect(screen.getByText('No times in this file')).toBeTruthy();
+    // the time row is there to write the format the file uses, and says no time was found
+    expect(screen.getByRole('combobox', { name: 'How the lines write their time' })).toBeTruthy();
     expect(screen.getByText(/no times CargoFrame can read in this file/)).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Search by text' }));
     expect(screen.getByRole('searchbox')).toBeTruthy();
+  });
+});
+
+describe('LogViewBlock with a time format', () => {
+  afterEach(() => {
+    cleanup();
+    localStorage.clear();
+  });
+  const local = (h: number, mi: number, s = 0) => new Date(2026, 10, 12, h, mi, s).getTime();
+  // a log that writes its time its own way: found by nothing but its format
+  const text = ['[2026_11_12] 12:00 - boot', '[2026_11_12] 12:01 - crash', '[2026_11_12] 12:05 - quit'].join('\n');
+  const api = () => memoryApi({ readOfferedFile: () => ({ text, size: text.length, cut: false }) });
+  async function recorded(more: Partial<SessionView> = {}): Promise<SessionView> {
+    const v = await view();
+    // recorded from 12:01:30 for 4 s: inside the minute written 12:01
+    v.video = { width: 640, height: 360, duration_ms: 4_000, bytes: 1, audio: false, started_at_ms: local(12, 1, 30) };
+    v.captured_at_ms = local(12, 1, 34);
+    return { ...v, ...more };
+  }
+  const shownLines = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/^\d+/, '').trim());
+  const formatBox = () => screen.getByRole('combobox', { name: 'How the lines write their time' }) as HTMLInputElement;
+
+  it('reads the times with a format written the way the log does, and keeps it for files of that name', async () => {
+    render(LogViewBlock, { block, view: await recorded(), files: { logs: ['Saved/Logs/Game.log'] }, api: api() });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
+    // found by itself: none of these lines is a time it knows
+    expect(screen.getByText(/no times CargoFrame can read in this file/)).toBeTruthy();
+    await fireEvent.input(formatBox(), { target: { value: '[YYYY_MM_DD] HH:mm -' } });
+    await fireEvent.change(formatBox());
+    // a line written 12:01 covers its minute, so it is in a recording at 12:01:30
+    await waitFor(() => expect(shownLines(list)).toEqual(['[2026_11_12] 12:01 - crash']));
+    expect(screen.getByText(/times read as \[2026_11_12\] 12:01 -/)).toBeTruthy();
+    // next capture, a Game.log anywhere opens with it
+    cleanup();
+    render(LogViewBlock, { block, view: await recorded(), files: { logs: ['Other/Game.log'] }, api: api() });
+    await screen.findByRole('list', { name: 'Lines' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
+    expect(formatBox().value).toBe('[YYYY_MM_DD] HH:mm -');
+  });
+
+  it("uses the data rule's format for the file it found, and says so", async () => {
+    const v = await recorded({ log_times: [{ file: 'Saved/Logs/Game.log', format: '[YYYY_MM_DD] HH:mm -', rule: 'Game log' }] });
+    render(LogViewBlock, { block: { ...block, during: true }, view: v, files: { logs: ['Saved/Logs/Game.log'] }, api: api() });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    // nothing to do: the lines of the recording show
+    await waitFor(() => expect(shownLines(list)).toEqual(['[2026_11_12] 12:01 - crash']));
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
+    expect(formatBox().value).toBe('[YYYY_MM_DD] HH:mm -');
+    expect(formatBox().title).toMatch(/Set by the data rule “Game log”/);
+    expect(screen.getByText(/\(data rule “Game log”\)/)).toBeTruthy();
+  });
+
+  it("starts on the block's format, and says what is wrong with a format", async () => {
+    render(LogViewBlock, { block: { ...block, time_format: '[YYYY_MM_DD] HH:mm' }, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
+    await screen.findByRole('list', { name: 'Lines' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
+    expect(formatBox().value).toBe('[YYYY_MM_DD] HH:mm');
+    await fireEvent.input(formatBox(), { target: { value: '[foo]' } });
+    expect(formatBox().classList.contains('bad')).toBe(true);
+    expect(screen.getByText(/The format has no time in it/)).toBeTruthy();
   });
 });

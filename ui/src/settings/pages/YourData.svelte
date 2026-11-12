@@ -6,6 +6,7 @@
   import Chip from '../../lib/components/Chip.svelte';
   import { getApi } from '../../lib/ipc';
   import { forgetRecent, remembered } from '../../lib/recent';
+  import { forgetFormats, formatsKept } from '../../capture/blocks/logFormats';
   import { formatSize } from '../../capture/values';
   import type { Cleaned, DataReport } from '../../lib/types';
 
@@ -23,7 +24,7 @@
     } catch (e) {
       message = { kind: 'err', text: String(e) };
     }
-    remembering = remembered();
+    remembering = remembered() + formatsKept();
   }
   onMount(() => void read());
 
@@ -50,9 +51,9 @@
   }
 
   function forget() {
-    const n = forgetRecent();
-    message = { kind: 'ok', text: n === 0 ? 'Nothing was remembered.' : 'The last choices of every dropdown are forgotten.' };
-    remembering = remembered();
+    const n = forgetRecent() + forgetFormats();
+    message = { kind: 'ok', text: n === 0 ? 'Nothing was remembered.' : 'The last choices of every dropdown, and the log time formats used, are forgotten.' };
+    remembering = remembered() + formatsKept();
   }
 
   async function reset() {
@@ -61,6 +62,7 @@
     try {
       await (await getApi()).resetEverything();
       forgetRecent();
+      forgetFormats();
       confirming = false;
       message = { kind: 'ok', text: 'CargoFrame is back to a new install.' };
       reload();

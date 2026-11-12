@@ -209,7 +209,10 @@ them over the clip where the person drags them, and the share lays them over the
 under it, or from the start when the Video block says), moved and taken off like the keys, and is sent the same way.
 A **Log viewer** reads the time each line was written and can keep the lines written during the recording (a few
 seconds either side), around a screenshot, or between two times; times without a zone are the computer's, or UTC when
-the block says (Unreal Engine's logs).
+the block says (Unreal Engine's logs). The time is found by itself, or read with a format written the way the log
+writes it (`[YYYY-MM-DD HH:mm]`, `MM_DD_HH_mm_ss`; `#` for a counter), which a data rule can set for the file it
+finds ("if Game.log is found, its times are `[YYYY_MM_DD] HH:mm -`"), the block can set, or the person types once:
+the last one used for a file of that name comes back next time.
 
 **A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the whole
 screen is recorded and the window's place is noted ten times a second; the clip opens cropped to the window and the
@@ -266,7 +269,7 @@ service are grouped under *Connect a service*, below the others.
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
-| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown, *Open large* fills the window. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (UTC when the block says); both keep applying, and the button shows a dot while the other one is on. Nothing of it is sent |
+| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown, *Open large* fills the window. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (UTC when the block says); the time of each line is found by itself, or read with a format written the way the log does (`[YYYY_MM_DD] HH:mm -`), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. Nothing of it is sent |
 | **Sharing buttons** | Up to five, in the service's colour. Tick boxes in each block's top-right corner say which button sends it: dashed = cannot take it, ring = required. Hovering a button or a box rings what each block it sends holds (not the block's title) |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">

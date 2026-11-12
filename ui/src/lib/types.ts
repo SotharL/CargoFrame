@@ -232,6 +232,8 @@ export type BlockContent =
       utc?: boolean;
       /** Start on the lines written during the recording (or around the capture). */
       during?: boolean;
+      /** How the lines write their time, when no data rule says it for the file shown. */
+      time_format?: string;
     };
 
 /** The most tags a Tags block holds, and the longest a tag may be (core/layout MAX_TAGS). */
@@ -404,6 +406,8 @@ export interface SessionView {
   sharing: Record<string, SharingView>;
   /** When the capture was made (ms since 1970): a log viewer can keep the lines written around then. */
   captured_at_ms?: number;
+  /** How the lines of the files the data rules found write their time. */
+  log_times?: { file: string; format: string; rule: string }[];
 }
 
 // ----- configuration items edited in Settings (mirror core/config, core/rules) -----
@@ -553,6 +557,8 @@ export interface Rule {
   several?: RuleSeveral;
   add_to_files?: boolean;
   values?: RuleValue[];
+  /** How the lines of the file write their time (`[YYYY-MM-DD HH:mm:ss]`), for the log viewers. */
+  log_time?: string;
   // before 0.3.0 a rule read one value with a format and a query
   format: RuleFormat;
   query?: string;

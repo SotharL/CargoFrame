@@ -96,8 +96,11 @@ pub fn key_ok(key: &str) -> bool {
 
 /// A rule of 0.3.0: values to read, files to add, or both.
 fn check_steps(rule: &Rule) -> Result<(), String> {
-    if rule.values.is_empty() && !rule.add_to_files {
-        return Err("Add a value to read, or tick \u{201c}Add it to the files\u{201d}".into());
+    if rule.values.is_empty() && !rule.add_to_files && rule.log_time.trim().is_empty() {
+        return Err(
+            "Add a value to read, tick \u{201c}Add it to the files\u{201d}, or say how its lines write their time"
+                .into(),
+        );
     }
     let mut keys = std::collections::BTreeSet::new();
     for step in &rule.values {
@@ -409,6 +412,9 @@ pub fn check(rule: &Rule) -> Result<(), String> {
     if rule.name.trim().is_empty() {
         return Err("Give it a name".into());
     }
+    if rule.log_time.chars().count() > 120 {
+        return Err("The time format of its lines is too long".into());
+    }
     // a rule whose values are all made from other values reads no file
     if !(rule.only_combines() && rule.file.trim().is_empty()) && !crate::run::pattern_ok(&rule.file)
     {
@@ -708,6 +714,29 @@ mod check_tests {
             .unwrap_err()
             .contains("Add a value"));
         assert!(check(&rule("a.csv", Format::Csv, "")).is_err());
+    }
+
+    #[test]
+    fn a_rule_may_only_say_how_its_file_writes_the_time() {
+        let mut game = rule("Game.log", Format::Json, "");
+        assert!(check(&game)
+            .unwrap_err()
+            .contains("how its lines write their time"));
+        game.log_time = "[YYYY_MM_DD] HH:mm -".into();
+        assert!(check(&game).is_ok());
+        game.log_time = "H".repeat(200);
+        assert!(check(&game).unwrap_err().contains("too long"));
+        // and it reads nothing, so it gives no value and reports nothing
+        let json = serde_json::to_value(Rule {
+            log_time: "HH:mm".into(),
+            ..Rule::default()
+        })
+        .unwrap();
+        assert_eq!(json["log_time"], "HH:mm");
+        assert!(serde_json::to_value(Rule::default())
+            .unwrap()
+            .get("log_time")
+            .is_none());
     }
 
     #[test]

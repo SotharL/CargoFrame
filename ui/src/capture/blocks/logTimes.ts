@@ -9,6 +9,7 @@
 // or UTC when the block says the files are written in UTC. A line with no time (the rest of a
 // message, a stack trace) has the time of the line before it.
 import type { LogLine } from './logLines';
+import { readWith, type TimeFormat } from './logFormat';
 
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
@@ -63,12 +64,21 @@ export function timeOf(line: string, day: number, utc: boolean): number | null {
   return null;
 }
 
-/** Each line's time; a line without one has the time of the line before it (`null` before the first). */
-export function stamps(lines: readonly LogLine[], day: number, utc: boolean): (number | null)[] {
-  let last: number | null = null;
+/** When a line was written: from `at`, for `unit` ms (a time written to the minute covers it). */
+export interface Stamp {
+  at: number;
+  unit: number;
+}
+
+/**
+ * Each line's time, read with the person's format, or found by itself (`format` absent); a
+ * line without one has the time of the line before it (`null` before the first).
+ */
+export function stamps(lines: readonly LogLine[], day: number, utc: boolean, format?: TimeFormat | null): (Stamp | null)[] {
+  let last: Stamp | null = null;
   return lines.map((l) => {
-    const t = timeOf(l.text, day, utc);
-    if (t !== null) last = t;
+    const at = format ? readWith(format, l.text, day, utc) : timeOf(l.text, day, utc);
+    if (at !== null) last = { at, unit: format ? format.unit : 1_000 };
     return last;
   });
 }
@@ -79,11 +89,11 @@ export interface Span {
   to: number;
 }
 
-/** The lines written during `span`, given their times. */
-export function during(lines: readonly LogLine[], times: readonly (number | null)[], span: Span): LogLine[] {
+/** The lines written during `span`, given their times: a line whose time covers part of it. */
+export function during(lines: readonly LogLine[], times: readonly (Stamp | null)[], span: Span): LogLine[] {
   return lines.filter((_, i) => {
     const t = times[i];
-    return t !== null && t !== undefined && t >= span.from && t <= span.to;
+    return !!t && t.at <= span.to && t.at + t.unit > span.from;
   });
 }
 

@@ -111,6 +111,13 @@ describe('Properties: a text block', () => {
     await fireEvent.click(screen.getByRole('switch', { name: 'Start on the lines written during the recording' }));
     await fireEvent.click(screen.getByRole('switch', { name: 'The times in the files are UTC' }));
     expect([log.during, log.utc]).toEqual([true, true]);
+    // how its lines write their time, with what a time looks like in it
+    const format = screen.getByRole('combobox', { name: 'How the lines write their time' });
+    await fireEvent.input(format, { target: { value: '[YYYY_MM_DD] HH:mm -' } });
+    expect((log as { time_format?: string }).time_format).toBe('[YYYY_MM_DD] HH:mm -');
+    expect(screen.getByText(/Lines start like/).textContent).toMatch(/\[\d{4}_\d{2}_\d{2}\] \d{2}:\d{2} -/);
+    await fireEvent.input(format, { target: { value: '' } });
+    expect((log as { time_format?: string }).time_format).toBeUndefined();
   });
 
   it('locks the box to one line high when ticked, for any role', async () => {

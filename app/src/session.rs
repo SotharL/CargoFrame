@@ -776,6 +776,7 @@ pub fn prepare_with(
     let mut variables = builtins.values.clone();
     let mut notes = captured.notes.clone();
     let mut added_files: Vec<String> = Vec::new();
+    let mut log_times = Vec::new();
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
         let mut report = run_rules(
             loaded.items.iter().map(|(id, r)| (id.as_str(), r)),
@@ -829,6 +830,19 @@ pub fn prepare_with(
             }
         }
         added_files = report.files;
+        // how the lines of the files they found write their time, for the log viewers
+        for (id, rule) in &loaded.items {
+            if rule.log_time.trim().is_empty() {
+                continue;
+            }
+            for file in report.found.get(id).into_iter().flatten() {
+                log_times.push(cargoframe_window::view::LogTimeView {
+                    file: file.clone(),
+                    format: rule.log_time.trim().to_string(),
+                    rule: rule.name.clone(),
+                });
+            }
+        }
     }
 
     // Where the Files blocks look. File paths are relative to the highest folder any of them
@@ -910,6 +924,7 @@ pub fn prepare_with(
     };
     let mut view = view::build(&inputs);
     view.captured_at_ms = unix_ms();
+    view.log_times = log_times;
     let png = captured
         .frame
         .to_png()
