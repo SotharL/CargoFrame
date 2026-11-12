@@ -270,5 +270,6 @@ function demoExtras(params: URLSearchParams) {
         { at_ms: 5_000, x: 500, y: 240 },
       ]
     : undefined;
-  return { ...(keys ? { keys } : {}), ...(follow ? { follow, crop: { x: 100, y: 80, w: 640, h: 400 } } : {}) };
+  // the clip ended a moment ago, so its time and the made-up log's are today's
+  return { started_at_ms: Date.now() - 9_500, ...(keys ? { keys } : {}), ...(follow ? { follow, crop: { x: 100, y: 80, w: 640, h: 400 } } : {}) };
 }

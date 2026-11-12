@@ -763,6 +763,7 @@ fn session_from_recording(
             duration_ms: trial.clip_ms,
             bytes: trial.clip_bytes,
             has_audio: trial.clip_audio,
+            ends_before_ms: trial.behind_ms,
         },
     )
     .map_err(|e| e.to_string())

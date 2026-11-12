@@ -1376,14 +1376,17 @@ pub struct ClipEdit {
     #[serde(default)]
     pub follow: bool,
     /// Show the keys pressed, with their top-left corner here on the picture as it is sent
-    /// (the pictures the window uploaded, see `set_clip_keys`).
+    /// (the pictures the window uploaded, see `set_clip_layer`).
     #[serde(default)]
-    pub keys: Option<KeysAt>,
+    pub keys: Option<TextAt>,
+    /// Show the time of each moment (the computer's clock), the same way.
+    #[serde(default)]
+    pub clock: Option<TextAt>,
 }
 
-/// Where the keys pressed go on a sent clip, in its pixels.
+/// Where a text laid over a sent clip goes (its top-left corner), in the clip's pixels.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
-pub struct KeysAt {
+pub struct TextAt {
     pub x: i32,
     pub y: i32,
 }
@@ -1395,8 +1398,9 @@ pub struct Layers<'a> {
     pub mark: Option<&'a Path>,
     /// Where the crop goes, when it follows a window that was moved.
     pub follow: &'a [cargoframe_window::view::PlaceView],
-    /// The concat list of the keys' pictures (see `cargoframe_video::keys_list`).
-    pub keys: Option<&'a Path>,
+    /// The texts laid over the sent picture: the concat list of each one's pictures (see
+    /// `cargoframe_video::keys_list`), and where it goes.
+    pub texts: &'a [(PathBuf, TextAt)],
 }
 
 impl ClipEdit {
@@ -1405,6 +1409,7 @@ impl ClipEdit {
         self.crop.is_none()
             && !self.mark
             && self.keys.is_none()
+            && self.clock.is_none()
             && self.start_ms == 0
             && match self.end_ms {
                 None => true,
@@ -1461,21 +1466,22 @@ pub fn edit_clip(
     } else {
         Vec::new()
     };
-    let keys = match (edit.keys, layers.keys) {
-        (Some(at), Some(list)) => Some(cargoframe_video::KeysLayer {
-            list: list.to_path_buf(),
+    let texts = layers
+        .texts
+        .iter()
+        .map(|(list, at)| cargoframe_video::TextLayer {
+            list: list.clone(),
             x: at.x,
             y: at.y,
-        }),
-        _ => None,
-    };
+        })
+        .collect();
     let edit = Edit {
         start_ms: edit.start_ms,
         end_ms: edit.end_ms,
         crop,
         overlays,
         follow,
-        keys,
+        layers: texts,
     };
     let planned = plan(input, output, &edit, &info).map_err(|problems| {
         problems

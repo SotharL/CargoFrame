@@ -82,10 +82,19 @@ fn a_video_session_keeps_the_recording_in_its_own_folder_and_tells_the_window_ab
             duration_ms: 9_500,
             bytes: 18,
             has_audio: false,
+            ends_before_ms: 500,
         },
     )
     .unwrap();
 
+    // the capture is dated now, and the clip started its length (and the part not handed out
+    // yet) before
+    let now = crate::session::unix_ms();
+    assert!(s.view.captured_at_ms <= now && now - s.view.captured_at_ms < 60_000);
+    assert_eq!(
+        s.view.video.as_ref().unwrap().started_at_ms,
+        Some(s.view.captured_at_ms - 10_000)
+    );
     let clip = s.clip.clone().expect("the session has the recording");
     assert_eq!(clip.path.file_name().unwrap(), CLIP_NAME);
     assert_eq!(std::fs::read(&clip.path).unwrap(), b"not really a video");
@@ -99,6 +108,8 @@ fn a_video_session_keeps_the_recording_in_its_own_folder_and_tells_the_window_ab
     );
     let json = serde_json::to_value(&s.view).unwrap();
     assert_eq!(json["video"]["duration_ms"], 9_500);
+    assert!(json["video"]["started_at_ms"].as_u64().is_some());
+    assert!(json["captured_at_ms"].as_u64().unwrap() > 0);
     assert_eq!(json["layout"]["blocks"][0]["type"], "video");
 
     let folder = s.dir_path().unwrap();

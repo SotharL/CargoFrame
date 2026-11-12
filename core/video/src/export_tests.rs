@@ -561,7 +561,7 @@ fn the_keys_list_fills_the_gaps_with_the_blank_picture() {
 }
 
 #[test]
-fn the_keys_come_after_the_crop_on_the_sent_picture() {
+fn texts_come_after_the_crop_on_the_sent_picture_one_over_the_other() {
     let edit = Edit {
         crop: Some(Crop {
             x: 100,
@@ -569,11 +569,18 @@ fn the_keys_come_after_the_crop_on_the_sent_picture() {
             w: 160,
             h: 120,
         }),
-        keys: Some(crate::edit::KeysLayer {
-            list: "/w/keys.txt".into(),
-            x: 8,
-            y: 90,
-        }),
+        layers: vec![
+            crate::edit::TextLayer {
+                list: "/w/keys.txt".into(),
+                x: 8,
+                y: 90,
+            },
+            crate::edit::TextLayer {
+                list: "/w/clock.txt".into(),
+                x: 100,
+                y: 4,
+            },
+        ],
         overlays: vec![overlay("/w/mark.png", 0, 0, 0, 4_000)],
         ..Edit::default()
     };
@@ -587,11 +594,13 @@ fn the_keys_come_after_the_crop_on_the_sent_picture() {
     let a = strings(&p);
     let graph = after(&a, "-filter_complex");
     assert!(
-        graph.ends_with("[o0]crop=160:120:100:50[cropped];[cropped][2:v]overlay=x=8:y=90:format=auto:eof_action=pass[out]"),
+        graph.ends_with("[o0]crop=160:120:100:50[t0];[t0][2:v]overlay=x=8:y=90:format=auto:eof_action=pass[t1];[t1][3:v]overlay=x=100:y=4:format=auto:eof_action=pass[out]"),
         "{graph}"
     );
-    let i = a.iter().position(|x| x == "file:/w/keys.txt").unwrap();
-    assert_eq!(a[i - 5..i], ["-f", "concat", "-safe", "0", "-i"]);
+    for list in ["file:/w/keys.txt", "file:/w/clock.txt"] {
+        let i = a.iter().position(|x| x == list).unwrap();
+        assert_eq!(a[i - 5..i], ["-f", "concat", "-safe", "0", "-i"]);
+    }
 }
 
 #[test]
@@ -672,11 +681,11 @@ fn a_real_export_follows_the_moved_window_and_shows_the_keys_in_time() {
                 y: 0,
             },
         ],
-        keys: Some(crate::edit::KeysLayer {
+        layers: vec![crate::edit::TextLayer {
             list: p("keys.txt"),
             x: 10,
             y: 60,
-        }),
+        }],
         ..Edit::default()
     };
     let plan = plan(&p("in.mp4"), &p("out.mp4"), &edit, &info).unwrap();

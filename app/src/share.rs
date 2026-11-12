@@ -695,10 +695,12 @@ fn edited_recording(
     } else {
         None
     };
-    let keys = match edit.keys {
-        Some(_) => Some(keys_list(svc, session, clip, &edit)?),
-        None => None,
-    };
+    let mut texts = Vec::new();
+    for (name, at) in [("keys", edit.keys), ("clock", edit.clock)] {
+        if let Some(at) = at {
+            texts.push((layer_list(svc, session, name, clip, &edit)?, at));
+        }
+    }
     let follow = session
         .view
         .video
@@ -708,47 +710,46 @@ fn edited_recording(
     let layers = crate::video::Layers {
         mark: mark.as_deref(),
         follow,
-        keys: keys.as_deref(),
+        texts: &texts,
     };
     crate::video::edit_clip(&settings, &clip.path, &output, edit, layers)?;
     Ok(Some(output))
 }
 
-/// Write the pictures of the keys the window drew into the capture's folder, and the list
-/// ffmpeg plays them from. The window sends a see-through blank picture first, then one for
-/// each line of keys the capture holds, in order.
-fn keys_list(
+/// Write the pictures of a text the window drew over the recording (the keys pressed, the time)
+/// into the capture's folder, and the list ffmpeg plays them from, each for the time the window
+/// gave it (see `set_clip_layer`).
+fn layer_list(
     svc: &Services,
     session: &Session,
+    name: &str,
     clip: &crate::session::Clip,
     edit: &crate::video::ClipEdit,
 ) -> Result<PathBuf, String> {
-    let lines = session
-        .view
-        .video
-        .as_ref()
-        .map(|v| v.keys.as_slice())
-        .unwrap_or_default();
-    let pictures = session
-        .clip_keys()
-        .filter(|p| p.len() == lines.len() + 1)
-        .ok_or("The keys pressed were not drawn: try again")?;
-    let keep = |e: std::io::Error| format!("CargoFrame could not keep the keys pressed: {e}");
+    let what = if name == "clock" {
+        "the time"
+    } else {
+        "the keys pressed"
+    };
+    let layer = session
+        .clip_layer(name)
+        .ok_or_else(|| format!("The pictures of {what} were not drawn: try again"))?;
+    let keep = |e: std::io::Error| format!("CargoFrame could not keep {what}: {e}");
     let dir = session
-        .with_dir(svc.workspace, |d| d.path().join("keys"))
+        .with_dir(svc.workspace, |d| d.path().join(name))
         .map_err(keep)?;
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).map_err(keep)?;
     let blank = dir.join("blank.png");
-    fs::write(&blank, &pictures[0]).map_err(keep)?;
-    let mut shown = Vec::with_capacity(lines.len());
-    for (i, (line, png)) in lines.iter().zip(&pictures[1..]).enumerate() {
-        let path = dir.join(format!("k{i:04}.png"));
+    fs::write(&blank, &layer.blank).map_err(keep)?;
+    let mut shown = Vec::with_capacity(layer.lines.len());
+    for (i, ((from, to), png)) in layer.lines.iter().enumerate() {
+        let path = dir.join(format!("t{i:04}.png"));
         fs::write(&path, png).map_err(keep)?;
-        shown.push((path, line.from_ms, line.to_ms));
+        shown.push((path, *from, *to));
     }
     let end = edit.end_ms.unwrap_or(clip.duration_ms);
-    let list = dir.join("keys.txt");
+    let list = dir.join("list.txt");
     fs::write(
         &list,
         cargoframe_video::keys_list(&blank, &shown, edit.start_ms, end),

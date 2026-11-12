@@ -45,9 +45,8 @@ pub struct Session {
     /// For a recording: the mark the window drew on a see-through picture the size of the
     /// recording (a PNG), sent just before a share. `None` while there is no mark.
     clip_mark: Mutex<Option<Vec<u8>>>,
-    /// The pictures of the keys pressed the window drew for the recording: a see-through blank
-    /// one first, then one for each line of `view.video.keys`, all the same size.
-    clip_keys: Mutex<Option<Vec<Vec<u8>>>>,
+    /// The texts the window drew over the recording, by name (`keys`, `clock`).
+    clip_layers: Mutex<BTreeMap<String, ClipLayer>>,
     /// The folder the ticked files are read from, as worked out at capture time: the highest
     /// folder any Files block looks in (the project folder unless a block looks higher). Every
     /// file path the window shows is relative to it. Kept here so a share never trusts a folder
@@ -112,7 +111,7 @@ impl Session {
             clip: None,
             edited: Mutex::new(None),
             clip_mark: Mutex::new(None),
-            clip_keys: Mutex::new(None),
+            clip_layers: Mutex::new(BTreeMap::new()),
             files_root,
             dir: Mutex::new(None),
             added: Mutex::new(BTreeMap::new()),
@@ -229,6 +228,7 @@ impl Session {
             crop: None,
             follow: Vec::new(),
             keys: Vec::new(),
+            started_at_ms: None,
         });
         self.clip = Some(clip);
         self
@@ -336,16 +336,26 @@ impl Session {
         *self.clip_mark.lock().unwrap_or_else(|e| e.into_inner()) = png;
     }
 
-    pub fn set_clip_keys(&self, pictures: Option<Vec<Vec<u8>>>) {
-        *self.clip_keys.lock().unwrap_or_else(|e| e.into_inner()) = pictures;
+    /// Keep (or, with `None`, forget) a text the window drew over the recording.
+    pub fn set_clip_layer(&self, name: &str, layer: Option<ClipLayer>) {
+        let mut all = self.clip_layers.lock().unwrap_or_else(|e| e.into_inner());
+        match layer {
+            Some(l) => {
+                all.insert(name.to_string(), l);
+            }
+            None => {
+                all.remove(name);
+            }
+        }
     }
 
-    /// The pictures of the keys the window drew (the blank one first), if it sent them.
-    pub fn clip_keys(&self) -> Option<Vec<Vec<u8>>> {
-        self.clip_keys
+    /// A text the window drew over the recording, if it sent it.
+    pub fn clip_layer(&self, name: &str) -> Option<ClipLayer> {
+        self.clip_layers
             .lock()
             .unwrap_or_else(|e| e.into_inner())
-            .clone()
+            .get(name)
+            .cloned()
     }
 
     /// The mark the window drew for the recording, if there is one.
@@ -518,6 +528,24 @@ pub struct ClipInfo {
     pub duration_ms: u64,
     pub bytes: u64,
     pub has_audio: bool,
+    /// How long before the capture the clip ends: a continuous recording hands out only the
+    /// pieces it has finished.
+    pub ends_before_ms: u64,
+}
+
+/// A text the window drew over a recording: a see-through blank picture, and each line's
+/// picture with when it shows (on the clip's timeline), all the same size.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ClipLayer {
+    pub blank: Vec<u8>,
+    pub lines: Vec<((u64, u64), Vec<u8>)>,
+}
+
+/// Now, in milliseconds since 1970 (UTC).
+pub fn unix_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_millis() as u64)
 }
 
 /// A picture taken now, when a recording has just been stopped: what the program in focus is
@@ -554,14 +582,22 @@ pub fn prepare_video(
             ))
         })?
         .map_err(|e| PrepareError::Clip(format!("CargoFrame could not keep the recording: {e}")))?;
-    Ok(session.with_clip(Clip {
+    let started = session
+        .view
+        .captured_at_ms
+        .checked_sub(info.ends_before_ms + info.duration_ms);
+    let mut session = session.with_clip(Clip {
         path: moved,
         width: info.width,
         height: info.height,
         duration_ms: info.duration_ms,
         bytes: info.bytes,
         has_audio: info.has_audio,
-    }))
+    });
+    if let Some(v) = session.view.video.as_mut() {
+        v.started_at_ms = started;
+    }
+    Ok(session)
 }
 
 /// Move a file: a rename where it can be, a copy and a delete across drives.
@@ -872,7 +908,8 @@ pub fn prepare_with(
         local_folder: save_folder.as_deref(),
         scan: &scan,
     };
-    let view = view::build(&inputs);
+    let mut view = view::build(&inputs);
+    view.captured_at_ms = unix_ms();
     let png = captured
         .frame
         .to_png()

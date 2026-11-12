@@ -73,7 +73,7 @@ fn main() {
             "add_files",
             "read_offered_file",
             "set_clip_mark",
-            "set_clip_keys",
+            "set_clip_layer",
             "share",
             "open_link",
         ]),

@@ -49,6 +49,16 @@ describe('VideoOptions', () => {
     expect(seen.now.keys).toBeUndefined();
   });
 
+  it('starts with the time shown on the recording only when asked', async () => {
+    const seen = open(fresh());
+    const box = screen.getByRole('switch', { name: 'Show the time on the recording' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    await fireEvent.click(box);
+    expect(seen.now.clock).toBe(true);
+    await fireEvent.click(box);
+    expect(seen.now.clock).toBeUndefined();
+  });
+
   it('records the window in focus when asked, and says what happens when it cannot be found', async () => {
     const seen = open(fresh());
     await fireEvent.change(select('Record'), { target: { value: 'focused_window' } });

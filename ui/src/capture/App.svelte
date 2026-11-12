@@ -193,7 +193,11 @@
       await api.setEditedImage(view.session_id, paired ? (still && !stillIsPoster ? (edited ?? still) : edited) : edited);
       // The mark on a recording is drawn here too; the backend lays it over the recording.
       if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
-      if (view.video) await api.setClipKeys(view.session_id, clipEdit?.keys && clip ? await clip.exportKeys() : null);
+      if (view.video) {
+        const layers = clip && (clipEdit?.keys || clipEdit?.clock) ? await clip.exportLayers() : null;
+        await api.setClipLayer(view.session_id, 'keys', clipEdit?.keys ? (layers?.keys ?? null) : null);
+        await api.setClipLayer(view.session_id, 'clock', clipEdit?.clock ? (layers?.clock ?? null) : null);
+      }
       const chat = chatToOpen(view, button, values);
       result = await api.share(request);
       if (result.status === 'sent' || result.status === 'saved_locally') {
@@ -282,7 +286,7 @@
                 <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />
               {:else if b.type === 'video'}
                 {#if view.video}
-                  {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} onshot={paired ? takeShot : undefined} />{/key}
+                  {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} clockShown={b.clock === true} onshot={paired ? takeShot : undefined} />{/key}
                 {:else}
                   <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
                 {/if}

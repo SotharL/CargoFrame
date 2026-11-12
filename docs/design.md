@@ -205,6 +205,12 @@ close together make one line ("hello ⏎", "Ctrl+S") shown from each press until
 them over the clip where the person drags them, and the share lays them over the sent picture at the same times
 (black letters, white outline). Not on Wayland, which does not show other programs' keys.
 
+**The time** of each moment, on the computer's clock (2026-11-12 14:03:27), can be shown over a recording (*Time*
+under it, or from the start when the Video block says), moved and taken off like the keys, and is sent the same way.
+A **Log viewer** reads the time each line was written and can keep the lines written during the recording (a few
+seconds either side), around a screenshot, or between two times; times without a zone are the computer's, or UTC when
+the block says (Unreal Engine's logs).
+
 **A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the whole
 screen is recorded and the window's place is noted ten times a second; the clip opens cropped to the window and the
 crop slides with it, in the window and in the sent clip. A crop set by hand stays put; *Follow window* follows again.
@@ -255,12 +261,12 @@ service are grouped under *Connect a service*, below the others.
 | Element | Behaviour |
 |---------|-----------|
 | **Screenshot** | Pen, square, circle, arrow, text (bold, italic, on a box; click a text to change it), crop; colour and size. *Read text*: drag over text on the picture, the lines found are marked; copy them all or click the ones to copy, or *Try again* to read it another way |
-| **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends*; the keys pressed (dragged where they go, × takes them off, *Keys* brings them back); *Follow window* when the window was moved |
+| **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends*; the keys pressed (dragged where they go, × takes them off, *Keys* brings them back); the time of each moment (*Time*); *Follow window* when the window was moved |
 | **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in. The box keeps at least one line; *One line high* keeps it at that |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
-| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown, *Open large* fills the window. Large files show their last 4 MB. Nothing of it is sent |
+| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown, *Open large* fills the window. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (UTC when the block says); both keep applying, and the button shows a dot while the other one is on. Nothing of it is sent |
 | **Sharing buttons** | Up to five, in the service's colour. Tick boxes in each block's top-right corner say which button sends it: dashed = cannot take it, ring = required. Hovering a button or a box rings what each block it sends holds (not the block's title) |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">

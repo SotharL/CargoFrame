@@ -753,6 +753,7 @@ fn a_recording_from_a_trigger_becomes_a_session_whose_clip_plays_back() {
             duration_ms: trial.clip_ms,
             bytes: trial.clip_bytes,
             has_audio: trial.clip_audio,
+            ends_before_ms: 0,
         },
     )
     .unwrap();

@@ -57,3 +57,18 @@ describe('keyLayer', () => {
     expect(keyPixels(100)).toBe(12);
   });
 });
+
+describe('the time over a recording', () => {
+  it('writes the local time the way logs do, one line per second of the clock', async () => {
+    const { clockLines, clockText } = await import('./keyLayer');
+    const started = new Date(2026, 10, 12, 23, 59, 58, 600).getTime();
+    expect(clockText(started)).toBe('2026-11-12 23:59:58');
+    const lines = clockLines(started, 2_000);
+    expect(lines.map((l) => [l.from_ms, l.to_ms, l.text])).toEqual([
+      [0, 400, '2026-11-12 23:59:58'],
+      [400, 1_400, '2026-11-12 23:59:59'],
+      [1_400, 2_000, '2026-11-13 00:00:00'],
+    ]);
+    expect(clockLines(started, 0)).toEqual([]);
+  });
+});

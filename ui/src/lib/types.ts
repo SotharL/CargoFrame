@@ -177,7 +177,7 @@ export interface AudioDevices {
 
 export type BlockContent =
   | { type: 'screenshot' }
-  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio; screenshot_at_end?: boolean; keys?: boolean }
+  | { type: 'video'; subject?: VideoSubject; audio?: VideoAudio; screenshot_at_end?: boolean; keys?: boolean; clock?: boolean }
   | {
       type: 'text';
       title: string;
@@ -228,6 +228,10 @@ export type BlockContent =
       title: string;
       /** The filter it starts with. */
       filter?: string;
+      /** The times written in the files are UTC (Unreal Engine's logs, by default). */
+      utc?: boolean;
+      /** Start on the lines written during the recording (or around the capture). */
+      during?: boolean;
     };
 
 /** The most tags a Tags block holds, and the longest a tag may be (core/layout MAX_TAGS). */
@@ -358,6 +362,9 @@ export interface VideoClipInfo {
   follow?: ClipPlace[];
   /** The keys pressed, each line with when it shows (the Video block asks for them). */
   keys?: KeyLine[];
+  /** When the clip starts on this computer's clock (ms since 1970): the time shown over it, and
+   *  the lines a log viewer keeps for "during the recording". */
+  started_at_ms?: number;
 }
 
 /** Where a following crop's corner is at a moment, in the recording's pixels. */
@@ -395,6 +402,8 @@ export interface SessionView {
   dropdowns: Record<string, DropdownState>;
   issues: IssueView[];
   sharing: Record<string, SharingView>;
+  /** When the capture was made (ms since 1970): a log viewer can keep the lines written around then. */
+  captured_at_ms?: number;
 }
 
 // ----- configuration items edited in Settings (mirror core/config, core/rules) -----
@@ -941,6 +950,8 @@ export interface ClipEdit {
   follow?: boolean;
   /** Show the keys pressed, their top-left corner here on the sent picture (the window uploads them). */
   keys?: { x: number; y: number } | null;
+  /** Show the time of each moment, the same way. */
+  clock?: { x: number; y: number } | null;
 }
 
 // ----- updates (Settings, General) -----

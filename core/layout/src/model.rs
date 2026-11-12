@@ -166,6 +166,13 @@ pub struct LogViewBlock {
     /// The filter it starts with (`error`); empty shows every line.
     #[serde(skip_serializing_if = "String::is_empty")]
     pub filter: String,
+    /// The times written in the files are UTC (Unreal Engine's logs, by default), not the
+    /// computer's own time. A time that says its zone is read as it says.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub utc: bool,
+    /// Start on the lines written during the recording (or around the capture).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub during: bool,
 }
 
 /// What a video trigger records, set in the layout the trigger opens.
@@ -184,6 +191,9 @@ pub struct VideoBlock {
     /// unless asked for. Wayland does not let a program see them.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub keys: bool,
+    /// Start with the time of each moment shown over the clip (the person can hide it).
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub clock: bool,
 }
 
 /// What a recording shows.
@@ -750,10 +760,12 @@ mod serde_tests {
                 },
                 screenshot_at_end: true,
                 keys: true,
+                clock: true,
             }),
         };
         let json = serde_json::to_value(&block).unwrap();
         assert_eq!(json["keys"], true);
+        assert_eq!(json["clock"], true);
         assert_eq!(json["type"], "video");
         assert_eq!(json["subject"], "focused_window");
         assert_eq!(json["screenshot_at_end"], true);

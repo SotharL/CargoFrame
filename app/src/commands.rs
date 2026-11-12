@@ -1077,50 +1077,89 @@ pub fn set_clip_mark(state: State<'_, AppState>, request: Request<'_>) -> Result
     Ok(())
 }
 
-/// The most bytes of key pictures one share may send (a few hundred small pictures).
-const MAX_KEYS_BYTES: usize = 64 * 1024 * 1024;
+/// The most bytes of pictures one text over a recording may send (a few hundred small ones).
+const MAX_LAYER_BYTES: usize = 64 * 1024 * 1024;
+/// The texts the window may lay over a recording.
+pub const CLIP_LAYERS: [&str; 2] = ["keys", "clock"];
 
-/// The pictures of the keys pressed the window drew over a recording, sent just before a share:
-/// each is a PNG after its length (four bytes, big-endian); a see-through blank one first, then
-/// one for each line of keys of the capture. An empty body clears them. Named by
+/// A text the window drew over a recording (`x-layer`: `keys` or `clock`), sent just before a
+/// share. The body is pieces, each after its length (four bytes, big-endian): first the times of
+/// the lines as JSON (`[[from_ms, to_ms], …]` on the clip's timeline, in order), then a
+/// see-through blank picture, then one picture for each line. An empty body forgets it. Named by
 /// `x-session-id` like the mark.
 #[tauri::command]
-pub fn set_clip_keys(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
+pub fn set_clip_layer(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
     let InvokeBody::Raw(bytes) = request.body() else {
         return Err("Expected pictures".into());
     };
-    let id: u64 = request
-        .headers()
-        .get("x-session-id")
-        .and_then(|v| v.to_str().ok())
+    let header = |name: &str| {
+        request
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_string)
+    };
+    let id: u64 = header("x-session-id")
         .and_then(|v| v.parse().ok())
         .ok_or("The capture is not named")?;
+    let name = header("x-layer")
+        .filter(|n| CLIP_LAYERS.contains(&n.as_str()))
+        .ok_or("Not a text that goes over a recording")?;
     let session = state
         .sessions
         .by_id(id)
         .ok_or("This capture is no longer open")?;
-    let lines = session
+    let duration = session
         .view
         .video
         .as_ref()
-        .map(|v| v.keys.len())
+        .map(|v| v.duration_ms)
         .ok_or("This capture has no recording")?;
     if bytes.is_empty() {
-        session.set_clip_keys(None);
+        session.set_clip_layer(&name, None);
         return Ok(());
     }
-    if bytes.len() > MAX_KEYS_BYTES {
-        return Err("The pictures of the keys are too large".into());
+    if bytes.len() > MAX_LAYER_BYTES {
+        return Err("The pictures of the text are too large".into());
     }
-    let pictures = split_frames(bytes)?;
-    if pictures.len() != lines + 1 {
-        return Err("The pictures of the keys do not match the keys pressed".into());
+    let layer = read_layer(bytes, duration)?;
+    session.set_clip_layer(&name, Some(layer));
+    Ok(())
+}
+
+/// The pieces of a text over a recording (see `set_clip_layer`), checked: times in order inside
+/// the clip, one PNG for each, and no more lines than a clip carries.
+pub fn read_layer(bytes: &[u8], duration_ms: u64) -> Result<crate::session::ClipLayer, String> {
+    let mut pieces = split_frames(bytes)?.into_iter();
+    let times: Vec<(u64, u64)> = pieces
+        .next()
+        .and_then(|j| serde_json::from_slice(&j).ok())
+        .ok_or("The times of the text are missing")?;
+    let blank = pieces
+        .next()
+        .ok_or("The pictures of the text are missing")?;
+    let pictures: Vec<Vec<u8>> = pieces.collect();
+    if pictures.len() != times.len() {
+        return Err("The pictures of the text do not match its times".into());
     }
+    if times.len() > cargoframe_keys::MAX_CAPTIONS {
+        return Err("The text has too many lines".into());
+    }
+    let ordered = times
+        .iter()
+        .all(|(a, b)| a < b && *b <= duration_ms + 1_000)
+        && times.windows(2).all(|w| w[0].1 <= w[1].0);
+    if !ordered {
+        return Err("The times of the text are out of order".into());
+    }
+    check_png(&blank)?;
     for p in &pictures {
         check_png(p)?;
     }
-    session.set_clip_keys(Some(pictures));
-    Ok(())
+    Ok(crate::session::ClipLayer {
+        blank,
+        lines: times.into_iter().zip(pictures).collect(),
+    })
 }
 
 /// Pieces each written after their length (four bytes, big-endian).
@@ -1477,7 +1516,51 @@ pub async fn set_update_token(app: AppHandle, value: String) -> Result<(), Strin
 
 #[cfg(test)]
 mod split_tests {
-    use super::split_frames;
+    use super::{read_layer, split_frames};
+
+    fn body(pieces: &[Vec<u8>]) -> Vec<u8> {
+        let mut b = Vec::new();
+        for p in pieces {
+            b.extend((p.len() as u32).to_be_bytes());
+            b.extend(p);
+        }
+        b
+    }
+
+    fn png() -> Vec<u8> {
+        cargoframe_capture::Frame::new(4, 2, vec![0; 4 * 2 * 4])
+            .unwrap()
+            .to_png()
+            .unwrap()
+    }
+
+    #[test]
+    fn a_text_over_a_recording_is_read_with_its_times_and_checked() {
+        let times = |t: &str| t.as_bytes().to_vec();
+        let ok = body(&[times("[[0,1000],[1000,1800]]"), png(), png(), png()]);
+        let layer = read_layer(&ok, 2_000).unwrap();
+        assert_eq!(
+            layer.lines.iter().map(|l| l.0).collect::<Vec<_>>(),
+            [(0, 1000), (1000, 1800)]
+        );
+        // one picture short, times out of order or past the clip, no times, not a picture
+        for (bad, why) in [
+            (
+                body(&[times("[[0,1000],[1000,1800]]"), png(), png()]),
+                "do not match",
+            ),
+            (
+                body(&[times("[[1000,1800],[0,1000]]"), png(), png(), png()]),
+                "out of order",
+            ),
+            (body(&[times("[[0,9000]]"), png(), png()]), "out of order"),
+            (body(&[b"nope".to_vec(), png()]), "missing"),
+            (body(&[times("[[0,10]]"), png(), b"not a png".to_vec()]), ""),
+        ] {
+            let e = read_layer(&bad, 2_000).unwrap_err();
+            assert!(e.contains(why), "{e}");
+        }
+    }
 
     #[test]
     fn pictures_are_read_one_after_the_other_and_a_short_body_is_refused() {

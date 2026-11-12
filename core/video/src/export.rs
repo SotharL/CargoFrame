@@ -10,8 +10,8 @@
 //!   moves a mark. Their times are on the output's own timeline once the start is cut.
 //! * A crop that follows a moving window slides from place to place: its corner is a sum of
 //!   ramps, one per move, which ffmpeg works out for each frame.
-//! * The keys pressed come last, on the picture as it is sent: one input of pictures, each
-//!   shown for its time (ffmpeg's concat reader, see [`keys_list`]).
+//! * Texts come last, on the picture as it is sent (the keys pressed, the time): one input of
+//!   pictures each, each shown for its time (ffmpeg's concat reader, see [`keys_list`]).
 //! * The result is H.264 in an MP4 with the index at the front (so it plays while it downloads).
 //!   The sound of the recording, if it has one, is kept as AAC and cut with the picture.
 
@@ -75,7 +75,7 @@ fn plan_resolved(input: &Path, output: &Path, r: &Resolved, clip: &Clip) -> Plan
     for o in &r.overlays {
         args.extend(["-i".into(), file_arg(&o.image)]);
     }
-    if let Some(k) = &r.keys {
+    for k in &r.layers {
         for a in ["-f", "concat", "-safe", "0", "-i"] {
             args.push(a.into());
         }
@@ -96,7 +96,7 @@ fn plan_resolved(input: &Path, output: &Path, r: &Resolved, clip: &Clip) -> Plan
         ));
         last = out;
     }
-    let cropped = if r.keys.is_some() { "cropped" } else { "out" };
+    let cropped = if r.layers.is_empty() { "out" } else { "t0" };
     match r.crop {
         Some(c) if !r.follow.is_empty() => graph.push_str(&format!(
             "[{last}]crop=w={}:h={}:x='{}':y='{}'[{cropped}]",
@@ -114,10 +114,15 @@ fn plan_resolved(input: &Path, output: &Path, r: &Resolved, clip: &Clip) -> Plan
             "[{last}]crop=trunc(iw/2)*2:trunc(ih/2)*2:0:0[{cropped}]"
         )),
     }
-    if let Some(k) = &r.keys {
+    for (i, k) in r.layers.iter().enumerate() {
+        let to = if i + 1 == r.layers.len() {
+            "out".to_string()
+        } else {
+            format!("t{}", i + 1)
+        };
         graph.push_str(&format!(
-            ";[cropped][{n}:v]overlay=x={x}:y={y}:format=auto:eof_action=pass[out]",
-            n = r.overlays.len() + 1,
+            ";[t{i}][{n}:v]overlay=x={x}:y={y}:format=auto:eof_action=pass[{to}]",
+            n = r.overlays.len() + 1 + i,
             x = k.x,
             y = k.y,
         ));

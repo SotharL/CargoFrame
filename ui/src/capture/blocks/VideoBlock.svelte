@@ -1,7 +1,13 @@
+<script lang="ts" module>
+  /** A text over the recording as the share uploads it: each line's time, and its pictures
+   *  (a blank one first, then one per line). */
+  export type DrawnLayer = { times: [number, number][]; pictures: Blob[] };
+</script>
+
 <script lang="ts">
   import { onDestroy, onMount, untrack } from 'svelte';
   import { getApi } from '../../lib/ipc';
-  import type { ClipEdit, VideoClipInfo } from '../../lib/types';
+  import type { ClipEdit, KeyLine, VideoClipInfo } from '../../lib/types';
   import { formatSize } from '../values';
   import TrimStrip from './TrimStrip.svelte';
   import CropBox from './CropBox.svelte';
@@ -12,7 +18,8 @@
   import { containRect } from './contain';
   import { drawMarks } from './drawMark';
   import { stepRate } from './player';
-  import { KEY_SIZE, KEY_START, drawKeys, lineAt, placeAt } from './keyLayer';
+  import { CLOCK_START, KEY_START, clockLines, drawKeys, lineAt, placeAt } from './keyLayer';
+  import TextOverlay from './TextOverlay.svelte';
 
   /**
    * `edit` is what the person chose: the part to keep and perhaps an area to crop to. It is
@@ -21,10 +28,13 @@
   let {
     info,
     edit = $bindable(null),
+    clockShown = false,
     onshot,
   }: {
     info: VideoClipInfo;
     edit?: ClipEdit | null;
+    /** The time shows over the clip from the start (the layout's Video block asks for it). */
+    clockShown?: boolean;
     /** Given when the layout has a screenshot block: the button takes the frame on screen for it. */
     onshot?: (frame: Blob) => void;
   } = $props();
@@ -78,9 +88,14 @@
   let keysOn = $state(hasKeys);
   let keysAt = $state({ ...KEY_START });
   const showKeys = $derived(keysOn && hasKeys);
+  /** The time of each moment, on this computer's clock, when the capture knows when it started. */
+  const clock = untrack(() => (info.started_at_ms ? clockLines(info.started_at_ms, info.duration_ms) : []));
+  const clockFirst = untrack(() => clock.length > 0 && clockShown);
+  let clockOn = $state(clockFirst);
+  let clockAt = $state({ ...CLOCK_START });
 
   const kept = $derived(Math.max(0, end - start));
-  const wholeClip = $derived(start <= 0 && end >= total && crop === null && !markOn && !showKeys);
+  const wholeClip = $derived(start <= 0 && end >= total && crop === null && !markOn && !showKeys && !clockOn);
   /** Nothing changed from how the window opened: Reset edits has nothing to do. */
   const pristine = $derived(
     start <= 0 &&
@@ -90,6 +105,9 @@
       keysOn === hasKeys &&
       keysAt.fx === KEY_START.fx &&
       keysAt.fy === KEY_START.fy &&
+      clockOn === clockFirst &&
+      clockAt.fx === CLOCK_START.fx &&
+      clockAt.fy === CLOCK_START.fy &&
       JSON.stringify(crop) === JSON.stringify(info.crop ?? null),
   );
 
@@ -107,6 +125,7 @@
           // said only when on, so a plain edit stays as it was
           ...(followOn && crop ? { follow: true } : {}),
           ...(showKeys ? { keys: { x: Math.round(keysAt.fx * sent.w), y: Math.round(keysAt.fy * sent.h) } } : {}),
+          ...(clockOn ? { clock: { x: Math.round(clockAt.fx * sent.w), y: Math.round(clockAt.fy * sent.h) } } : {}),
         };
   });
 
@@ -114,6 +133,7 @@
   const liveCrop = $derived<Box | null>(crop && followOn && info.follow ? { ...crop, ...placeAt(info.follow, now * 1000) } : crop);
   /** The line of keys showing now. */
   const keyLine = $derived(showKeys ? lineAt(info.keys, now * 1000) : null);
+  const clockLine = $derived(clockOn ? lineAt(clock, now * 1000) : null);
 
   // What is on screen: the whole picture while the crop box is being set, else the part that
   // will be sent. The picture is laid out so that part fills the space, and the rest is clipped.
@@ -167,43 +187,17 @@
     marks = clearAll();
     if (mode === 'mark') mode = 'none';
   }
-  /** The pictures of the keys the share uploads (a blank one, then one per line), or `null`. */
-  export async function exportKeys(): Promise<Blob[] | null> {
-    return showKeys && info.keys ? drawKeys(info.keys, sent.h) : null;
-  }
-
-  // Dragging the keys to where they show; they stay inside the picture.
-  let keysBox = $state<HTMLElement | null>(null);
-  let dragFrom: { x: number; y: number; fx: number; fy: number } | null = null;
-  function keysDown(e: PointerEvent) {
-    if (e.button !== 0 || (e.target as HTMLElement).closest('button')) return;
-    e.preventDefault();
-    (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-    dragFrom = { x: e.clientX, y: e.clientY, ...keysAt };
-  }
-  function keysMove(e: PointerEvent) {
-    if (!dragFrom || shown.w <= 0) return;
-    const box = keysBox?.getBoundingClientRect();
-    const maxX = Math.max(0, 1 - (box?.width ?? 0) / shown.w);
-    const maxY = Math.max(0, 1 - (box?.height ?? 0) / shown.h);
-    keysAt = {
-      fx: Math.min(maxX, Math.max(0, dragFrom.fx + (e.clientX - dragFrom.x) / shown.w)),
-      fy: Math.min(maxY, Math.max(0, dragFrom.fy + (e.clientY - dragFrom.y) / shown.h)),
+  /** The texts over the recording the share uploads, by name (each line's time, and its
+   *  pictures: a blank one first, then one per line); `null` for one not shown. */
+  export async function exportLayers(): Promise<{ keys: DrawnLayer | null; clock: DrawnLayer | null }> {
+    const drawn = async (lines: readonly KeyLine[]): Promise<DrawnLayer> => ({
+      times: lines.map((l) => [l.from_ms, l.to_ms]),
+      pictures: await drawKeys(lines, sent.h),
+    });
+    return {
+      keys: showKeys && info.keys ? await drawn(info.keys) : null,
+      clock: clockOn ? await drawn(clock) : null,
     };
-  }
-  const keysUp = () => (dragFrom = null);
-  function keysKey(e: KeyboardEvent) {
-    const step = e.shiftKey ? 0.05 : 0.01;
-    const moves: Record<string, [number, number]> = { ArrowLeft: [-step, 0], ArrowRight: [step, 0], ArrowUp: [0, -step], ArrowDown: [0, step] };
-    const m = moves[e.key];
-    if (e.key === 'Delete' || e.key === 'Backspace') {
-      e.preventDefault();
-      keysOn = false;
-    } else if (m) {
-      e.preventDefault();
-      e.stopPropagation();
-      keysAt = { fx: Math.min(0.97, Math.max(0, keysAt.fx + m[0])), fy: Math.min(0.95, Math.max(0, keysAt.fy + m[1])) };
-    }
   }
 
   /** The picture of the marks the share uploads, or `null` while there are none. */
@@ -348,6 +342,8 @@
     followOn = canFollow;
     keysOn = hasKeys;
     keysAt = { ...KEY_START };
+    clockOn = clockFirst;
+    clockAt = { ...CLOCK_START };
     marks = clearAll();
     mode = 'none';
   }
@@ -415,28 +411,10 @@
           {#if mode === 'crop'}<CropBox width={info.width} height={info.height} bind:crop />{/if}
         </div>
         {#if showKeys && mode !== 'crop'}
-          <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
-          <div
-            class="keys"
-            class:empty={!keyLine}
-            class:hot
-            bind:this={keysBox}
-            style:left="{keysAt.fx * shown.w}px"
-            style:top="{keysAt.fy * shown.h}px"
-            style:font-size="{Math.max(9, shown.h * KEY_SIZE)}px"
-            role="group"
-            tabindex="0"
-            aria-label="Keys pressed: drag, or use the arrow keys, to move them; Delete takes them off"
-            title="Drag to move the keys"
-            onpointerdown={keysDown}
-            onpointermove={keysMove}
-            onpointerup={keysUp}
-            onpointercancel={keysUp}
-            onkeydown={keysKey}
-          >
-            <span class="line">{keyLine?.text ?? 'Keys'}</span>
-            <button type="button" class="off" aria-label="Take the keys off the recording" title="Take the keys off" onclick={() => (keysOn = false)}>×</button>
-          </div>
+          <TextOverlay text={keyLine?.text ?? null} placeholder="Keys" name="the keys pressed" bind:at={keysAt} {shown} {hot} onremove={() => (keysOn = false)} />
+        {/if}
+        {#if clockOn && mode !== 'crop'}
+          <TextOverlay text={clockLine?.text ?? null} placeholder="Time" name="the time" bind:at={clockAt} {shown} {hot} onremove={() => (clockOn = false)} />
         {/if}
         {#if mode !== 'crop'}
           <PlayerControls
@@ -474,6 +452,9 @@
         </button>
         {#if hasKeys && mode === 'none'}
           <button type="button" class="small" aria-pressed={keysOn} title="The keys pressed while it recorded" onclick={() => (keysOn = !keysOn)}>Keys</button>
+        {/if}
+        {#if clock.length && mode === 'none'}
+          <button type="button" class="small" aria-pressed={clockOn} title="The time of each moment, on this computer's clock" onclick={() => (clockOn = !clockOn)}>Time</button>
         {/if}
         {#if canFollow && mode === 'none'}
           <button type="button" class="small" aria-pressed={followOn} title="The crop moves with the window as it was moved" onclick={toggleFollow}>Follow window</button>
@@ -519,7 +500,7 @@
           {#if wholeClip}
             {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
           {:else}
-            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{#if followOn}{' following the window'}{/if}{/if}{#if markOn}, marked{/if}{#if showKeys}, with the keys{/if}
+            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{#if followOn}{' following the window'}{/if}{/if}{#if markOn}, marked{/if}{#if showKeys}, with the keys{/if}{#if clockOn}, with the time{/if}
           {/if}
         </span>
       </div>
@@ -549,22 +530,4 @@
   .tool svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tool[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .tool.letter { font-family: Georgia, serif; }
-  /* black letters with a white outline, as the sent clip has them */
-  .keys {
-    position: absolute; display: inline-flex; align-items: center; gap: 0.35em; padding: 0.1em 0.25em; line-height: 1.4;
-    font-weight: 700; font-family: system-ui, 'Segoe UI', 'DejaVu Sans', sans-serif; color: #000; white-space: pre;
-    cursor: grab; touch-action: none; user-select: none; border-radius: 4px; border: 1px dashed transparent;
-    text-shadow: -0.08em -0.08em 0 #fff, 0.08em -0.08em 0 #fff, -0.08em 0.08em 0 #fff, 0.08em 0.08em 0 #fff,
-      0 -0.11em 0 #fff, 0 0.11em 0 #fff, -0.11em 0 0 #fff, 0.11em 0 0 #fff;
-  }
-  .keys:active { cursor: grabbing; }
-  .keys.hot, .keys:focus-visible { border-color: rgb(255 255 255 / 0.7); }
-  /* where they go, while no key shows: only when the mouse is over the picture */
-  .keys.empty .line { opacity: 0; }
-  .keys.empty.hot .line, .keys.empty:focus-visible .line { opacity: 0.45; }
-  .keys .off {
-    font: 600 12px/1 system-ui, sans-serif; padding: 1px 4px; border-radius: 999px; text-shadow: none; opacity: 0;
-    background: rgb(0 0 0 / 0.6); color: #fff; border: 0; cursor: pointer;
-  }
-  .keys.hot .off, .keys:focus-within .off { opacity: 1; }
 </style>

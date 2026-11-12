@@ -321,6 +321,16 @@
     <Field label="Start with this filter" hint="Only the lines with this text are shown at first (case aside), like error. Empty: every line.">
       <input type="text" value={block.filter ?? ''} oninput={(e) => (block.filter = e.currentTarget.value || undefined)} placeholder="error" />
     </Field>
+    <div class="toggles">
+      <Toggle label="Start on the lines written during the recording" checked={block.during === true} onchange={(v) => (block.during = v || undefined)} />
+      <p class="quiet hint">
+        Lines that start with a time (2026-11-12 14:03:27, [2026.11.12-14.03.27:123], 14:03:27…) are kept when written
+        during the recording, a few seconds either side, or in the minute before a screenshot. The person can show them all
+        again, or pick two times.
+      </p>
+      <Toggle label="The times in the files are UTC" checked={block.utc === true} onchange={(v) => (block.utc = v || undefined)} />
+      <p class="quiet hint">For logs that write UTC rather than this computer's time (Unreal Engine's, by default). A time that says its zone is read as it says.</p>
+    </div>
     <p class="quiet hint">
       Shows a file of the window's Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the
       lines shown. Nothing of it is sent.

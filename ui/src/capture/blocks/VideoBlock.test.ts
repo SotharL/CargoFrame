@@ -107,7 +107,7 @@ describe('VideoBlock', () => {
         });
         return { video, last: () => seen[seen.length - 1] };
       }
-      const keysBox = () => screen.getByRole('group', { name: /Keys pressed/ });
+      const keysBox = () => screen.getByRole('group', { name: /keys pressed over the recording/i });
 
       it('shows each line of keys at its time, near the bottom-left corner, and sends them', async () => {
         const { video, last } = await open({ keys });
@@ -130,9 +130,9 @@ describe('VideoBlock', () => {
         await fireEvent.keyDown(keysBox(), { key: 'ArrowUp', shiftKey: true });
         await fireEvent.keyDown(keysBox(), { key: 'ArrowRight' });
         expect(last()?.keys).toEqual({ x: 51, y: 569 });
-        await fireEvent.click(screen.getByRole('button', { name: 'Take the keys off the recording' }));
+        await fireEvent.click(screen.getByRole('button', { name: 'Take the keys pressed off the recording' }));
         expect(last()).toBeNull();
-        expect(screen.queryByRole('group', { name: /Keys pressed/ })).toBeNull();
+        expect(screen.queryByRole('group', { name: /keys pressed over the recording/i })).toBeNull();
         const button = screen.getByRole('button', { name: 'Keys' });
         expect(button.getAttribute('aria-pressed')).toBe('false');
         await fireEvent.click(button);
@@ -141,6 +141,41 @@ describe('VideoBlock', () => {
         await fireEvent.click(screen.getByRole('button', { name: 'Reset edits' }));
         expect(last()?.keys).toEqual({ x: 38, y: 605 });
         expect((screen.getByRole('button', { name: 'Reset edits' }) as HTMLButtonElement).disabled).toBe(true);
+      });
+
+      it('shows the time of each moment when asked, and sends it where it is put', async () => {
+        // 14:03:27.500 local time on the 12th of November 2026
+        const started = new Date(2026, 10, 12, 14, 3, 27, 500).getTime();
+        const { video, last } = await open({ started_at_ms: started });
+        // hidden until asked for
+        expect(last()).toBeNull();
+        const time = screen.getByRole('button', { name: 'Time' });
+        expect(time.getAttribute('aria-pressed')).toBe('false');
+        await fireEvent.click(time);
+        // above the keys, near the bottom-left corner of the sent picture
+        expect(last()).toEqual({ start_ms: 0, end_ms: null, crop: null, mark: false, clock: { x: 38, y: 518 } });
+        expect(document.querySelector('.meta')?.textContent).toMatch(/with the time/);
+        const box = () => screen.getByRole('group', { name: /time over the recording/i });
+        expect(box().textContent).toContain('2026-11-12 14:03:27');
+        // a second later on the clip, half a second into the next one... and the one after
+        Object.defineProperty(video, 'currentTime', { value: 0.6, configurable: true });
+        await fireEvent.timeUpdate(video);
+        expect(box().textContent).toContain('14:03:28');
+        Object.defineProperty(video, 'currentTime', { value: 1.6, configurable: true });
+        await fireEvent.timeUpdate(video);
+        expect(box().textContent).toContain('14:03:29');
+        await fireEvent.click(screen.getByRole('button', { name: 'Take the time off the recording' }));
+        expect(last()).toBeNull();
+      });
+
+      it('starts with the time shown when the layout asks, and has no Time button without a start', async () => {
+        setApiForTests(memoryApi());
+        const seen: (ClipEdit | null)[] = [];
+        render(Harness, { info: { ...info, started_at_ms: 1_000 }, clockShown: true, onedit: (t: ClipEdit | null) => seen.push(t) });
+        await waitFor(() => expect(seen[seen.length - 1]?.clock).toEqual({ x: 38, y: 518 }));
+        cleanup();
+        await open({});
+        expect(screen.queryByRole('button', { name: 'Time' })).toBeNull();
       });
 
       it('has no keys button when no key was pressed', async () => {

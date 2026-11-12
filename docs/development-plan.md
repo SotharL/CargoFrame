@@ -178,7 +178,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes |
 | `settings/search.ts` | What the settings search finds: each setting's page, section title or `data-tour` name, and the words it is found by (checked against the pages' code by `search.test.ts`) |
-| `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files (＋ to add by hand), Tags, Log viewer (`logLines.ts`), Sharing |
+| `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`; texts over the clip: `TextOverlay.svelte`, `keyLayer.ts`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files (＋ to add by hand), Tags, Log viewer (`logLines.ts`, `logTimes.ts`), Sharing |
 | `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
 | `capture/*.ts` | Values, tick boxes, what each button will send, remembered choices |
 | `lib/` | `ipc.ts` (real and in-memory API), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links) |
@@ -205,6 +205,7 @@ flowchart LR
     P9b --> P10[10 · Company features]
     P10 --> P11[11 · Polish]
     P11 --> P12[12 · Tags, logs, continuous]
+    P12 --> P13[13 · Time]
 ```
 
 | Phase | Build | Done when |
@@ -222,6 +223,7 @@ flowchart LR
 | **10 · Company features** | Cargo feature per connector and `CF_SERVICES`; `cargoframe open`; system certificates and proxy | A build with only `jira` has no other service's code; a script fills a layout |
 | **11 · Polish (0.3.0)** | Recording sign (`indicator`) and focus following; tables and code blocks, pictures in the text; the values list; *Read text* (`ocr`); wider layouts | Each has unit and UI tests; the Windows parts compile on CI |
 | **12 · Tags, logs, continuous (0.4.0)** | Tags block and its fields per service; log viewer; files added by hand; values made from other values; continuous recording with hold-to-start; keys pressed over a recording; a recording that follows a moved window; settings search; Text blocks that keep one line | Each has unit and UI tests; a real continuous recording on a virtual screen hands out two clips; a real export shows the keys at their time and follows a moved window |
+| **13 · Time (0.4.1)** | The time over a recording; texts over a clip through one upload; log lines read by their time (during the recording, around the capture, between two times) | Each format of log time has a test; a share sends the keys and the time |
 
 ---
 
