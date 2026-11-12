@@ -174,7 +174,8 @@ typed while it records shows, passwords too; not on Wayland. **A window that is 
 it is moved* on (*Settings, Recording*), the whole screen is recorded and the clip stays on the window as it moves.
 **The time:** *Time* under a recording shows the time of each moment over it (2026-11-12 14:03:27), sent the same way;
 in a Log viewer, the clock button at the start of the search row turns it to a time search that keeps the lines written during the recording, or between
-two times.
+two times. Logs write their time in many ways: type the one yours uses in the format box (`[YYYY_MM_DD] HH:mm -`,
+`MM_DD_HH_mm_ss`), or let a data rule set it for the file it finds; the last one used for a file comes back next time.
 
 Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording

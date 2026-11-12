@@ -173,6 +173,10 @@ pub struct LogViewBlock {
     /// Start on the lines written during the recording (or around the capture).
     #[serde(skip_serializing_if = "std::ops::Not::not")]
     pub during: bool,
+    /// How the lines write their time (`[YYYY-MM-DD HH:mm:ss]`), when no data rule says it for the
+    /// file shown. Empty: the viewer finds the time by itself.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub time_format: String,
 }
 
 /// What a video trigger records, set in the layout the trigger opens.

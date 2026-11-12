@@ -1,5 +1,6 @@
 <script lang="ts">
   import Field from '../../lib/components/Field.svelte';
+  import TimeFormatField from '../../lib/components/TimeFormatField.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import LookInEditor from './LookInEditor.svelte';
   import TextAutomation from './TextAutomation.svelte';
@@ -330,6 +331,15 @@
       </p>
       <Toggle label="The times in the files are UTC" checked={block.utc === true} onchange={(v) => (block.utc = v || undefined)} />
       <p class="quiet hint">For logs that write UTC rather than this computer's time (Unreal Engine's, by default). A time that says its zone is read as it says.</p>
+    </div>
+    <div class="toggles">
+      <TimeFormatField
+        id={`time-format-${block.id}`}
+        label="How the lines write their time"
+        value={block.time_format ?? ''}
+        onchange={(v) => (block.time_format = v.trim() || undefined)}
+      />
+      <p class="quiet hint">For every file it shows, unless a data rule says it for that file (Data &amp; fields, Read from files).</p>
     </div>
     <p class="quiet hint">
       Shows a file of the window's Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the

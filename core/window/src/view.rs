@@ -192,6 +192,20 @@ pub struct SessionView {
     /// When the capture was made (milliseconds since 1970, UTC); a log viewer can show the lines
     /// written around then.
     pub captured_at_ms: u64,
+    /// How the lines of the files the data rules found write their time, so a log viewer showing
+    /// one of them searches by time with it.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub log_times: Vec<LogTimeView>,
+}
+
+/// A file a data rule found, and how its lines write their time.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct LogTimeView {
+    /// Relative to the project folder, with `/`.
+    pub file: String,
+    pub format: String,
+    /// The rule that says it.
+    pub rule: String,
 }
 
 /// The tags a Tags block starts with, from its own list and the capture's values.
@@ -362,6 +376,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
         issues: Vec::new(),
         sharing: BTreeMap::new(),
         captured_at_ms: 0,
+        log_times: Vec::new(),
     };
 
     let layout = match &inputs.layout {

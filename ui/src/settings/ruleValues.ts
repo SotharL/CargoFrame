@@ -38,7 +38,7 @@ export function keysOfOthers(rules: { id: string; item: Rule }[], except: string
 /** A rule with nothing in it. */
 export function blankRule(): Rule {
   return {
-    name: '', file: '', several: 'newest', add_to_files: false, values: [],
+    name: '', file: '', several: 'newest', add_to_files: false, values: [], log_time: '',
     format: 'json', query: '', multiple: 'first', separator: ', ', nth: 1, output: '', fallback: null, max_bytes: 1048576,
   };
 }

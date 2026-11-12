@@ -639,6 +639,66 @@ fn a_file_found_by_its_name_gives_its_values_and_is_ticked_in_the_files() {
 }
 
 #[test]
+fn a_rule_that_says_how_a_log_writes_its_time_tells_the_log_viewers() {
+    use cargoframe_rules::Rule;
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(Dirs::under(dir.path()));
+    let project = dir.path().join("Foo");
+    std::fs::create_dir_all(project.join("bin")).unwrap();
+    std::fs::create_dir_all(project.join("Saved/Logs")).unwrap();
+    std::fs::write(
+        project.join("Saved/Logs/Game.log"),
+        "[2026_11_12] 14:03 - up\n",
+    )
+    .unwrap();
+    // a rule that reads nothing: it only finds the file and says how its times are written
+    let rule = Rule {
+        name: "Game log".into(),
+        file: "Game.log".into(),
+        log_time: "[YYYY_MM_DD] HH:mm -".into(),
+        ..Rule::default()
+    };
+    store.save_item(Kind::Rules, "game", &rule).unwrap();
+    // a rule without a format adds nothing
+    store
+        .save_item(
+            Kind::Rules,
+            "other",
+            &Rule {
+                name: "Other".into(),
+                file: "Game.log".into(),
+                ..Rule::default()
+            },
+        )
+        .unwrap();
+    let exe = project.join("bin").join("Foo");
+    let s = prepare_with(
+        &store,
+        &no_connections(),
+        "t",
+        &Trigger::default(),
+        fake_capture(Some(&exe.display().to_string())),
+        NOW,
+        5,
+    )
+    .unwrap();
+    assert_eq!(
+        s.view.log_times,
+        vec![cargoframe_window::view::LogTimeView {
+            file: "Saved/Logs/Game.log".into(),
+            format: "[YYYY_MM_DD] HH:mm -".into(),
+            rule: "Game log".into(),
+        }]
+    );
+    // a rule that reads nothing is no failure to report
+    assert!(
+        s.view.notes.iter().all(|n| !n.contains("Game")),
+        "{:?}",
+        s.view.notes
+    );
+}
+
+#[test]
 fn no_program_means_no_project_and_files_say_why() {
     let dir = tempfile::tempdir().unwrap();
     let store = Store::new(Dirs::under(dir.path()));

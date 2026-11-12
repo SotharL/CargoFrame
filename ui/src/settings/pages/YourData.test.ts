@@ -74,7 +74,7 @@ describe('Your data', () => {
     open();
     await screen.findByText('2 dropdowns');
     await fireEvent.click(clearOf('Forget the remembered choices'));
-    expect(await screen.findByText(/The last choices of every dropdown are forgotten/)).toBeTruthy();
+    expect(await screen.findByText(/The last choices of every dropdown, and the log time formats used, are forgotten/)).toBeTruthy();
     expect(recentChoices('bug', 'where')).toEqual([]);
     expect(recentChoices('bug', deeperKey('where', 'C1'))).toEqual([]);
     expect(localStorage.getItem('something-else')).toBe('kept');

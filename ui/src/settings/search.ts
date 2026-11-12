@@ -35,7 +35,7 @@ export const FINDINGS: Finding[] = [
   },
   { page: 'layouts', title: 'Keys pressed on a recording (Video block)', words: 'keyboard keystrokes shortcuts typing overlay video block' },
   { page: 'layouts', title: 'Time on a recording (Video block)', words: 'clock timestamp date hour overlay video block' },
-  { page: 'layouts', title: 'Log lines by time (Log viewer block)', words: 'timestamp during recording utc between times filter log viewer' },
+  { page: 'layouts', title: 'Log lines by time (Log viewer block)', words: 'timestamp time format during recording utc between times filter log viewer' },
   { page: 'layouts', title: 'One line high (Text block)', words: 'text block height single line size' },
   { page: 'layouts', title: 'Formatting buttons (Text block)', words: 'bold italic code lists tables markdown text block' },
   { page: 'layouts', title: 'Tags block', words: 'labels hashtags tag container jira github' },
@@ -48,6 +48,7 @@ export const FINDINGS: Finding[] = [
   { page: 'triggers', title: 'Shortcuts on this desktop', target: 'triggers.desktop', words: 'wayland gnome sway hyprland kde desktop shortcuts' },
   // Data & fields
   { page: 'rules', title: 'Read from files', target: 'rules.add', arg: 'files', words: 'data rules values file version config log json xml ini yaml project folder read' },
+  { page: 'rules', title: 'Time format of a log', target: 'rules.log_time', arg: 'files', words: 'log viewer timestamp time format YYYY MM DD HH mm ss lines game log' },
   { page: 'rules', title: 'Values made from other values', target: 'rules.add', arg: 'files', words: 'combine combination build id conditions if found missing choice' },
   { page: 'rules', title: 'Fill fields', target: 'fields.add', arg: 'fields', words: 'jira labels priority component assignee field service fill mapping extra fields' },
   // Recording

@@ -1313,4 +1313,17 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   words). Times without a zone are the computer's own, or UTC when the block or the person says (Unreal Engine writes
   UTC by default). A file whose lines carry no time it can read says so and shows every line; nothing else is guessed
   (a day written 12/11/2026 could be either way round, so it is not read).
+- **Time formats the person writes.** Found by itself, the time missed logs that write it their own way, and logs
+  differ too much for any list of formats to be enough. So the time search has a box to write the format the way the
+  log does: `[YYYY-MM-DD HH:mm]`, `MM_DD_HH_mm_ss`, `[YYYY_MM_DD] HH:mm -`, `[#][YYYY.MM.DD-HH.mm.ss:SSS]` (`#` is any
+  number, a counter or a frame; `*` is anything). The letters are those of the usual date formats (`YYYY MM DD HH mm ss
+  SSS`, `MMM`, `hh` with `A`, `Z`, `X` for seconds since 1970); everything else is matched as written, a space matches
+  any run of spaces, and other lowercase letters are themselves, so a format reads like the line. Only the time needs
+  writing; what it leaves out is filled from the capture (the day, the year), and a line written to the minute covers
+  its whole minute. The box shows what a time looks like in the format as it is written, or what is wrong with it.
+- **Who sets the format.** In order: a data rule for the file it finds (*In a log viewer, its lines' time looks like*,
+  so "if Game.log is found, its times are `[YYYY_MM_DD] HH:mm -`" needs nothing from the person; such a rule may read
+  no value at all), the log viewer block, then the last format used for a file of that name, kept on this computer;
+  empty, the time is found by itself. The last five formats used are offered in the box, with common ones (Unreal
+  Engine, ISO, syslog). *Your data, Forget* forgets them with the other remembered choices.
 

@@ -33,7 +33,7 @@ describe('the time of a log line', () => {
   it('gives a line without a time the time of the line before, and keeps the lines of a span', () => {
     const lines = splitLines('starting\n14:00:01 a\n  more of a\n14:00:05 b\n14:00:09 c\n');
     const t = stamps(lines, day, false);
-    expect(t).toEqual([null, local(14, 0, 1), local(14, 0, 1), local(14, 0, 5), local(14, 0, 9)]);
+    expect(t.map((x) => x?.at ?? null)).toEqual([null, local(14, 0, 1), local(14, 0, 1), local(14, 0, 5), local(14, 0, 9)]);
     const kept = during(lines, t, { from: local(14, 0, 1), to: local(14, 0, 6) });
     expect(kept.map((l) => l.n)).toEqual([2, 3, 4]);
   });

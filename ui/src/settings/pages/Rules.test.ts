@@ -85,6 +85,23 @@ describe('Data from files: if a file is found, read values', () => {
     expect(saved.values).toEqual([]);
   });
 
+  it('can only say how a log writes its time, for the log viewers, with what a time looks like', async () => {
+    await openForm();
+    await type(screen.getByPlaceholderText('Machine config'), 'Game log');
+    await type(fileBox(), 'Game.log');
+    await fireEvent.click(screen.getByRole('button', { name: 'Remove this value' }));
+    const format = screen.getByRole('combobox', { name: "In a log viewer, its lines' time looks like" });
+    await type(format, '[YYYY_MM_DD] HH:mm -');
+    expect(screen.getByText(/Lines start like/).textContent).toMatch(/\[\d{4}_\d{2}_\d{2}\] \d{2}:\d{2} -/);
+    await fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(async () => expect((await api.listItems<Rule>('rule')).items.length).toBe(1));
+    const saved = (await api.listItems<Rule>('rule')).items[0]!.item;
+    expect(saved.log_time).toBe('[YYYY_MM_DD] HH:mm -');
+    expect(saved.values).toEqual([]);
+    // the list says it
+    expect(await screen.findByText(/read its lines' time as/)).toBeTruthy();
+  });
+
   it('gives two values two variables', async () => {
     await openForm();
     await type(nameBoxes()[0]!, 'GPU');

@@ -184,6 +184,11 @@ pub struct Rule {
     /// The values read from the file.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub values: Vec<ValueStep>,
+    /// How the lines of the file write their time (`[YYYY-MM-DD HH:mm:ss]`), so a log viewer that
+    /// shows it searches by time with it, with nothing for the person to set. Empty: the viewer
+    /// finds the time by itself.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub log_time: String,
     // ----- before 0.3.0 a rule read one value with a format and a query (`Find::Advanced`) -----
     pub format: Format,
     #[serde(skip_serializing_if = "String::is_empty")]
@@ -211,6 +216,7 @@ impl Default for Rule {
             several: Several::default(),
             add_to_files: false,
             values: Vec::new(),
+            log_time: String::new(),
             format: Format::default(),
             query: String::new(),
             multiple: Multiple::default(),
