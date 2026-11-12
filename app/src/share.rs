@@ -3359,17 +3359,17 @@ mod tests {
         assert_eq!(zip_text(&path, "files/run.log"), "LOGLINE");
 
         // a log viewer reads what the capture offers, and nothing else
-        let log = w.session.read_offered(&w.ws, "run.log").unwrap();
+        let log = w.session.read_offered("run.log").unwrap();
         assert_eq!((log.text.as_str(), log.cut), ("LOGLINE", false));
         assert_eq!(
             w.session
-                .read_offered(&w.ws, "added/notes.txt")
+                .read_offered("added/notes.txt")
                 .unwrap()
                 .text,
             "first\nsecond"
         );
-        assert!(w.session.read_offered(&w.ws, "../secret.txt").is_err());
-        assert!(w.session.read_offered(&w.ws, "missing.log").is_err());
+        assert!(w.session.read_offered("../secret.txt").is_err());
+        assert!(w.session.read_offered("missing.log").is_err());
     }
 
     #[test]

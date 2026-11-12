@@ -190,7 +190,7 @@ impl Session {
     /// The text of a file a Files block offers, for a log viewer: this capture's copy if it has
     /// one, else the file in the project; only its end when it is large. Never a file the
     /// capture did not offer.
-    pub fn read_offered(&self, workspace: &Workspace, path: &str) -> Result<LogText, String> {
+    pub fn read_offered(&self, path: &str) -> Result<LogText, String> {
         let offered = self.view.files.keys().any(|block| self.offers(block, path));
         if !offered {
             return Err("That file is not one this capture offers".into());

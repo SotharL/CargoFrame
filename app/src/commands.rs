@@ -1042,7 +1042,7 @@ pub async fn read_offered_file(
             .sessions
             .by_id(session_id)
             .ok_or("This capture is no longer open")?;
-        session.read_offered(&state.workspace, &path)
+        session.read_offered(&path)
     })
     .await?
 }
