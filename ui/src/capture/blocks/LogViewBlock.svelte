@@ -111,7 +111,7 @@
     mode = mode === 'text' ? 'time' : 'text';
     if (mode === 'time' && when === 'all' && moment) when = 'moment';
   }
-  /** The search not shown is on: the switch says so with a dot. */
+  /** The search not shown is on: the button says so with a dot. */
   const otherOn = $derived(mode === 'text' ? !!(timed && span) : query.trim() !== '');
 
   /** Between two times: it starts on the moment of the capture, or on the file's own first and last. */
@@ -177,20 +177,16 @@
     <button type="button" class="small" onclick={() => (large = !large)} aria-pressed={large}>{large ? 'Close' : 'Open large'}</button>
   </div>
   <div class="bar">
-    <!-- a switch: the knob sits on the side of the search shown, the other side shows the one it
-         switches to (the clock while the words are searched, the magnifier while the time is) -->
+    <!-- one button: its icon is the search it turns to (the clock while the words are searched,
+         the magnifier while the time is) -->
     <button
       type="button"
-      role="switch"
       class="mode"
-      class:time={mode === 'time'}
       class:other={otherOn}
-      aria-checked={mode === 'time'}
       onclick={switchMode}
-      aria-label="Search by time"
+      aria-label={mode === 'text' ? 'Search by time' : 'Search by text'}
       title={mode === 'text' ? 'Search by time' : 'Search by text'}
     >
-      <span class="knob" aria-hidden="true"></span>
       {#if mode === 'text'}
         <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 4v4.2l2.8 1.8" /></svg>
       {:else}
@@ -266,26 +262,12 @@
   .search { flex: 1; min-width: 0; font-size: 13px; }
   .bar select.when { flex: 0 1 auto; min-width: 0; }
   .none { font-size: 12px; white-space: nowrap; }
-  /* the switch: a track with a knob, the icon on the free side */
-  .mode {
-    position: relative; flex: none; width: 46px; height: 24px; padding: 0 6px; border-radius: 999px;
-    display: flex; align-items: center; justify-content: flex-end; cursor: pointer;
-    border: 1px solid var(--border-strong); background: var(--surface-2); color: var(--quiet);
-  }
-  .mode:hover { color: var(--text); }
-  .mode.time { justify-content: flex-start; background: color-mix(in srgb, var(--accent) 18%, var(--surface)); }
-  .mode .knob {
-    position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%;
-    background: var(--surface); box-shadow: 0 1px 2px rgb(0 0 0 / 0.3); transition: left 120ms;
-  }
-  .mode.time .knob { left: 24px; background: var(--accent); }
-  .mode svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; }
+  .mode { position: relative; flex: none; width: 28px; height: 26px; padding: 0; display: grid; place-items: center; }
+  .mode svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
   /* the search not shown is on */
   .mode.other::after {
-    content: ''; position: absolute; top: -2px; right: -2px; width: 7px; height: 7px; border-radius: 50%;
-    background: var(--accent); border: 1px solid var(--surface);
+    content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
   }
-  .mode.time.other::after { right: auto; left: -2px; }
   .time { font-size: 12.5px; padding: 1px 4px; }
   .utc { display: inline-flex; gap: 4px; align-items: center; font-size: 12px; margin-left: auto; white-space: nowrap; }
   .small { padding: 2px 8px; font-size: 12.5px; white-space: nowrap; }

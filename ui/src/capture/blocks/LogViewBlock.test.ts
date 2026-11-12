@@ -82,10 +82,11 @@ describe('LogViewBlock by time', () => {
     expect(within(list).getAllByRole('button')).toHaveLength(5);
     // one row: the text search, until the clock is asked for
     expect(screen.queryByRole('combobox', { name: 'Lines written' })).toBeNull();
-    const sw = screen.getByRole('switch', { name: 'Search by time' });
-    expect(sw.getAttribute('aria-checked')).toBe('false');
-    await fireEvent.click(sw);
-    expect(sw.getAttribute('aria-checked')).toBe('true');
+    // the button shows the clock: what it turns the row to
+    const button = screen.getByRole('button', { name: 'Search by time' });
+    await fireEvent.click(button);
+    // now it shows the magnifier, to come back to the words
+    expect(button.getAttribute('aria-label')).toBe('Search by text');
     expect(screen.queryByRole('searchbox')).toBeNull();
     const when = screen.getByRole('combobox', { name: 'Lines written' }) as HTMLSelectElement;
     expect([...when.options].map((o) => o.text)).toEqual(['Written any time', 'During the recording (12:00:13 to 12:00:27)', 'Written between…']);
@@ -94,10 +95,10 @@ describe('LogViewBlock by time', () => {
     await waitFor(() => expect(shownLines(list)).toEqual(['12:00:20 [error] crash', 'at Foo.bar']));
     expect(screen.getByText(/2 of 5 lines, written 12:00:13 to 12:00:27/)).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Copy 2 lines' })).toBeTruthy();
-    // back to the words: the time keeps applying, and the switch says so with a dot
-    await fireEvent.click(sw);
-    expect(sw.getAttribute('aria-checked')).toBe('false');
-    expect(sw.classList.contains('other')).toBe(true);
+    // back to the words: the time keeps applying, and the button says so with a dot
+    await fireEvent.click(button);
+    expect(button.getAttribute('aria-label')).toBe('Search by time');
+    expect(button.classList.contains('other')).toBe(true);
     await fireEvent.input(screen.getByRole('searchbox'), { target: { value: 'foo' } });
     await waitFor(() => expect(shownLines(list)).toEqual(['at Foo.bar']));
     expect(screen.getByText(/1 of 5 lines with “foo”, written 12:00:13/)).toBeTruthy();
@@ -106,7 +107,7 @@ describe('LogViewBlock by time', () => {
   it('keeps the lines between two times typed, starting on the recording', async () => {
     render(LogViewBlock, { block, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
     const list = await screen.findByRole('list', { name: 'Lines' });
-    await fireEvent.click(screen.getByRole('switch', { name: 'Search by time' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
     await fireEvent.change(screen.getByRole('combobox', { name: 'Lines written' }), { target: { value: 'between' } });
     const from = screen.getByLabelText('From') as HTMLInputElement;
     const to = screen.getByLabelText('To') as HTMLInputElement;
@@ -123,7 +124,7 @@ describe('LogViewBlock by time', () => {
     // asked to start on the recording, the row still starts on the text search; the time
     // search applies, and the clock says so
     expect(screen.getByRole('searchbox')).toBeTruthy();
-    const clock = screen.getByRole('switch', { name: 'Search by time' });
+    const clock = screen.getByRole('button', { name: 'Search by time' });
     expect(clock.classList.contains('other')).toBe(true);
     await fireEvent.click(clock);
     expect((screen.getByRole('combobox', { name: 'Lines written' }) as HTMLSelectElement).value).toBe('moment');
@@ -143,11 +144,10 @@ describe('LogViewBlock by time', () => {
     // the search bar comes first; the clock is there all the same, and says the file has no
     // times while every line shows
     expect(screen.getByRole('searchbox')).toBeTruthy();
-    const sw = screen.getByRole('switch', { name: 'Search by time' });
-    await fireEvent.click(sw);
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
     expect(screen.getByText('No times in this file')).toBeTruthy();
     expect(screen.getByText(/no times CargoFrame can read in this file/)).toBeTruthy();
-    await fireEvent.click(sw);
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by text' }));
     expect(screen.getByRole('searchbox')).toBeTruthy();
   });
 });
