@@ -20,6 +20,7 @@
     "allow-add-files",
     "allow-read-offered-file",
     "allow-set-clip-mark",
+    "allow-set-clip-keys",
     "allow-share",
     "allow-open-link",
     "allow-open-settings",

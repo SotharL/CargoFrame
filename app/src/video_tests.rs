@@ -816,9 +816,13 @@ fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
     let focus = |area: Area| Focus {
         area,
         program: Some(77),
+        window: Some(5),
     };
     let (wish, notes) = wish_for(Some(&window), &|| Some(focus(place)));
     assert_eq!(wish.area, Some(place));
+    // the window goes along, to follow it if it is moved; keys only when the block asks
+    assert_eq!(wish.window, Some(5));
+    assert!(!wish.keys);
     // the program is only passed on when its sound is asked for
     assert_eq!(wish.program, None);
     assert_eq!(wish.audio.unwrap().microphone, AudioChoice::Default);
@@ -839,7 +843,16 @@ fn a_layout_decides_whether_the_screen_or_the_window_in_focus_is_recorded() {
     };
     let (wish, notes) = wish_for(Some(&window), &|| Some(focus(stub)));
     assert_eq!(wish.area, None);
+    assert_eq!(
+        wish.window, None,
+        "no window is followed when the screen is recorded"
+    );
     assert!(notes[0].contains("too small"), "{notes:?}");
+    let keys = layout_with(VideoBlock {
+        keys: true,
+        ..VideoBlock::default()
+    });
+    assert!(wish_for(Some(&keys), &|| None).0.keys);
 }
 
 #[test]
@@ -861,6 +874,7 @@ fn a_layout_that_asks_for_one_programs_sound_gets_the_program_in_focus() {
     let focus = |program| Focus {
         area: place,
         program,
+        window: None,
     };
     // the screen is recorded, but the focus is still looked at: for the program
     let (wish, notes) = wish_for(Some(&one), &|| Some(focus(Some(4242))));

@@ -91,6 +91,14 @@
   <p class="quiet small">For a layout with a screenshot block too. Off, that block starts empty, and “Take screenshot” under the recording keeps the frame on screen.</p>
 </div>
 
+<div class="end" data-tour="layout.video-keys">
+  <Toggle label="Show the keys pressed on the recording" checked={block.keys === true} onchange={(v) => (block.keys = v || undefined)} />
+  <p class="quiet small">
+    Each key shows over the clip when it was pressed (“Ctrl+S”, “hello ⏎”), in black letters with a white outline; move it or take it off before sending.
+    Every key typed while it records shows, passwords too. Reading the keyboard costs a little, so it is off unless asked for. Wayland does not let a program see the keys.
+  </p>
+</div>
+
 {#if note}<p class="quiet small" role="note">{note}</p>{/if}
 
 <style>

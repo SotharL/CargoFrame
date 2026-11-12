@@ -179,6 +179,11 @@ pub struct VideoBlock {
     /// With a screenshot block in the same layout: start it filled with the picture taken when
     /// the recording stopped. Off, it starts empty and the person takes one from the recording.
     pub screenshot_at_end: bool,
+    /// Show the keys pressed during the recording over the clip, each when it was pressed
+    /// ("Ctrl+S", "hello ⏎"). Reading the keyboard while recording costs a little, so it is off
+    /// unless asked for. Wayland does not let a program see them.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub keys: bool,
 }
 
 /// What a recording shows.
@@ -274,6 +279,9 @@ pub struct TextBlock {
     /// can show them. A block that is not plain text never has them.
     #[serde(default = "yes", skip_serializing_if = "is_true")]
     pub formatting: bool,
+    /// The box is one line high, whatever the size of the block.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub one_line: bool,
 }
 
 /// Where a value for an info-type field comes from.
@@ -650,6 +658,7 @@ mod serde_tests {
                         role: TextRole::Prompt,
                         default_text: "Look at {{app.title}}".into(),
                         formatting: true,
+                        one_line: false,
                     }),
                 },
                 Block {
@@ -740,9 +749,11 @@ mod serde_tests {
                     ..VideoAudio::default()
                 },
                 screenshot_at_end: true,
+                keys: true,
             }),
         };
         let json = serde_json::to_value(&block).unwrap();
+        assert_eq!(json["keys"], true);
         assert_eq!(json["type"], "video");
         assert_eq!(json["subject"], "focused_window");
         assert_eq!(json["screenshot_at_end"], true);

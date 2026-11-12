@@ -178,6 +178,10 @@
         </p>
       </div>
     {/if}
+    <div class="toggles">
+      <Toggle label="One line high" checked={block.one_line === true} onchange={(v) => (block.one_line = v || undefined)} />
+      <p class="quiet hint">The box keeps the height of one line of text, however tall the block is or the window gets. A longer text scrolls in it.</p>
+    </div>
     <div class="auto-field">
       <span class="auto-title">Text automation</span>
       <TextAutomation bind:value={block.default_text} {variables} {rules} marks={textFormat.marks} services={textFormat.services} />

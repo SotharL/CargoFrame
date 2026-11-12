@@ -197,6 +197,8 @@ pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
     // the window in focus changes while it runs: the whole screen is recorded, and the window
     // the clip is about is chosen when it is handed out
     wish.area = None;
+    wish.window = None;
+    let wayland = video::Session::current().wayland;
     let started = state.recording.start_continuous(
         &settings,
         video::Os::current(),
@@ -208,6 +210,24 @@ pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
         Ok(s) => {
             tracing::info!(sound = s.sound, "continuous recording started");
             notes.extend(s.notes);
+            // any shortcut may open its layout during it: the keys are read if one shows them
+            let watch = crate::watch::Watch::begin(
+                app,
+                &settings.sign,
+                wayland,
+                crate::watch::Plan {
+                    area: None,
+                    keep_ms: Some(u64::from(settings.window_secs) * 1000),
+                    keys: any_layout_shows_keys(&state),
+                    places: if settings.follow_window {
+                        crate::watch::Places::Focused
+                    } else {
+                        crate::watch::Places::None
+                    },
+                },
+            );
+            notes.extend(watch.keys_problem().map(str::to_string));
+            state.set_watch(watch);
             let mut body = format!(
                 "Press a shortcut to open its window with the last {} seconds; the recording goes on. Hold it two seconds to stop.",
                 settings.window_secs
@@ -217,12 +237,6 @@ pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
                 body.push_str(n);
             }
             notify::info(app, "CargoFrame is recording continuously", &body);
-            state.set_watch(crate::watch::Watch::start_following(
-                app,
-                &settings.sign,
-                video::Session::current().wayland,
-                u64::from(settings.window_secs) * 1000,
-            ));
             tray::refresh_menu(app);
         }
         Err(e) => {
@@ -243,6 +257,24 @@ pub fn stop_continuous(app: &AppHandle) {
         "Continuous recording stopped",
         "Nothing more is recorded.",
     );
+}
+
+/// Does any layout's Video block show the keys pressed?
+fn any_layout_shows_keys(state: &AppState) -> bool {
+    state
+        .store
+        .load_all::<cargoframe_layout::Layout>(Kind::Layouts)
+        .map(|l| l.items.iter().any(|(_, l)| shows_keys(Some(l))))
+        .unwrap_or(false)
+}
+
+/// Does this layout's Video block show the keys pressed?
+fn shows_keys(layout: Option<&cargoframe_layout::Layout>) -> bool {
+    layout.is_some_and(|l| {
+        l.blocks
+            .iter()
+            .any(|b| matches!(&b.kind, cargoframe_layout::BlockKind::Video(v) if v.keys))
+    })
 }
 
 /// The recording settings, as they are used (numbers kept in their bounds).
@@ -455,6 +487,7 @@ fn focus() -> Option<video::Focus> {
             h: b.h,
         },
         program: app.pid,
+        window: Some(app.window),
     })
 }
 
@@ -464,8 +497,23 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     // the layout this trigger opens says what to record: the screen or the window in focus, and
     // which sounds go in
     let layout = layout_of(state, trigger_id);
-    let (wish, mut notes) = video::wish_for(layout.as_ref(), &focus);
+    let (mut wish, mut notes) = video::wish_for(layout.as_ref(), &focus);
     let window = wish.area.is_some();
+    let wayland = video::Session::current().wayland;
+    // the window is followed if it is moved: the whole screen is recorded, and the clip is
+    // cropped to where the window is, moment by moment
+    let outline = wish.area.map(|a| cargoframe_indicator::Rect {
+        x: a.x,
+        y: a.y,
+        w: a.w,
+        h: a.h,
+    });
+    let followed = wish
+        .window
+        .filter(|_| settings.follow_window && !wayland && window);
+    if followed.is_some() {
+        wish.area = None;
+    }
     let started = state.recording.start_for_trigger(
         &settings,
         video::Os::current(),
@@ -478,6 +526,20 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
         Ok(s) => {
             tracing::info!(window, sound = s.sound, "recording started by a trigger");
             notes.extend(s.notes);
+            let watch = crate::watch::Watch::begin(
+                app,
+                &settings.sign,
+                wayland,
+                crate::watch::Plan {
+                    area: outline,
+                    keep_ms: None,
+                    keys: wish.keys,
+                    places: followed
+                        .map_or(crate::watch::Places::None, crate::watch::Places::Window),
+                },
+            );
+            notes.extend(watch.keys_problem().map(str::to_string));
+            state.set_watch(watch);
             let what = format!(
                 "your {}{}",
                 if window { "window" } else { "screen" },
@@ -492,18 +554,6 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
                 body.push_str(n);
             }
             notify::info(app, &format!("CargoFrame is recording {what}"), &body);
-            let area = wish.area.map(|a| cargoframe_indicator::Rect {
-                x: a.x,
-                y: a.y,
-                w: a.w,
-                h: a.h,
-            });
-            state.set_watch(crate::watch::Watch::start(
-                app,
-                &settings.sign,
-                area,
-                video::Session::current().wayland,
-            ));
             tray::refresh_menu(app);
         }
         Err(e) => {
@@ -522,7 +572,17 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     let watched = state.take_watch().map(|w| w.finish());
     tray::refresh_menu(app);
     let keep_ms = keep_ms(state);
-    let made = session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms);
+    let span = watched
+        .as_ref()
+        .map(|w| crate::watch::Span::ending(w.ran_ms, trial.clip_ms));
+    // a window followed as it was moved: the places noted are all of it
+    let followed = watched
+        .as_ref()
+        .and_then(|w| w.places.first())
+        .map(|p| p.window);
+    let layout = layout_of(state, trigger_id);
+    let made = session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms)
+        .map(|s| with_watched(app, s, watched.as_ref(), span, layout.as_ref(), followed));
     state.end_capture();
     match made {
         Ok(s) => {
@@ -546,15 +606,15 @@ fn snapshot_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     let trial = state.recording.snapshot();
     let watched = state.peek_watch();
     let keep_ms = keep_ms(state);
+    // the clip ends where the last finished piece does, a little before now
+    let span = watched.as_ref().map(|w| {
+        crate::watch::Span::ending(w.ran_ms.saturating_sub(trial.behind_ms), trial.clip_ms)
+    });
+    let layout = layout_of(state, trigger_id);
     let made =
         session_from_recording(state, trigger_id, trial, watched.as_ref(), keep_ms).map(|s| {
-            crop_to_focus(
-                app,
-                s,
-                watched.as_ref(),
-                keep_ms,
-                &layout_of(state, trigger_id),
-            )
+            let (s, followed) = crop_to_focus(app, s, watched.as_ref(), keep_ms, layout.as_ref());
+            with_watched(app, s, watched.as_ref(), span, layout.as_ref(), followed)
         });
     state.end_capture();
     match made {
@@ -571,27 +631,27 @@ fn snapshot_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
 
 /// A continuous recording holds the whole screen. When the layout records the window in focus,
 /// the window starts cropped to the one in focus the longest in the clip, which the person can
-/// change or take away.
+/// change or take away. Gives back that window, to follow it if it was moved.
 fn crop_to_focus(
     app: &AppHandle,
     mut s: session::Session,
     watched: Option<&crate::watch::Watched>,
     keep_ms: u64,
-    layout: &Option<cargoframe_layout::Layout>,
-) -> session::Session {
-    let wants_window = layout.as_ref().is_some_and(|l| {
+    layout: Option<&cargoframe_layout::Layout>,
+) -> (session::Session, Option<u64>) {
+    let wants_window = layout.is_some_and(|l| {
         l.blocks.iter().any(|b| {
             matches!(&b.kind, cargoframe_layout::BlockKind::Video(v) if v.subject == cargoframe_layout::VideoSubject::FocusedWindow)
         })
     });
     let Some(video) = s.view.video.as_mut() else {
-        return s;
+        return (s, None);
     };
     if !wants_window {
-        return s;
+        return (s, None);
     }
     let Some((focused, _)) = watched.and_then(|w| crate::watch::longest(w, keep_ms)) else {
-        return s;
+        return (s, None);
     };
     let b = focused.bounds;
     let desktop = crate::watch::desktop_of(app);
@@ -605,6 +665,41 @@ fn crop_to_focus(
         desktop.as_ref(),
         (video.width, video.height),
     );
+    (s, Some(focused.window))
+}
+
+/// What was noted while it recorded, put on the clip: the keys pressed (when the layout shows
+/// them), and the crop that follows `followed` as it was moved (when its places were noted).
+fn with_watched(
+    app: &AppHandle,
+    mut s: session::Session,
+    watched: Option<&crate::watch::Watched>,
+    span: Option<crate::watch::Span>,
+    layout: Option<&cargoframe_layout::Layout>,
+    followed: Option<u64>,
+) -> session::Session {
+    let (Some(w), Some(span)) = (watched, span) else {
+        return s;
+    };
+    let Some(video) = s.view.video.as_mut() else {
+        return s;
+    };
+    if shows_keys(layout) {
+        video.keys = crate::watch::key_lines(&w.presses, span);
+    }
+    if let Some(window) = followed.filter(|_| !w.places.is_empty()) {
+        let desktop = crate::watch::desktop_of(app);
+        if let Some((crop, path)) = crate::watch::follow_path(
+            &w.places,
+            window,
+            span,
+            desktop.as_ref(),
+            (video.width, video.height),
+        ) {
+            video.crop = Some(crop);
+            video.follow = path;
+        }
+    }
     s
 }
 

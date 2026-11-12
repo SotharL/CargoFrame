@@ -706,6 +706,7 @@ mod tests {
             role,
             default_text: body.into(),
             formatting: true,
+            one_line: false,
         })
     }
 
@@ -991,6 +992,7 @@ mod tests {
                 role: TextRole::Plain,
                 default_text: String::new(),
                 formatting: true,
+                one_line: false,
             }),
         );
         assert!(validate(&layout(vec![list(Some("title")), title.clone()]), &reg).is_empty());

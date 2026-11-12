@@ -401,6 +401,10 @@ pub struct Wish {
     pub audio: Option<VideoAudio>,
     /// The program in focus (its process id), when the layout asks for that program's sound.
     pub program: Option<u32>,
+    /// The window recorded (with `area`), to follow it if it is moved.
+    pub window: Option<u64>,
+    /// Show the keys pressed over the clip.
+    pub keys: bool,
 }
 
 /// The window that has the focus when a shortcut is pressed.
@@ -409,6 +413,8 @@ pub struct Focus {
     pub area: Area,
     /// The program it belongs to, when the system says.
     pub program: Option<u32>,
+    /// The window itself (as `FocusedApp::window` names it), to follow it if it is moved.
+    pub window: Option<u64>,
 }
 
 /// What the layout a video trigger opens asks the recording to be. `focused` says which window
@@ -453,6 +459,8 @@ pub fn wish_for(
             area,
             audio: Some(block.audio),
             program: focus.and_then(|f| f.program).filter(|_| wants_program),
+            window: focus.and_then(|f| f.window).filter(|_| area.is_some()),
+            keys: block.keys,
         },
         notes,
     )
@@ -705,6 +713,10 @@ pub struct Trial {
     pub took_ms: u64,
     /// Where the clip is, to open and watch.
     pub clip: Option<String>,
+    /// How far the end of the clip is behind the moment it was asked for: a continuous
+    /// recording hands out only the pieces it has finished.
+    #[serde(skip)]
+    pub behind_ms: u64,
 }
 
 impl Trial {
@@ -721,6 +733,7 @@ impl Trial {
             clip_audio: false,
             took_ms: 0,
             clip: None,
+            behind_ms: 0,
         }
     }
 }
@@ -891,17 +904,19 @@ impl Recording {
             };
             let dir = a.work.join(format!("snapshot-{n}"));
             let _ = std::fs::remove_dir_all(&dir);
+            let ran = u64::try_from(a.recorder.elapsed().as_millis()).unwrap_or(u64::MAX);
             a.recorder.snapshot(&dir).map(|segments| {
+                let end = segments.last().map_or(ran, |s| s.end_ms);
                 (
                     segments,
                     dir,
                     a.found.clone(),
                     a.choice.clone(),
-                    a.keep_secs,
+                    ran.saturating_sub(end),
                 )
             })
         };
-        let (segments, dir, found, choice, _keep) = match taken {
+        let (segments, dir, found, choice, behind_ms) = match taken {
             Ok(t) => t,
             Err(e) => return Trial::failed(e.to_string(), None),
         };
@@ -937,6 +952,7 @@ impl Recording {
             clip_audio: info.has_audio,
             took_ms: 0,
             clip: Some(clip.display().to_string()),
+            behind_ms,
         }
     }
 
@@ -1338,13 +1354,14 @@ fn finish(active: Active) -> Trial {
         clip_audio: info.has_audio,
         took_ms,
         clip: Some(clip.display().to_string()),
+        behind_ms: 0,
     }
 }
 
 /// What the person did to a recording in the CargoFrame window: kept from `start_ms` to `end_ms`
 /// (`None` is to the end of the recording), and perhaps cropped to an area. Times are on the
 /// recording's own timeline, the crop is in the recording's pixels.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Deserialize)]
 pub struct ClipEdit {
     pub start_ms: u64,
     pub end_ms: Option<u64>,
@@ -1354,6 +1371,32 @@ pub struct ClipEdit {
     /// kept part, on the uncropped picture.
     #[serde(default)]
     pub mark: bool,
+    /// The crop follows the recorded window as it was moved (the places the capture noted);
+    /// off, it stays where `crop` is.
+    #[serde(default)]
+    pub follow: bool,
+    /// Show the keys pressed, with their top-left corner here on the picture as it is sent
+    /// (the pictures the window uploaded, see `set_clip_keys`).
+    #[serde(default)]
+    pub keys: Option<KeysAt>,
+}
+
+/// Where the keys pressed go on a sent clip, in its pixels.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
+pub struct KeysAt {
+    pub x: i32,
+    pub y: i32,
+}
+
+/// What is laid over a clip besides the edit itself.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Layers<'a> {
+    /// The mark the window drew, the size of the recording.
+    pub mark: Option<&'a Path>,
+    /// Where the crop goes, when it follows a window that was moved.
+    pub follow: &'a [cargoframe_window::view::PlaceView],
+    /// The concat list of the keys' pictures (see `cargoframe_video::keys_list`).
+    pub keys: Option<&'a Path>,
 }
 
 impl ClipEdit {
@@ -1361,6 +1404,7 @@ impl ClipEdit {
     pub fn changes_nothing(&self, duration_ms: u64) -> bool {
         self.crop.is_none()
             && !self.mark
+            && self.keys.is_none()
             && self.start_ms == 0
             && match self.end_ms {
                 None => true,
@@ -1376,7 +1420,7 @@ pub fn edit_clip(
     input: &Path,
     output: &Path,
     edit: ClipEdit,
-    mark: Option<&Path>,
+    layers: Layers<'_>,
 ) -> Result<Trial, String> {
     let found = find(video, program_beside_app().as_deref())?;
     let info = probe(&found.ffprobe, input)
@@ -1393,7 +1437,8 @@ pub fn edit_clip(
         }
     });
     // the mark is drawn the size of the picture, so it goes on the corner and shows all along
-    let overlays = mark
+    let overlays = layers
+        .mark
         .map(|image| Overlay {
             image: image.to_path_buf(),
             x: 0,
@@ -1403,11 +1448,34 @@ pub fn edit_clip(
         })
         .into_iter()
         .collect();
+    let follow = if edit.follow && crop.is_some() {
+        layers
+            .follow
+            .iter()
+            .map(|p| cargoframe_video::Placed {
+                at_ms: p.at_ms,
+                x: p.x,
+                y: p.y,
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let keys = match (edit.keys, layers.keys) {
+        (Some(at), Some(list)) => Some(cargoframe_video::KeysLayer {
+            list: list.to_path_buf(),
+            x: at.x,
+            y: at.y,
+        }),
+        _ => None,
+    };
     let edit = Edit {
         start_ms: edit.start_ms,
         end_ms: edit.end_ms,
         crop,
         overlays,
+        follow,
+        keys,
     };
     let planned = plan(input, output, &edit, &info).map_err(|problems| {
         problems
@@ -1435,6 +1503,7 @@ pub fn edit_clip(
         clip_audio: out.has_audio,
         took_ms: u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX),
         clip: Some(output.display().to_string()),
+        behind_ms: 0,
     })
 }
 

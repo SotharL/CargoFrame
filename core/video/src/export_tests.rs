@@ -1,5 +1,5 @@
 use super::*;
-use crate::edit::{Crop, Overlay};
+use crate::edit::{Crop, Overlay, Placed};
 use std::process::Command;
 
 const CLIP: Clip = Clip {
@@ -49,6 +49,7 @@ fn the_plan_cuts_before_the_input_and_lays_marks_in_the_cut_clips_time() {
             overlay("/tmp/a.png", 120, 70, 1500, 2500),
             overlay("/tmp/b.png", -4, 8, 0, 4000),
         ],
+        ..Edit::default()
     };
     let p = plan(
         Path::new("/rec/in.mp4"),
@@ -313,6 +314,7 @@ fn a_real_export_cuts_crops_and_shows_the_mark_only_while_it_should() {
             from_ms: 1500,
             to_ms: 2500,
         }],
+        ..Edit::default()
     };
     let p = plan(&clip, &out, &edit, &info).unwrap();
     run(&ffmpeg, &p, &|| false, Duration::from_secs(60)).unwrap();
@@ -509,4 +511,195 @@ fn a_failed_export_says_why_and_a_cancelled_or_slow_one_is_stopped() {
         "stopping took {:?}",
         started.elapsed()
     );
+}
+
+#[test]
+fn a_moving_crop_slides_from_place_to_place() {
+    let places = [
+        Placed {
+            at_ms: 1_000,
+            x: 10,
+            y: 20,
+        },
+        Placed {
+            at_ms: 1_500,
+            x: 110,
+            y: 20,
+        },
+        Placed {
+            at_ms: 1_500,
+            x: 120,
+            y: 40,
+        },
+    ];
+    // on the sent clip, which starts at 0.5 s of the recording
+    assert_eq!(
+        moving(&places, 500, |p| p.x),
+        "10+(100)*clip((t-(0.500))/0.500,0,1)+(10)*gte(t,1.000)"
+    );
+    assert_eq!(moving(&places, 500, |p| p.y), "20+(20)*gte(t,1.000)");
+}
+
+#[test]
+fn the_keys_list_fills_the_gaps_with_the_blank_picture() {
+    let blank = Path::new("/w/blank.png");
+    let shown = vec![
+        (PathBuf::from("/w/k0.png"), 500, 1_500),
+        (PathBuf::from("/w/it's.png"), 1_500, 2_000),
+        // after the end: left out
+        (PathBuf::from("/w/k2.png"), 5_000, 6_000),
+    ];
+    let list = keys_list(blank, &shown, 1_000, 3_000);
+    assert_eq!(
+        list,
+        "ffconcat version 1.0\n\
+         file 'file:/w/k0.png'\nduration 0.500\n\
+         file 'file:/w/it'\\''s.png'\nduration 0.500\n\
+         file 'file:/w/blank.png'\nduration 1.000\n\
+         file 'file:/w/blank.png'\n"
+    );
+}
+
+#[test]
+fn the_keys_come_after_the_crop_on_the_sent_picture() {
+    let edit = Edit {
+        crop: Some(Crop {
+            x: 100,
+            y: 50,
+            w: 160,
+            h: 120,
+        }),
+        keys: Some(crate::edit::KeysLayer {
+            list: "/w/keys.txt".into(),
+            x: 8,
+            y: 90,
+        }),
+        overlays: vec![overlay("/w/mark.png", 0, 0, 0, 4_000)],
+        ..Edit::default()
+    };
+    let p = plan(
+        Path::new("/w/in.mp4"),
+        Path::new("/w/out.mp4"),
+        &edit,
+        &CLIP,
+    )
+    .unwrap();
+    let a = strings(&p);
+    let graph = after(&a, "-filter_complex");
+    assert!(
+        graph.ends_with("[o0]crop=160:120:100:50[cropped];[cropped][2:v]overlay=x=8:y=90:format=auto:eof_action=pass[out]"),
+        "{graph}"
+    );
+    let i = a.iter().position(|x| x == "file:/w/keys.txt").unwrap();
+    assert_eq!(a[i - 5..i], ["-f", "concat", "-safe", "0", "-i"]);
+}
+
+#[test]
+fn a_real_export_follows_the_moved_window_and_shows_the_keys_in_time() {
+    let Some((ffmpeg, ffprobe)) = tools() else {
+        eprintln!("skipped: ffmpeg and ffprobe are not installed");
+        return;
+    };
+    let dir = tempfile::tempdir().unwrap();
+    let p = |n: &str| dir.path().join(n);
+    // a blue clip with a red square that jumps from (20,20) to (200,20) at 2 s
+    let made = make(
+        &ffmpeg,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=blue:s=320x240:r=15:d=4[b];color=c=red:s=40x40:r=15:d=4[r];[b][r]overlay=x='if(lt(t,2),20,200)':y=20",
+            "-pix_fmt",
+            "yuv420p",
+            p("in.mp4").to_str().unwrap(),
+        ],
+    ) && make(
+        &ffmpeg,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=black@0.0:s=60x20,format=rgba",
+            "-frames:v",
+            "1",
+            p("blank.png").to_str().unwrap(),
+        ],
+    ) && make(
+        &ffmpeg,
+        &[
+            "-f",
+            "lavfi",
+            "-i",
+            "color=c=0x00FF00:s=60x20,format=rgba",
+            "-frames:v",
+            "1",
+            p("key.png").to_str().unwrap(),
+        ],
+    );
+    if !made {
+        eprintln!("skipped: this ffmpeg cannot make test pictures");
+        return;
+    }
+    let info = probe(&ffprobe, &p("in.mp4")).unwrap();
+    std::fs::write(
+        p("keys.txt"),
+        keys_list(&p("blank.png"), &[(p("key.png"), 1_000, 2_000)], 0, 4_000),
+    )
+    .unwrap();
+    // an 80x80 crop on the square, which moves with it between 1.9 s and 2.0 s
+    let edit = Edit {
+        crop: Some(Crop {
+            x: 0,
+            y: 0,
+            w: 80,
+            h: 80,
+        }),
+        follow: vec![
+            Placed {
+                at_ms: 0,
+                x: 0,
+                y: 0,
+            },
+            Placed {
+                at_ms: 1_900,
+                x: 0,
+                y: 0,
+            },
+            Placed {
+                at_ms: 2_000,
+                x: 180,
+                y: 0,
+            },
+        ],
+        keys: Some(crate::edit::KeysLayer {
+            list: p("keys.txt"),
+            x: 10,
+            y: 60,
+        }),
+        ..Edit::default()
+    };
+    let plan = plan(&p("in.mp4"), &p("out.mp4"), &edit, &info).unwrap();
+    run(&ffmpeg, &plan, &|| false, Duration::from_secs(60)).unwrap();
+    let out = probe(&ffprobe, &p("out.mp4")).unwrap();
+    assert_eq!((out.width, out.height), (80, 80));
+    // the square is in the crop before and after it moved
+    for at in ["0.5", "3.0"] {
+        assert!(
+            is_red(pixel(&ffmpeg, &p("out.mp4"), at, 80, 40, 40)),
+            "the crop lost the window at {at} s"
+        );
+    }
+    // the key shows from 1 s to 2 s, at (10,60) on the sent picture
+    let green = |c: [u8; 3]| c[1] > 180 && c[0] < 90 && c[2] < 90;
+    assert!(
+        green(pixel(&ffmpeg, &p("out.mp4"), "1.5", 80, 20, 70)),
+        "no key at 1.5 s"
+    );
+    for at in ["0.5", "2.5"] {
+        assert!(
+            !green(pixel(&ffmpeg, &p("out.mp4"), at, 80, 20, 70)),
+            "a key at {at} s"
+        );
+    }
 }

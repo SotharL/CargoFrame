@@ -174,6 +174,7 @@ fn joining_needs_segments_and_quotes_every_name() {
         path: quirky,
         bytes: 1,
         length_ms: 1000,
+        end_ms: 0,
     }];
     let (list, args) = join(&segs, Path::new("/w/list.txt"), Path::new("/w/out.mp4")).unwrap();
     assert_eq!(
@@ -196,6 +197,7 @@ fn joining_needs_segments_and_quotes_every_name() {
         path: dir.path().join("a\nb.ts"),
         bytes: 1,
         length_ms: 1000,
+        end_ms: 0,
     }];
     assert_eq!(
         join(&newline, Path::new("l"), Path::new("o")).unwrap_err(),

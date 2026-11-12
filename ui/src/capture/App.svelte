@@ -193,6 +193,7 @@
       await api.setEditedImage(view.session_id, paired ? (still && !stillIsPoster ? (edited ?? still) : edited) : edited);
       // The mark on a recording is drawn here too; the backend lays it over the recording.
       if (view.video) await api.setClipMark(view.session_id, clipEdit?.mark && clip ? await clip.exportMark() : null);
+      if (view.video) await api.setClipKeys(view.session_id, clipEdit?.keys && clip ? await clip.exportKeys() : null);
       const chat = chatToOpen(view, button, values);
       result = await api.share(request);
       if (result.status === 'sent' || result.status === 'saved_locally') {

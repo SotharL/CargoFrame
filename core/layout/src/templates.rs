@@ -171,6 +171,7 @@ fn text(title: &str, role: TextRole, default_text: &str) -> BlockKind {
         role,
         default_text: default_text.to_string(),
         formatting: true,
+        one_line: false,
     })
 }
 

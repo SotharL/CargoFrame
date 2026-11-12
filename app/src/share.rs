@@ -695,8 +695,66 @@ fn edited_recording(
     } else {
         None
     };
-    crate::video::edit_clip(&settings, &clip.path, &output, edit, mark.as_deref())?;
+    let keys = match edit.keys {
+        Some(_) => Some(keys_list(svc, session, clip, &edit)?),
+        None => None,
+    };
+    let follow = session
+        .view
+        .video
+        .as_ref()
+        .map(|v| v.follow.as_slice())
+        .unwrap_or_default();
+    let layers = crate::video::Layers {
+        mark: mark.as_deref(),
+        follow,
+        keys: keys.as_deref(),
+    };
+    crate::video::edit_clip(&settings, &clip.path, &output, edit, layers)?;
     Ok(Some(output))
+}
+
+/// Write the pictures of the keys the window drew into the capture's folder, and the list
+/// ffmpeg plays them from. The window sends a see-through blank picture first, then one for
+/// each line of keys the capture holds, in order.
+fn keys_list(
+    svc: &Services,
+    session: &Session,
+    clip: &crate::session::Clip,
+    edit: &crate::video::ClipEdit,
+) -> Result<PathBuf, String> {
+    let lines = session
+        .view
+        .video
+        .as_ref()
+        .map(|v| v.keys.as_slice())
+        .unwrap_or_default();
+    let pictures = session
+        .clip_keys()
+        .filter(|p| p.len() == lines.len() + 1)
+        .ok_or("The keys pressed were not drawn: try again")?;
+    let keep = |e: std::io::Error| format!("CargoFrame could not keep the keys pressed: {e}");
+    let dir = session
+        .with_dir(svc.workspace, |d| d.path().join("keys"))
+        .map_err(keep)?;
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).map_err(keep)?;
+    let blank = dir.join("blank.png");
+    fs::write(&blank, &pictures[0]).map_err(keep)?;
+    let mut shown = Vec::with_capacity(lines.len());
+    for (i, (line, png)) in lines.iter().zip(&pictures[1..]).enumerate() {
+        let path = dir.join(format!("k{i:04}.png"));
+        fs::write(&path, png).map_err(keep)?;
+        shown.push((path, line.from_ms, line.to_ms));
+    }
+    let end = edit.end_ms.unwrap_or(clip.duration_ms);
+    let list = dir.join("keys.txt");
+    fs::write(
+        &list,
+        cargoframe_video::keys_list(&blank, &shown, edit.start_ms, end),
+    )
+    .map_err(keep)?;
+    Ok(list)
 }
 
 /// The recording of a video capture as the attachment a connector sends, or why it cannot go to

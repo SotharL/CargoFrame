@@ -15,6 +15,8 @@ pub const MAX_OVERLAYS: usize = 50;
 pub const MIN_CLIP_MS: u64 = 500;
 /// The smallest crop, in pixels, on each side.
 pub const MIN_CROP: u32 = 16;
+/// The most places a moving crop goes through.
+pub const MAX_PLACES: usize = 400;
 
 /// The recorded clip, as ffprobe describes it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -48,6 +50,26 @@ pub struct Overlay {
     pub to_ms: u64,
 }
 
+/// Where the crop's top-left corner is at a moment, when it follows a window that moves. Between
+/// two places it slides from one to the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Placed {
+    /// On the uncut clip's timeline.
+    pub at_ms: u64,
+    pub x: u32,
+    pub y: u32,
+}
+
+/// The keys pressed, laid over the clip as it is sent (after the crop): a list of pictures for
+/// ffmpeg's concat reader (see [`crate::export::keys_list`]), all the same size, and where their
+/// top-left corner goes on the sent picture.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct KeysLayer {
+    pub list: PathBuf,
+    pub x: i32,
+    pub y: i32,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Edit {
@@ -57,18 +79,32 @@ pub struct Edit {
     pub end_ms: Option<u64>,
     pub crop: Option<Crop>,
     pub overlays: Vec<Overlay>,
+    /// With a crop: where it is over time, so it follows a window that was moved. Its size stays
+    /// the crop's; the crop's own corner is where it starts.
+    pub follow: Vec<Placed>,
+    pub keys: Option<KeysLayer>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Problem {
     EmptyClip,
-    EndAfterClip { end_ms: u64, duration_ms: u64 },
-    TooShort { length_ms: u64 },
-    CropTooSmall { w: u32, h: u32 },
+    EndAfterClip {
+        end_ms: u64,
+        duration_ms: u64,
+    },
+    TooShort {
+        length_ms: u64,
+    },
+    CropTooSmall {
+        w: u32,
+        h: u32,
+    },
     CropOutside,
     TooManyOverlays(usize),
     OverlayWithoutImage(usize),
     OverlayEndsBeforeItStarts(usize),
+    /// The places a crop follows are out of order, too many, or come without a crop.
+    BadFollow,
 }
 
 impl fmt::Display for Problem {
@@ -105,6 +141,7 @@ impl fmt::Display for Problem {
             Problem::OverlayEndsBeforeItStarts(i) => {
                 write!(f, "Mark {} ends before it starts", i + 1)
             }
+            Problem::BadFollow => write!(f, "The crop cannot follow the window as it moved"),
         }
     }
 }
@@ -130,6 +167,9 @@ pub struct Resolved {
     pub overlays: Vec<Overlay>,
     /// Marks left out because they only show in the part that was cut.
     pub dropped_overlays: usize,
+    /// Where the crop goes over time (even, inside the picture); empty when it stays put.
+    pub follow: Vec<Placed>,
+    pub keys: Option<KeysLayer>,
 }
 
 impl Resolved {
@@ -209,6 +249,38 @@ pub fn resolve(edit: &Edit, clip: &Clip) -> Result<Resolved, Vec<Problem>> {
         });
     }
 
+    let mut follow = Vec::new();
+    if !edit.follow.is_empty() {
+        let ordered = edit.follow.windows(2).all(|w| w[0].at_ms <= w[1].at_ms);
+        match (crop, edit.crop) {
+            (_, None) => problems.push(Problem::BadFollow),
+            _ if !ordered || edit.follow.len() > MAX_PLACES => problems.push(Problem::BadFollow),
+            (c, Some(asked)) => {
+                // the size is the crop's (or the whole picture's, when it covers all of it)
+                let (w, h) = c.map_or((clip.width & !1, clip.height & !1), |c| (c.w, c.h));
+                let (max_x, max_y) = (clip.width.saturating_sub(w), clip.height.saturating_sub(h));
+                let moves = edit
+                    .follow
+                    .iter()
+                    .any(|p| (p.x & !1, p.y & !1) != (asked.x & !1, asked.y & !1));
+                if moves {
+                    follow = edit
+                        .follow
+                        .iter()
+                        .map(|p| Placed {
+                            at_ms: p.at_ms,
+                            x: p.x.min(max_x) & !1,
+                            y: p.y.min(max_y) & !1,
+                        })
+                        .collect();
+                    if crop.is_none() {
+                        crop = Some(Crop { x: 0, y: 0, w, h });
+                    }
+                }
+            }
+        }
+    }
+
     if problems.is_empty() {
         Ok(Resolved {
             start_ms,
@@ -216,6 +288,8 @@ pub fn resolve(edit: &Edit, clip: &Clip) -> Result<Resolved, Vec<Problem>> {
             crop,
             overlays,
             dropped_overlays: dropped,
+            follow,
+            keys: edit.keys.clone(),
         })
     } else {
         Err(problems)
@@ -379,6 +453,41 @@ mod tests {
     }
 
     #[test]
+    fn a_following_crop_is_kept_inside_the_picture_and_needs_a_crop() {
+        let place = |at_ms, x, y| Placed { at_ms, x, y };
+        let edit = Edit {
+            crop: Some(Crop {
+                x: 100,
+                y: 100,
+                w: 640,
+                h: 360,
+            }),
+            follow: vec![place(0, 100, 100), place(1_000, 1_301, 9_999)],
+            ..Edit::default()
+        };
+        let r = resolve(&edit, &CLIP).unwrap();
+        // the size stays; the corner is even and cannot go past the picture
+        assert_eq!(r.follow, vec![place(0, 100, 100), place(1_000, 1_280, 720)]);
+        // a window that never moved needs nothing more than its crop
+        let still = Edit {
+            follow: vec![place(0, 101, 100), place(1_000, 100, 101)],
+            ..edit.clone()
+        };
+        assert!(resolve(&still, &CLIP).unwrap().follow.is_empty());
+        // out of order, or without a crop
+        let backwards = Edit {
+            follow: vec![place(1_000, 0, 0), place(0, 10, 10)],
+            ..edit.clone()
+        };
+        assert_eq!(
+            resolve(&backwards, &CLIP).unwrap_err(),
+            [Problem::BadFollow]
+        );
+        let no_crop = Edit { crop: None, ..edit };
+        assert_eq!(resolve(&no_crop, &CLIP).unwrap_err(), [Problem::BadFollow]);
+    }
+
+    #[test]
     fn too_many_marks_and_an_empty_clip_are_refused() {
         let edit = Edit {
             overlays: (0..=MAX_OVERLAYS as u64).map(|i| mark(i, i + 10)).collect(),
@@ -412,6 +521,16 @@ mod tests {
                 h: 240,
             }),
             overlays: vec![mark(600, 900)],
+            follow: vec![Placed {
+                at_ms: 700,
+                x: 10,
+                y: 12,
+            }],
+            keys: Some(KeysLayer {
+                list: "keys.txt".into(),
+                x: 4,
+                y: 200,
+            }),
         };
         let json = serde_json::to_string(&edit).unwrap();
         assert_eq!(serde_json::from_str::<Edit>(&json).unwrap(), edit);

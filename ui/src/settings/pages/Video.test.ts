@@ -41,6 +41,17 @@ describe('Video settings', () => {
     expect(screen.getByText(/acts when it is let go/)).toBeTruthy();
   });
 
+  it('follows a moved window only when asked, and says what it costs', async () => {
+    const api = open();
+    await screen.findByText('ffmpeg found');
+    const box = screen.getByRole('checkbox', { name: 'Follow the window when it is moved' }) as HTMLInputElement;
+    expect(box.checked).toBe(false);
+    expect(screen.getByText(/keeps the place and size the window had/)).toBeTruthy();
+    await fireEvent.click(box);
+    await waitFor(async () => expect((await api.getVideo()).follow_window).toBe(true));
+    expect(screen.getByText(/uses more of the computer than one window/)).toBeTruthy();
+  });
+
   it('looks for ffmpeg when the page opens and says what it found and what Automatic would use', async () => {
     open();
     await screen.findByText('ffmpeg found');

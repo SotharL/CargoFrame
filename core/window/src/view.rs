@@ -54,6 +54,29 @@ pub struct VideoView {
     /// The part the window starts cropped to (the window in focus, in a continuous recording of
     /// the whole screen), in the recording's pixels. The person can change it or take it away.
     pub crop: Option<CropView>,
+    /// With `crop`: where its corner goes as the recorded window was moved, on the clip's
+    /// timeline (it slides from one place to the next). Empty when the window stayed put.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub follow: Vec<PlaceView>,
+    /// The keys pressed, each line with when it shows (the layout's Video block asks for them).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub keys: Vec<KeyLine>,
+}
+
+/// Where a following crop's corner is at a moment, in the recording's pixels.
+#[derive(Debug, Clone, Copy, Serialize, PartialEq, Eq)]
+pub struct PlaceView {
+    pub at_ms: u64,
+    pub x: u32,
+    pub y: u32,
+}
+
+/// A line of keys shown over a recording, on its timeline.
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub struct KeyLine {
+    pub from_ms: u64,
+    pub to_ms: u64,
+    pub text: String,
 }
 
 /// A part of a recording, in its pixels.
@@ -496,6 +519,7 @@ mod tests {
                         role: TextRole::Plain,
                         default_text: "{{app.exe}} in {{project.name}} {{rule.missing}}".into(),
                         formatting: true,
+                        one_line: false,
                     }),
                 },
                 Block {

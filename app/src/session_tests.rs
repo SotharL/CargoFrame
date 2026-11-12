@@ -157,6 +157,7 @@ fn a_session_combines_capture_layout_variables_and_files() {
                     role: Default::default(),
                     default_text: "{{project.name}} at {{capture.date}}".into(),
                     formatting: true,
+                    one_line: false,
                 }),
             },
             Block {
@@ -523,6 +524,7 @@ fn data_rule_values_reach_the_window_and_only_used_failures_are_reported() {
                 role: Default::default(),
                 default_text: "b={{rule.build}} g={{rule.gone}} s={{rule.soft}}".into(),
                 formatting: true,
+                one_line: false,
             }),
         }],
     };
@@ -852,6 +854,7 @@ fn values_from_another_program_fill_text_boxes_and_dropdowns_of_a_layout_that_ac
                 role: Default::default(),
                 default_text: "{{app.title}}".into(),
                 formatting: true,
+                one_line: false,
             }),
         },
         Block {

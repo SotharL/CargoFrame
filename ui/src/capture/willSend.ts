@@ -58,7 +58,7 @@ export function willSend(
       const whole = view.video.duration_ms / 1000;
       const from = (clipEdit?.start_ms ?? 0) / 1000;
       const to = (clipEdit?.end_ms ?? view.video.duration_ms) / 1000;
-      const done = [from > 0 || to < whole ? 'cut' : '', clipEdit?.crop ? 'cropped' : '', clipEdit?.mark ? 'marked' : ''].filter(Boolean);
+      const done = [from > 0 || to < whole ? 'cut' : '', clipEdit?.crop ? 'cropped' : '', clipEdit?.mark ? 'marked' : '', clipEdit?.keys ? 'with the keys' : ''].filter(Boolean);
       if (done.length === 0) {
         parts.push(`Video (${whole.toFixed(1)} s, ${formatSize(view.video.bytes)})`);
       } else {
