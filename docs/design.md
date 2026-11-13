@@ -47,7 +47,7 @@ flowchart LR
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
 | **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{{rule.<key>}}` | `rules/<id>.json` |
 | **Field fill** | One field of a service and the steps that fill it on each share ("if `{{rule.gpu}}` is found, add `gpu-{{rule.gpu}}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
-| **Template** | A ready-made layout per service, never stored until saved | in the code |
+| **Template** | A ready-made layout per service, never stored until saved. Those with much to fill in (Jira bug, GitHub issue, Slack, Discord, Ask Claude) hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording | in the code |
 
 ---
 

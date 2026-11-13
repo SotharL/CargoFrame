@@ -1369,3 +1369,10 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
 - **Review.** The demo capture no longer needs a button called `send`, and draws an empty picture where there is
   no canvas, so the window tests now open the window rather than its error page (they passed on the error page
   before, as both have a heading).
+- **Tabs in the ready-made layouts.** Each template was weighed against what its service takes. Only those with
+  much to fill in got one Tabs block, holding the capture where it was: *Screenshot* and *Logs* (the files to
+  attach and a log viewer to read them) for the Jira bug report, the GitHub issue, Slack, Discord and Ask Claude,
+  and *Recording*, *Screenshot* (taken when the recording ends) and *Logs* for the Jira and Slack recordings. The
+  picture keeps its full size in its tab, and the fields beside it gain the room the files took. Templates with
+  little to fill in (save locally, Drive, comments, Sheet, Teams, Reddit, X, Bluesky, Instagram, Custom API) stay
+  as they were: everything is already in view, and most of those services take no files to read logs from.

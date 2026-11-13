@@ -8,8 +8,8 @@
 
 use crate::model::{
     Block, BlockKind, Deeper, DropdownBlock, DropdownSource, FilesBlock, InfoMapping, Layout,
-    OnSuccess, Rect, SharingButton, TagList, TagsBlock, TextBlock, TextRole, TitlePlacement,
-    ValueSource,
+    LogViewBlock, OnSuccess, Rect, SharingButton, Tab, TabSide, TabsBlock, TagList, TagsBlock,
+    TextBlock, TextRole, TitlePlacement, ValueSource, VideoBlock,
 };
 use crate::validate::ConnectionKind;
 
@@ -41,13 +41,13 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "jira-bug",
         name: "Jira bug report",
-        description: "Project, issue type, summary and description, with the screenshot and any files attached to a new issue.",
+        description: "Project, issue type, summary and description, with the screenshot and any files attached to a new issue. A Logs tab beside the screenshot reads the logs, to copy lines from.",
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
         key: "jira-video",
         name: "Jira bug report with a recording",
-        description: "Like the Jira bug report, with the recording of your screen attached to the new issue. A shortcut that opens it records the screen.",
+        description: "Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording, the screenshot taken from it and the logs. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
@@ -59,7 +59,7 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "github-issue",
         name: "GitHub issue",
-        description: "Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it.",
+        description: "Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it. A Logs tab beside the screenshot reads the logs.",
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
@@ -95,25 +95,25 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "claude-ask",
         name: "Ask Claude about a capture",
-        description: "Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude.",
+        description: "Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude. A Logs tab beside the screenshot reads the logs, to copy lines into the prompt.",
         service: Some(ConnectionKind::Claude),
     },
     TemplateInfo {
         key: "slack-message",
         name: "Slack message",
-        description: "Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.",
+        description: "Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread. A Logs tab beside the screenshot reads the logs.",
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
         key: "slack-video",
         name: "Slack message with a recording",
-        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread. A shortcut that opens it records the screen.",
+        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording, the screenshot taken from it and the logs. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
         key: "discord-message",
         name: "Discord message",
-        description: "Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.",
+        description: "Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged. A Logs tab beside the screenshot reads the logs.",
         service: Some(ConnectionKind::Discord),
     },
     TemplateInfo {
@@ -182,6 +182,55 @@ fn files(title: &str) -> BlockKind {
         preselect: Vec::new(),
         look_in: Default::default(),
     })
+}
+
+/// The left of a window with much to fill in: a Tabs block, `h` rows high, holding the capture
+/// and the logs, one at a time and each at full size. A recording's window has the recording, the
+/// screenshot taken when it ends (or from it), and the logs; a picture's, the picture and the
+/// logs. The logs are the files to send and a log viewer to read them, to copy lines from.
+fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
+    let whole = rect(0, 0, 7, h);
+    let tab = |name: &str, ids: &[&str]| Tab {
+        name: name.into(),
+        blocks: ids.iter().map(|id| id.to_string()).collect(),
+    };
+    let mut tabs = Vec::new();
+    let mut blocks = Vec::new();
+    if video {
+        tabs.push(tab("Recording", &["clip"]));
+        blocks.push(block(
+            "clip",
+            whole,
+            BlockKind::Video(VideoBlock {
+                screenshot_at_end: true,
+                ..Default::default()
+            }),
+        ));
+    }
+    tabs.push(tab("Screenshot", &["shot"]));
+    blocks.push(block("shot", whole, BlockKind::Screenshot));
+    tabs.push(tab("Logs", &["files", "log"]));
+    blocks.push(block("files", rect(0, 0, 7, 3), files(files_title)));
+    blocks.push(block(
+        "log",
+        rect(0, 3, 7, h - 3),
+        BlockKind::LogView(LogViewBlock {
+            title: "Log".into(),
+            ..Default::default()
+        }),
+    ));
+    blocks.insert(
+        0,
+        block(
+            "capture",
+            whole,
+            BlockKind::Tabs(TabsBlock {
+                tabs,
+                side: TabSide::Top,
+            }),
+        ),
+    );
+    blocks
 }
 
 fn web_list(title: &str, connection_id: &str, options_id: &str) -> BlockKind {
@@ -300,44 +349,46 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 vec![from_block("note", "note")],
             ),
         ],
-        ("jira-bug", Some(c)) => vec![
-            shot(8),
-            block(
-                "project",
-                rect(7, 0, 5, 1),
-                web_list("Project", c, "projects"),
-            ),
-            block(
-                "type",
-                rect(7, 1, 5, 1),
-                web_list("Issue type", c, "issue_types"),
-            ),
-            block(
-                "summary",
-                rect(7, 2, 5, 2),
-                text("Summary", TextRole::Plain, WHERE),
-            ),
-            block(
-                "description",
-                rect(7, 4, 5, 3),
-                text("Description", TextRole::Plain, SEEN_IN),
-            ),
-            block("files", rect(0, 8, 7, 3), files("Attach files")),
-            block("labels", rect(7, 7, 5, 1), tags("Labels", c, "labels")),
-            button(
-                rect(7, 8, 5, 1),
-                "Create issue",
-                Some(c),
-                None,
-                vec![
-                    from_block("project", "project"),
-                    from_block("issuetype", "type"),
-                    from_block("summary", "summary"),
-                    from_block("description", "description"),
-                    from_block("labels", "labels"),
-                ],
-            ),
-        ],
+        ("jira-bug", Some(c)) => [
+            capture_tabs(9, is_video, "Attach files"),
+            vec![
+                block(
+                    "project",
+                    rect(7, 0, 5, 1),
+                    web_list("Project", c, "projects"),
+                ),
+                block(
+                    "type",
+                    rect(7, 1, 5, 1),
+                    web_list("Issue type", c, "issue_types"),
+                ),
+                block(
+                    "summary",
+                    rect(7, 2, 5, 2),
+                    text("Summary", TextRole::Plain, WHERE),
+                ),
+                block(
+                    "description",
+                    rect(7, 4, 5, 3),
+                    text("Description", TextRole::Plain, SEEN_IN),
+                ),
+                block("labels", rect(7, 7, 5, 1), tags("Labels", c, "labels")),
+                button(
+                    rect(7, 8, 5, 1),
+                    "Create issue",
+                    Some(c),
+                    None,
+                    vec![
+                        from_block("project", "project"),
+                        from_block("issuetype", "type"),
+                        from_block("summary", "summary"),
+                        from_block("description", "description"),
+                        from_block("labels", "labels"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
         ("jira-comment", Some(c)) => vec![
             shot(8),
             block(
@@ -362,32 +413,34 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 ],
             ),
         ],
-        ("github-issue", Some(c)) => vec![
-            shot(8),
-            block(
-                "title",
-                rect(7, 0, 5, 2),
-                text("Title", TextRole::Plain, WHERE),
-            ),
-            block("labels", rect(7, 2, 5, 1), tags("Labels", c, "labels")),
-            block(
-                "description",
-                rect(7, 3, 5, 4),
-                text("Description", TextRole::Plain, SEEN_IN),
-            ),
-            block("files", rect(0, 8, 7, 3), files("Attach files")),
-            button(
-                rect(7, 7, 5, 1),
-                "Open issue",
-                Some(c),
-                None,
-                vec![
-                    from_block("title", "title"),
-                    from_block("labels", "labels"),
-                    from_block("body", "description"),
-                ],
-            ),
-        ],
+        ("github-issue", Some(c)) => [
+            capture_tabs(8, is_video, "Attach files"),
+            vec![
+                block(
+                    "title",
+                    rect(7, 0, 5, 2),
+                    text("Title", TextRole::Plain, WHERE),
+                ),
+                block("labels", rect(7, 2, 5, 1), tags("Labels", c, "labels")),
+                block(
+                    "description",
+                    rect(7, 3, 5, 4),
+                    text("Description", TextRole::Plain, SEEN_IN),
+                ),
+                button(
+                    rect(7, 7, 5, 1),
+                    "Open issue",
+                    Some(c),
+                    None,
+                    vec![
+                        from_block("title", "title"),
+                        from_block("labels", "labels"),
+                        from_block("body", "description"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
         ("github-comment", Some(c)) => vec![
             shot(8),
             block(
@@ -548,102 +601,108 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 vec![from_block("caption", "caption")],
             ),
         ],
-        ("claude-ask", Some(c)) => vec![
-            shot(8),
-            block(
-                "chat",
-                rect(7, 0, 5, 1),
-                BlockKind::Dropdown(DropdownBlock::new("Chat", DropdownSource::ClaudeChats)),
-            ),
-            block(
-                "prompt",
-                rect(7, 1, 5, 4),
-                text(
-                    "Prompt",
-                    TextRole::Prompt,
-                    "What is wrong in {{app.title}}? The screenshot shows it.",
+        ("claude-ask", Some(c)) => [
+            capture_tabs(9, is_video, "Files to mention"),
+            vec![
+                block(
+                    "chat",
+                    rect(7, 0, 5, 1),
+                    BlockKind::Dropdown(DropdownBlock::new("Chat", DropdownSource::ClaudeChats)),
                 ),
-            ),
-            block("files", rect(7, 5, 5, 3), files("Files to mention")),
-            button(
-                rect(7, 8, 5, 1),
-                "Ask Claude",
-                Some(c),
-                Some("prompt"),
-                vec![from_block("chat", "chat")],
-            ),
-        ],
-        ("slack-message", Some(c)) => vec![
-            shot(10),
-            block(
-                "channel",
-                rect(7, 0, 5, 1),
-                web_list("Channel", c, "channels"),
-            ),
-            block(
-                "message",
-                rect(7, 1, 5, 4),
-                text("Message", TextRole::Plain, SEEN_IN),
-            ),
-            block(
-                "thread",
-                rect(7, 5, 5, 1),
-                text(
-                    "Reply in a thread (message link, optional)",
-                    TextRole::Plain,
-                    "",
+                block(
+                    "prompt",
+                    rect(7, 1, 5, 7),
+                    text(
+                        "Prompt",
+                        TextRole::Prompt,
+                        "What is wrong in {{app.title}}? The screenshot shows it.",
+                    ),
                 ),
-            ),
-            block("files", rect(7, 6, 5, 3), files("Attach files")),
-            button(
-                rect(7, 9, 5, 1),
-                "Post to Slack",
-                Some(c),
-                Some("message"),
-                vec![
-                    from_block("channel", "channel"),
-                    from_block("thread", "thread"),
-                ],
-            ),
-        ],
-        ("discord-message", Some(c)) => vec![
-            shot(10),
+                button(
+                    rect(7, 8, 5, 1),
+                    "Ask Claude",
+                    Some(c),
+                    Some("prompt"),
+                    vec![from_block("chat", "chat")],
+                ),
+            ],
+        ]
+        .concat(),
+        ("slack-message", Some(c)) => [
+            capture_tabs(10, is_video, "Attach files"),
+            vec![
+                block(
+                    "channel",
+                    rect(7, 0, 5, 1),
+                    web_list("Channel", c, "channels"),
+                ),
+                block(
+                    "message",
+                    rect(7, 1, 5, 7),
+                    text("Message", TextRole::Plain, SEEN_IN),
+                ),
+                block(
+                    "thread",
+                    rect(7, 8, 5, 1),
+                    text(
+                        "Reply in a thread (message link, optional)",
+                        TextRole::Plain,
+                        "",
+                    ),
+                ),
+                button(
+                    rect(7, 9, 5, 1),
+                    "Post to Slack",
+                    Some(c),
+                    Some("message"),
+                    vec![
+                        from_block("channel", "channel"),
+                        from_block("thread", "thread"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
+        ("discord-message", Some(c)) => [
+            capture_tabs(10, is_video, "Attach files"),
             // The whole path in one dropdown: the channel, then (when there is one to choose) the
             // thread or forum post inside it. The title narrows the second list.
-            block(
-                "channel",
-                rect(7, 0, 5, 2),
-                path_list(
-                    "Where to post",
-                    c,
-                    "channels",
-                    "threads",
-                    "thread",
-                    Some("title"),
+            vec![
+                block(
+                    "channel",
+                    rect(7, 0, 5, 2),
+                    path_list(
+                        "Where to post",
+                        c,
+                        "channels",
+                        "threads",
+                        "thread",
+                        Some("title"),
+                    ),
                 ),
-            ),
-            block(
-                "title",
-                rect(7, 2, 5, 1),
-                text("Title (a forum post's name)", TextRole::Plain, WHERE),
-            ),
-            block(
-                "message",
-                rect(7, 3, 5, 3),
-                text("Message", TextRole::Plain, SEEN_IN),
-            ),
-            block("files", rect(7, 6, 5, 3), files("Attach files")),
-            button(
-                rect(7, 9, 5, 1),
-                "Post to Discord",
-                Some(c),
-                Some("message"),
-                vec![
-                    from_block("channel", "channel"),
-                    from_block("title", "title"),
-                ],
-            ),
-        ],
+                block(
+                    "title",
+                    rect(7, 2, 5, 1),
+                    text("Title (a forum post's name)", TextRole::Plain, WHERE),
+                ),
+                block(
+                    "message",
+                    rect(7, 3, 5, 6),
+                    text("Message", TextRole::Plain, SEEN_IN),
+                ),
+                button(
+                    rect(7, 9, 5, 1),
+                    "Post to Discord",
+                    Some(c),
+                    Some("message"),
+                    vec![
+                        from_block("channel", "channel"),
+                        from_block("title", "title"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
         ("teams-message", Some(c)) => vec![
             shot(8),
             block(
@@ -705,7 +764,9 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         _ => return None,
     };
-    let blocks = if is_video {
+    // a template with tabs drew its recording itself (`capture_tabs`)
+    let tabbed = blocks.iter().any(|b| matches!(b.kind, BlockKind::Tabs(_)));
+    let blocks = if is_video && !tabbed {
         blocks
             .into_iter()
             .map(|mut b| {
@@ -820,17 +881,28 @@ mod tests {
                 "{}",
                 t.key
             );
-            // One capture (a picture or a recording), one sharing button, and the button is
-            // named for the connection.
-            assert_eq!(
+            // A picture, or a recording (with the screenshot taken from it when the template
+            // has tabs), one sharing button, and the button is named for the connection.
+            let count = |video: bool| {
                 l.blocks
                     .iter()
-                    .filter(|b| matches!(b.kind, BlockKind::Screenshot | BlockKind::Video(_)))
-                    .count(),
-                1,
-                "{}",
-                t.key
-            );
+                    .filter(|b| match b.kind {
+                        BlockKind::Video(_) => video,
+                        BlockKind::Screenshot => !video,
+                        _ => false,
+                    })
+                    .count()
+            };
+            let tabbed = l
+                .blocks
+                .iter()
+                .any(|b| matches!(b.kind, BlockKind::Tabs(_)));
+            let (videos, pictures) = (count(true), count(false));
+            match (t.key.ends_with("-video"), tabbed) {
+                (true, true) => assert_eq!((videos, pictures), (1, 1), "{}", t.key),
+                (true, false) => assert_eq!((videos, pictures), (1, 0), "{}", t.key),
+                (false, _) => assert_eq!((videos, pictures), (0, 1), "{}", t.key),
+            }
             let BlockKind::SharingButton(b) = &l.block("send").unwrap().kind else {
                 panic!("{}: no button", t.key);
             };
@@ -852,9 +924,7 @@ mod tests {
     fn a_template_for_a_recording_has_a_video_block_where_the_picture_would_be() {
         for (video, picture) in [
             ("local-video", "local-capture"),
-            ("jira-video", "jira-bug"),
             ("google-drive-video", "google-drive"),
-            ("slack-video", "slack-message"),
         ] {
             let v = build(video, Some("c")).unwrap();
             let p = build(picture, Some("c")).unwrap();
@@ -884,6 +954,76 @@ mod tests {
             .unwrap()
             .block("shot")
             .is_some());
+    }
+
+    #[test]
+    fn a_window_with_much_to_fill_holds_the_capture_and_the_logs_in_tabs() {
+        let names = |l: &Layout| match &l.block("capture").map(|b| &b.kind) {
+            Some(BlockKind::Tabs(t)) => t
+                .tabs
+                .iter()
+                .map(|t| (t.name.clone(), t.blocks.clone()))
+                .collect::<Vec<_>>(),
+            _ => vec![],
+        };
+        let tab = |n: &str, ids: &[&str]| {
+            (
+                n.to_string(),
+                ids.iter().map(|s| s.to_string()).collect::<Vec<_>>(),
+            )
+        };
+        for key in [
+            "jira-bug",
+            "github-issue",
+            "slack-message",
+            "discord-message",
+            "claude-ask",
+        ] {
+            let l = build(key, Some("c")).unwrap();
+            assert_eq!(
+                names(&l),
+                vec![tab("Screenshot", &["shot"]), tab("Logs", &["files", "log"])],
+                "{key}"
+            );
+            // the picture fills its tab
+            assert_eq!(
+                l.block("shot").unwrap().rect,
+                l.block("capture").unwrap().rect
+            );
+        }
+        for key in ["jira-video", "slack-video"] {
+            let l = build(key, Some("c")).unwrap();
+            assert_eq!(
+                names(&l),
+                vec![
+                    tab("Recording", &["clip"]),
+                    tab("Screenshot", &["shot"]),
+                    tab("Logs", &["files", "log"])
+                ],
+                "{key}"
+            );
+            // the screenshot tab starts with the picture taken when the recording ends
+            assert!(matches!(
+                l.block("clip").unwrap().kind,
+                BlockKind::Video(VideoBlock {
+                    screenshot_at_end: true,
+                    ..
+                })
+            ));
+        }
+        // a window with little to fill keeps it all in view
+        for key in [
+            "local-capture",
+            "google-drive",
+            "x-post",
+            "reddit-post",
+            "jira-comment",
+        ] {
+            assert!(
+                build(key, Some("c")).unwrap().block("capture").is_none(),
+                "{key}"
+            );
+        }
     }
 
     #[test]
