@@ -6,12 +6,12 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.4.0 (beta)</p>
+Windows 11 and Linux · version 0.4.1 (beta)</p>
 
 <p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/images/capture-dark.png">
-    <img alt="The CargoFrame window: the screenshot, a note, where to post, and the sharing buttons" src="docs/images/capture-light.png" width="760">
+    <img alt="The CargoFrame window: the screenshot, a note, where to post, the sharing buttons, and a dot per button on each block" src="docs/images/capture-light.png" width="760">
   </picture>
 </p>
 
@@ -77,12 +77,18 @@ flowchart LR
 administrator password is needed. Windows may say the publisher is unknown (the installer is not signed yet): choose
 **More info**, then **Run anyway**. CargoFrame then opens on its **Setup** page.
 
-<details>
-<summary><b>Linux, silent install, uninstall, video</b></summary>
+**Linux (x64):** download **CargoFrame-<version>-linux-x64.tar.gz** from **Releases**, unpack it and run
+`./install.sh`.
 
-- **Linux (x64):** download the **linux-appimage** file from the **Bundle** run on GitHub (Actions), unzip it and run
-  `./install.sh` (`--no-startup` to keep it from starting at sign-in). The tray needs a system tray: KDE has one, GNOME
-  needs the AppIndicator extension. Uninstall with `./uninstall.sh` (`--delete-data` also removes your settings).
+Each release also has **SHA256SUMS.txt** to check the download. To update, run the new installer over the old one
+(your settings stay), or press **Check for updates** in *Settings, About*.
+
+<details>
+<summary><b>Linux details, silent install, uninstall, video</b></summary>
+
+- **Linux:** `./install.sh --no-startup` keeps it from starting at sign-in. The tray needs a system tray: KDE has
+  one, GNOME needs the AppIndicator extension. Uninstall with `./uninstall.sh` (`--delete-data` also removes your
+  settings).
 - **Wayland** (GNOME, KDE, sway, Hyprland) works too: CargoFrame hands each shortcut to the desktop (on GNOME it
   appears in *Settings, Keyboard, Custom Shortcuts*). *Settings, Setup* lists what Wayland needs: the desktop portal
   (or `grim`), GStreamer with its PipeWire plugin for video, `wtype` on sway and Hyprland. How each desktop is handled:
@@ -101,7 +107,7 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 | Step | Where | What you do |
 |:----:|-------|-------------|
 | 1 | **Setup, Connections** | Add the service you share to. A button beside each token field opens the page where you get it. Skip this to start with **Save locally** |
-| 2 | **Layouts** | Press **Start from a template**, then **Use**, change what you like, **Save**. A layout is the window a capture opens |
+| 2 | **Layouts** | Press **Start from a template**, then **Use**, change what you like, **Save**. A layout is the window a capture opens. Bigger templates keep the screenshot and the logs in tabs |
 | 3 | **Triggers** | Name it, click **Shortcut** and press the keys, pick your layout, **Save** |
 
 <table>
@@ -110,7 +116,7 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 <td width="50%"><img alt="Settings, Triggers: name, shortcut, layout and what the screenshot shows" src="docs/images/trigger-form.png"></td>
 </tr>
 <tr>
-<td><b>Layouts.</b> Add blocks, drag them, resize them. A <b>Video</b> block makes the shortcut record.</td>
+<td><b>Layouts.</b> Add blocks, drag them, resize them, group them in tabs. A <b>Video</b> block makes the shortcut record.</td>
 <td><b>Triggers.</b> A shortcut and the layout it opens. That is all a trigger needs.</td>
 </tr>
 </table>
@@ -138,7 +144,7 @@ or click the ones you want. *Try again* reads it another way. It is read on your
 |------|---------|
 | **Trigger** | A shortcut, and the layout it opens |
 | **Layout** | The window a capture opens: blocks on a grid of 12 columns, or more (up to 24) for a wider window |
-| **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, or a sharing button |
+| **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, Tags, Log viewer, Tabs, or a sharing button |
 | **Connection** | A service you signed in to (Jira, Slack…) |
 | **Where to post** | One dropdown that goes as deep as the service does: project, or server, channel, thread |
 | **Data & fields** | *Read from files*: if a file is found in the program's folder, add it to the files and read values from it (`{{rule.gpu}}`). *Fill fields*: fill a field of the service on each share, with steps such as "if `{{rule.gpu}}` is found, add the label `gpu-{{rule.gpu}}`" |
@@ -159,7 +165,7 @@ everything it sends (the picture itself for a screenshot or a recording).
 <details>
 <summary><b>In the window: recording, trimming, marking</b></summary>
 
-<img alt="The CargoFrame window with a recording: trim handles, crop and mark" src="docs/images/capture-recording.png" width="640">
+<img alt="The CargoFrame window from the Jira recording template: tabs for the recording, the screenshot and the logs; the recording's tools above it and the trim handles under it" src="docs/images/capture-recording.png" width="640">
 
 Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles under it to trim; the
 icons above it, as on a screenshot, **crop** (drag a frame, then *Apply crop*) and draw **marks** with the screenshot's
@@ -171,17 +177,19 @@ the time. Each press of a video shortcut then opens its window with the last sec
 a shortcut 2 seconds again to stop. The tray menu does the same (on Wayland it is the way to start and stop).
 
 **Keys pressed:** turn on *Show the keys pressed on the recording* on a Video block, and each key shows over the clip
-when it was pressed ("Ctrl+S", "hello ⏎"). Drag the keys where you want them, or take them off with their ×. Every key
-typed while it records shows, passwords too; not on Wayland. **A window that is moved:** with *Follow the window when
-it is moved* on (*Settings, Recording*), the whole screen is recorded and the clip stays on the window as it moves.
-**The time:** the clock above a recording shows the time of each moment over it (2026-11-12 14:03:27), sent the same way;
-in a Log viewer, the clock button at the start of the search row turns it to a time search that keeps the lines written during the recording, or between
-two times. Logs write their time in many ways: type the one yours uses in the format box (`[YYYY_MM_DD] HH:mm -`,
-`MM_DD_HH_mm_ss`), or let a data rule set it for the file it finds; the last one used for a file comes back next time.
+when it was pressed ("Ctrl+S", "hello ⏎"). Drag the keys where you want them, take them off with their ×, and bring
+them back with the keyboard icon. Every key typed while it records shows, passwords too; not on Wayland.
+
+**The time:** the clock icon shows the time of each moment over the recording (2026-11-12 14:03:27), the way logs
+write it; it is sent as you see it. To find the log lines of that moment, see *Log viewer* below.
+
+**A window that is moved:** with *Follow the window when it is moved* on (*Settings, Recording*), the whole screen is
+recorded and the crop follows the window as it moves.
 
 Click the Video block in the layout builder to choose the screen or the window in
-focus, the computer's sound (on by default) and a microphone (off). Tick *Also take a screenshot when the recording
-ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Save locally; the other services get the still.
+focus, the computer's sound (on by default) and a microphone (off). With a Screenshot block in the layout too, tick
+*Also take a screenshot when the recording ends* to start it with that picture, or take one from the recording with the
+camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save locally; the other services get the still.
 
 </details>
 
@@ -215,9 +223,14 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
 - **Log viewer:** a block that shows a file of the window line by line. Type `error` in its search to see only those
   lines, pick one to read it whole and copy it, or *Copy all*. The expand icon opens it large in the middle of the
   window; the cross or Escape closes it.
+- **Log lines by time:** the clock button at the start of the log viewer's search row turns it to a time search: the
+  lines written during the recording, around the screenshot, or between two times you type (the magnifier turns it
+  back). Logs write their time in many ways: type the one yours uses in the format box (`[YYYY_MM_DD] HH:mm -`,
+  `MM_DD_HH_mm_ss`) and the missing day or year is taken from the capture; or let a data rule set it for the file it
+  finds. The last format used for a file comes back next time.
 - **Tabs:** a Tabs block is a binder: 2 to 5 tabs (named, with the names on the top, bottom, left or right), each
-  holding blocks. In the layout builder, click a tab's name and drop blocks inside; in the window, click a tab to see
-  its blocks. What is in the other tabs is kept and sent.
+  holding blocks. In the layout builder, click a tab's name and drop blocks inside; drag the grip at its top right to
+  move it with its blocks. In the window, click a tab to see its blocks. What is in the other tabs is kept and sent.
 - **Values made from other values:** in *Data & fields*, *Make a value from other values*: for example a build id
   `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
@@ -231,9 +244,11 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
 <summary><b>Templates, clean-up and your data</b></summary>
 
 Templates are offered for the services you connected: *Save a capture locally*, *Save a recording locally*, Jira
-*Bug report* (also with a recording) and *Comment on an issue*, Google *Drive upload* (also a recording) and *Sheet
-row*, Slack *Message* (also with a recording), *Ask Claude about a capture*, and a *Message* or *Post* for each
-other service.
+*Bug report* (also with a recording) and *Comment on an issue*, GitHub *Issue* and *Comment on an issue*, Google
+*Drive upload* (also a recording) and *Sheet row*, Slack *Message* (also with a recording), *Ask Claude about a
+capture*, and a *Message* or *Post* for each other service. The ones with much to fill in (Jira bug report, GitHub
+issue, Slack, Discord, Ask Claude) keep the screenshot and a *Logs* tab (files and a log viewer) in tabs; with a
+recording, a *Recording* tab comes first.
 
 | Remove | How | Gentler |
 |--------|-----|---------|
