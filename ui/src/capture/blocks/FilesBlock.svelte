@@ -40,7 +40,7 @@
   <div class="head">
     <span class="title">{block.title}</span>
     <span class="quiet count">{selected.length} of {info.entries.length} selected{filter.trim() ? ` · ${visible.length} shown` : ''}</span>
-    <!-- Next to the title, so the right corner is left to the boxes of the sharing buttons. -->
+    <!-- Next to the title, so the right corner is left to the dots of the sharing buttons. -->
     <button class="small" onclick={selectAll} disabled={!visible.length}>All</button>
     <button class="small" onclick={selectNone} disabled={!selected.length}>None</button>
     {#if onadd}
@@ -102,4 +102,6 @@
   .path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12.5px; }
   .size { font-size: 12px; }
   .empty { padding: 6px; }
+  /* Room at its end for the dots of the sharing buttons (App sets --corner). */
+  .head { padding-right: var(--corner, 0px); }
 </style>

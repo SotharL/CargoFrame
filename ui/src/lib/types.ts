@@ -234,7 +234,21 @@ export type BlockContent =
       during?: boolean;
       /** How the lines write their time, when no data rule says it for the file shown. */
       time_format?: string;
+    }
+  | {
+      type: 'tabs';
+      /** 2 to 5 tabs, in order; each lists the ids of the blocks it holds (inside the tabs' area). */
+      tabs: Tab[];
+      /** The side the names are on. Absent: the top. */
+      side?: TabSide;
     };
+
+/** One tab of a Tabs block: its name and the blocks it holds. */
+export interface Tab {
+  name: string;
+  blocks?: string[];
+}
+export type TabSide = 'top' | 'right' | 'bottom' | 'left';
 
 /** The most tags a Tags block holds, and the longest a tag may be (core/layout MAX_TAGS). */
 export const MAX_TAGS = 25;

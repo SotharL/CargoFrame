@@ -8,8 +8,10 @@
   // read with a format the person writes the way the log does ([YYYY-MM-DD HH:mm]); a data rule
   // can say it for the file it finds, and the last one used for a file of that name comes back
   // next time (logFormat.ts, logFormats.ts). A line picked is shown whole under the list,
-  // to read and copy. "Open large" fills the window with it. Nothing of it is sent: the files go
+  // to read and copy. The expand button opens it large, in the middle of the window (× or
+  // Escape closes it). Nothing of it is sent: the files go
   // as the Files blocks say.
+  import Icon from '../../lib/components/Icon.svelte';
   import { untrack } from 'svelte';
   import type { Api } from '../../lib/ipc';
   import type { Block, LogText, SessionView } from '../../lib/types';
@@ -187,6 +189,10 @@
 
 <svelte:window onkeydown={onKey} />
 
+{#if large}
+  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+  <div class="backdrop" onclick={() => (large = false)}></div>
+{/if}
 <div class="log" class:large data-content role="region" aria-label={block.title || 'Log'}>
   <div class="bar">
     <span class="title">{block.title}</span>
@@ -197,7 +203,20 @@
     {:else if offered.length === 1}
       <span class="quiet mono one" title={offered[0]}>{offered[0]}</span>
     {/if}
-    <button type="button" class="small" onclick={() => (large = !large)} aria-pressed={large}>{large ? 'Close' : 'Open large'}</button>
+    <button
+      type="button"
+      class="small square"
+      onclick={() => (large = !large)}
+      aria-pressed={large}
+      aria-label={large ? 'Close the large view' : 'Open large'}
+      title={large ? 'Close (Escape)' : 'Open large'}
+    >
+      {#if large}
+        <Icon name="close" size={15} />
+      {:else}
+        <Icon name="expand" size={15} />
+      {/if}
+    </button>
   </div>
   <div class="bar">
     <!-- one button: its icon is the search it turns to (the clock while the words are searched,
@@ -211,9 +230,9 @@
       title={mode === 'text' ? 'Search by time' : 'Search by text'}
     >
       {#if mode === 'text'}
-        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6.5" /><path d="M8 4v4.2l2.8 1.8" /></svg>
+        <Icon name="clock" size={15} />
       {:else}
-        <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="6.5" cy="6.5" r="4.5" /><path d="M10 10l4.5 4.5" /></svg>
+        <Icon name="search" size={15} />
       {/if}
     </button>
     {#if mode === 'text'}
@@ -288,11 +307,17 @@
 
 <style>
   /* a column: the bars (the time one only when the lines have times), the lines taking the rest */
-  .log { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; background: var(--surface); }
+  /* in its block it has no background of its own; opened large, it is a panel in the middle of
+     the window, never taller than it, so the picked line under the list always shows */
+  .log { display: flex; flex-direction: column; gap: 4px; height: 100%; min-height: 0; }
   .log.large {
-    position: fixed; inset: 16px; z-index: 50; padding: 12px; border: 1px solid var(--border-strong);
+    position: fixed; z-index: 50; inset: 0; margin: auto; box-sizing: border-box;
+    width: min(1100px, calc(100vw - 32px)); height: calc(100vh - 32px);
+    padding: 12px; background: var(--surface); border: 1px solid var(--border-strong);
     border-radius: var(--radius); box-shadow: 0 8px 40px rgb(0 0 0 / 0.35);
   }
+  .backdrop { position: fixed; inset: 0; z-index: 49; background: rgb(0 0 0 / 0.35); }
+  .square { width: 28px; height: 26px; padding: 0; display: grid; place-items: center; flex: none; }
   .bar { display: flex; gap: 6px; align-items: center; min-width: 0; }
   .title { font-weight: 600; font-size: 13px; }
   .bar select { min-width: 0; flex: 1; font-size: 12.5px; }
@@ -300,7 +325,6 @@
   .search { flex: 1; min-width: 0; font-size: 13px; }
   .bar select.when { flex: 0 1 auto; min-width: 0; }
   .mode { position: relative; flex: none; width: 28px; height: 26px; padding: 0; display: grid; place-items: center; }
-  .mode svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; }
   /* the search not shown is on */
   .mode.other::after {
     content: ''; position: absolute; top: 3px; right: 3px; width: 6px; height: 6px; border-radius: 50%; background: var(--accent);
@@ -321,7 +345,7 @@
   .t { overflow: hidden; text-overflow: ellipsis; }
   mark { background: color-mix(in srgb, #ffd400 55%, transparent); color: inherit; border-radius: 2px; }
   .foot { margin: 0; font-size: 11.5px; }
-  .picked { display: flex; gap: 6px; align-items: flex-start; }
+  .picked { display: flex; gap: 6px; align-items: flex-start; flex: none; }
   .picked pre {
     flex: 1; margin: 0; padding: 6px 8px; max-height: 8em; overflow: auto; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere;
     border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface-2);

@@ -14,6 +14,7 @@
   import MarkCanvas, { type MarkTool } from './MarkCanvas.svelte';
   import PlayerControls from './PlayerControls.svelte';
   import StylePicker from '../editor/StylePicker.svelte';
+  import Icon from '../../lib/components/Icon.svelte';
   import { COLORS, THICKNESS, clearAll, emptyState, redo, undo, type EditorState, type TextStyle, type Thickness } from '../editor/model';
   import { containRect } from './contain';
   import { drawMarks } from './drawMark';
@@ -205,12 +206,12 @@
     markCanvas?.commitText();
     return marks.annotations.length > 0 ? drawMarks(info.width, info.height, marks.annotations) : null;
   }
-  const MARK_TOOLS: { tool: MarkTool; label: string; path: string }[] = [
-    { tool: 'pen', label: 'Draw', path: 'M4 20l1-4L17 4l3 3L8 19z' },
-    { tool: 'rect', label: 'Square', path: 'M4 5h16v14H4z' },
-    { tool: 'ellipse', label: 'Circle', path: 'M12 5a8 7 0 100 14a8 7 0 100-14' },
-    { tool: 'arrow', label: 'Arrow', path: 'M5 19L19 5M10 5h9v9' },
-    { tool: 'text', label: 'Text', path: 'M5 6V4h14v2M12 4v16M9 20h6' },
+  const MARK_TOOLS: { tool: MarkTool; label: string }[] = [
+    { tool: 'pen', label: 'Draw' },
+    { tool: 'rect', label: 'Square' },
+    { tool: 'ellipse', label: 'Circle' },
+    { tool: 'arrow', label: 'Arrow' },
+    { tool: 'text', label: 'Text' },
   ];
 
   // The player's own controls are not used, so nothing else changes these.
@@ -349,11 +350,71 @@
   }
 </script>
 
-<div class="clip" data-content>
+<div class="clip">
+  {#if !problem}
+    <!-- The tools sit above the picture, as on a screenshot; icons, so they take one short row. -->
+    <div class="bar" role="toolbar" aria-label="Recording tools">
+      <button type="button" class="tool" aria-label={crop && mode !== 'crop' ? 'Edit crop' : 'Crop'} title={crop && mode !== 'crop' ? 'Edit crop' : 'Crop: keep a part of the picture'} aria-pressed={mode === 'crop'} onclick={() => (mode === 'crop' ? applyCrop() : startCrop())}>
+        <Icon name="crop" />
+      </button>
+      <button type="button" class="tool" aria-label={markOn && mode !== 'mark' ? 'Edit marks' : 'Mark'} title={markOn && mode !== 'mark' ? 'Edit marks' : 'Mark: draw on the recording'} aria-pressed={mode === 'mark'} onclick={() => (mode === 'mark' ? doneMark() : startMark())}>
+        <Icon name="pen" />
+      </button>
+      {#if mode === 'crop'}
+        <span class="sep" aria-hidden="true"></span>
+        {#if !crop}<button type="button" class="small" onclick={middleBox}>Start from the middle</button>{/if}
+        <button type="button" class="small primary" onclick={applyCrop} disabled={!crop}>Apply crop</button>
+        <button type="button" class="small" onclick={cancelCrop}>Cancel</button>
+        <span class="quiet hint">{crop ? 'Drag the box or its corner, or draw a new one' : 'Drag over the picture to choose the part to keep'}</span>
+      {:else if mode === 'mark'}
+        <span class="sep" aria-hidden="true"></span>
+        <span class="tools" role="toolbar" aria-label="Marks on the recording" data-mark-tools>
+          {#each MARK_TOOLS as t (t.tool)}
+            <button type="button" class="tool" aria-label={t.label} title={t.label} aria-pressed={markTool === t.tool} onmousedown={(e) => e.preventDefault()} onclick={() => { markCanvas?.commitText(); markTool = t.tool; }}>
+              <Icon name={t.tool} />
+            </button>
+          {/each}
+          {#if markTool === 'text'}
+            <button type="button" class="tool letter" aria-label="Bold" title="Bold" aria-pressed={!!markText.bold} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.bold = !markText.bold)}><b>B</b></button>
+            <button type="button" class="tool letter" aria-label="Italic" title="Italic" aria-pressed={!!markText.italic} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.italic = !markText.italic)}><i>I</i></button>
+            <button type="button" class="tool" aria-label="On a box" title="On a box: readable on any picture" aria-pressed={!!markText.box} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.box = !markText.box)}><Icon name="onBox" /></button>
+          {/if}
+          <StylePicker colors={COLORS} thicknesses={THICKNESS} bind:color={markColor} bind:thickness={markThickness} />
+          <button type="button" class="tool" aria-label="Undo" title="Undo" disabled={!markOn} onclick={() => (marks = undo(marks))}><Icon name="undo" /></button>
+          <button type="button" class="tool" aria-label="Redo" title="Redo" disabled={marks.redo.length === 0} onclick={() => (marks = redo(marks))}><Icon name="redo" /></button>
+          {#if markOn}<button type="button" class="tool" aria-label="Remove marks" title="Remove marks" onclick={removeMarks}><Icon name="eraser" /></button>{/if}
+        </span>
+        <button type="button" class="small primary" onclick={doneMark}>Done</button>
+        <span class="quiet hint">{markTool === 'text' ? 'Click to write, click a text to change it' : 'Drag on the picture'}</span>
+      {:else}
+        {#if hasKeys}
+          <button type="button" class="tool" aria-label="Keys" title="The keys pressed while it recorded" aria-pressed={keysOn} onclick={() => (keysOn = !keysOn)}><Icon name="keys" /></button>
+        {/if}
+        {#if clock.length}
+          <button type="button" class="tool" aria-label="Time" title="The time of each moment, on this computer's clock" aria-pressed={clockOn} onclick={() => (clockOn = !clockOn)}><Icon name="clock" /></button>
+        {/if}
+        {#if canFollow}
+          <button type="button" class="tool" aria-label="Follow window" title="Follow window: the crop moves with the window as it was moved" aria-pressed={followOn} onclick={toggleFollow}><Icon name="follow" /></button>
+        {/if}
+        <span class="sep" aria-hidden="true"></span>
+        {#if crop}
+          <button type="button" class="tool" aria-label="Reset to full capture" title="Reset to full capture: show the whole picture again" onclick={resetCrop}><Icon name="wholePicture" /></button>
+        {/if}
+        {#if markOn}
+          <button type="button" class="tool" aria-label="Remove marks" title="Remove marks" onclick={removeMarks}><Icon name="eraser" /></button>
+        {/if}
+        {#if onshot}
+          <button type="button" class="tool" aria-label="Take screenshot" title="Take screenshot: keep the picture on screen for the screenshot block" onclick={takeShot} disabled={!url || cannotPlay}><Icon name="camera" /></button>
+        {/if}
+        <button type="button" class="tool" aria-label="Reset edits" title="Reset edits: back to how the window opened" onclick={resetEdits} disabled={pristine}><Icon name="reset" /></button>
+      {/if}
+      {#if shotProblem}<span class="error" role="alert">{shotProblem}</span>{/if}
+    </div>
+  {/if}
   {#if problem}
     <p class="problem" role="alert">{problem}</p>
   {:else if cannotPlay}
-    <p class="quiet note" role="status">This window cannot play the recording, but it is there and will be sent.</p>
+    <p class="quiet note" role="status" data-content>This window cannot play the recording, but it is there and will be sent.</p>
   {:else if url}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
@@ -365,10 +426,12 @@
       aria-label="Recording player"
       onkeydown={onStageKey}
     >
+      <!-- the picture itself is what a sharing button lights up, not the tools around it -->
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="picture"
         class:hot
+        data-content="media"
         style:left="{shown.left}px"
         style:top="{shown.top}px"
         style:width="{shown.w}px"
@@ -443,67 +506,13 @@
   {#if !problem}
     <div class="trim">
       <TrimStrip duration={total} bind:start bind:end {now} onseek={seek} />
-      <div class="row">
-        <button type="button" class="small" aria-pressed={mode === 'crop'} onclick={() => (mode === 'crop' ? applyCrop() : startCrop())}>
-          {crop && mode !== 'crop' ? 'Edit crop' : 'Crop'}
-        </button>
-        <button type="button" class="small" aria-pressed={mode === 'mark'} onclick={() => (mode === 'mark' ? doneMark() : startMark())}>
-          {markOn && mode !== 'mark' ? 'Edit marks' : 'Mark'}
-        </button>
-        {#if hasKeys && mode === 'none'}
-          <button type="button" class="small" aria-pressed={keysOn} title="The keys pressed while it recorded" onclick={() => (keysOn = !keysOn)}>Keys</button>
-        {/if}
-        {#if clock.length && mode === 'none'}
-          <button type="button" class="small" aria-pressed={clockOn} title="The time of each moment, on this computer's clock" onclick={() => (clockOn = !clockOn)}>Time</button>
-        {/if}
-        {#if canFollow && mode === 'none'}
-          <button type="button" class="small" aria-pressed={followOn} title="The crop moves with the window as it was moved" onclick={toggleFollow}>Follow window</button>
-        {/if}
-        {#if mode === 'crop'}
-          <span class="quiet hint">{crop ? 'Drag the box or its corner, or draw a new one' : 'Drag over the picture to choose the part to keep'}</span>
-          {#if !crop}<button type="button" class="small" onclick={middleBox}>Start from the middle</button>{/if}
-          <button type="button" class="small primary" onclick={applyCrop} disabled={!crop}>Apply crop</button>
-          <button type="button" class="small" onclick={cancelCrop}>Cancel</button>
-        {:else if mode === 'mark'}
-          <span class="tools" role="toolbar" aria-label="Marks on the recording" data-mark-tools>
-            {#each MARK_TOOLS as t (t.tool)}
-              <button type="button" class="tool" aria-label={t.label} title={t.label} aria-pressed={markTool === t.tool} onmousedown={(e) => e.preventDefault()} onclick={() => { markCanvas?.commitText(); markTool = t.tool; }}>
-                <svg viewBox="0 0 24 24" aria-hidden="true"><path d={t.path} /></svg>
-              </button>
-            {/each}
-            {#if markTool === 'text'}
-              <button type="button" class="tool letter" aria-label="Bold" title="Bold" aria-pressed={!!markText.bold} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.bold = !markText.bold)}><b>B</b></button>
-              <button type="button" class="tool letter" aria-label="Italic" title="Italic" aria-pressed={!!markText.italic} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.italic = !markText.italic)}><i>I</i></button>
-              <button type="button" class="tool letter" aria-label="On a box" title="On a box: readable on any picture" aria-pressed={!!markText.box} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.box = !markText.box)}>▭</button>
-            {/if}
-            <StylePicker colors={COLORS} thicknesses={THICKNESS} bind:color={markColor} bind:thickness={markThickness} />
-            <button type="button" class="tool" aria-label="Undo" title="Undo" disabled={!markOn} onclick={() => (marks = undo(marks))}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" /></svg>
-            </button>
-            <button type="button" class="tool" aria-label="Redo" title="Redo" disabled={marks.redo.length === 0} onclick={() => (marks = redo(marks))}>
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" /></svg>
-            </button>
-          </span>
-          <span class="quiet hint">{markTool === 'text' ? 'Click to write, click a text to change it' : 'Drag on the picture'}</span>
-          <button type="button" class="small primary" onclick={doneMark}>Done</button>
-          {#if markOn}<button type="button" class="small" onclick={removeMarks}>Remove marks</button>{/if}
+      <p class="quiet meta" aria-live="polite">
+        {#if wholeClip}
+          {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
         {:else}
-          {#if crop}<button type="button" class="small" onclick={resetCrop}>Reset to full capture</button>{/if}
-          {#if markOn}<button type="button" class="small" onclick={removeMarks}>Remove marks</button>{/if}
+          {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{#if followOn}{' following the window'}{/if}{/if}{#if markOn}, marked{/if}{#if showKeys}, with the keys{/if}{#if clockOn}, with the time{/if}
         {/if}
-        {#if onshot}
-          <button type="button" class="small" onclick={takeShot} disabled={!url || cannotPlay}>Take screenshot</button>
-        {/if}
-        <button type="button" class="small" onclick={resetEdits} disabled={pristine}>Reset edits</button>
-        {#if shotProblem}<span class="error" role="alert">{shotProblem}</span>{/if}
-        <span class="quiet meta" aria-live="polite">
-          {#if wholeClip}
-            {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
-          {:else}
-            {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{#if followOn}{' following the window'}{/if}{/if}{#if markOn}, marked{/if}{#if showKeys}, with the keys{/if}{#if clockOn}, with the time{/if}
-          {/if}
-        </span>
-      </div>
+      </p>
     </div>
   {:else}
     <p class="quiet meta">{total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}</p>
@@ -511,8 +520,11 @@
 </div>
 
 <style>
-  .clip { height: 100%; min-height: 0; display: grid; grid-template-rows: 1fr auto; gap: 2px; }
-  .stage { position: relative; min-height: 0; background: #000; border-radius: var(--radius-sm); overflow: hidden; outline-offset: 2px; }
+  .clip { height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 4px; }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 4px; }
+  .sep { width: 1px; height: 18px; background: var(--border-strong); margin: 0 2px; }
+  .trim { display: grid; gap: 2px; }
+  .stage { position: relative; flex: 1 1 0; min-height: 0; background: #000; border-radius: var(--radius-sm); overflow: hidden; outline-offset: 2px; }
   .stage.full { border-radius: 0; }
   .picture { position: absolute; overflow: hidden; }
   .frame { position: absolute; }
@@ -522,12 +534,11 @@
   .meta { margin: 0; font-size: 12px; }
   .hint { font-size: 12px; }
   .error { color: var(--err); font-size: 12px; }
-  .row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
   .small { padding: 2px 8px; font-size: 12px; }
-  .small[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .tools { display: inline-flex; flex-wrap: wrap; gap: 2px; align-items: center; }
-  .tool { width: 26px; height: 26px; padding: 0; display: inline-grid; place-items: center; font-size: 13px; }
-  .tool svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .tool { width: 28px; height: 28px; padding: 0; display: inline-grid; place-items: center; font-size: 14px; }
   .tool[aria-pressed='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .tool.letter { font-family: Georgia, serif; }
+  /* Room at its end for the dots of the sharing buttons (App sets --corner). */
+  .bar { padding-right: var(--corner, 0px); }
 </style>

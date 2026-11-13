@@ -14,7 +14,8 @@
 
 use crate::capabilities::Capabilities;
 use crate::model::{
-    Block, BlockKind, DropdownBlock, DropdownSource, Layout, SharingButton, TextRole, ValueSource,
+    Block, BlockKind, DropdownBlock, DropdownSource, Layout, SharingButton, TabsBlock, TextRole,
+    ValueSource,
 };
 use crate::reach::{reach, Verdict};
 use cargoframe_context::template;
@@ -60,6 +61,9 @@ pub enum Code {
     TooManyTags,
     /// A log viewer in a layout with no Files block.
     NoFilesToView,
+    /// A Tabs block with too few or too many tabs, too small, or a block in its tabs that is
+    /// not there, not inside it, in two tabs, or itself a Tabs block.
+    BadTabs,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -369,6 +373,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                     ));
                 }
             }
+            BlockKind::Tabs(t) => check_tabs(layout, block, t, &mut out),
             BlockKind::Screenshot => {}
             BlockKind::Video(_) => {}
         }
@@ -619,7 +624,7 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
         }
         if let Some(other) = layout.blocks[..i]
             .iter()
-            .find(|b| b.rect.overlaps(&block.rect))
+            .find(|b| b.rect.overlaps(&block.rect) && !layout.may_share(&b.id, &block.id))
         {
             out.push(issue(
                 block,
@@ -627,6 +632,65 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
                 Code::Overlap,
                 format!("Overlaps block \"{}\"", other.id),
             ));
+        }
+    }
+}
+
+fn check_tabs(layout: &Layout, block: &Block, tabs: &TabsBlock, out: &mut Vec<Issue>) {
+    let mut bad =
+        |severity, message: String| out.push(issue(block, severity, Code::BadTabs, message));
+    if !(crate::MIN_TABS..=crate::MAX_TABS).contains(&tabs.tabs.len()) {
+        bad(
+            Severity::Error,
+            format!(
+                "A Tabs block has {} to {} tabs",
+                crate::MIN_TABS,
+                crate::MAX_TABS
+            ),
+        );
+    }
+    let r = &block.rect;
+    if r.w < crate::MIN_TABS_SIZE || r.h < crate::MIN_TABS_SIZE {
+        bad(
+            Severity::Error,
+            format!(
+                "A Tabs block is at least {0} by {0} cells",
+                crate::MIN_TABS_SIZE
+            ),
+        );
+    }
+    for (i, tab) in tabs.tabs.iter().enumerate() {
+        for id in &tab.blocks {
+            let name = &tab.name;
+            // a block is in the first tab that lists it; any other that lists it is wrong
+            if layout.tab_of(id).map(|(t, j)| (t.id.as_str(), j)) != Some((block.id.as_str(), i)) {
+                bad(
+                    Severity::Error,
+                    format!("The block \"{id}\" is in two tabs"),
+                );
+                continue;
+            }
+            match layout.block(id) {
+                None => bad(
+                    Severity::Warning,
+                    format!("The tab \u{201c}{name}\u{201d} lists the block \"{id}\", which is not in this layout"),
+                ),
+                Some(b) if matches!(b.kind, BlockKind::Tabs(_)) => {
+                    bad(Severity::Error, "Tabs cannot go inside tabs".into())
+                }
+                Some(b)
+                    if b.rect.x < r.x
+                        || b.rect.y < r.y
+                        || b.rect.right() > r.right()
+                        || b.rect.bottom() > r.bottom() =>
+                {
+                    bad(
+                        Severity::Error,
+                        format!("The block \"{id}\" of the tab \u{201c}{name}\u{201d} is not inside the tabs"),
+                    )
+                }
+                Some(_) => {}
+            }
         }
     }
 }
@@ -1246,5 +1310,140 @@ mod tests {
         );
         assert_eq!(worst(&issues), Some(Severity::Error));
         assert_eq!(worst(&[]), None);
+    }
+
+    fn tabs(names: &[(&str, &[&str])]) -> BlockKind {
+        BlockKind::Tabs(TabsBlock {
+            tabs: names
+                .iter()
+                .map(|(n, ids)| Tab {
+                    name: (*n).into(),
+                    blocks: ids.iter().map(|s| s.to_string()).collect(),
+                })
+                .collect(),
+            side: TabSide::Top,
+        })
+    }
+
+    fn sized(id: &str, rect: Rect, kind: BlockKind) -> Block {
+        Block {
+            id: id.into(),
+            rect,
+            kind,
+        }
+    }
+
+    fn bad_tabs(l: &Layout) -> Vec<String> {
+        validate(l, &Reg::default())
+            .into_iter()
+            .filter(|i| matches!(i.code, Code::BadTabs | Code::Overlap))
+            .map(|i| i.message)
+            .collect()
+    }
+
+    #[test]
+    fn blocks_in_tabs_share_the_tabs_area_and_one_another_s_across_tabs() {
+        let l = layout(vec![
+            sized(
+                "tabs",
+                Rect::new(0, 0, 6, 4),
+                tabs(&[("One", &["a"]), ("Two", &["b"])]),
+            ),
+            sized("a", Rect::new(0, 0, 6, 4), BlockKind::Screenshot),
+            sized("b", Rect::new(0, 1, 3, 2), text(TextRole::Plain, "")),
+        ]);
+        assert!(bad_tabs(&l).is_empty(), "{:?}", bad_tabs(&l));
+        assert_eq!(
+            l.tab_of("b").map(|(t, i)| (t.id.as_str(), i)),
+            Some(("tabs", 1))
+        );
+        assert!(l.may_share("a", "b") && l.may_share("tabs", "a") && !l.may_share("a", "a2"));
+    }
+
+    #[test]
+    fn blocks_of_the_same_tab_or_outside_the_tabs_do_not_overlap() {
+        let l = layout(vec![
+            sized(
+                "tabs",
+                Rect::new(0, 0, 6, 4),
+                tabs(&[("One", &["a", "b"]), ("Two", &[])]),
+            ),
+            sized("a", Rect::new(0, 0, 4, 2), BlockKind::Screenshot),
+            sized("b", Rect::new(2, 1, 4, 2), BlockKind::Screenshot),
+            sized("c", Rect::new(5, 3, 2, 1), BlockKind::Screenshot),
+        ]);
+        assert_eq!(
+            bad_tabs(&l),
+            vec![
+                "Overlaps block \"a\"".to_string(),
+                "Overlaps block \"tabs\"".to_string()
+            ]
+        );
+    }
+
+    #[test]
+    fn says_what_is_wrong_with_tabs() {
+        let l = layout(vec![
+            sized(
+                "tabs",
+                Rect::new(0, 0, 1, 4),
+                tabs(&[("One", &["a", "gone", "inner"])]),
+            ),
+            sized("a", Rect::new(0, 3, 1, 2), BlockKind::Screenshot),
+            sized(
+                "inner",
+                Rect::new(0, 0, 1, 1),
+                tabs(&[("x", &[]), ("y", &["a"])]),
+            ),
+        ]);
+        let all = bad_tabs(&l);
+        for want in [
+            "A Tabs block has 2 to 5 tabs",
+            "A Tabs block is at least 2 by 2 cells",
+            "The block \"a\" of the tab \u{201c}One\u{201d} is not inside the tabs",
+            "The tab \u{201c}One\u{201d} lists the block \"gone\", which is not in this layout",
+            "Tabs cannot go inside tabs",
+        ] {
+            assert!(all.iter().any(|m| m == want), "{want} not in {all:?}");
+        }
+        // the inner Tabs block lists "a" too
+        assert!(
+            all.iter().any(|m| m == "The block \"a\" is in two tabs"),
+            "{all:?}"
+        );
+    }
+
+    #[test]
+    fn tabs_keep_their_shape_in_json() {
+        let b = sized(
+            "tabs",
+            Rect::new(0, 0, 4, 3),
+            BlockKind::Tabs(TabsBlock {
+                tabs: vec![
+                    Tab::named("Logs"),
+                    Tab {
+                        name: "Notes".into(),
+                        blocks: vec!["n".into()],
+                    },
+                ],
+                side: TabSide::Left,
+            }),
+        );
+        let json = serde_json::to_value(&b).unwrap();
+        assert_eq!(
+            json,
+            serde_json::json!({"id": "tabs", "rect": {"x": 0, "y": 0, "w": 4, "h": 3}, "type": "tabs",
+                "tabs": [{"name": "Logs"}, {"name": "Notes", "blocks": ["n"]}], "side": "left"})
+        );
+        assert_eq!(serde_json::from_value::<Block>(json).unwrap(), b);
+        // the side is "top" when it is not said
+        let top: Block = serde_json::from_value(serde_json::json!({"id": "t", "rect": {"x": 0, "y": 0, "w": 2, "h": 2}, "type": "tabs", "tabs": [{"name": "A"}, {"name": "B"}]})).unwrap();
+        assert!(matches!(
+            top.kind,
+            BlockKind::Tabs(TabsBlock {
+                side: TabSide::Top,
+                ..
+            })
+        ));
     }
 }

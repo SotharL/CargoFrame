@@ -76,10 +76,14 @@ function describe(r: BlockReach | undefined, label: string, on: boolean): { titl
   }
 }
 
+/** The room the dots of a block take at the end of its first row, in px (TickBoxes draws 18 px each). */
+export const cornerWidth = (boxes: readonly TickBox[]) => (boxes.length ? boxes.length * 18 + 2 : 0);
+
 /** The boxes of one block, in the order of the buttons. Empty for a block no button could ever use. */
 export function boxesFor(view: SessionView, blockId: string, ticks: Ticks): TickBox[] {
-  // a log viewer only shows: nothing of it is ever sent
-  if (view.layout?.blocks.find((b) => b.id === blockId)?.type === 'log_view') return [];
+  // a log viewer only shows, and tabs only hold other blocks: nothing of them is ever sent
+  const type = view.layout?.blocks.find((b) => b.id === blockId)?.type;
+  if (type === 'log_view' || type === 'tabs') return [];
   const buttons = buttonsOf(view);
   const kinds = buttons.map((b) => view.sharing[b.id]?.kind ?? null);
   return buttons.map((button, i) => {

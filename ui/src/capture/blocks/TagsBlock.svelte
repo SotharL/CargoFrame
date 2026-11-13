@@ -153,4 +153,6 @@
   .offer { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; }
   .pick { padding: 1px 8px; font-size: 12px; border-radius: 999px; }
   .note { margin: 0; font-size: 12px; }
+  /* Room at its end for the dots of the sharing buttons (App sets --corner). */
+  .tags > label { padding-right: var(--corner, 0px); }
 </style>

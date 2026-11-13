@@ -31,7 +31,7 @@ export const FINDINGS: Finding[] = [
   { page: 'layouts', title: 'Ready-made layouts', target: 'layouts.templates', words: 'templates jira bug github issue start new layout' },
   {
     page: 'layouts', title: 'Blocks of a layout', target: 'layouts.save',
-    words: 'grid columns rows window screenshot video recording text dropdown files tags labels log viewer sharing button block',
+    words: 'grid columns rows window screenshot video recording text dropdown files tags labels log viewer tabs sharing button block',
   },
   { page: 'layouts', title: 'Keys pressed on a recording (Video block)', words: 'keyboard keystrokes shortcuts typing overlay video block' },
   { page: 'layouts', title: 'Time on a recording (Video block)', words: 'clock timestamp date hour overlay video block' },
@@ -40,6 +40,7 @@ export const FINDINGS: Finding[] = [
   { page: 'layouts', title: 'Formatting buttons (Text block)', words: 'bold italic code lists tables markdown text block' },
   { page: 'layouts', title: 'Tags block', words: 'labels hashtags tag container jira github' },
   { page: 'layouts', title: 'Log viewer block', words: 'log parser search filter lines copy file preview' },
+  { page: 'layouts', title: 'Tabs block', words: 'tabs binder pages sections group blocks tab names side' },
   { page: 'layouts', title: 'Where each block is sent', target: 'props.sent_in', words: 'field mapping sharing button sent in jira field' },
   // Triggers
   { page: 'triggers', title: 'Add a trigger', target: 'triggers.add', words: 'shortcut hotkey keyboard key combination capture screenshot record' },

@@ -279,7 +279,7 @@ pub fn select(
                     );
                 }
             }
-            BlockKind::SharingButton(_) | BlockKind::LogView(_) => {}
+            BlockKind::SharingButton(_) | BlockKind::LogView(_) | BlockKind::Tabs(_) => {}
         }
     }
     if !reasons.is_empty() {
@@ -318,7 +318,7 @@ fn block_name(b: &Block) -> String {
         BlockKind::Files(f) => format!("\u{201c}{}\u{201d}", titled(&f.title)),
         BlockKind::Tags(t) => format!("\u{201c}{}\u{201d}", titled(&t.title)),
         BlockKind::LogView(l) => format!("\u{201c}{}\u{201d}", titled(&l.title)),
-        BlockKind::SharingButton(_) => b.id.clone(),
+        BlockKind::SharingButton(_) | BlockKind::Tabs(_) => b.id.clone(),
     }
 }
 
@@ -405,7 +405,9 @@ fn verdict(
             },
         },
         // shown in the window only
-        BlockKind::SharingButton(_) | BlockKind::LogView(_) => Verdict::NotUsed,
+        BlockKind::SharingButton(_) | BlockKind::LogView(_) | BlockKind::Tabs(_) => {
+            Verdict::NotUsed
+        }
     }
 }
 

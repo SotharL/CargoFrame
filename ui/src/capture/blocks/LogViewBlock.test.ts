@@ -48,6 +48,12 @@ describe('LogViewBlock', () => {
     expect(screen.getByRole('combobox', { name: 'File to show' })).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Open large' }));
     expect(screen.getByRole('region', { name: 'Log' }).classList.contains('large')).toBe(true);
+    // the same button, now a cross, closes it; so does a click beside it
+    await fireEvent.click(screen.getByRole('button', { name: 'Close the large view' }));
+    expect(screen.getByRole('region', { name: 'Log' }).classList.contains('large')).toBe(false);
+    await fireEvent.click(screen.getByRole('button', { name: 'Open large' }));
+    await fireEvent.click(document.querySelector('.backdrop')!);
+    expect(screen.getByRole('region', { name: 'Log' }).classList.contains('large')).toBe(false);
   });
 
   it('starts with the filter of the layout, and says when there is nothing to show', async () => {

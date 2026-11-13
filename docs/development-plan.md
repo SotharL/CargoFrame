@@ -132,7 +132,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `keys` | The keys pressed while recording: the keyboard asked which keys are down (Windows `GetAsyncKeyState`, X11 `QueryKeymap`), each press with its time; lines of keys with when they show | `Tracker`, `captions` |
 | `indicator` | The sign shown while recording: a red outline and a blinking dot, as native windows (Win32, excluded from capture; X11 with the Shape extension); none on Wayland | `geometry.rs`, `win.rs`, `x11.rs` |
 | `ocr` | Read the text in part of a screenshot on this computer: `Windows.Media.Ocr`, or the `tesseract` program on Linux; the picture is prepared first (grey, larger, light-on-dark turned), three ways to try | `read`, `prepare.rs` |
-| `layout` | Blocks on a grid of 12 to 24 columns (`Layout::columns`), validation chips, templates; tags kept clean and at most 25 (`split_tags`) | `model.rs`, `templates.rs` |
+| `layout` | Blocks on a grid of 12 to 24 columns (`Layout::columns`), validation chips, templates; tags kept clean and at most 25 (`split_tags`); Tabs blocks and the blocks they hold (`tab_of`, `may_share`) | `model.rs`, `templates.rs` |
 | `rules` | Data rules: find a file, read values from it; values made from other values | `find.rs` (the three ways to find a value), `combine.rs`, one module per format |
 | `window` | Everything the CargoFrame window shows for one capture, as one serializable view | `view::SessionView` |
 | `bundle` | The fallback zip and the Files zip, with a manifest | |
@@ -178,10 +178,10 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes |
 | `settings/search.ts` | What the settings search finds: each setting's page, section title or `data-tour` name, and the words it is found by (checked against the pages' code by `search.test.ts`) |
-| `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`; texts over the clip: `TextOverlay.svelte`, `keyLayer.ts`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files (＋ to add by hand), Tags, Log viewer (`logLines.ts`, `logTimes.ts`, `logFormat.ts` for the formats people write, `logFormats.ts` for the ones kept), Sharing |
+| `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`; texts over the clip: `TextOverlay.svelte`, `keyLayer.ts`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files (＋ to add by hand), Tags, Log viewer (`logLines.ts`, `logTimes.ts`, `logFormat.ts` for the formats people write, `logFormats.ts` for the ones kept), Tabs (`TabsBlock.svelte`: the names; the window draws the page), Sharing |
 | `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
-| `capture/*.ts` | Values, tick boxes, what each button will send, remembered choices |
-| `lib/` | `ipc.ts` (real and in-memory API), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links) |
+| `capture/*.ts` | Values, the sharing dots (`ticks.ts`), what each button will send, remembered choices, row heights (`rows.ts`) |
+| `lib/` | `ipc.ts` (real and in-memory API), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links), `icons.ts` with `Icon.svelte` (the line icons), `tabs.ts` (which tab a block is in, shared by the builder and the window) |
 
 </details>
 
@@ -224,6 +224,7 @@ flowchart LR
 | **11 · Polish (0.3.0)** | Recording sign (`indicator`) and focus following; tables and code blocks, pictures in the text; the values list; *Read text* (`ocr`); wider layouts | Each has unit and UI tests; the Windows parts compile on CI |
 | **12 · Tags, logs, continuous (0.4.0)** | Tags block and its fields per service; log viewer; files added by hand; values made from other values; continuous recording with hold-to-start; keys pressed over a recording; a recording that follows a moved window; settings search; Text blocks that keep one line | Each has unit and UI tests; a real continuous recording on a virtual screen hands out two clips; a real export shows the keys at their time and follows a moved window |
 | **13 · Time (0.4.1)** | The time over a recording; texts over a clip through one upload; log lines read by their time (during the recording, around the capture, between two times), with formats the person writes or a data rule sets | Each format of log time has a test; a share sends the keys and the time |
+| **14 · Layout round (0.4.1)** | Rows that hold one line; sharing labels cut, not overflowing; the log viewer opened large in the middle; the ring round the picture; the recording's tools as icons above it; sharing dots in each block's first row; one icon set; the Tabs block (2 to 5 tabs, names on any side) in the model, its checks, the builder and the window | Tabs checks and moves have Rust and TS tests; the window test opens a layout with tabs and switches them |
 
 ---
 

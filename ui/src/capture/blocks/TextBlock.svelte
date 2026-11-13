@@ -110,4 +110,6 @@
     display: flex; gap: 6px; align-items: center; pointer-events: none;
   }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
+  /* The first row keeps room at its end for the dots of the sharing buttons (App sets --corner). */
+  .text > :first-child:not(.field) { padding-right: var(--corner, 0px); }
 </style>

@@ -88,8 +88,14 @@ export async function demoSession(): Promise<SessionView> {
       id: 'clip', type: 'video', rect: { x: 0, y: 4, w: 8, h: 5 }, screenshot_at_end: params.get('end') === '1',
     });
   }
-  const button = layout.blocks.find((b) => b.type === 'sharing_button')!;
-  const reach = demoReach(layout, button as Extract<typeof button, { type: 'sharing_button' }>, local ? LOCAL_CAPABILITIES : demoCapabilities(kind), local ? null : kind);
+  // `?blocks=[…]` puts these blocks (JSON) in place of the layout's, to look at any arrangement:
+  // the ids of the blocks above keep their content (prompt, note, logs, log, shot, clip), and
+  // any sharing buttons are drawn (the first one as `?local=`/`?kind=` say).
+  const custom = params.get('blocks');
+  if (custom) layout.blocks = JSON.parse(custom) as typeof layout.blocks;
+  // the first sharing button goes where the demo says (`?local=1`, `?kind=`); there may be none
+  const button = layout.blocks.find((b): b is Extract<typeof b, { type: 'sharing_button' }> => b.type === 'sharing_button');
+  const reach = button ? demoReach(layout, button, local ? LOCAL_CAPABILITIES : demoCapabilities(kind), local ? null : kind) : null;
   return {
     session_id: 1,
     trigger_id: 'bug',
@@ -102,10 +108,18 @@ export async function demoSession(): Promise<SessionView> {
     variables: { 'project.name': 'Foo', 'app.exe': 'Foo', 'capture.date': '2026-10-23' },
     layout_problem: null,
     layout,
-    texts: {
-      prompt: { value: 'What is wrong in Foo?', unresolved: [] },
-      note: { value: 'Seen on 2026-10-23 {{rule.build}}', unresolved: ['rule.build'] },
-    },
+    texts: Object.fromEntries(
+      layout.blocks
+        .filter((b) => b.type === 'text')
+        .map((b) => [
+          b.id,
+          b.id === 'prompt'
+            ? { value: 'What is wrong in Foo?', unresolved: [] }
+            : b.id === 'note'
+              ? { value: 'Seen on 2026-10-23 {{rule.build}}', unresolved: ['rule.build'] }
+              : { value: 'Short text', unresolved: [] },
+        ]),
+    ),
     tags: { labels: { tags: ['crash'], over: 0 } },
     files: {
       logs: {
@@ -139,13 +153,16 @@ export async function demoSession(): Promise<SessionView> {
     ...(video ? { video: both ? { width: 640, height: 400, duration_ms: 1_300, bytes: 40_000, audio: false } : { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true, ...demoExtras(params) } } : {}),
     issues: [],
     sharing: {
-      ...(local
-        ? { send: { enabled: true, reasons: [], mode: 'save_locally' as const, note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }
-        : { send: { enabled: true, reasons: [], mode: 'send' as const, note: null, kind, reach } }),
+      ...(!button || !reach
+        ? {}
+        : local
+          ? { [button.id]: { enabled: true, reasons: [], mode: 'save_locally' as const, note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }
+          : { [button.id]: { enabled: true, reasons: [], mode: 'send' as const, note: null, kind, reach } }),
       ...Object.fromEntries(
-        [...kinds].map(([id, k]) => {
-          const b = layout.blocks.find((x) => x.id === id) as Extract<(typeof layout.blocks)[number], { type: 'sharing_button' }>;
-          return [id, { enabled: true, reasons: [], mode: 'send' as const, note: null, kind: k, reach: demoReach(layout, b, demoCapabilities(k!), k) }];
+        [...kinds].flatMap(([id, k]) => {
+          const b = layout.blocks.find((x) => x.id === id);
+          if (b?.type !== 'sharing_button' || b.id === button?.id) return [];
+          return [[id, { enabled: true, reasons: [], mode: 'send' as const, note: null, kind: k, reach: demoReach(layout, b, demoCapabilities(k!), k) }]];
         }),
       ),
     },
@@ -186,7 +203,9 @@ export async function demoImage(): Promise<Blob> {
   const c = document.createElement('canvas');
   c.width = w;
   c.height = h;
-  const g = c.getContext('2d')!;
+  const g = c.getContext('2d');
+  // no canvas (the tests' browser): an empty picture, so the window still opens
+  if (!g) return new Blob([], { type: 'image/png' });
   g.fillStyle = '#1e2330';
   g.fillRect(0, 0, w, h);
   g.fillStyle = '#2b3245';

@@ -149,9 +149,10 @@ or click the ones you want. *Try again* reads it another way. It is read on your
 <details>
 <summary><b>In the window: which button sends what</b></summary>
 
-A window can have up to five sharing buttons. Each block shows a row of small tick boxes, one per button, in that
-button's colour. Untick one to leave the block out of that button's share. A dashed box means the service cannot take
-it; a ring means the button needs it. Pointing at a button outlines everything it sends.
+A window can have up to five sharing buttons. Each block shows one small dot per button, in that button's colour, at
+the end of its title row: full means the button sends the block, an empty ring leaves it out; click a dot to switch it.
+A dashed dot means the service cannot take it; an outer ring means the button needs it. Pointing at a button outlines
+everything it sends (the picture itself for a screenshot or a recording).
 
 </details>
 
@@ -160,8 +161,9 @@ it; a ring means the button needs it. Pointing at a button outlines everything i
 
 <img alt="The CargoFrame window with a recording: trim handles, crop and mark" src="docs/images/capture-recording.png" width="640">
 
-Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles to trim, drag a frame to
-**Crop** (then *Confirm*), and draw **marks** with the same tools as on a screenshot (pen, square, circle, arrow, text).
+Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles under it to trim; the
+icons above it, as on a screenshot, **crop** (drag a frame, then *Apply crop*) and draw **marks** with the screenshot's
+tools (pen, square, circle, arrow, text). Rest the mouse on an icon to see its name.
 If you switch programs while recording, the one you used longest names the capture and gives the project folder.
 
 **Continuous recording** (turn it on in *Settings, Recording*): hold a shortcut for 2 seconds to start recording all
@@ -172,7 +174,7 @@ a shortcut 2 seconds again to stop. The tray menu does the same (on Wayland it i
 when it was pressed ("Ctrl+S", "hello ⏎"). Drag the keys where you want them, or take them off with their ×. Every key
 typed while it records shows, passwords too; not on Wayland. **A window that is moved:** with *Follow the window when
 it is moved* on (*Settings, Recording*), the whole screen is recorded and the clip stays on the window as it moves.
-**The time:** *Time* under a recording shows the time of each moment over it (2026-11-12 14:03:27), sent the same way;
+**The time:** the clock above a recording shows the time of each moment over it (2026-11-12 14:03:27), sent the same way;
 in a Log viewer, the clock button at the start of the search row turns it to a time search that keeps the lines written during the recording, or between
 two times. Logs write their time in many ways: type the one yours uses in the format box (`[YYYY_MM_DD] HH:mm -`,
 `MM_DD_HH_mm_ss`), or let a data rule set it for the file it finds; the last one used for a file comes back next time.
@@ -211,7 +213,11 @@ ends* to get both. Recordings go to Jira, GitHub, Google, Slack, Discord and Sav
   repository's labels are suggested while typing. Send them as Jira or GitHub labels, hashtags on X, Bluesky and
   Instagram, or a *Tags* line in Slack, Teams and Discord.
 - **Log viewer:** a block that shows a file of the window line by line. Type `error` in its search to see only those
-  lines, pick one to read it whole and copy it, or *Copy all*.
+  lines, pick one to read it whole and copy it, or *Copy all*. The expand icon opens it large in the middle of the
+  window; the cross or Escape closes it.
+- **Tabs:** a Tabs block is a binder: 2 to 5 tabs (named, with the names on the top, bottom, left or right), each
+  holding blocks. In the layout builder, click a tab's name and drop blocks inside; in the window, click a tab to see
+  its blocks. What is in the other tabs is kept and sent.
 - **Values made from other values:** in *Data & fields*, *Make a value from other values*: for example a build id
   `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least

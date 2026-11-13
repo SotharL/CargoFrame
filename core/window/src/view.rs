@@ -486,7 +486,10 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                 view.tags
                     .insert(block.id.clone(), starting_tags(t, inputs.variables));
             }
-            BlockKind::Screenshot | BlockKind::Video(_) | BlockKind::LogView(_) => {}
+            BlockKind::Screenshot
+            | BlockKind::Video(_)
+            | BlockKind::LogView(_)
+            | BlockKind::Tabs(_) => {}
         }
     }
     view

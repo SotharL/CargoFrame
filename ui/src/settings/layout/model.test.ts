@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { Block, Layout } from '../../lib/types';
 import {
-  canPlace, cellAt, COLUMNS, firstFree, fits, makeBlock, MAX_SHARING_BUTTONS, moveTo, newBlockId, overlaps, removeBlock,
+  addBlock, canPlace, cellAt, COLUMNS, firstFree, fits, makeBlock, MAX_SHARING_BUTTONS, moveTo, newBlockId, overlaps, removeBlock,
   resizeTo, rowsNeeded, tidy, columnsOf, usedColumns,
 } from './model';
 
@@ -171,5 +171,49 @@ describe('a wider grid', () => {
     const base: Layout = { id: 'l', name: 'L', blocks: [] };
     expect('columns' in tidy({ ...base, columns: 12 })).toBe(false);
     expect(tidy({ ...base, columns: 18 }).columns).toBe(18);
+  });
+});
+
+describe('tabs, like a binder', () => {
+  const tabs = (blocks: string[][] = [[], []]): Block => ({
+    id: 'tabs', rect: { x: 0, y: 0, w: 8, h: 4 }, type: 'tabs', tabs: blocks.map((b, i) => (b.length ? { name: `T${i + 1}`, blocks: b } : { name: `T${i + 1}` })),
+  });
+  const tabsOf = (blocks: Block[]) => (blocks.find((b) => b.id === 'tabs') as Extract<Block, { type: 'tabs' }>).tabs.map((t) => t.blocks ?? []);
+
+  it('a block dropped inside goes in the open tab, and blocks of other tabs share its cells', () => {
+    const one = addBlock([tabs()], 'text', { x: 0, y: 1 })!;
+    expect(tabsOf(one.blocks)).toEqual([[one.block.id], []]);
+    // the same cells, in the second tab
+    expect(canPlace(one.blocks, one.block.rect, undefined, COLUMNS, { open: { tabs: 1 } })).toBe(true);
+    const two = addBlock(one.blocks, 'text', { x: 0, y: 1 }, COLUMNS, { tabs: 1 })!;
+    expect(tabsOf(two.blocks)).toEqual([[one.block.id], [two.block.id]]);
+    // but not in the first again, nor across the tabs' edge
+    expect(canPlace(two.blocks, one.block.rect)).toBe(false);
+    expect(canPlace(two.blocks, { x: 6, y: 0, w: 4, h: 2 })).toBe(false);
+  });
+
+  it('moving a block out of the tabs takes it out of its tab', () => {
+    const blocks = [tabs([['a'], []]), text('a', 0, 0)];
+    const next = moveTo(blocks, 'a', 0, 5)!;
+    expect(tabsOf(next)).toEqual([[], []]);
+    // and back in, to the tab open then
+    expect(tabsOf(moveTo(next, 'a', 2, 1, COLUMNS, { tabs: 1 })!)).toEqual([[], ['a']]);
+    // moved inside, it stays in its own tab, whichever is open
+    expect(tabsOf(moveTo(blocks, 'a', 1, 1, COLUMNS, { tabs: 1 })!)).toEqual([['a'], []]);
+  });
+
+  it('the tabs take their blocks along, keep them inside when resized, and go with them', () => {
+    const blocks = [tabs([['a'], ['b']]), text('a', 0, 0), text('b', 4, 2)];
+    const moved = moveTo(blocks, 'tabs', 2, 3)!;
+    expect(moved.map((b) => [b.id, b.rect.x, b.rect.y])).toEqual([['tabs', 2, 3], ['a', 2, 3], ['b', 6, 5]]);
+    expect(resizeTo(blocks, 'tabs', 6, 4)).toBeNull(); // b would be outside
+    expect(resizeTo(blocks, 'tabs', 1, 4)).toBeNull(); // at least 2 by 2
+    expect(resizeTo(blocks, 'tabs', 8, 5)).not.toBeNull();
+    expect(removeBlock(blocks, 'tabs')).toEqual([]);
+    expect(tabsOf(removeBlock(blocks, 'b'))).toEqual([['a'], []]);
+  });
+
+  it('tabs do not go inside tabs', () => {
+    expect(canPlace([tabs()], { x: 0, y: 0, w: 4, h: 2 }, undefined, COLUMNS, { type: 'tabs' })).toBe(false);
   });
 });

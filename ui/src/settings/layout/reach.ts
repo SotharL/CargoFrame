@@ -13,6 +13,7 @@ export interface Line {
 export function blockName(b: Block): string {
   if (b.type === 'screenshot') return 'Screenshot';
   if (b.type === 'video') return 'Video';
+  if (b.type === 'tabs') return 'Tabs';
   return b.type === 'sharing_button' ? b.label || 'Share' : b.title || b.id;
 }
 
