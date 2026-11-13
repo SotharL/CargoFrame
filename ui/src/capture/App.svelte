@@ -18,9 +18,12 @@
   import { recentChoices, type Recent } from '../lib/recent';
   import { rememberChoices, remembers } from './remembering';
   import { marksFor } from './blocks/formatting';
+  import { rowMinimums, tabRows } from './rows';
+  import TabsBlock from './blocks/TabsBlock.svelte';
+  import { tabOf, openTab } from '../lib/tabs';
   import ResultPanel from './ResultPanel.svelte';
   import TickBoxes from './TickBoxes.svelte';
-  import { boxesFor, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
+  import { boxesFor, cornerWidth, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
   import { chatToOpen, pairedWithRecording, willSend } from './willSend';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
@@ -104,6 +107,7 @@
       opened = null;
       hovered = null;
       ticks = initialTicks(v);
+      tabOpen = {};
       recents = Object.fromEntries(
         (v.layout?.blocks ?? [])
           .filter((b) => b.type === 'dropdown' || (b.type === 'tags' && b.remember !== false))
@@ -165,14 +169,45 @@
   /** The layout's columns: more than 12 make it wider, with more side by side. */
   const cols = $derived(Math.min(24, Math.max(12, view?.layout?.columns ?? 12)));
   const rows = $derived(blocks.reduce((m, b) => Math.max(m, b.rect.y + b.rect.h), 0));
+  /** Each row's height: at least 44 px, and as much as the blocks in it need to show one line
+   *  (a Text block with its title above, a dropdown…), so none is cut in a short window. */
+  const hasToolbar = (b: Block) => (b.type === 'text' && view ? marksFor(view, b).marks.length > 0 : false);
+  const rowHeights = $derived(view ? rowMinimums(blocks, rows, hasToolbar) : []);
+  /** The blocks in no tab; the others are drawn on their Tabs block's page. */
+  const topLevel = $derived(blocks.filter((b) => !tabOf(blocks, b.id)));
+  /** The tab open in each Tabs block, by its id (the first one when the window opens). */
+  let tabOpen = $state<Record<string, number>>({});
+  /** The rows of a grid: each at least as high as its blocks need, sharing what is left. */
+  const gridRows = (heights: number[]) => heights.map((h) => `minmax(${h}px, 1fr)`).join(' ');
   const empty = $derived(view !== null && blocks.length === 0);
   // "This button does not send X" is shown on the block itself, so the header does not repeat it.
   const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug' && i.code !== 'cannot_send') ?? []);
   const debugs = $derived(view?.issues.filter((i) => i.severity === 'debug') ?? []);
 
-  function place(b: Block): string {
+  /** Where a block goes in its grid: the window's, or its Tabs block's page (from `origin`). */
+  function place(b: Block, origin = { x: 0, y: 0 }): string {
     const r = b.rect;
-    return `grid-column:${r.x + 1} / span ${r.w};grid-row:${r.y + 1} / span ${r.h};`;
+    return `grid-column:${r.x - origin.x + 1} / span ${r.w};grid-row:${r.y - origin.y + 1} / span ${r.h};`;
+  }
+
+  /** Does the block show a first row (a title, or tools) for the dots of the sharing buttons to
+   *  sit at the end of? Without one they go on its top edge. */
+  function headed(b: Block): boolean {
+    switch (b.type) {
+      case 'text':
+        return (b.placement !== 'inside' && !!b.title) || marksFor(view!, b).marks.length > 0;
+      case 'dropdown':
+      case 'tags':
+        return !!b.title;
+      case 'files':
+        return true;
+      case 'screenshot':
+        return paired ? still !== null : image !== null;
+      case 'video':
+        return !!view?.video;
+      default:
+        return false;
+    }
   }
 
   async function share(button: Extract<Block, { type: 'sharing_button' }>) {
@@ -271,86 +306,8 @@
         <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>Edit layout</button>
       </main>
     {:else}
-      <main class="grid" style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={`repeat(${rows}, minmax(44px, 1fr))`} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
-        {#each blocks as b (b.id)}
-          <div class="slot" style={place(b)}>
-            <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
-              <div class="body">
-              {#if b.type === 'screenshot' && paired}
-                {#if still}
-                  {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />{/key}
-                {:else}
-                  <p class="quiet videonote">No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.</p>
-                {/if}
-              {:else if b.type === 'screenshot' && image}
-                <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />
-              {:else if b.type === 'video'}
-                {#if view.video}
-                  {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} clockShown={b.clock === true} onshot={paired ? takeShot : undefined} />{/key}
-                {:else}
-                  <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
-                {/if}
-              {:else if b.type === 'text'}
-                {@const formats = marksFor(view, b)}
-                <TextBlock
-                  block={b}
-                  bind:value={values.texts[b.id]!}
-                  unresolved={view.texts[b.id]?.unresolved ?? []}
-                  marks={formats.marks}
-                  services={formats.services}
-                />
-              {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
-                <DropdownBlock
-                  block={b}
-                  info={view.dropdowns[b.id]!}
-                  bind:value={values.dropdowns[b.id]!}
-                  recent={recents[b.id] ?? []}
-                  narrowText={b.narrow_by ? (values.texts[b.narrow_by] ?? '') : ''}
-                  sessionId={view.session_id}
-                  layoutId={view.layout?.id ?? null}
-                  bind:deeper={values.deeper[b.id]}
-                />
-              {:else if b.type === 'files' && view.files[b.id]}
-                <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} onadd={api ? () => addFiles(b.id) : undefined} />
-              {:else if b.type === 'tags' && values.tags[b.id]}
-                {@const sessionId = view.session_id}
-                <TagsBlock
-                  block={b}
-                  bind:tags={values.tags[b.id]!}
-                  recent={recents[b.id] ?? []}
-                  over={view.tags?.[b.id]?.over ?? 0}
-                  suggest={b.suggest?.options_id && api ? () => api!.fetchOptions(sessionId, b.id) : undefined}
-                />
-              {:else if b.type === 'log_view'}
-                <LogViewBlock block={b} {view} files={values.files} api={api ?? null} />
-              {:else if b.type === 'sharing_button'}
-                <SharingBlock
-                  block={b}
-                  enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
-                  sending={sending === b.id}
-                  reasons={view.sharing[b.id]?.reasons ?? []}
-                  mode={nowhereToPost(view, b) ? 'save_locally' : (view.sharing[b.id]?.mode ?? 'send')}
-                  note={view.sharing[b.id]?.note ?? null}
-                  kind={view.sharing[b.id]?.kind ?? null}
-                  parts={willSend(view, b, values, imageEdited, clipEdit, ticks, still !== null)}
-                  opening={chatToOpen(view, b, values)}
-                  lit={hovered === b.id}
-                  onshare={() => share(b)}
-                  onhover={(on) => (hovered = on ? b.id : hovered === b.id ? null : hovered)}
-                />
-              {/if}
-              </div>
-            </section>
-            {#if b.type !== 'sharing_button'}
-              <TickBoxes
-                boxes={boxesFor(view, b.id, ticks)}
-                active={hovered}
-                onchange={(buttonId, on) => (ticks = setTick(ticks, buttonId, b.id, on))}
-                onhover={(buttonId) => (hovered = buttonId)}
-              />
-            {/if}
-          </div>
-        {/each}
+      <main class="grid" style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={gridRows(rowHeights)} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
+        {#each topLevel as b (b.id)}{@render slot(b, { x: 0, y: 0 }, false)}{/each}
       </main>
     {/if}
     {#if notice || result}
@@ -370,6 +327,110 @@
   {/if}
 </div>
 
+<!-- One block in its grid: the window's, or a Tabs block's page. Blocks of a closed tab are only
+     hidden, so what is typed or edited in them stays. -->
+{#snippet slot(b: Block, origin: { x: number; y: number }, hidden: boolean)}
+  {#if view}
+    {@const boxes = b.type === 'sharing_button' ? [] : boxesFor(view, b.id, ticks)}
+    <div class="slot" class:hidden style="{place(b, origin)}--corner:{cornerWidth(boxes)}px;">
+      {#if b.type === 'tabs'}
+        {@const open = openTab(b, tabOpen)}
+        <TabsBlock
+          block={b}
+          bind:open={() => open, (i) => (tabOpen[b.id] = i)}
+          lit={b.tabs.map((t) => hovered !== null && (t.blocks ?? []).some((id) => isTicked(ticks, hovered!, id)))}
+        >
+          <div class="grid inner" style:grid-template-columns={`repeat(${b.rect.w}, minmax(0, 1fr))`} style:grid-template-rows={gridRows(tabRows(b, blocks, hasToolbar))}>
+            {#each b.tabs as t, i (i)}
+              {#each t.blocks ?? [] as id (id)}
+                {@const child = blocks.find((x) => x.id === id)}
+                {#if child}{@render slot(child, b.rect, i !== open)}{/if}
+              {/each}
+            {/each}
+          </div>
+        </TabsBlock>
+      {:else}
+        <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
+          <div class="body">
+          {#if b.type === 'screenshot' && paired}
+            {#if still}
+              {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />{/key}
+            {:else}
+              <p class="quiet videonote">No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.</p>
+            {/if}
+          {:else if b.type === 'screenshot' && image}
+            <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />
+          {:else if b.type === 'video'}
+            {#if view.video}
+              {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} clockShown={b.clock === true} onshot={paired ? takeShot : undefined} />{/key}
+            {:else}
+              <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
+            {/if}
+          {:else if b.type === 'text'}
+            {@const formats = marksFor(view, b)}
+            <TextBlock
+              block={b}
+              bind:value={values.texts[b.id]!}
+              unresolved={view.texts[b.id]?.unresolved ?? []}
+              marks={formats.marks}
+              services={formats.services}
+            />
+          {:else if b.type === 'dropdown' && view.dropdowns[b.id]}
+            <DropdownBlock
+              block={b}
+              info={view.dropdowns[b.id]!}
+              bind:value={values.dropdowns[b.id]!}
+              recent={recents[b.id] ?? []}
+              narrowText={b.narrow_by ? (values.texts[b.narrow_by] ?? '') : ''}
+              sessionId={view.session_id}
+              layoutId={view.layout?.id ?? null}
+              bind:deeper={values.deeper[b.id]}
+            />
+          {:else if b.type === 'files' && view.files[b.id]}
+            <FilesBlock block={b} info={view.files[b.id]!} bind:selected={values.files[b.id]!} onadd={api ? () => addFiles(b.id) : undefined} />
+          {:else if b.type === 'tags' && values.tags[b.id]}
+            {@const sessionId = view.session_id}
+            <TagsBlock
+              block={b}
+              bind:tags={values.tags[b.id]!}
+              recent={recents[b.id] ?? []}
+              over={view.tags?.[b.id]?.over ?? 0}
+              suggest={b.suggest?.options_id && api ? () => api!.fetchOptions(sessionId, b.id) : undefined}
+            />
+          {:else if b.type === 'log_view'}
+            <LogViewBlock block={b} {view} files={values.files} api={api ?? null} />
+          {:else if b.type === 'sharing_button'}
+            <SharingBlock
+              block={b}
+              enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
+              sending={sending === b.id}
+              reasons={view.sharing[b.id]?.reasons ?? []}
+              mode={nowhereToPost(view, b) ? 'save_locally' : (view.sharing[b.id]?.mode ?? 'send')}
+              note={view.sharing[b.id]?.note ?? null}
+              kind={view.sharing[b.id]?.kind ?? null}
+              parts={willSend(view, b, values, imageEdited, clipEdit, ticks, still !== null)}
+              opening={chatToOpen(view, b, values)}
+              lit={hovered === b.id}
+              onshare={() => share(b)}
+              onhover={(on) => (hovered = on ? b.id : hovered === b.id ? null : hovered)}
+            />
+          {/if}
+          </div>
+        </section>
+        {#if boxes.length > 0}
+          <TickBoxes
+            {boxes}
+            edge={!headed(b)}
+            active={hovered}
+            onchange={(buttonId, on) => (ticks = setTick(ticks, buttonId, b.id, on))}
+            onhover={(buttonId) => (hovered = buttonId)}
+          />
+        {/if}
+      {/if}
+    </div>
+  {/if}
+{/snippet}
+
 <style>
   .videonote { margin: 0; padding: 12px; font-size: 13px; }
   .frame { height: 100%; display: grid; grid-template-rows: auto 1fr auto; min-height: 0; }
@@ -385,15 +446,24 @@
     display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); gap: 10px;
     padding: 12px 14px; overflow: auto; min-height: 0;
   }
-  /* The slot holds the block and its boxes: the boxes sit on the block's edge, so they must not
-     be clipped by the block's own scrolling. */
+  /* The slot holds the block and the dots of the sharing buttons: the dots sit over the block's
+     first row (or its top edge), so they must not be clipped by the block's own scrolling. */
   .slot { position: relative; min-width: 0; min-height: 0; display: grid; container-type: size; }
+  .slot.hidden { display: none; }
+  /* A Tabs block's page: the same grid as the window, from the page's corner. */
+  .grid.inner { padding: 0; overflow: visible; height: 100%; }
   /* A block never paints over its neighbour; the padding keeps focus rings from being clipped. */
   .cell { min-width: 0; min-height: 0; overflow: auto; padding: 3px; margin: -3px; display: grid; grid-template-rows: minmax(0, 1fr); border-radius: var(--radius); }
   .body { min-width: 0; min-height: 0; }
   /* The blocks the hovered button sends: a ring around what the block holds (each block marks it
      with data-content), not its title. A ring, so layout never shifts. */
   .cell.lit :global([data-content]) { box-shadow: 0 0 0 2px var(--kind-line, var(--accent)); border-radius: var(--radius-sm); }
+  /* A picture or a recording: the ring is drawn over its own edge, so nothing around it clips it. */
+  .cell.lit :global([data-content='media']) { box-shadow: none; }
+  .cell.lit :global([data-content='media'])::after {
+    content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 3;
+    box-shadow: inset 0 0 0 3px var(--kind-line, var(--accent));
+  }
   .center {
     display: grid; place-content: center; justify-items: center; gap: 10px; text-align: center;
     padding: 24px;

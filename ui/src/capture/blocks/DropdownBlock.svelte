@@ -197,4 +197,6 @@
   .step { flex: 0 1 34%; min-width: 0; width: auto; text-overflow: ellipsis; }
   .note { margin: 0; font-size: 12px; }
   .link { border: 0; background: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; font: inherit; }
+  /* Room at its end for the dots of the sharing buttons (App sets --corner). */
+  .dd > label { padding-right: var(--corner, 0px); }
 </style>

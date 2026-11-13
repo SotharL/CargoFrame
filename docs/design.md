@@ -247,7 +247,7 @@ service are grouped under *Connect a service*, below the others.
 | Group | Page | What it holds |
 |-------|------|---------------|
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
-| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Text block's starting text is written with every value listed on its right, searchable, the most used first |
+| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, and a block dropped inside goes in the tab open); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Triggers** | Shortcuts and the layout each opens |
 | | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder, and values made from other values) and *Fill fields* (steps that fill a field of the service on each share) |
 | | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, following a window that is moved, the outline and dot shown while recording |
@@ -263,14 +263,15 @@ service are grouped under *Connect a service*, below the others.
 
 | Element | Behaviour |
 |---------|-----------|
-| **Screenshot** | Pen, square, circle, arrow, text (bold, italic, on a box; click a text to change it), crop; colour and size. *Read text*: drag over text on the picture, the lines found are marked; copy them all or click the ones to copy, or *Try again* to read it another way |
-| **Video** | Trim handles, crop (drag a frame, *Confirm*), marks drawn with the screenshot's tools; *Also take a screenshot when the recording ends*; the keys pressed (dragged where they go, × takes them off, *Keys* brings them back); the time of each moment (*Time*); *Follow window* when the window was moved |
+| **Screenshot** | Its tools are a row of icons above the picture: pen, square, circle, arrow, text (bold, italic, on a box; click a text to change it), crop; colour and size. *Read text*: drag over text on the picture, the lines found are marked; copy them all or click the ones to copy, or *Try again* to read it another way |
+| **Video** | Its tools are a row of icons above the picture, like the screenshot's: crop (drag a frame, *Apply crop*), marks drawn with the screenshot's tools, the keys pressed (dragged where they go, × takes them off, the keyboard icon brings them back), the time of each moment (the clock), *Follow window* when the window was moved, *Take screenshot*, *Reset edits*; each icon is named on hover. Under the picture: the trim handles and what is kept. *Also take a screenshot when the recording ends* is set in the layout |
 | **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in. The box keeps at least one line; *One line high* keeps it at that |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
-| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown, *Open large* fills the window. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (UTC when the block says); the time of each line is found by itself, or read with a format written the way the log does (`[YYYY_MM_DD] HH:mm -`), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. Nothing of it is sent |
-| **Sharing buttons** | Up to five, in the service's colour. Tick boxes in each block's top-right corner say which button sends it: dashed = cannot take it, ring = required. Hovering a button or a box rings what each block it sends holds (not the block's title) |
+| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown; the expand icon opens it large, in the middle of the window over a dimmed one (the cross, Escape or a click outside closes it). It has no background of its own until opened large. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (UTC when the block says); the time of each line is found by itself, or read with a format written the way the log does (`[YYYY_MM_DD] HH:mm -`), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. Nothing of it is sent |
+| **Tabs** | Like a binder: the names on the top (or the bottom, left or right), the blocks of the open tab under them. A click (or the arrow keys) opens a tab; the blocks of the others are only hidden, so what is typed or edited in them stays and is sent. A tab's name lights up while a hovered button sends something in it |
+| **Sharing buttons** | Up to five, in the service's colour; a label too long for its button is cut with an ellipsis and is whole on hover. One dot per button at the end of each block's first row (its title, or its tools) says which button sends it: full = sent, an empty ring in the button's colour = left out (a click switches it), dashed = cannot take it, an outer ring = required, a number when two buttons go to the same kind of service. A block with no first row has them on its top edge. Hovering a button or a dot rings what each block it sends holds: the picture of a screenshot or a recording, the box of a text, not the block's title or tools |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">
 
@@ -369,7 +370,7 @@ convoy is what travels with them, the arrow is the sharing.
 | **Fixed surfaces** | Program icon and installer: grey frames `#8B8A84`, blue arrow `#4F8EE0`. The installer's icon is the same mark turned a quarter clockwise, so the arrow points down |
 | **Name** | *Cargo* Manrope 800 + *Frame* Manrope 500, one word, letter-spacing -0.02em; outlined in the SVGs |
 | **Colours** | Ink `#1F1E1D` / page `#F5F4EE` (light), reversed in dark; accent `#4F8EE0`, changeable with a contrast warning |
-| **Destinations** | Each service has its own colour on its button and tick boxes, never the only signal: the label always says where |
+| **Destinations** | Each service has its own colour on its button and its dots, never the only signal: the label always says where, and a dot is full or empty |
 
 | Icon | Small icon | Program icon | Installer icon | Tray |
 |:---:|:---:|:---:|:---:|:---:|
@@ -404,6 +405,8 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
 - Tags: Jira and GitHub labels (Jira labels cannot hold spaces: a space becomes `-`), hashtags at the end of a post on
   X, Bluesky (marked as tags) and Instagram, a last *Tags:* line on Slack, Teams and Discord. Discord forum tags and
   Reddit flairs are not set from them.
+- Tabs hold blocks one level deep (no tabs inside tabs), 2 to 5 of them; a tab that still holds blocks cannot be
+  removed until they are moved out or removed.
 - Continuous recording cannot tell a held shortcut on Wayland: the tray menu starts and stops it there. It stops by
   itself after 12 hours.
 - The keys pressed and following a moved window: Windows and X11, not Wayland. A key tapped faster than the keyboard is

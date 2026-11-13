@@ -6,6 +6,7 @@
     type Annotation, type EditorState, type Pt, type PxRect, type TextStyle, type Thickness,
   } from './model';
   import { exportPng, fontOf, measureLine, paint } from './render';
+  import Icon from '../../lib/components/Icon.svelte';
   import StylePicker from './StylePicker.svelte';
   import { READ_TRIES, placed, regionPng, toCopy } from './ocr';
   import type { TextReading } from '../../lib/types';
@@ -71,8 +72,11 @@
 
   function fit() {
     if (!box) return;
-    const aw = Math.max(80, box.clientWidth);
-    const ah = Math.max(80, box.clientHeight);
+    // the space inside the stage's padding, or the picture is cut at its right and bottom
+    const css = getComputedStyle(box);
+    const pad = (a: string, b: string) => (parseFloat(a) || 0) + (parseFloat(b) || 0);
+    const aw = Math.max(80, box.clientWidth - pad(css.paddingLeft, css.paddingRight));
+    const ah = Math.max(80, box.clientHeight - pad(css.paddingTop, css.paddingBottom));
     const s = Math.min(aw / visible.w, ah / visible.h, 1);
     cssSize = { w: Math.max(1, Math.floor(visible.w * s)), h: Math.max(1, Math.floor(visible.h * s)) };
     dpr = window.devicePixelRatio || 1;
@@ -325,26 +329,26 @@
   <div class="toolbar" role="toolbar" aria-label="Screenshot tools">
     <div class="group">
       <button class="tool" class:on={tool === 'crop'} aria-pressed={tool === 'crop'} title="Crop" aria-label="Crop" onclick={() => pick('crop')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 2v16h16M2 6h16v16" /></svg>
+        <Icon name="crop" size={17} />
       </button>
       <button class="tool" class:on={tool === 'pen'} aria-pressed={tool === 'pen'} title="Draw" aria-label="Draw" onclick={() => pick('pen')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 20l1-4L17 4l3 3L8 19z" /></svg>
+        <Icon name="pen" size={17} />
       </button>
       <button class="tool" class:on={tool === 'rect'} aria-pressed={tool === 'rect'} title="Square (hold Shift for equal sides)" aria-label="Square" onclick={() => pick('rect')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="4" y="5" width="16" height="14" /></svg>
+        <Icon name="rect" size={17} />
       </button>
       <button class="tool" class:on={tool === 'ellipse'} aria-pressed={tool === 'ellipse'} title="Circle (hold Shift for a true circle)" aria-label="Circle" onclick={() => pick('ellipse')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><ellipse cx="12" cy="12" rx="8" ry="7" /></svg>
+        <Icon name="ellipse" size={17} />
       </button>
       <button class="tool" class:on={tool === 'arrow'} aria-pressed={tool === 'arrow'} title="Arrow" aria-label="Arrow" onclick={() => pick('arrow')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 19L19 5M10 5h9v9" /></svg>
+        <Icon name="arrow" size={17} />
       </button>
       <button class="tool" class:on={tool === 'text'} aria-pressed={tool === 'text'} title="Text: click to write, click a text to change it" aria-label="Text" onclick={() => pick('text')}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 6V4h14v2M12 4v16M9 20h6" /></svg>
+        <Icon name="text" size={17} />
       </button>
       {#if reader}
         <button class="tool" class:on={tool === 'read'} aria-pressed={tool === 'read'} title="Read text: drag over the text to copy it" aria-label="Read text" onclick={() => pick('read')}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7V3h4M17 3h4v4M21 17v4h-4M7 21H3v-4M8 9h8M12 9v7" /></svg>
+          <Icon name="read" size={17} />
         </button>
       {/if}
     </div>
@@ -353,7 +357,7 @@
         <button class="tool letter" class:on={textStyle.bold} aria-pressed={!!textStyle.bold} title="Bold (Ctrl+B)" aria-label="Bold" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.bold = !textStyle.bold)}><b>B</b></button>
         <button class="tool letter" class:on={textStyle.italic} aria-pressed={!!textStyle.italic} title="Italic (Ctrl+I)" aria-label="Italic" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.italic = !textStyle.italic)}><i>I</i></button>
         <button class="tool" class:on={textStyle.box} aria-pressed={!!textStyle.box} title="On a box: readable on any picture" aria-label="On a box" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.box = !textStyle.box)}>
-          <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="6" width="18" height="12" rx="2" /><path d="M8 10h8M12 10v5" /></svg>
+          <Icon name="onBox" size={17} />
         </button>
       </div>
     {/if}
@@ -366,22 +370,23 @@
 
     <div class="group">
       <button class="tool" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={doc.annotations.length === 0} onclick={() => (doc = undo(doc))}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" /></svg>
+        <Icon name="undo" size={17} />
       </button>
       <button class="tool" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={doc.redo.length === 0} onclick={() => (doc = redo(doc))}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" /></svg>
+        <Icon name="redo" size={17} />
       </button>
       <button class="tool" title="Reset crop: show the whole picture again" aria-label="Reset crop" disabled={!doc.crop} onclick={() => (doc = resetCrop(doc))}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5" /></svg>
+        <Icon name="wholePicture" size={17} />
       </button>
       <button class="tool" title="Clear all: remove every mark and the crop" aria-label="Clear all" disabled={!edited} onclick={() => (doc = clearAll())}>
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6" /></svg>
+        <Icon name="trash" size={17} />
       </button>
     </div>
   </div>
 
   <div class="stage" bind:this={box}>
-    <div class="frame" style:width="{cssSize.w}px" style:height="{cssSize.h}px">
+    <!-- the picture itself is what a sharing button lights up, not its tools -->
+    <div class="frame" data-content="media" style:width="{cssSize.w}px" style:height="{cssSize.h}px">
       <canvas
         bind:this={canvas}
         style:width="{cssSize.w}px"
@@ -489,7 +494,6 @@
   .group { display: inline-flex; gap: 2px; align-items: center; }
   .sep { width: 1px; height: 18px; background: var(--border-strong); margin: 0 4px; }
   .tool { width: 28px; height: 28px; padding: 0; display: inline-grid; place-items: center; }
-  .tool svg { width: 17px; height: 17px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
   .tool.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .stage {
     min-height: 0; display: grid; place-items: center;
@@ -507,4 +511,6 @@
   }
   .text-input.box { background: rgb(255 255 255 / 0.85); }
   .status { font-size: 12px; }
+  /* Room at its end for the dots of the sharing buttons (the capture window sets --corner). */
+  .toolbar { padding-right: var(--corner, 0px); }
 </style>

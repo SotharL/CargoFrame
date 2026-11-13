@@ -57,6 +57,29 @@ impl Layout {
     pub fn block(&self, id: &str) -> Option<&Block> {
         self.blocks.iter().find(|b| b.id == id)
     }
+
+    /// The Tabs block a block is in, and the index of its tab.
+    pub fn tab_of(&self, id: &str) -> Option<(&Block, usize)> {
+        self.blocks.iter().find_map(|b| match &b.kind {
+            BlockKind::Tabs(t) => t
+                .tabs
+                .iter()
+                .position(|tab| tab.blocks.iter().any(|x| x == id))
+                .map(|i| (b, i)),
+            _ => None,
+        })
+    }
+
+    /// May the blocks `a` and `b` take the same cells? A Tabs block and a block in one of its
+    /// tabs do, and so do blocks in different tabs of the same Tabs block (one shows at a time).
+    pub fn may_share(&self, a: &str, b: &str) -> bool {
+        match (self.tab_of(a), self.tab_of(b)) {
+            (Some((pa, ta)), Some((pb, tb))) => pa.id == pb.id && ta != tb,
+            (Some((p, _)), None) => p.id == b,
+            (None, Some((p, _))) => p.id == a,
+            (None, None) => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -84,6 +107,67 @@ pub enum BlockKind {
     /// A log viewer: shows a file of the window's Files blocks, line by line, with a filter.
     /// Nothing of it is sent.
     LogView(LogViewBlock),
+    /// Tabs, like a binder: each tab holds blocks laid out inside the tabs block's area, and the
+    /// window shows the blocks of one tab at a time. Nothing of the tabs themselves is sent; the
+    /// blocks in them are sent as any other.
+    Tabs(TabsBlock),
+}
+
+/// The fewest and the most tabs a Tabs block has.
+pub const MIN_TABS: usize = 2;
+pub const MAX_TABS: usize = 5;
+/// The smallest a Tabs block is, in grid cells each way: room for its names and one block.
+pub const MIN_TABS_SIZE: u32 = 2;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TabsBlock {
+    /// The tabs, in the order they are shown; the first one is open when the window opens.
+    pub tabs: Vec<Tab>,
+    /// The side the names of the tabs are on.
+    #[serde(default, skip_serializing_if = "TabSide::is_top")]
+    pub side: TabSide,
+}
+
+impl Default for TabsBlock {
+    fn default() -> Self {
+        Self {
+            tabs: vec![Tab::named("Tab 1"), Tab::named("Tab 2")],
+            side: TabSide::Top,
+        }
+    }
+}
+
+/// One tab: its name, and the ids of the blocks it holds (each inside the Tabs block's area).
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+pub struct Tab {
+    pub name: String,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocks: Vec<String>,
+}
+
+impl Tab {
+    pub fn named(name: impl Into<String>) -> Self {
+        Self {
+            name: name.into(),
+            blocks: Vec::new(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum TabSide {
+    #[default]
+    Top,
+    Right,
+    Bottom,
+    Left,
+}
+
+impl TabSide {
+    fn is_top(&self) -> bool {
+        *self == TabSide::Top
+    }
 }
 
 /// The most tags one Tags block holds.

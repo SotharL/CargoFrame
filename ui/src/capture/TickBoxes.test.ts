@@ -11,7 +11,7 @@ const box = (over: Partial<TickBox> = {}): TickBox => ({
 describe('TickBoxes', () => {
   afterEach(cleanup);
 
-  it('shows one box per button, named for what it does, with a ✓ when it is ticked', () => {
+  it('shows one dot per button, named for what it does, full when it sends the block', () => {
     render(TickBoxes, {
       boxes: [box(), box({ buttonId: 'b', label: 'Post', kind: 'reddit', checked: false, title: 'Post leaves this out' })],
       onchange: () => {},
@@ -21,8 +21,13 @@ describe('TickBoxes', () => {
       ['Create ticket sends this', true],
       ['Post leaves this out', false],
     ]);
-    // the ✓ is text, so colour is never the only sign
-    expect(screen.getAllByText('✓')).toHaveLength(1);
+    // full or empty: the shape tells it, not the colour alone
+    expect(boxes.map((b) => b.closest('label')!.classList.contains('on'))).toEqual([true, false]);
+  });
+
+  it('sits on the top edge of a block that has no first row', () => {
+    const { container } = render(TickBoxes, { boxes: [box()], edge: true, onchange: () => {} });
+    expect(container.querySelector('.ticks.edge')).not.toBeNull();
   });
 
   it('draws nothing for a block with no boxes', () => {
@@ -52,7 +57,7 @@ describe('TickBoxes', () => {
     expect(onchange).not.toHaveBeenCalled();
   });
 
-  it('lights up the button of the box under the pointer or the keyboard focus, and its number', async () => {
+  it('lights up the button of the dot under the pointer or the keyboard focus, and has its number', async () => {
     const onhover = vi.fn();
     render(TickBoxes, { boxes: [box({ badge: '2' })], active: 'send', onchange: () => {}, onhover });
     const label = screen.getByRole('checkbox').closest('label')!;

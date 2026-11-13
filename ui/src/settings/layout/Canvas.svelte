@@ -1,12 +1,14 @@
 <script lang="ts">
+  import { untrack } from 'svelte';
   import { roleTag } from '../../lib/roles';
   import { buttonKind, kindStyle } from '../../lib/connector';
   import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
   import { lineFor, type Line } from './reach';
   import {
-    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, canPlace, makeBlock, moveTo, removeBlock, resizeTo,
+    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, addBlock, canPlace, moveTo, removeBlock, resizeTo,
     rowsNeeded, typeLabel, usedColumns, type BlockType,
   } from './model';
+  import { isShown, openTab, tabOf, type OpenTabs } from '../../lib/tabs';
 
   let {
     blocks = $bindable(),
@@ -35,6 +37,18 @@
 
   let grid = $state<HTMLDivElement>();
   const rows = $derived(rowsNeeded(blocks));
+  /** The tab open in each Tabs block: its blocks are the ones drawn, and a block dropped in it joins it. */
+  let open = $state<Record<string, number>>({});
+  const opened = (): OpenTabs => open;
+  /** The blocks drawn: the Tabs blocks under the blocks of their open tab. */
+  const drawn = $derived(
+    blocks.filter((b) => isShown(blocks, b.id, open)).sort((a, b) => Number(b.type === 'tabs') - Number(a.type === 'tabs')),
+  );
+  /** Selecting a block in a closed tab (from the list, or by its issues) opens its tab. */
+  $effect(() => {
+    const t = selected ? tabOf(blocks, selected) : null;
+    if (t) untrack(() => { if (openTab(t.tabs, open) !== t.index) open[t.tabs.id] = t.index; });
+  });
 
   // What is being dragged right now, if anything.
   type Drag =
@@ -105,7 +119,7 @@
       const x = Math.floor((e.clientX - p.box.left) / p.x);
       const y = Math.floor((e.clientY - p.box.top) / p.y);
       const rect = clampRect({ x, y, w, h });
-      preview = { rect, valid: canPlace(blocks, rect, undefined, cols) };
+      preview = { rect, valid: canPlace(blocks, rect, undefined, cols, { open: opened(), type: wanted }) };
       return;
     }
     const dx = Math.round((e.clientX - drag.startX) / p.x);
@@ -114,7 +128,7 @@
     const rect = drag.kind === 'move'
       ? clampRect({ ...o, x: o.x + dx, y: o.y + dy })
       : clampRect({ ...o, w: Math.min(o.w + dx, cols - o.x), h: o.h + dy });
-    preview = { rect, valid: canPlace(blocks, rect, drag.id, cols) };
+    preview = { rect, valid: canPlace(blocks, rect, drag.id, cols, { open: opened() }) };
   }
 
   function onUp() {
@@ -127,16 +141,18 @@
         // A click: put it in the first free spot.
         addAt(d.type);
       } else if (pv?.valid) {
-        const b = makeBlock(blocks, d.type, { x: pv.rect.x, y: pv.rect.y }, cols);
-        if (b) {
-          blocks = [...blocks, b];
-          selected = b.id;
+        const added = addBlock(blocks, d.type, { x: pv.rect.x, y: pv.rect.y }, cols, opened());
+        if (added) {
+          blocks = added.blocks;
+          selected = added.block.id;
         }
       }
       return;
     }
     if (pv?.valid) {
-      const next = d.kind === 'move' ? moveTo(blocks, d.id, pv.rect.x, pv.rect.y, cols) : resizeTo(blocks, d.id, pv.rect.w, pv.rect.h, cols);
+      const next = d.kind === 'move'
+        ? moveTo(blocks, d.id, pv.rect.x, pv.rect.y, cols, opened())
+        : resizeTo(blocks, d.id, pv.rect.w, pv.rect.h, cols, opened());
       if (next) blocks = next;
     }
   }
@@ -151,10 +167,10 @@
   }
 
   export function addAt(type: BlockType) {
-    const b = makeBlock(blocks, type, undefined, cols);
-    if (b) {
-      blocks = [...blocks, b];
-      selected = b.id;
+    const added = addBlock(blocks, type, undefined, cols, opened());
+    if (added) {
+      blocks = added.blocks;
+      selected = added.block.id;
     }
   }
 
@@ -166,8 +182,8 @@
     if (step) {
       e.preventDefault();
       const next = e.shiftKey
-        ? resizeTo(blocks, b.id, b.rect.w + step[0], b.rect.h + step[1], cols)
-        : moveTo(blocks, b.id, b.rect.x + step[0], b.rect.y + step[1], cols);
+        ? resizeTo(blocks, b.id, b.rect.w + step[0], b.rect.h + step[1], cols, opened())
+        : moveTo(blocks, b.id, b.rect.x + step[0], b.rect.y + step[1], cols, opened());
       if (next) blocks = next;
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
@@ -181,6 +197,7 @@
   function label(b: Block): string {
     if (b.type === 'screenshot') return 'Screenshot';
     if (b.type === 'video') return 'Video';
+    if (b.type === 'tabs') return 'Tabs';
     return b.type === 'sharing_button' ? b.label || 'Share' : b.title || typeLabel(b.type);
   }
 
@@ -261,7 +278,7 @@
 
   <div class="scroll">
     <div class="grid" bind:this={grid} style={gridStyle} class:dragging={drag !== null}>
-      {#each blocks as b (b.id)}
+      {#each drawn as b (b.id)}
         {@const w = worst(b.id)}
         {@const l = lineOf(b)}
         <div
@@ -285,6 +302,21 @@
         >
           <!-- One line, so a block a single row high still shows its title: the title shrinks first,
                the small (type) after it and the badges on the right stay visible. -->
+          {#if b.type === 'tabs'}
+            <!-- The names, on their side: a click opens the tab, to see and place its blocks. -->
+            <div class="tabnames {b.side ?? 'top'}" role="tablist" aria-label="Tabs">
+              {#each b.tabs as t, i (i)}
+                <button
+                  type="button"
+                  role="tab"
+                  aria-selected={openTab(b, open) === i}
+                  title="{t.name}: {(t.blocks ?? []).length} blocks. Click to see them; a block dropped here goes in it."
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onclick={() => { open[b.id] = i; selected = b.id; }}
+                >{t.name || `Tab ${i + 1}`}</button>
+              {/each}
+            </div>
+          {/if}
           <div class="line">
             <span class="name" title={label(b)}>{label(b)}</span>
             <span class="kind">({typeLabel(b.type).toLowerCase()})</span>
@@ -379,4 +411,22 @@
     position: fixed; pointer-events: none; z-index: 10; padding: 2px 10px; border-radius: 999px;
     background: var(--accent); color: var(--on-accent); font-weight: 600; font-size: 12px;
   }
+  /* A Tabs block lies under the blocks of its open tab. Its names stick out of its chosen side,
+     like a binder's, over the blocks inside, so they are always there to click. */
+  .block.tabs { overflow: visible; background: color-mix(in srgb, var(--surface) 55%, transparent); border-style: dashed; }
+  .block.tabs .line { opacity: 0.8; margin-top: 10px; }
+  .block:not(.tabs) { z-index: 1; }
+  .tabnames { position: absolute; z-index: 2; display: flex; gap: 2px; }
+  .tabnames.top { top: -11px; left: 10px; }
+  .tabnames.bottom { bottom: -11px; left: 10px; }
+  .tabnames.left, .tabnames.right { flex-direction: column; top: 10px; }
+  .tabnames.left { left: -11px; }
+  .tabnames.right { right: -11px; }
+  .tabnames.left button, .tabnames.right button { writing-mode: vertical-rl; padding: 6px 1px; max-height: 12ch; max-width: none; }
+  .tabnames.left button { transform: rotate(180deg); }
+  .tabnames button {
+    padding: 0 8px; height: auto; font-size: 11.5px; line-height: 18px; border-radius: var(--radius-sm);
+    max-width: 12ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: var(--surface);
+  }
+  .tabnames button[aria-selected='true'] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 </style>

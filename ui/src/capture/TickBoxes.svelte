@@ -1,30 +1,37 @@
 <script lang="ts">
-  // In the top-right corner of a block: one small box per sharing button, in that button's colour. A ticked
-  // box (with a ✓, so colour is never the only sign) means that button sends this block; clear it
-  // to leave the block out of that button's share. A box that cannot be ticked says why when the
-  // pointer rests on it. Hovering or focusing a box lights up its button.
+  // In the top-right corner of a block: one dot per sharing button, in that button's colour. A full
+  // dot means that button sends this block; an empty ring (still in the button's colour, so it is
+  // told apart, and full against empty is never colour alone) leaves the block out of that
+  // button's share. Click to switch. A dot that cannot be switched on says why when the pointer
+  // rests on it. Hovering or focusing a dot lights up its button.
+  //
+  // The dots sit at the end of the block's first row (its title, or its tools), which keeps room
+  // for them (`--corner`, see cornerWidth); a block with no such row has them on its top edge.
   import { kindStyle } from '../lib/connector';
   import type { TickBox } from './ticks';
 
   let {
     boxes,
     active = null,
+    edge = false,
     onchange,
     onhover,
   }: {
     boxes: TickBox[];
     /** The button under the pointer, whose blocks and boxes are lit. */
     active?: string | null;
+    /** The block has no first row to sit in: the dots go on its top edge. */
+    edge?: boolean;
     onchange: (buttonId: string, on: boolean) => void;
     onhover?: (buttonId: string | null) => void;
   } = $props();
 </script>
 
 {#if boxes.length > 0}
-  <div class="ticks" role="group" aria-label="Sent by">
+  <div class="ticks" class:edge role="group" aria-label="Sent by">
     {#each boxes as b (b.buttonId)}
       <label
-        class="box"
+        class="dot"
         class:on={b.checked}
         class:blocked={b.disabled}
         class:locked={b.locked}
@@ -43,34 +50,31 @@
           onfocus={() => onhover?.(b.buttonId)}
           onblur={() => onhover?.(null)}
         />
-        <span class="square" aria-hidden="true">{b.checked ? '✓' : ''}</span>
-        {#if b.badge}<span class="badge" aria-hidden="true">{b.badge}</span>{/if}
+        <span class="mark" aria-hidden="true">{b.badge ?? ''}</span>
       </label>
     {/each}
   </div>
 {/if}
 
 <style>
-  /* From the block's top-right corner: their top on the block's top edge. */
-  .ticks {
-    position: absolute; top: 0; right: 0; z-index: 5;
-    display: flex; align-items: center; gap: 1px; padding: 0 3px;
-    background: var(--surface); border: 1px solid var(--border-strong); border-radius: 999px;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.18);
+  /* No container: the dots alone, centred on the block's first row (22 px high). */
+  .ticks { position: absolute; top: 0; right: 0; z-index: 5; height: 22px; display: flex; align-items: center; }
+  /* On the top edge: centred on the block's border, in the gap above it. */
+  .ticks.edge { top: -11px; }
+  .dot { position: relative; display: inline-grid; place-items: center; width: 18px; height: 18px; cursor: pointer; }
+  .dot input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: inherit; }
+  .mark {
+    display: inline-grid; place-items: center; width: 14px; height: 14px; box-sizing: border-box;
+    border: 2px solid var(--kind-line); border-radius: 50%; background: var(--surface);
+    font-size: 8.5px; font-weight: 800; line-height: 1; color: var(--kind-line);
+    transition: background 0.12s, box-shadow 0.12s;
   }
-  .box { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px 2px; cursor: pointer; }
-  .box input { position: absolute; opacity: 0; inset: 0; margin: 0; cursor: inherit; }
-  .square {
-    display: inline-grid; place-items: center; width: 16px; height: 16px; box-sizing: border-box;
-    border: 2px solid var(--kind-line); border-radius: 4px; background: transparent;
-    font-size: 11px; font-weight: 800; line-height: 1; color: var(--on-kind);
-  }
-  .on .square { background: var(--kind); }
+  .on .mark { background: var(--kind); color: var(--on-kind); }
+  .dot:hover .mark { box-shadow: 0 0 0 2px color-mix(in srgb, var(--kind-line) 30%, transparent); }
   .blocked { cursor: not-allowed; }
-  .blocked .square { border-style: dashed; border-color: var(--border-strong); opacity: 0.6; }
+  .blocked .mark { border-style: dashed; opacity: 0.55; }
   .locked { cursor: not-allowed; }
-  .locked .square { box-shadow: 0 0 0 1px var(--surface), 0 0 0 2px var(--kind-line); }
-  .lit .square { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--kind-line); }
-  .box:has(input:focus-visible) .square { outline: 2px solid var(--text); outline-offset: 1px; }
-  .badge { font-size: 10px; font-weight: 700; color: var(--quiet); line-height: 1; margin-right: 2px; }
+  .locked .mark { box-shadow: 0 0 0 1px var(--surface), 0 0 0 2px var(--kind-line); }
+  .lit .mark { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--kind-line); }
+  .dot:has(input:focus-visible) .mark { outline: 2px solid var(--text); outline-offset: 1px; }
 </style>

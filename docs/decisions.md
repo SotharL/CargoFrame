@@ -1327,3 +1327,41 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   empty, the time is found by itself. The last five formats used are offered in the box, with common ones (Unreal
   Engine, ISO, syslog). *Your data, Forget* forgets them with the other remembered choices.
 
+
+### 0.4.1, 13 Nov 2026: the layout round, and tabs
+
+- **Rows that hold one line.** A one-line Text block with its title above was still cut in a short window: the
+  window's grid gave each row the same share of the height. Each row is now at least as high as the blocks in it
+  need to show one line (a title and a line, a toolbar too when there is one; a block over several rows shares its
+  need between them), and what is left is shared out (`capture/rows.ts`, with tests).
+- **A long label stays in its button.** The label of a sharing button is cut with an ellipsis and is whole in the
+  tooltip, first, before where it sends: a button never grows or shows scroll bars.
+- **The log viewer.** No background of its own (only the lines' box); opened large it sits in the middle of the
+  window over a dimmed one, so a picked line is never under the edge, and it closes with its cross, Escape or a click
+  outside. *Open large* and *Close* became an expand icon and a cross.
+- **The ring goes round the picture.** A hovered button rings what each block holds; for the screenshot and the
+  recording that is now the picture itself, drawn over its edge, not the block with its tools and trim strip.
+- **One place for the tools.** The recording's tools moved above the picture, like the screenshot's, as icons named
+  on hover (crop, mark, keys, time, follow, take screenshot, reset); the trim strip and what is kept stay under it.
+  Letting each person choose top or bottom was weighed and left out: one place is easier to learn and to keep.
+  The icons are one list (`lib/icons.ts`, drawn by `Icon.svelte`) shared by the screenshot, the recording and the log
+  viewer, where each had its own copies.
+- **Dots, not boxes.** The tick boxes in a capsule covered text in some blocks. They are now dots without a
+  container: full when the button sends the block, an empty ring in the button's colour when it leaves it out (so it
+  is still told which button it is, and full against empty is never colour alone). They sit at the end of the
+  block's first row (its title or its tools), which keeps room for them (`--corner`), and on the block's top edge when
+  it has no such row. Looked at, the screenshot's picture was a few pixels too large for its frame (the frame's
+  padding was not counted) and lost its right and bottom edge; it now fits.
+- **Tabs block.** Asked for as a binder. Each tab lists the ids of the blocks it holds, and those blocks keep their
+  place on the layout's grid, inside the Tabs block's area: nothing changes for a block that is not in a tab, the
+  sending code does not need to know about tabs, and a layout without tabs reads as before. Blocks may share cells
+  with their Tabs block and with blocks of its other tabs (`Layout::may_share`, mirrored in `lib/tabs.ts`); the
+  checks say when a Tabs block has fewer than 2 or more than 5 tabs, is under 2 by 2, or lists a block that is not
+  there, not inside it, in two tabs, or itself tabs. In the builder the names stick out of the side chosen, a click
+  opens a tab, and a block dropped inside goes in the open one (moved inside, it keeps its tab); moving the Tabs block
+  takes its blocks along, resizing keeps them inside, removing it removes them. In the window a tab's page is the
+  same grid from the Tabs block's corner; the blocks of the closed tabs are hidden, not removed, so what was typed
+  or drawn in them stays and is sent.
+- **Review.** The demo capture no longer needs a button called `send`, and draws an empty picture where there is
+  no canvas, so the window tests now open the window rather than its error page (they passed on the error page
+  before, as both have a heading).

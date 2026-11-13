@@ -1,4 +1,4 @@
-//! Grid arithmetic for the builder: overlap tests. (Where a dropped block goes is worked out by
+//! Grid arithmetic for the builder: overlap tests (blocks in tabs may share cells, see `model.rs`). (Where a dropped block goes is worked out by
 //! the builder page itself, in `ui/src/settings/layout/model.ts`.)
 
 use crate::model::{Layout, Rect};
@@ -36,14 +36,17 @@ impl Rect {
 
 impl Layout {
     /// Can `rect` be placed without leaving the grid or overlapping another block?
-    /// `ignore` is the block being moved or resized.
+    /// `ignore` is the block being moved or resized; it may cover the blocks it shares cells with
+    /// (its Tabs block, the blocks of the other tabs: [`Layout::may_share`]).
     pub fn can_place(&self, rect: &Rect, ignore: Option<&str>) -> bool {
         rect.fits_grid(self.grid_columns())
             && self
                 .blocks
                 .iter()
                 .filter(|b| Some(b.id.as_str()) != ignore)
-                .all(|b| !b.rect.overlaps(rect))
+                .all(|b| {
+                    !b.rect.overlaps(rect) || ignore.is_some_and(|id| self.may_share(id, &b.id))
+                })
     }
 }
 

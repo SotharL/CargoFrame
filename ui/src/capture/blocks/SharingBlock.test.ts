@@ -78,7 +78,8 @@ describe('SharingBlock', () => {
   it('takes its destination colours and names the destination on hover', () => {
     render(SharingBlock, { block, enabled: true, reasons: [], kind: 'reddit', onshare: () => {} });
     const button = screen.getByRole('button', { name: 'Create ticket' });
-    expect(button.title).toBe('Sends to Reddit');
+    // the label first: when it is too long for the button, it is cut there
+    expect(button.title).toBe('Create ticket\nSends to Reddit');
     expect(button.parentElement!.getAttribute('style')).toContain('--kind: var(--kind-reddit)');
   });
 

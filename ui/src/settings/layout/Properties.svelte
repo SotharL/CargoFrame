@@ -12,7 +12,8 @@
   import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Reach, Rect, Rule, VariableInfo } from '../../lib/types';
   import { COLUMNS, typeLabel } from './model';
-  import { MAX_TAGS } from '../../lib/types';
+  import { MAX_TAGS, type TabSide } from '../../lib/types';
+  import { MAX_TABS, MIN_TABS } from '../../lib/tabs';
   import { stepLines } from '../fills';
   import { go } from '../route.svelte';
   import { getApi } from '../../lib/ipc';
@@ -345,6 +346,44 @@
       Shows a file of the window's Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the
       lines shown. Nothing of it is sent.
     </p>
+  {:else if block.type === 'tabs'}
+    {@const tabsBlock = block}
+    <Field label="Tabs" hint={`${MIN_TABS} to ${MAX_TABS}. Click a tab's name on the grid to see its blocks: a block dropped inside goes in the tab open.`}>
+      <ol class="tablist" data-tour="props.tabs">
+        {#each tabsBlock.tabs as t, i (i)}
+          <li>
+            <input type="text" aria-label={`Name of tab ${i + 1}`} bind:value={t.name} placeholder={`Tab ${i + 1}`} />
+            <span class="quiet small">{(t.blocks ?? []).length === 1 ? "1 block" : `${(t.blocks ?? []).length} blocks`}</span>
+          </li>
+        {/each}
+      </ol>
+      <div class="tabcount">
+        <button
+          type="button"
+          disabled={tabsBlock.tabs.length <= MIN_TABS || (tabsBlock.tabs.at(-1)?.blocks ?? []).length > 0}
+          title={tabsBlock.tabs.length <= MIN_TABS ? `A Tabs block has at least ${MIN_TABS} tabs` : (tabsBlock.tabs.at(-1)?.blocks ?? []).length ? 'Move or remove the blocks of the last tab first' : 'Remove the last tab'}
+          onclick={() => (tabsBlock.tabs = tabsBlock.tabs.slice(0, -1))}
+        >− Tab</button>
+        <button
+          type="button"
+          disabled={tabsBlock.tabs.length >= MAX_TABS}
+          title={tabsBlock.tabs.length >= MAX_TABS ? `A Tabs block has at most ${MAX_TABS} tabs` : 'Add a tab at the end'}
+          onclick={() => (tabsBlock.tabs = [...tabsBlock.tabs, { name: `Tab ${tabsBlock.tabs.length + 1}` }])}
+        >＋ Tab</button>
+      </div>
+    </Field>
+    <Field label="Names on the">
+      <select aria-label="Side of the tab names" value={tabsBlock.side ?? 'top'} onchange={(e) => (tabsBlock.side = e.currentTarget.value === 'top' ? undefined : (e.currentTarget.value as TabSide))}>
+        <option value="top">Top</option>
+        <option value="bottom">Bottom</option>
+        <option value="left">Left</option>
+        <option value="right">Right</option>
+      </select>
+    </Field>
+    <p class="quiet hint">
+      Like a binder: the window shows one tab at a time, and what is typed in the others stays. The blocks in the tabs are
+      sent as any other block; moving the Tabs block takes them along, and removing it removes them.
+    </p>
   {:else if block.type === 'video'}
     <VideoOptions {block} />
   {:else if block.type === 'files'}
@@ -532,4 +571,9 @@
   }
   .error { color: var(--err); font-size: 12.5px; }
   .remove { border-color: var(--err); background: color-mix(in srgb, var(--err) 10%, transparent); justify-self: start; }
+  .tablist { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
+  .tablist li { display: flex; gap: 8px; align-items: center; }
+  .tablist input { flex: 1; min-width: 0; }
+  .tablist .small { flex: none; font-size: 12px; }
+  .tabcount { display: flex; gap: 6px; margin-top: 6px; }
 </style>
