@@ -1,5 +1,6 @@
 <script lang="ts">
   import { untrack } from 'svelte';
+  import Icon from '../../lib/components/Icon.svelte';
   import { roleTag } from '../../lib/roles';
   import { buttonKind, kindStyle } from '../../lib/connector';
   import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
@@ -316,6 +317,16 @@
                 >{t.name || `Tab ${i + 1}`}</button>
               {/each}
             </div>
+            <!-- A grip that stays over the blocks of its tabs: when one fills a tab, the Tabs block
+                 can still be picked and moved. -->
+            <button
+              type="button"
+              class="grip"
+              tabindex="-1"
+              aria-label="Move {label(b)}"
+              title="Drag to move the tabs and their blocks; click to choose them"
+              onpointerdown={(e) => begin(e, b.id, 'move')}
+            ><Icon name="move" size={14} /></button>
           {/if}
           <div class="line">
             <span class="name" title={label(b)}>{label(b)}</span>
@@ -414,9 +425,20 @@
   /* A Tabs block lies under the blocks of its open tab. Its names stick out of its chosen side,
      like a binder's, over the blocks inside, so they are always there to click. */
   .block.tabs { overflow: visible; background: color-mix(in srgb, var(--surface) 55%, transparent); border-style: dashed; }
-  .block.tabs .line { opacity: 0.8; margin-top: 10px; }
+  .block.tabs .line { opacity: 0.8; margin-top: 10px; padding-right: 28px; }
   .block:not(.tabs) { z-index: 1; }
   .tabnames { position: absolute; z-index: 2; display: flex; gap: 2px; }
+  /* Over the blocks inside, top right: a Tabs block filled by a block is still picked and moved here.
+     Once picked, its resize corner comes over them too (else the corner is the block's inside). */
+  .grip {
+    position: absolute; z-index: 2; top: 4px; right: 4px; width: 24px; height: 24px; padding: 0;
+    display: grid; place-items: center; cursor: grab; touch-action: none;
+    background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); color: var(--quiet);
+  }
+  .grip:hover, .block.tabs.selected .grip { color: var(--accent); border-color: var(--accent); }
+  .block.tabs.lifted .grip { cursor: grabbing; }
+  .tabnames.right ~ .grip { right: 14px; }
+  .block.tabs.selected > .handle { z-index: 2; }
   .tabnames.top { top: -11px; left: 10px; }
   .tabnames.bottom { bottom: -11px; left: 10px; }
   .tabnames.left, .tabnames.right { flex-direction: column; top: 10px; }

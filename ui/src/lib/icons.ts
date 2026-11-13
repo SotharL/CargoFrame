@@ -17,6 +17,8 @@ export const ICONS = {
   trash: 'M4 7h16M10 7V4h4v3M6 7l1 13h10l1-13M10 11v6M14 11v6',
   eraser: 'M8 20h12M5 15l9-9 5 5-8 8H8z',
   reset: 'M4 4v6h6M5.2 15a8 8 0 101.6-8.4L4 10',
+  // the layout builder
+  move: 'M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3',
   // the recording
   keys: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
   clock: 'M12 3a9 9 0 100 18a9 9 0 100-18M12 7v5l3.5 2.2',

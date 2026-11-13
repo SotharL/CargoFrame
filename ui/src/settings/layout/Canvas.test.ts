@@ -144,3 +144,31 @@ describe('Canvas columns', () => {
     expect((screen.getByRole('button', { name: 'Add a column on the side' }) as HTMLButtonElement).disabled).toBe(true);
   });
 });
+
+describe('Layout canvas: tabs', () => {
+  afterEach(cleanup);
+
+  const layout: Block[] = [
+    { id: 'tabs', type: 'tabs', rect: { x: 0, y: 0, w: 6, h: 3 }, tabs: [{ name: 'One', blocks: ['big'] }, { name: 'Two', blocks: ['note'] }] },
+    // fills its whole tab: the Tabs block is only reached by its grip
+    { id: 'big', type: 'screenshot', rect: { x: 0, y: 0, w: 6, h: 3 } },
+    { id: 'note', type: 'text', rect: { x: 0, y: 0, w: 3, h: 1 }, title: 'Note', placement: 'above', role: 'plain', default_text: '' },
+  ];
+  const pressed = (name: RegExp) => screen.getByRole('button', { name }).getAttribute('aria-pressed');
+
+  it('shows the blocks of the open tab, and opens another on a click', async () => {
+    render(Canvas, { blocks: layout, selected: null });
+    expect(screen.queryByRole('button', { name: /^Text block Note/ })).toBeNull();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Two' }));
+    expect(screen.getByRole('button', { name: /^Text block Note/ })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Screenshot block/ })).toBeNull();
+  });
+
+  it('picks the Tabs block by its grip when a block fills the tab', async () => {
+    render(Canvas, { blocks: layout, selected: 'big' });
+    expect(pressed(/^Tabs block/)).toBe('false');
+    await fireEvent.pointerDown(screen.getByRole('button', { name: 'Move Tabs' }), { button: 0 });
+    window.dispatchEvent(new Event('pointerup'));
+    expect(pressed(/^Tabs block/)).toBe('true');
+  });
+});
