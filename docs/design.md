@@ -247,7 +247,7 @@ service are grouped under *Connect a service*, below the others.
 | Group | Page | What it holds |
 |-------|------|---------------|
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
-| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, and a block dropped inside goes in the tab open); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
+| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Triggers** | Shortcuts and the layout each opens |
 | | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder, and values made from other values) and *Fill fields* (steps that fill a field of the service on each share) |
 | | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, following a window that is moved, the outline and dot shown while recording |

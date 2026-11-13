@@ -1362,6 +1362,10 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   takes its blocks along, resizing keeps them inside, removing it removes them. In the window a tab's page is the
   same grid from the Tabs block's corner; the blocks of the closed tabs are hidden, not removed, so what was typed
   or drawn in them stays and is sent.
+- **A grip for the tabs.** Tried with a block filling its tab, the Tabs block could no longer be picked or moved:
+  every click landed on the block inside. A small move grip now sits at its top right, over the blocks of its tabs;
+  a click picks the Tabs block, a drag moves it with its blocks. Once picked, its resize corner comes over them
+  too, so a block filling the tab keeps its own corner otherwise.
 - **Review.** The demo capture no longer needs a button called `send`, and draws an empty picture where there is
   no canvas, so the window tests now open the window rather than its error page (they passed on the error page
   before, as both have a heading).
