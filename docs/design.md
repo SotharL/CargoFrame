@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.4.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.5.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -45,8 +45,8 @@ flowchart LR
 | **Layout** | Blocks on a 12-column grid. A **Video** block makes a press record; otherwise it takes a screenshot | `layouts/<id>.json` |
 | **Block** | Screenshot, Video, Text, Dropdown, Files, or a sharing button | inside its layout |
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
-| **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{{rule.<key>}}` | `rules/<id>.json` |
-| **Field fill** | One field of a service and the steps that fill it on each share ("if `{{rule.gpu}}` is found, add `gpu-{{rule.gpu}}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
+| **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{<key>}` (or `{{rule.<key>}}`). The same key can be read by the rules of several files: the newest file's value wins, or every different value | `rules/<id>.json` |
+| **Field fill** | One field of a service and the steps that fill it on each share ("if `{gpu}` is found, add `gpu-{gpu}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
 | **Template** | A ready-made layout per service, never stored until saved. Those with much to fill in (Jira bug, GitHub issue, Slack, Discord, Ask Claude) hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording | in the code |
 
 ---
@@ -84,7 +84,7 @@ sequenceDiagram
 |------|--------------|------|
 | Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse. While recording, a red outline and a blinking dot say so (never in the recording itself), and a change of focus is followed: the program used longest names the capture | `core/capture`, `core/indicator`, `app/src/watch.rs` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
-| Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values (after a name, between two pieces, the line with a word; first, last or all). The kind of file is known from its name: JSON, YAML, TOML, INI and XML are read by key, the rest as text. A value can also be **made from other values**: choices tried from the top (`{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}`, else without the shelf), with conditions when needed | `core/rules` |
+| Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values. A value is made by **selecting it in a file** (0.5.0, `Find::Pick`): in the lines with a text (the label just before the selection, or every line), right after it or from the start of the line, up to a text (the next sign, a space) or the end of the line; the most recent line, the first or all. Values from 0.4 (after a name, between two pieces, the line with a word; JSON, YAML, TOML, INI and XML read by key) keep working. **The same value in several files**: each file's rule reads it with the same key; the newest file (by its change time) wins, or every different value, the newest first; a value no file has is empty, or the text it says. A value can also be **made from other values**: choices tried from the top (`{stream}_{change}_{shelf}_{config}`, else without the shelf), with conditions when needed | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
 | Share | One `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices), handed to the connector | `app/src/share.rs` |
 | Fallback | Retry with backoff; then a zip of everything is kept. A button with no connection is **Save locally** | `core/safe`, `core/bundle` |
@@ -119,7 +119,15 @@ becomes a Jira or HTML table, a Markdown one, or aligned lines in a code block w
 (Slack, Discord). In the window and in the builder a table is a grid to type in, with ＋ for a row or a column and ×
 to take one out.
 
-`{{capture.screenshot}}` and `{{capture.recording}}` put the picture or the recording **where they are in the text**
+**How a value is written.** `{name}` (0.5.0) or `{{name}}`: `{map}` is the value `map` read from files (`{{rule.map}}`
+the older way), `{app.exe}` a value of the capture. Single braces stay as written when what is inside cannot be a value,
+so Jira's own `{code}`, `{noformat}`, `{quote}`, `{color:red}`, `{panel}` and the like, numbers like `{0}`, JSON and
+names with spaces are left alone; a value cannot be named like one of Jira's (`core/context/src/template.rs`). Values
+are filled in once and never read again, so a value holding braces stays as it is. A custom API's body reads only
+`{{name}}`, as JSON is full of braces. In the builder, typing `{` offers the values, and *Values* shows a text as the
+last capture fills it in.
+
+`{capture.screenshot}` and `{capture.recording}` put the picture or the recording **where they are in the text**
 instead of as attachments at the end: Jira (`!name!`, the file attached once), GitHub (the picture shown from the
 attachments branch) and Teams (the picture, inline). The builder offers a *Repro | Highlight* table with both. Other
 services leave the two out of the text and attach the files as before.
@@ -131,7 +139,7 @@ services leave the two out of the text and attach the files as before.
 
 A Tags block holds up to 25 tags (`core/layout` `split_tags`: commas, semicolons and new lines separate them, each is
 kept once, case aside, at most 100 characters). It starts with the tags of its list in the layout, where an entry such
-as `{{rule.gpu}}` gives a tag only when the value is found and `{{rule.platforms}}` gives one tag per part. The window
+as `{gpu}` or `gpu-{gpu}` gives a tag only when the value is found and `{platforms}` gives one tag per part. The window
 offers the last five used in the block and, when the block names a list of a connection (Jira's or a repository's
 labels), the matching ones while typing. A sharing button sends them in a field, as several values: labels for Jira
 and GitHub, `hashtags` for X, Bluesky and Instagram (added at the end of the post, the text cut first so they stay),
@@ -247,9 +255,9 @@ service are grouped under *Connect a service*, below the others.
 | Group | Page | What it holds |
 |-------|------|---------------|
 | Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
-| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends; a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
+| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends, with a *Fill fields* tab (steps that fill a field of the service on each share); a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Triggers** | Shortcuts and the layout each opens |
-| | **Data & fields** | Two tabs: *Read from files* (values read from files in the project folder, and values made from other values) and *Fill fields* (steps that fill a field of the service on each share) |
+| | **Data & fields** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or one opened or dropped), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives; a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read, each added to the window's files or not, with its lines' time format and its values |
 | | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, following a window that is moved, the outline and dot shown while recording |
 | CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
 | | **Your data** | What is kept on this computer, clear or reset, export and import |
@@ -265,7 +273,7 @@ service are grouped under *Connect a service*, below the others.
 |---------|-----------|
 | **Screenshot** | Its tools are a row of icons above the picture: pen, square, circle, arrow, text (bold, italic, on a box; click a text to change it), crop; colour and size. *Read text*: drag over text on the picture, the lines found are marked; copy them all or click the ones to copy, or *Try again* to read it another way |
 | **Video** | Its tools are a row of icons above the picture, like the screenshot's: crop (drag a frame, *Apply crop*), marks drawn with the screenshot's tools, the keys pressed (dragged where they go, × takes them off, the keyboard icon brings them back), the time of each moment (the clock), *Follow window* when the window was moved, *Take screenshot*, *Reset edits*; each icon is named on hover. Under the picture: the trim handles and what is kept. *Also take a screenshot when the recording ends* is set in the layout |
-| **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; `{{variables}}` filled in. The box keeps at least one line; *One line high* keeps it at that |
+| **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; values (`{map}`) filled in. The box keeps at least one line; *One line high* keeps it at that |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |

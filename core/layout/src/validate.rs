@@ -702,7 +702,7 @@ fn check_variables(block: &Block, text: &str, reg: &dyn Registry, out: &mut Vec<
                 block,
                 Severity::Debug,
                 Code::UnresolvedVariable,
-                format!("{{{{{name}}}}} is not defined by any data rule"),
+                format!("{{{name}}} is not defined by any data rule"),
             ));
         }
     }

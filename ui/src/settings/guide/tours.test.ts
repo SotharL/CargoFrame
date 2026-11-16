@@ -10,7 +10,8 @@ import { MAX_SAY, TOURS, tourById } from './tours';
 // Every page's code, as text: the guides name things by their `data-tour` attribute.
 const pages = import.meta.glob('../../**/*.svelte', { query: '?raw', import: 'default', eager: true }) as Record<string, string>;
 const code = Object.values(pages).join('\n');
-const named = (target: string) => code.includes(`data-tour="${target}"`) || code.includes(`tour="${target}"`);
+const named = (target: string) =>
+  code.includes(`data-tour="${target}"`) || code.includes(`tour="${target}"`) || code.includes(`tour: '${target}'`);
 
 /** The keys of the ready-made layouts, as the program has them. */
 const templatesRs = readFileSync(new URL('../../../../core/layout/src/templates.rs', import.meta.url), 'utf8');

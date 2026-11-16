@@ -13,18 +13,24 @@ use crate::run::{Outcome, Report};
 use cargoframe_context::template;
 use std::collections::BTreeMap;
 
-/// `{{rule.shelf}}` or `rule.shelf` → `rule.shelf`.
-fn name_of(raw: &str) -> &str {
-    raw.trim()
-        .trim_start_matches("{{")
-        .trim_end_matches("}}")
+/// `{{rule.shelf}}`, `{shelf}`, `rule.shelf` or `shelf` → the name the capture knows it by.
+fn name_of(raw: &str) -> String {
+    let n = raw
         .trim()
+        .trim_start_matches('{')
+        .trim_end_matches('}')
+        .trim();
+    if n.contains('.') {
+        n.to_string()
+    } else {
+        format!("rule.{n}")
+    }
 }
 
 /// Whether one condition holds. A value that is not known counts as empty.
 pub fn holds(c: &Cond, known: &BTreeMap<String, String>) -> bool {
     let v = known
-        .get(name_of(&c.value))
+        .get(&name_of(&c.value))
         .map(|v| v.trim().to_lowercase())
         .unwrap_or_default();
     let t = c.text.trim().to_lowercase();
@@ -231,6 +237,7 @@ mod tests {
             find: Find::Combine { choices },
             which: Which::First,
             fallback: fallback.map(str::to_string),
+            across: Default::default(),
         };
         let rule = Rule {
             name: "Build".into(),

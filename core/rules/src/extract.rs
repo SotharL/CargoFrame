@@ -117,8 +117,15 @@ fn check_steps(rule: &Rule) -> Result<(), String> {
                 "\u{201c}{name}\u{201d}: its variable name may only have letters, digits, _ and -"
             ));
         }
+        // `{key}` must read as a value in a text: not Jira's own `{code}`, not a number
+        if !cargoframe_context::template::short_name_ok(&step.key) {
+            return Err(format!(
+                "\u{201c}{name}\u{201d}: pick another name, {{{}}} is kept for Jira's formatting or is only digits",
+                step.key
+            ));
+        }
         if !keys.insert(step.key.as_str()) {
-            return Err(format!("Two values are called {{{{rule.{}}}}}", step.key));
+            return Err(format!("Two values are called {{{}}}", step.key));
         }
         crate::find::check(&step.find).map_err(|e| format!("\u{201c}{name}\u{201d}: {e}"))?;
     }

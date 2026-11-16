@@ -28,7 +28,33 @@ describe('TextAutomation', () => {
     render(TextAutomation, { value: 'Seen on ', variables, rules });
     area().setSelectionRange(8, 8);
     await fireEvent.click(inGroup('Most used', 'Date'));
-    expect(area().value).toBe('Seen on {{capture.date}}');
+    expect(area().value).toBe('Seen on {capture.date}');
+  });
+
+  it('offers the values when { is typed, and writes the brace on Escape', async () => {
+    render(TextAutomation, { value: 'Build ', variables, rules });
+    area().setSelectionRange(6, 6);
+    await fireEvent.keyDown(area(), { key: '{' });
+    const find = await screen.findByRole('searchbox', { name: 'Find a value' });
+    await fireEvent.input(find, { target: { value: 'build' } });
+    expect(screen.getByRole('option', { name: /Build number/ })).toBeTruthy();
+    await fireEvent.keyDown(find, { key: 'Enter' });
+    expect(area().value).toBe('Build {build}');
+    area().setSelectionRange(13, 13);
+    await fireEvent.keyDown(area(), { key: '{' });
+    await fireEvent.keyDown(await screen.findByRole('searchbox', { name: 'Find a value' }), { key: 'Escape' });
+    expect(area().value).toBe('Build {build}{');
+    expect(screen.queryByRole('dialog', { name: 'Put a value in the text' })).toBeNull();
+  });
+
+  it('shows the text as the last capture fills it in', async () => {
+    render(TextAutomation, { value: 'On {app.exe} and {nothing}', variables, rules });
+    await fireEvent.click(screen.getByRole('radio', { name: 'Values' }));
+    const shown = await screen.findByRole('region', { name: "The text with the last capture's values" });
+    expect([...shown.querySelectorAll('mark')].map((m) => m.textContent)).toContain('{nothing}');
+    expect(shown.textContent).toContain('On ');
+    // the formatting buttons and { } wait until the names are shown again
+    expect((screen.getByRole('button', { name: '{ } Value' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('lists every value on the right, the most used first, then by group', () => {
@@ -50,10 +76,10 @@ describe('TextAutomation', () => {
     const list = screen.getByRole('region', { name: 'Values to put in the text' });
     expect(within(list).getAllByRole('button').map((b) => b.textContent?.trim())).toEqual(['Program path']);
     await fireEvent.click(inGroup('Program', 'Program path'));
-    expect(area().value).toBe('{{app.path}}');
+    expect(area().value).toBe('{app.path}');
     await fireEvent.input(screen.getByRole('searchbox', { name: 'Search values' }), { target: { value: 'package.json' } });
     await fireEvent.click(within(screen.getByRole('group', { name: 'From files' })).getAllByRole('button')[0]!);
-    expect(area().value).toBe('{{app.path}}{{rule.build}}');
+    expect(area().value).toBe('{app.path}{build}');
     await fireEvent.input(screen.getByRole('searchbox', { name: 'Search values' }), { target: { value: 'nothing like it' } });
     expect(screen.getByText('No value matches “nothing like it”.')).toBeTruthy();
   });
@@ -66,7 +92,7 @@ describe('TextAutomation', () => {
     const files = within(screen.getByRole('group', { name: 'From files' })).getAllByRole('button');
     expect(files).toHaveLength(1);
     await fireEvent.click(files[0]!);
-    expect(area().value).toBe('{{rule.build}}');
+    expect(area().value).toBe('{build}');
   });
 
   it('has no file group when no value is read from files', () => {
@@ -79,9 +105,9 @@ describe('TextAutomation', () => {
     const box = screen.getByRole('textbox', { name: 'Text automation' }) as HTMLElement;
     select(box, 5, 5);
     await fireEvent.click(inGroup('In the text', 'Screenshot'));
-    expect(readText(box)).toBe('Steps{{capture.screenshot}}');
+    expect(readText(box)).toBe('Steps{capture.screenshot}');
     await fireEvent.click(inGroup('In the text', 'Repro | Highlight table'));
-    expect(readText(box)).toBe('Steps{{capture.screenshot}}\n| Repro | Highlight |\n| --- | --- |\n| {{capture.recording}} | {{capture.screenshot}} |');
+    expect(readText(box)).toBe('Steps{capture.screenshot}\n| Repro | Highlight |\n| --- | --- |\n| {capture.recording} | {capture.screenshot} |');
     expect(box.querySelector('.tw')).toBeTruthy();
   });
 
@@ -106,9 +132,9 @@ describe('TextAutomation', () => {
     await fireEvent.input(screen.getByLabelText('Word that becomes the link'), { target: { value: 'build' } });
     await fireEvent.input(screen.getByLabelText('Web address'), { target: { value: 'https://ci.example.com/builds/' } });
     await fireEvent.change(screen.getByRole('combobox', { name: 'A value from a file, in the address' }), { target: { value: 'rule.build' } });
-    expect(screen.getByText('[build](https://ci.example.com/builds/{{rule.build}})')).toBeTruthy();
+    expect(screen.getByText('[build](https://ci.example.com/builds/{build})')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Insert link' }));
-    expect(area().value).toBe('Fixed in [build](https://ci.example.com/builds/{{rule.build}})');
+    expect(area().value).toBe('Fixed in [build](https://ci.example.com/builds/{build})');
     expect(screen.queryByRole('group', { name: 'Custom link' })).toBeNull();
   });
 
@@ -134,13 +160,13 @@ describe('TextAutomation', () => {
     expect(box.getAttribute('contenteditable')).toBe('true');
     select(box, 10, 10);
     await fireEvent.click(inGroup('Most used', 'Program'));
-    expect(readText(box)).toBe('- Seen in {{app.exe}}');
+    expect(readText(box)).toBe('- Seen in {app.exe}');
     // the variable is shown as one, the line as a bullet
-    expect(box.querySelector('.var')?.textContent).toBe('{{app.exe}}');
+    expect(box.querySelector('.var')?.textContent).toBe('{app.exe}');
     expect(box.querySelector('.ln.bullet')).toBeTruthy();
-    select(box, 10, 21);
+    select(box, 10, 19);
     await fireEvent.click(screen.getByRole('button', { name: 'Code' }));
-    expect(readText(box)).toBe('- Seen in `{{app.exe}}`');
+    expect(readText(box)).toBe('- Seen in `{app.exe}`');
     // only what the services can show
     expect(screen.queryByRole('button', { name: 'Underline' })).toBeNull();
   });

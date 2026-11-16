@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.4.1 (beta)</p>
+Windows 11 and Linux · version 0.5.0 (beta)</p>
 
 <p align="center">
   <picture>
@@ -109,6 +109,7 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 | 1 | **Setup, Connections** | Add the service you share to. A button beside each token field opens the page where you get it. Skip this to start with **Save locally** |
 | 2 | **Layouts** | Press **Start from a template**, then **Use**, change what you like, **Save**. A layout is the window a capture opens. Bigger templates keep the screenshot and the logs in tabs |
 | 3 | **Triggers** | Name it, click **Shortcut** and press the keys, pick your layout, **Save** |
+| 4 | **Data & fields** *(optional)* | After a first capture, **New value: select it in a file**: click the map in a log, name it, **Save**. Write `{map}` in a layout's title, text or tags |
 
 <table>
 <tr>
@@ -120,6 +121,9 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 <td><b>Triggers.</b> A shortcut and the layout it opens. That is all a trigger needs.</td>
 </tr>
 </table>
+
+<p><img alt="Settings, Data & fields: a game log with the map selected, how to find it again, and what each log gives" src="docs/images/data-values.png"></p>
+<p><b>Data & fields.</b> Select a value once in a file of a capture; CargoFrame finds it again in every capture, in every log you tick, the newest winning.</p>
 
 > **Looking for a setting?** Type in the search box at the top of the Settings menu (Ctrl+F): the menu lists only
 > what has your words, and the rest of the page shown is greyed out. The × clears it.
@@ -147,7 +151,8 @@ or click the ones you want. *Try again* reads it another way. It is read on your
 | **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, Tags, Log viewer, Tabs, or a sharing button |
 | **Connection** | A service you signed in to (Jira, Slack…) |
 | **Where to post** | One dropdown that goes as deep as the service does: project, or server, channel, thread |
-| **Data & fields** | *Read from files*: if a file is found in the program's folder, add it to the files and read values from it (`{{rule.gpu}}`). *Fill fields*: fill a field of the service on each share, with steps such as "if `{{rule.gpu}}` is found, add the label `gpu-{{rule.gpu}}`" |
+| **Value** | Something read in the files of each capture, like the map in a game's log: select it once in a file, then write `{map}` in a title, a description, a tag or a field (*Data & fields*) |
+| **Fill fields** | A field of the service filled on each share, with steps such as "if `{gpu}` is found, add the label `gpu-{gpu}`" (a tab of *Layouts*) |
 | **Template** | A ready-made layout to start from; it becomes yours when you save it |
 
 </details>
@@ -201,23 +206,28 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   quotes, lists, code blocks and tables as they look, with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U,
   Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8 bullets, Ctrl+Shift+7 numbers), only the ones that service can
   show. A table is a grid: type in its cells, ＋ adds a row or a column, × removes one. The block's starting text in
-  the layout builder has the same buttons, and every value is listed on its right with a search box, so
-  `Seen in `{{app.exe}}` **({{project.name}})**` is written formatted once and filled in on every capture.
-  CargoFrame writes the marks the way each service wants.
+  the layout builder has the same buttons, and every value is listed on its right with a search box (or type `{` to
+  pick one), so `Seen in `{app.exe}` **({project.name})**` is written formatted once and filled in on every capture.
+  *Values* above the box shows the text as the last capture fills it in. CargoFrame writes the marks the way each
+  service wants.
 - **Pictures in the text:** for Jira, GitHub and Teams, put *Screenshot* or *Recording* from the values list (or the
   *Repro | Highlight* table) in the text, and the picture shows right there instead of as an attachment at the end.
-- **Read from files** (*Settings, Data & fields*): *If this file is found* (its name or part of it, no format to choose), *add it to the
-  files* and/or *read* values: the value written after a name (`GPU: …`), the text between two pieces (or to the end of
-  the line), or the whole line with a word; the first, the last or all of them. Each value is a variable such as
-  `{{rule.gpu}}` for the title or description. Only files your rules name are read, and only inside the project folder.
-- **Fill fields** (*Settings, Data & fields*): a field of the service and the steps that fill it on each share: *If*
+- **Values from files** (*Settings, Data & fields*): *New value: select it in a file* shows the text files of the last
+  capture (or one you open or drop). Click a word, or drag over the text you want: CargoFrame suggests how to find it
+  again (in the lines with the label just before it, up to the next sign, a space or the end of the line, the most
+  recent line), shows what each file gives, and you name it. Tick the files to read it in: when several have it, the
+  newest file wins, or all their different values. A value no file has stays empty, or gives a text you choose. The
+  *Values* tab lists each one with what the last capture gave and the layouts using it; *Files* lists the files read,
+  whether each is added to the window's files and how its lines write their time. Write a value as `{map}`; the older
+  `{{rule.map}}` keeps working. Only files you name are read, and only inside the project folder.
+- **Fill fields** (*Settings, Layouts, Fill fields*): a field of the service and the steps that fill it on each share: *If*
   a value (from a file, the program, the project) *is found / is / contains…*, *add* or *set* a text, *and* more. Add
   puts one more label in a list, a new line in a description. For every layout that shares there, or only some. A
   block of the window is still sent in a field from the sharing button.
 - **Files from several folders:** a Files block can look in several subfolders, separated by commas (`logs, build/out`).
   Missed one? **＋** adds files by hand; they are copied into the capture and ticked.
 - **Tags:** a Tags block works like Jira's labels: type a tag and press Enter, up to 25. Its starting list can use
-  values (`{{rule.gpu}}` tags the graphics card when it is found), the last five used are offered, and Jira's or a
+  values (`{gpu}` or `gpu-{gpu}` tags the graphics card when it is found), the last five used are offered, and Jira's or a
   repository's labels are suggested while typing. Send them as Jira or GitHub labels, hashtags on X, Bluesky and
   Instagram, or a *Tags* line in Slack, Teams and Discord.
 - **Log viewer:** a block that shows a file of the window line by line. Type `error` in its search to see only those
@@ -231,8 +241,8 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
 - **Tabs:** a Tabs block is a binder: 2 to 5 tabs (named, with the names on the top, bottom, left or right), each
   holding blocks. In the layout builder, click a tab's name and drop blocks inside; drag the grip at its top right to
   move it with its blocks. In the window, click a tab to see its blocks. What is in the other tabs is kept and sent.
-- **Values made from other values:** in *Data & fields*, *Make a value from other values*: for example a build id
-  `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is found, else without it.
+- **Values made from other values:** in *Data & fields*, *Made from other values*: for example a build id
+  `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
   one line, however small the window.
 - **Last choices:** each dropdown starts on what you used last and lists the last five.

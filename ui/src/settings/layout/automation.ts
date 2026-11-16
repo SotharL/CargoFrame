@@ -1,6 +1,6 @@
 /**
  * Helpers for the "Text automation" editor: put a snippet where the cursor is, and build a link
- * whose address can carry live data (`{{rule.build}}`). Plain functions, so they are tested without a screen.
+ * whose address can carry live data (`{build}`). Plain functions, so they are tested without a screen.
  */
 
 export type LinkStyle = 'markdown' | 'jira' | 'plain';
@@ -34,10 +34,10 @@ export function makeLink(style: LinkStyle, word: string, url: string): string {
   }
 }
 
-/** A web address worth sending: starts with http(s):// or begins with a `{{variable}}` that will supply it. */
+/** A web address worth sending: starts with http(s):// or begins with a value (`{tracker}`) that will supply it. */
 export function looksLikeAddress(url: string): boolean {
   const u = url.trim();
-  return /^https?:\/\/\S+$/i.test(u) || /^\{\{[\w.\- ]+\}\}\S*$/.test(u);
+  return /^https?:\/\/\S+$/i.test(u) || /^\{\{[\w.\- ]+\}\}\S*$/.test(u) || /^\{[\w.-]+\}\S*$/.test(u);
 }
 
 /** The variables worth a button of their own, in this order, when the app offers them. */
@@ -64,7 +64,7 @@ export const MEDIA_SERVICES: Record<string, string[]> = {
   'capture.recording': ['jira', 'github'],
 };
 /** A table with the recording and the screenshot side by side, as a bug report shows them. */
-export const MEDIA_TABLE = '| Repro | Highlight |\n| --- | --- |\n| {{capture.recording}} | {{capture.screenshot}} |';
+export const MEDIA_TABLE = '| Repro | Highlight |\n| --- | --- |\n| {capture.recording} | {capture.screenshot} |';
 
 /** The group a value is listed under. */
 export function groupOf(name: string): string {

@@ -1,11 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import Fields from './Fields.svelte';
-import DataFields from './DataFields.svelte';
+import LayoutsArea from './LayoutsArea.svelte';
 import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
 import type { InfoType } from '../../lib/types';
 import { stepLines } from '../fills';
-import { go } from '../route.svelte';
+import { go, parseTarget } from '../route.svelte';
 
 let api: Api;
 beforeEach(async () => {
@@ -44,7 +44,7 @@ describe('Fill fields: if a value is found, add it to a field of the service', (
       },
     ]);
     // the card says it in a sentence
-    expect(await screen.findByText('If {{rule.gpu}} is found: add “gpu-{{rule.gpu}}” and add “needs-triage”')).toBeTruthy();
+    expect(await screen.findByText('If {gpu} is found: add “gpu-{{rule.gpu}}” and add “needs-triage”')).toBeTruthy();
   });
 
   it('shows a starting value from before 0.3.0 as its first step, and saves it as one', async () => {
@@ -62,12 +62,15 @@ describe('Fill fields: if a value is found, add it to a field of the service', (
     expect(t.steps![0]!.when).toEqual({ subject: '', test: 'missing', text: '' });
   });
 
-  it('is the second tab of Data & fields, and the old address opens it', async () => {
-    go('rules', 'fields');
-    render(DataFields);
+  it('is the second tab of Layouts, and the old addresses open it', async () => {
+    expect(parseTarget('rules/fields')).toEqual({ page: 'layouts', arg: 'fields' });
+    expect(parseTarget('infotypes')).toEqual({ page: 'layouts', arg: 'fields' });
+    go('layouts', 'fields');
+    render(LayoutsArea);
     expect(screen.getByRole('tab', { name: 'Fill fields' }).getAttribute('aria-selected')).toBe('true');
-    await fireEvent.click(screen.getByRole('tab', { name: 'Read from files' }));
-    expect(await screen.findByRole('button', { name: 'Add data from a file' })).toBeTruthy();
+    expect(await screen.findByRole('button', { name: 'Fill a field' })).toBeTruthy();
+    await fireEvent.click(screen.getByRole('tab', { name: 'Layouts' }));
+    expect(screen.getByRole('tab', { name: 'Layouts' }).getAttribute('aria-selected')).toBe('true');
   });
 
   it('describes each kind of step in words', () => {
@@ -78,6 +81,6 @@ describe('Fill fields: if a value is found, add it to a field of the service', (
         { when: { subject: 'app.exe', test: 'contains', text: 'maya' }, then: [{ do: 'set', text: 'dcc' }] },
       ],
     };
-    expect(stepLines(t)).toEqual(['Always: add “crash”', 'If {{app.exe}} contains “maya”: set it to “dcc”']);
+    expect(stepLines(t)).toEqual(['Always: add “crash”', 'If {app.exe} contains “maya”: set it to “dcc”']);
   });
 });

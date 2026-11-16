@@ -1,7 +1,7 @@
 <script lang="ts">
-  // Data & fields → Fill fields: a field of a service (Jira's Labels, Priority, a custom field) and
+  // Layouts → Fill fields: a field of a service (Jira's Labels, Priority, a custom field) and
   // the steps that fill it on every share to that service, from values found in files or anything
-  // else the capture knows: "If {{rule.gpu}} is found → add gpu-{{rule.gpu}}". Sending a block in a
+  // else the capture knows: "If {gpu} is found → add gpu-{gpu}". Sending a block in a
   // field stays on the sharing button in the layout; this page is for what fills a field by itself.
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
@@ -10,6 +10,7 @@
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
   import type { ComboOption, ConnectionView, FillStep, InfoKind, InfoType, Layout, VariableInfo } from '../../lib/types';
+  import { token } from '../../lib/valueNames';
   import { TESTS, blankFill, cleaned, needsText, newStep, newWhen, stepLines, stepsOf } from '../fills';
 
   const fills = createItems<InfoType>('infotype');
@@ -58,7 +59,7 @@
     { value: '', label: 'this field' },
     ...[...variables]
       .sort((a, b) => Number(!a.name.startsWith('rule.')) - Number(!b.name.startsWith('rule.')))
-      .map((v) => ({ value: v.name, label: `{{${v.name}}}`, note: v.description, group: v.name.startsWith('rule.') ? 'From files' : 'From the capture' })),
+      .map((v) => ({ value: v.name, label: token(v.name), note: v.description, group: v.name.startsWith('rule.') ? 'From files' : 'From the capture' })),
   ]);
   /** The layouts that can share to the chosen service. */
   const sharingLayouts = $derived(
@@ -133,8 +134,8 @@
         capture knows. For a box of the layout, choose its field on the sharing button instead.
       </p>
       <p class="example">
-        Example: <strong>Jira → Labels</strong>: if <span class="mono">{'{{rule.gpu}}'}</span> is found,
-        add <span class="mono">gpu-{'{{rule.gpu}}'}</span> and add <span class="mono">needs-triage</span>.
+        Example: <strong>Jira → Labels</strong>: if <span class="mono">{'{gpu}'}</span> is found,
+        add <span class="mono">gpu-{'{gpu}'}</span> and add <span class="mono">needs-triage</span>.
       </p>
       <button class="primary" data-tour="fields.add" onclick={add}>Fill a field</button>
     </div>
@@ -197,7 +198,7 @@
                 <option value="if">If</option>
               </select>
               {#if step.when}
-                <div class="subject"><Combobox label="What to look at" options={subjects} free bind:value={step.when.subject} placeholder={'{{rule.gpu}}'} /></div>
+                <div class="subject"><Combobox label="What to look at" options={subjects} free bind:value={step.when.subject} placeholder={'{gpu}'} /></div>
                 <select aria-label="Test" bind:value={step.when.test}>
                   {#each TESTS as t (t.value)}<option value={t.value}>{step.when.subject === '' && t.value === 'missing' ? 'is empty' : step.when.subject === '' && t.value === 'found' ? 'has a value' : t.label}</option>{/each}
                 </select>
@@ -212,7 +213,7 @@
                   <option value="add">add</option>
                   <option value="set">set it to</option>
                 </select>
-                <input type="text" class="grow" aria-label="Text to add" bind:value={a.text} placeholder="gpu-{'{{rule.gpu}}'}" />
+                <input type="text" class="grow" aria-label="Text to add" bind:value={a.text} placeholder="gpu-{'{gpu}'}" />
                 {#if step.then.length > 1}
                   <button type="button" class="x" aria-label="Remove this action" onclick={() => step.then.splice(ai, 1)}>✕</button>
                 {/if}
@@ -224,7 +225,7 @@
         <div><button type="button" onclick={() => draft!.steps.push(newStep())}>Add a step</button></div>
         <p class="quiet hint">
           Add puts one more value in a list (a label), a new line in a description, or words at the end
-          of a title. Variables such as {'{{rule.gpu}}'} come from <em>Read from files</em>.
+          of a title. Values such as {'{gpu}'} come from <em>Data &amp; fields</em>.
         </p>
       </fieldset>
 

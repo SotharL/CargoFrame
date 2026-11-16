@@ -5,7 +5,7 @@
   import General from './pages/General.svelte';
   import Triggers from './pages/Triggers.svelte';
   import DataFields from './pages/DataFields.svelte';
-  import Layouts from './pages/Layouts.svelte';
+  import Layouts from './pages/LayoutsArea.svelte';
   import Connections from './pages/Connections.svelte';
   import VideoPage from './pages/Video.svelte';
   import Setup from './pages/Setup.svelte';
@@ -205,7 +205,7 @@
     <GuideMenu />
   </nav>
 
-  <main class:wide={page === 'layouts'} bind:this={mainEl}>
+  <main class:wide={page === 'layouts' || page === 'rules'} bind:this={mainEl}>
     {#if !trayAvailable}
       <div class="banner" role="status">
         <Chip kind="warn" label="No tray icon" />

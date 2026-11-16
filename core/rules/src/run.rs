@@ -3,7 +3,7 @@
 use crate::details::{self, FileDetails, What};
 use crate::extract::{extract, RuleError};
 use crate::find;
-use crate::model::{Format, ReadMode, Rule, Several, Which};
+use crate::model::{Across, Format, ReadMode, Rule, Several, Which};
 use cargoframe_context::glob;
 use std::collections::BTreeMap;
 use std::fs;
@@ -33,6 +33,12 @@ pub trait ProjectFiles {
     /// Every file `pattern` means, relative to `root`, the newest first.
     fn locate_all(&self, root: &Path, pattern: &str) -> Result<Vec<String>, RuleError> {
         self.locate(root, pattern).map(|f| vec![f])
+    }
+
+    /// When the file at `rel` (relative to `root`) was last changed, for "the newest file has
+    /// it". A source that cannot tell says nothing, and the rules' order decides.
+    fn modified(&self, _root: &Path, _rel: &str) -> Option<std::time::SystemTime> {
+        None
     }
 
     /// Facts about the file `pattern` means. The file's content is only read when `what` needs it.
@@ -243,6 +249,10 @@ impl ProjectFiles for FsFiles {
         find_all(root, pattern)
     }
 
+    fn modified(&self, root: &Path, rel: &str) -> Option<std::time::SystemTime> {
+        fs::metadata(root.join(rel)).and_then(|m| m.modified()).ok()
+    }
+
     fn details(&self, root: &Path, pattern: &str, what: What) -> Result<FileDetails, RuleError> {
         let rel = find(root, pattern)?;
         let (real, meta) = resolve_inside(root, &root.join(&rel))?;
@@ -350,6 +360,59 @@ pub struct Report {
     pub files: Vec<String>,
     /// The files each rule found, by rule id.
     pub found: BTreeMap<String, Vec<String>>,
+    /// The file each value was read from, by value key, when it was read from one.
+    pub sources: BTreeMap<String, String>,
+}
+
+/// What one rule found for one value, before the files that have the same value are compared.
+struct Candidate {
+    rule: String,
+    file: Option<String>,
+    modified: Option<std::time::SystemTime>,
+    result: Result<String, RuleError>,
+    fallback: Option<String>,
+    across: Across,
+}
+
+/// The value of a key read in several rules: the newest file's, or every different value. One
+/// that no file has gives the first problem met, and the first fallback.
+fn settle(key: &str, found: Vec<Candidate>, report: &mut Report) {
+    let fallback = found.iter().find_map(|c| c.fallback.clone());
+    let across = found.first().map_or(Across::Newest, |c| c.across);
+    let mut ok: Vec<&Candidate> = found.iter().filter(|c| c.result.is_ok()).collect();
+    // the newest first; files the source cannot date keep the rules' order, after the dated ones
+    ok.sort_by_key(|c| std::cmp::Reverse(c.modified));
+    let Some(winner) = ok.first() else {
+        let first = found.into_iter().next();
+        if let Some(c) = first {
+            report.owners.insert(key.to_string(), c.rule.clone());
+            report
+                .values
+                .insert(key.to_string(), outcome(c.result, &fallback));
+        }
+        return;
+    };
+    let value = match across {
+        Across::Newest => winner.result.clone().unwrap_or_default(),
+        Across::All => {
+            let mut seen: Vec<String> = Vec::new();
+            for c in &ok {
+                if let Ok(v) = &c.result {
+                    if !seen.contains(v) {
+                        seen.push(v.clone());
+                    }
+                }
+            }
+            seen.join(", ")
+        }
+    };
+    report.owners.insert(key.to_string(), winner.rule.clone());
+    if let Some(f) = &winner.file {
+        report.sources.insert(key.to_string(), f.clone());
+    }
+    report
+        .values
+        .insert(key.to_string(), outcome(Ok(value), &None));
 }
 
 fn outcome(result: Result<String, RuleError>, fallback: &Option<String>) -> Outcome {
@@ -376,6 +439,8 @@ pub fn run_rules<'a>(
 ) -> Report {
     let mut report = Report::default();
     let mut legacy: Vec<(&str, &Rule)> = Vec::new();
+    // what each rule found for each value, in the rules' order, compared once all are read
+    let mut candidates: Vec<(String, Vec<Candidate>)> = Vec::new();
     // Rules that read the same part of the same file share one read.
     let mut cache: BTreeMap<(String, u64, u8), Result<String, RuleError>> = BTreeMap::new();
     for (id, rule) in rules {
@@ -465,11 +530,27 @@ pub fn run_rules<'a>(
                     }
                 }
             };
-            report.owners.insert(step.key.clone(), id.to_string());
-            report
-                .values
-                .insert(step.key.clone(), outcome(result, &step.fallback));
+            let file = chosen.first().cloned();
+            let modified = match (project, &file) {
+                (Some(root), Some(f)) => files.modified(root, f),
+                _ => None,
+            };
+            let candidate = Candidate {
+                rule: id.to_string(),
+                file,
+                modified,
+                result,
+                fallback: step.fallback.clone(),
+                across: step.across,
+            };
+            match candidates.iter_mut().find(|(k, _)| *k == step.key) {
+                Some((_, list)) => list.push(candidate),
+                None => candidates.push((step.key.clone(), vec![candidate])),
+            }
         }
+    }
+    for (key, found) in candidates {
+        settle(&key, found, &mut report);
     }
     for (id, outcome) in run_details(legacy, project, files) {
         report.owners.insert(id.clone(), id.clone());
@@ -1036,7 +1117,7 @@ mod tests {
 
     // ----- 0.3.0: a file found by its name, values read from it, files added -----
 
-    use crate::model::{Find, ValueStep};
+    use crate::model::{Across, Find, ValueStep};
 
     fn step(key: &str, find: Find, which: Which) -> ValueStep {
         ValueStep {
@@ -1045,6 +1126,7 @@ mod tests {
             find,
             which,
             fallback: None,
+            across: Default::default(),
         }
     }
 
@@ -1174,7 +1256,10 @@ mod tests {
     fn two_values_with_one_name_are_refused() {
         let mut r = config(Several::Newest, false);
         r.values[1].key = "gpu".into();
-        assert!(crate::check(&r).unwrap_err().contains("{{rule.gpu}}"));
+        assert!(crate::check(&r).unwrap_err().contains("{gpu}"));
+        let mut jira = config(Several::Newest, false);
+        jira.values[0].key = "code".into();
+        assert!(crate::check(&jira).unwrap_err().contains("{code}"));
         let mut bad = config(Several::Newest, false);
         bad.values[0].key = "g p u".into();
         assert!(crate::check(&bad).is_err());
@@ -1184,5 +1269,151 @@ mod tests {
             ..Rule::default()
         };
         assert!(crate::check(&empty).unwrap_err().contains("Add a value"));
+    }
+
+    fn at_time(path: &Path, secs: u64) {
+        let f = fs::File::options().write(true).open(path).unwrap();
+        f.set_modified(std::time::UNIX_EPOCH + std::time::Duration::from_secs(secs))
+            .unwrap();
+    }
+
+    /// Game.log and Editor.log both say which map was loaded; Editor.log was changed last.
+    fn two_logs() -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        fs::create_dir_all(p.join("Saved/Logs")).unwrap();
+        fs::write(
+            p.join("Saved/Logs/Game.log"),
+            "LoadMap: /Game/Maps/Harbor_P?listen\n",
+        )
+        .unwrap();
+        fs::write(
+            p.join("Saved/Logs/Editor.log"),
+            "LoadMap: /Game/Maps/Harbor_Night_P?listen\n",
+        )
+        .unwrap();
+        at_time(&p.join("Saved/Logs/Game.log"), 1_000_000);
+        at_time(&p.join("Saved/Logs/Editor.log"), 2_000_000);
+        dir
+    }
+
+    fn map_rule(file: &str, across: Across) -> Rule {
+        let mut s = step(
+            "map",
+            Find::Pick {
+                lines_with: "Maps/".into(),
+                from_line_start: false,
+                stop: Some("?".into()),
+            },
+            Which::Last,
+        );
+        s.across = across;
+        Rule {
+            name: file.into(),
+            file: file.into(),
+            values: vec![s],
+            ..Rule::default()
+        }
+    }
+
+    #[test]
+    fn a_value_read_in_several_files_is_the_newest_files_by_default() {
+        let d = two_logs();
+        let (game, editor) = (
+            map_rule("Game.log", Across::Newest),
+            map_rule("Editor.log", Across::Newest),
+        );
+        let report = run_rules(
+            [("game", &game), ("editor", &editor)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(
+            report.values["map"].value.as_deref(),
+            Some("Harbor_Night_P")
+        );
+        assert_eq!(report.owners["map"], "editor");
+        assert_eq!(report.sources["map"], "Saved/Logs/Editor.log");
+        // the order of the rules does not matter
+        let report = run_rules(
+            [("editor", &editor), ("game", &game)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(
+            report.values["map"].value.as_deref(),
+            Some("Harbor_Night_P")
+        );
+    }
+
+    #[test]
+    fn a_value_read_in_several_files_can_keep_every_different_value() {
+        let d = two_logs();
+        let (game, editor) = (
+            map_rule("Game.log", Across::All),
+            map_rule("Editor.log", Across::All),
+        );
+        let report = run_rules(
+            [("game", &game), ("editor", &editor)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(
+            report.values["map"].value.as_deref(),
+            Some("Harbor_Night_P, Harbor_P")
+        );
+        // the same value twice is said once
+        fs::write(
+            d.path().join("Saved/Logs/Game.log"),
+            "LoadMap: /Game/Maps/Harbor_Night_P?x\n",
+        )
+        .unwrap();
+        let report = run_rules(
+            [("game", &game), ("editor", &editor)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(
+            report.values["map"].value.as_deref(),
+            Some("Harbor_Night_P")
+        );
+    }
+
+    #[test]
+    fn a_value_no_file_has_is_empty_unless_it_says_what_to_write() {
+        let d = two_logs();
+        let (mut crash, mut other) = (
+            map_rule("Crash.log", Across::Newest),
+            map_rule("nothing.txt", Across::Newest),
+        );
+        let report = run_rules(
+            [("crash", &crash), ("other", &other)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(report.values["map"].value, None);
+        assert!(report.values["map"]
+            .problem
+            .as_deref()
+            .unwrap()
+            .contains("Crash.log"));
+        other.values[0].fallback = Some("Unknown map".into());
+        crash.values[0].fallback = None;
+        let report = run_rules(
+            [("crash", &crash), ("other", &other)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(report.values["map"].value.as_deref(), Some("Unknown map"));
+        assert!(report.values["map"].used_fallback);
+        // one file that has it is enough: the other's problem is not reported
+        let game = map_rule("Game.log", Across::Newest);
+        let report = run_rules(
+            [("crash", &crash), ("game", &game)],
+            Some(d.path()),
+            &FsFiles,
+        );
+        assert_eq!(report.values["map"].value.as_deref(), Some("Harbor_P"));
+        assert_eq!(report.values["map"].problem, None);
     }
 }

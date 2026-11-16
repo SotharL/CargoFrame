@@ -1,6 +1,7 @@
 <script lang="ts">
   import Chip from '../../lib/components/Chip.svelte';
   import { roleTag } from '../../lib/roles';
+  import { token } from '../../lib/valueNames';
   import { KIND_NAME } from '../../lib/connector';
   import type { Block, ServiceKind } from '../../lib/types';
   import RichBox from './RichBox.svelte';
@@ -69,7 +70,7 @@
   {#if unresolved.length}
     <div class="chips">
       {#each unresolved as name (name)}
-        <Chip kind="dbg" label={`{{${name}}} has no value`} />
+        <Chip kind="dbg" label={`${token(name)} has no value`} />
       {/each}
     </div>
   {/if}

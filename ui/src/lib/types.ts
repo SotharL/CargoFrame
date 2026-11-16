@@ -536,12 +536,19 @@ export type RuleFind =
   | { type: 'between'; start: string; end: string | null }
   /** The whole line that holds a text. */
   | { type: 'line_with'; text: string }
+  /** Chosen by selecting it in a file (0.5.0): in the lines with `lines_with` (every line when
+   *  empty), right after it or from the start of the line, up to `stop` (the end of the line when
+   *  none). Mirror of `Find::Pick` in core/rules; `settings/data/pick.ts` runs it in the window. */
+  | { type: 'pick'; lines_with: string; from_line_start?: boolean; stop?: string | null }
   /** Made from other values: the first choice that fits gives the value (core/rules/src/combine.rs). */
   | { type: 'combine'; choices: RuleChoice[] }
   /** A rule made before 0.3.0: its own `format` and `query`. */
   | { type: 'advanced' };
 
-/** One value a data rule reads, used in text as `{{rule.<key>}}`. */
+/** When several files have the same value: the newest file's, or every different value. */
+export type RuleAcross = 'newest' | 'all';
+
+/** One value a data rule reads, used in text as `{<key>}` (or `{{rule.<key>}}`). */
 export type RuleCondTest = 'found' | 'missing' | 'is' | 'is_not' | 'contains';
 /** "{{rule.shelf}} is found": `value` is a variable's name. */
 export interface RuleCond {
@@ -561,6 +568,40 @@ export interface RuleValue {
   find: RuleFind;
   which: RuleWhich;
   fallback: string | null;
+  /** Absent: the newest file. Every step of the same key says the same. */
+  across?: RuleAcross;
+}
+
+/** What the saved values give in the last capture's folder (`preview_values`). */
+export interface ValuesPreview {
+  folder: string | null;
+  /** By name: `rule.gpu`, `app.exe`… */
+  values: Record<string, string>;
+  /** The file each value read from files came from, by key. */
+  sources: Record<string, string>;
+  /** Why a value read from files has none, by key. */
+  problems: Record<string, string>;
+}
+
+/** A file of the last capture to pick a value in. */
+export interface SampleFile {
+  path: string;
+  size: number;
+  modified_ms: number;
+}
+
+export interface SampleFiles {
+  /** The last capture's project folder; the paths are inside it. */
+  folder: string | null;
+  files: SampleFile[];
+}
+
+export interface SampleText {
+  text: string;
+  /** Only the end of the file is here: it is large. */
+  cut: boolean;
+  size: number;
+  modified_ms: number;
 }
 
 /** Data from a file: if the file is found, read these values, and maybe add it to the files. */

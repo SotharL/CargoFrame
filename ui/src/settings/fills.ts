@@ -1,6 +1,13 @@
 // Fill fields: a field of a service and the steps that fill it on each share
-// ("If {{rule.gpu}} is found → add gpu-{{rule.gpu}} to Labels"). Mirror of core/config/src/infotype.rs.
+// ("If {gpu} is found → add gpu-{gpu} to Labels"). Mirror of core/config/src/infotype.rs.
 import type { FillStep, FillTest, FillWhen, InfoType } from '../lib/types';
+import { fullName, token } from '../lib/valueNames';
+
+/** What a step looks at, as the capture names it: `{gpu}`, `{{rule.gpu}}` and `gpu` are `rule.gpu`. */
+const subjectName = (s: string) => {
+  const n = s.trim().replace(/^\{+|\}+$/g, '').trim();
+  return n ? fullName(n) : '';
+};
 
 export const TESTS: { value: FillTest; label: string; needsText: boolean }[] = [
   { value: 'found', label: 'is found', needsText: false },
@@ -32,7 +39,7 @@ export function stepsOf(t: InfoType): FillStep[] {
 export function cleaned(t: InfoType, steps: FillStep[]): InfoType {
   const kept = steps
     .map((s) => ({
-      ...(s.when ? { when: { subject: s.when.subject.trim().replace(/^\{\{|\}\}$/g, ''), test: s.when.test, text: s.when.text } } : {}),
+      ...(s.when ? { when: { subject: subjectName(s.when.subject), test: s.when.test, text: s.when.text } } : {}),
       then: s.then.filter((a) => a.text.trim() !== '' || a.do === 'set'),
     }))
     .filter((s) => s.then.length > 0);
@@ -42,10 +49,10 @@ export function cleaned(t: InfoType, steps: FillStep[]): InfoType {
 
 const quote = (s: string) => `“${s.trim()}”`;
 
-/** "If {{rule.gpu}} is found" / "If this field is empty" / "Always". */
+/** "If {gpu} is found" / "If this field is empty" / "Always". */
 export function whenText(w: FillWhen | null | undefined): string {
   if (!w) return 'Always';
-  const subject = w.subject.trim() ? `{{${w.subject.trim()}}}` : 'this field';
+  const subject = w.subject.trim() ? token(w.subject.trim().replace(/^\{+|\}+$/g, '')) : 'this field';
   if (!w.subject.trim() && w.test === 'missing') return 'If this field is empty';
   if (!w.subject.trim() && w.test === 'found') return 'If this field has a value';
   const t = TESTS.find((x) => x.value === w.test);

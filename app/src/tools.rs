@@ -244,23 +244,185 @@ pub fn variables(store: &Store) -> Vec<VariableInfo> {
         })
         .collect();
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
+        // a value read in several files is offered once, naming its files
+        let mut values: Vec<(String, String, Vec<String>)> = Vec::new();
         for (id, rule) in loaded.items {
             for step in rule.steps(&id) {
-                let file = rule.name.trim();
-                let value = step.name.trim();
-                out.push(VariableInfo {
-                    name: format!("rule.{}", step.key),
-                    description: match (file.is_empty(), value.is_empty() || value == file) {
-                        (true, true) => "From a file".to_string(),
-                        (false, true) => format!("From a file: {file}"),
-                        (true, false) => format!("From a file: {value}"),
-                        (false, false) => format!("From a file: {file}, {value}"),
-                    },
-                });
+                let file = rule.file.trim().to_string();
+                match values.iter_mut().find(|(k, _, _)| *k == step.key) {
+                    Some((_, _, files)) => files.push(file),
+                    None => {
+                        values.push((step.key.clone(), step.name.trim().to_string(), vec![file]))
+                    }
+                }
             }
+        }
+        for (key, name, files) in values {
+            let files: Vec<String> = files.into_iter().filter(|f| !f.is_empty()).collect();
+            out.push(VariableInfo {
+                name: format!("rule.{key}"),
+                description: match (name.is_empty(), files.is_empty()) {
+                    (_, true) if name.is_empty() => "Made from other values".to_string(),
+                    (_, true) => format!("{name}, made from other values"),
+                    (true, false) => format!("From {}", files.join(", ")),
+                    (false, false) => format!("{name}, from {}", files.join(", ")),
+                },
+            });
         }
     }
     out
+}
+
+/// What the saved values give in a folder: each value, the file it came from, or why there is
+/// none; and the capture's other values. The settings window shows it beside each value, and the
+/// layout builder shows a text with it.
+#[derive(Debug, Serialize, PartialEq, Eq, Default)]
+pub struct ValuesPreview {
+    /// The project folder the values were read in.
+    pub folder: Option<String>,
+    /// Every value by its name (`rule.gpu`, `app.exe`…).
+    pub values: BTreeMap<String, String>,
+    /// The file each value read from files came from, by key, relative to the folder.
+    pub sources: BTreeMap<String, String>,
+    /// Why a value read from files has none, by key.
+    pub problems: BTreeMap<String, String>,
+}
+
+/// Run every saved rule in `folder`, then the values made from others, with `known` (the last
+/// capture's values) for the rest.
+pub fn preview_values(
+    rules: &[(String, Rule)],
+    folder: Option<&str>,
+    known: &BTreeMap<String, String>,
+) -> ValuesPreview {
+    let root = folder.map(Path::new).filter(|f| f.is_dir());
+    let all: Vec<(&str, &Rule)> = rules.iter().map(|(id, r)| (id.as_str(), r)).collect();
+    let mut report = cargoframe_rules::run_rules(all.iter().copied(), root, &FsFiles);
+    // the capture's own values, without the values its files gave then
+    let mut values: BTreeMap<String, String> = known
+        .iter()
+        .filter(|(k, _)| !k.starts_with("rule."))
+        .map(|(k, v)| (k.clone(), v.clone()))
+        .collect();
+    for (key, o) in &report.values {
+        if let Some(v) = &o.value {
+            values.insert(format!("rule.{key}"), v.clone());
+        }
+    }
+    cargoframe_rules::combine_values(all.iter().copied(), &mut report, &mut values);
+    let problems = report
+        .values
+        .iter()
+        .filter(|(_, o)| o.value.is_none())
+        .filter_map(|(k, o)| o.problem.clone().map(|p| (k.clone(), p)))
+        .collect();
+    ValuesPreview {
+        folder: root.map(|r| r.to_string_lossy().into_owned()),
+        values,
+        sources: report.sources,
+        problems,
+    }
+}
+
+/// A file the settings window can show to pick a value in.
+#[derive(Debug, Serialize, PartialEq, Eq, Clone)]
+pub struct SampleFile {
+    /// Relative to the folder, with `/`.
+    pub path: String,
+    pub size: u64,
+    /// Milliseconds since 1970.
+    pub modified_ms: u64,
+}
+
+#[derive(Debug, Serialize, PartialEq, Eq, Default)]
+pub struct SampleFiles {
+    pub folder: Option<String>,
+    pub files: Vec<SampleFile>,
+}
+
+/// The most files offered to pick a value in.
+const MAX_SAMPLES: usize = 40;
+
+fn modified_ms(meta: &std::fs::Metadata) -> u64 {
+    meta.modified()
+        .ok()
+        .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
+        .map_or(0, |d| d.as_millis() as u64)
+}
+
+/// The files of the last capture worth picking a value in, the newest first: those its window
+/// offers, and those the saved rules find in its folder. Only files inside `folder`, and only text.
+pub fn sample_files(
+    folder: Option<&str>,
+    offered: &[String],
+    rules: &[(String, Rule)],
+) -> SampleFiles {
+    let Some(root) = folder.map(Path::new).filter(|f| f.is_dir()) else {
+        return SampleFiles::default();
+    };
+    let all: Vec<(&str, &Rule)> = rules.iter().map(|(id, r)| (id.as_str(), r)).collect();
+    let found = cargoframe_rules::run_rules(all.iter().copied(), Some(root), &FsFiles).found;
+    let mut paths: Vec<String> = offered.to_vec();
+    for f in found.into_values().flatten() {
+        if !paths.contains(&f) {
+            paths.push(f);
+        }
+    }
+    let mut files: Vec<SampleFile> = paths
+        .into_iter()
+        .filter(|p| !crate::tools::looks_binary(p))
+        .filter_map(|path| {
+            let real = cargoframe_bundle::inside(root, &path).ok()?;
+            let meta = std::fs::metadata(&real).ok().filter(|m| m.is_file())?;
+            Some(SampleFile {
+                size: meta.len(),
+                modified_ms: modified_ms(&meta),
+                path,
+            })
+        })
+        .collect();
+    files.sort_by_key(|f| std::cmp::Reverse(f.modified_ms));
+    files.truncate(MAX_SAMPLES);
+    SampleFiles {
+        folder: Some(root.to_string_lossy().into_owned()),
+        files,
+    }
+}
+
+/// Names of files that are surely not text (pictures, programs, archives…).
+pub fn looks_binary(path: &str) -> bool {
+    const BINARY: [&str; 16] = [
+        "png", "jpg", "jpeg", "gif", "webp", "bmp", "exe", "dll", "so", "zip", "7z", "gz", "pdf",
+        "mp4", "webm", "dmp",
+    ];
+    path.rsplit('.').next().is_some_and(|ext| {
+        path.contains('.') && BINARY.contains(&ext.to_ascii_lowercase().as_str())
+    })
+}
+
+/// The text of a file inside `folder` (its end when it is large), and when it was changed.
+#[derive(Debug, Serialize, PartialEq, Eq)]
+pub struct SampleText {
+    pub text: String,
+    pub cut: bool,
+    pub size: u64,
+    pub modified_ms: u64,
+}
+
+pub fn read_sample(folder: &str, path: &str) -> Result<SampleText, String> {
+    if looks_binary(path) {
+        return Err("That file is not text".into());
+    }
+    let real = cargoframe_bundle::inside(Path::new(folder), path).map_err(|e| e.to_string())?;
+    let meta = std::fs::metadata(&real).map_err(|e| format!("The file could not be read: {e}"))?;
+    let read = crate::session::read_end(&real, crate::session::MAX_LOG_BYTES)
+        .map_err(|e| format!("The file could not be read: {e}"))?;
+    Ok(SampleText {
+        text: read.text,
+        cut: read.cut,
+        size: read.size,
+        modified_ms: modified_ms(&meta),
+    })
 }
 
 #[cfg(test)]
@@ -516,7 +678,7 @@ mod tests {
             .unwrap();
         let all = variables(&store);
         assert_eq!(all.last().unwrap().name, "rule.build");
-        assert_eq!(all.last().unwrap().description, "From a file: Build");
+        assert_eq!(all.last().unwrap().description, "Build, from a");
         assert!(all.iter().all(|v| !v.description.is_empty()));
     }
 
@@ -535,6 +697,7 @@ mod tests {
             find: Find::ValueOf { name: name.into() },
             which: Which::First,
             fallback: None,
+            across: Default::default(),
         };
         let saved = Rule {
             name: "Build".into(),
@@ -555,6 +718,7 @@ mod tests {
                 },
                 which: Which::First,
                 fallback: None,
+                across: Default::default(),
             }],
             ..Rule::default()
         };
@@ -564,5 +728,64 @@ mod tests {
         let t = test_rule(&combined, Some(folder), &[("build".into(), saved)], &known);
         assert_eq!(t.problem, None, "{t:?}");
         assert_eq!(t.value.as_deref(), Some("main_Debug_Editor.exe"));
+    }
+
+    #[test]
+    fn the_values_of_a_folder_name_their_file_and_the_files_to_pick_in_are_text_inside_it() {
+        use cargoframe_rules::{Find, ValueStep, Which};
+        let dir = tempfile::tempdir().unwrap();
+        let p = dir.path();
+        std::fs::create_dir_all(p.join("Saved/Logs")).unwrap();
+        std::fs::write(p.join("Saved/Logs/Game.log"), "LogRHI: GPU: RTX 4070\n").unwrap();
+        std::fs::write(p.join("shot.png"), [0u8, 1, 2]).unwrap();
+        let read = |key: &str, after: &str| ValueStep {
+            key: key.into(),
+            name: key.into(),
+            find: Find::Pick {
+                lines_with: after.into(),
+                from_line_start: false,
+                stop: None,
+            },
+            which: Which::Last,
+            fallback: None,
+            across: Default::default(),
+        };
+        let rules = vec![(
+            "game".to_string(),
+            Rule {
+                name: "Game.log".into(),
+                file: "Game.log".into(),
+                values: vec![read("gpu", "GPU:"), read("crash", "Fatal error:")],
+                ..Rule::default()
+            },
+        )];
+        let known: BTreeMap<String, String> = [
+            ("app.exe".to_string(), "Game.exe".to_string()),
+            ("rule.gpu".to_string(), "old".to_string()),
+        ]
+        .into();
+        let folder = p.to_str().unwrap();
+        let v = preview_values(&rules, Some(folder), &known);
+        assert_eq!(v.values["rule.gpu"], "RTX 4070");
+        assert_eq!(v.values["app.exe"], "Game.exe");
+        assert_eq!(v.sources["gpu"], "Saved/Logs/Game.log");
+        assert!(v.problems.contains_key("crash") && !v.values.contains_key("rule.crash"));
+
+        let s = sample_files(
+            Some(folder),
+            &["shot.png".to_string(), "../x.log".to_string()],
+            &rules,
+        );
+        assert_eq!(
+            s.files.iter().map(|f| f.path.as_str()).collect::<Vec<_>>(),
+            ["Saved/Logs/Game.log"]
+        );
+        assert_eq!(
+            read_sample(folder, "Saved/Logs/Game.log").unwrap().text,
+            "LogRHI: GPU: RTX 4070\n"
+        );
+        assert!(read_sample(folder, "../outside.log").is_err());
+        assert!(read_sample(folder, "shot.png").is_err());
+        assert!(sample_files(None, &[], &rules).files.is_empty());
     }
 }

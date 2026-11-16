@@ -31,15 +31,18 @@ impl<'a> AppRegistry<'a> {
                     .collect()
             })
             .unwrap_or_default();
-        Self::with(
-            store
-                .list_ids(Kind::Rules)
-                .unwrap_or_default()
-                .into_iter()
-                .collect(),
-            move |id| connections.info(store, id),
-        )
-        .requiring(required)
+        // a value is named by its key (`{gpu}`), a rule from before 0.3.0 by its id
+        let mut rules: BTreeSet<String> = store
+            .list_ids(Kind::Rules)
+            .unwrap_or_default()
+            .into_iter()
+            .collect();
+        if let Ok(loaded) = store.load_all::<cargoframe_rules::Rule>(Kind::Rules) {
+            for (id, r) in &loaded.items {
+                rules.extend(r.steps(id).into_iter().map(|s| s.key));
+            }
+        }
+        Self::with(rules, move |id| connections.info(store, id)).requiring(required)
     }
 
     /// The fields the services require, as (connection id, field).
@@ -71,9 +74,8 @@ impl Registry for AppRegistry<'_> {
 
     fn is_known_variable(&self, name: &str) -> bool {
         vars::NAMES.contains(&name)
-            || name
-                .strip_prefix("rule.")
-                .is_some_and(|id| self.rules.contains(id))
+            || cargoframe_context::template::rule_key(name)
+                .is_some_and(|key| self.rules.contains(key))
     }
 
     fn field_required(&self, connection_id: &str, field: &str) -> bool {

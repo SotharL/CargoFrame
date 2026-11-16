@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { token } from '../../lib/valueNames';
   import Field from '../../lib/components/Field.svelte';
   import TimeFormatField from '../../lib/components/TimeFormatField.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
@@ -90,7 +91,7 @@
   async function moveToFills(b: SharingBlock, m: SharingBlock['mappings'][number]) {
     moveError = '';
     if (!b.connection_id) return;
-    const text = m.source.kind === 'rule' ? `{{rule.${m.source.value}}}` : m.source.value;
+    const text = m.source.kind === 'rule' ? `{${m.source.value}}` : m.source.value;
     const fill: InfoType = {
       name: fieldsFor(b.connection_id).find((f) => f.key === m.field)?.label ?? m.field,
       connection_id: b.connection_id, field: m.field, kind: 'text', options: { type: 'none' }, required: false,
@@ -279,17 +280,20 @@
     <div class="auto-field">
       <span class="auto-title">Starting tags</span>
       <p class="quiet hint">
-        Each line is a tag. Use a value like <code>{'{{rule.gpu}}'}</code>: the tag is there only when the value is
+        Each line is a tag. Use a value like <code>{'{gpu}'}</code> or <code>{'gpu-{gpu}'}</code>: the tag is there only when the value is
         found, and a value with several parts (<code>a, b</code>) gives several tags. At most {MAX_TAGS}.
       </p>
       {#each tagsBlock.tags as _t, i (i)}
         <div class="tagline">
-          <input type="text" class="mono" bind:value={tagsBlock.tags[i]} list="tag-variables" aria-label={`Starting tag ${i + 1}`} placeholder={'{{rule.gpu}}'} />
+          <input type="text" class="mono" bind:value={tagsBlock.tags[i]} list="tag-variables" aria-label={`Starting tag ${i + 1}`} placeholder={'{gpu}'} />
           <button type="button" aria-label={`Remove starting tag ${i + 1}`} onclick={() => (tagsBlock.tags = tagsBlock.tags.filter((_, n) => n !== i))}>✕</button>
         </div>
       {/each}
       <datalist id="tag-variables">
-        {#each variables as v (v.name)}<option value={`{{${v.name}}}`}>{v.description}</option>{/each}
+        {#each variables as v (v.name)}
+          <option value={token(v.name)}>{v.description}</option>
+          {#if v.name.startsWith('rule.')}<option value={`${v.name.slice(5)}-${token(v.name)}`}>{v.description}</option>{/if}
+        {/each}
       </datalist>
       <button type="button" class="start" disabled={tagsBlock.tags.length >= MAX_TAGS} onclick={() => (tagsBlock.tags = [...tagsBlock.tags, ''])}>Add a starting tag</button>
     </div>
@@ -447,14 +451,14 @@
       {/each}
       {#each own as m (m.field)}
         <div class="map">
-          <span class="small"><strong>{m.field}</strong> = <span class="mono">{m.source.kind === 'rule' ? `{{rule.${m.source.value}}}` : m.source.value}</span></span>
+          <span class="small"><strong>{m.field}</strong> = <span class="mono">{m.source.kind === 'rule' ? `{${m.source.value}}` : m.source.value}</span></span>
           <button type="button" onclick={() => void moveToFills(block, m)}>Move to Fill fields</button>
           <button type="button" aria-label="Remove this field" onclick={() => (block.mappings = block.mappings.filter((x) => x !== m))}>✕</button>
         </div>
       {/each}
       {#if own.length > 0}<p class="quiet small">Set on this button before 0.3.0. Fill fields does the same, with conditions.</p>{/if}
       {#if moveError}<p class="error small" role="alert">{moveError}</p>{/if}
-      <button type="button" onclick={() => go('rules', 'fields')}>Open Fill fields</button>
+      <button type="button" onclick={() => go('layouts', 'fields')}>Open Fill fields</button>
     </div>
   {:else}
     <p class="quiet">The captured picture, with crop, draw, square, circle and text tools. Nothing to set.</p>

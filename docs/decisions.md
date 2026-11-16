@@ -1376,3 +1376,47 @@ refused and pasting into Claude failed. Each is now asked of the desktop, and th
   picture keeps its full size in its tab, and the fields beside it gain the room the files took. Templates with
   little to fill in (save locally, Drive, comments, Sheet, Teams, Reddit, X, Bluesky, Instagram, Custom API) stay
   as they were: everything is already in view, and most of those services take no files to read logs from.
+
+### 0.5.0, 16 Nov 2026: values selected in a file, read in several files, written `{map}`
+
+Asked for: Data & fields that are easy to set up, update and maintain; values that can be anywhere in any text file
+and written anyhow; the same value read in several files, the newest winning; empty when nothing is found; a shorter
+way to write a value than `{{rule.test}}`; and choosing a value by selecting it in a file. A mock-up was approved
+first (*Data & fields 0.5.0*), after two rounds of feedback.
+
+- **Selecting, not describing.** Tools that pull a value out of a log (log shippers' parsers, text-to-columns,
+  "extract by example" in data tools) all end on the same idea: show the text, let the person point at the part
+  they want, and say back how it will be found next time. CargoFrame does that with what logs share: a value comes
+  after a label (`LogAI:`, `Maps/`, `"version": "`) and stops at a sign, a space or the end of the line. A selection
+  suggests all three (`Find::Pick`: the lines with a text, right after it or from the line's start, up to a text);
+  each part can be changed with a click, or by selecting another text in the line (the pen). No pattern language: a
+  person who cannot write a regular expression can still say "after LogAI:, to the end of the line, the most recent
+  line", and that sentence is what the page shows. The editor runs the same rule as the capture (`settings/data/
+  pick.ts` mirrors `core/rules/src/find.rs`, both tested on the same log), so what it shows is what is found.
+- **A click takes a word, a drag snaps to words.** Letters, digits and `_` make a word; a drag that starts or ends
+  inside a word takes all of it, so `Harbor_P` or `Spawned 12 crew on Harbor_P` come out whole without aiming at a
+  character. Lines are one row of 20 px each (the second mock-up's tall rows were too much), with scroll bars both
+  ways and only the lines in view drawn, so a 4 MB log scrolls as quickly as a short one. A search like Ctrl+F (n of
+  N, ↑↓, Enter, counts per file, only lines with it) finds the line first.
+- **Stored per file, shown per value.** A data rule stays "if this file is found, read these values": exports and
+  older settings load as they are, and a rule still says whether its file is added to the window and how its lines
+  write their time. What changed is that two rules may read the same key; `run_rules` collects every file's answer
+  for a key and settles it after reading them all: the newest file (its change time) wins, or with *all* each
+  different value, the newest first. The Values tab groups the rules' steps by key, so the person sees one `{map}`
+  read in Game.log and Editor.log, not two rules. A value no file has is empty unless it says what to write.
+- **`{map}`, safely.** Single braces are read as a value only when what is inside can be one: letters, digits, `_`,
+  `.` and `-`, not only digits, and a dotted name only in the groups CargoFrame fills (`app.`, `project.`,
+  `capture.`, `rule.`). Jira writes `{code}`, `{noformat}`, `{quote}`, `{color:red}`, `{panel}`, `{anchor}`, `{toc}`,
+  `{section}` and `{column}` in single braces, so those names are refused as values and left in the text. JSON, a
+  `{0}` placeholder or a name with spaces stay as written. A value is filled in once and its text is never read
+  again, so a log line holding braces cannot turn into another value. A custom API's body, where JSON is everywhere,
+  reads only `{{…}}`. `{{rule.map}}` and `{{map}}` keep working everywhere.
+- **Fill fields moved to Layouts.** Filling a field of a service is about what a layout sends; it sits as a tab of
+  the Layouts page now, and the old addresses (`rules/fields`, `infotypes`) go there. Data & fields keeps what is
+  read: *Values* and *Files*.
+- **What the builder shows.** Typing `{` in a text's starting text opens the list of values (Enter puts one in,
+  Escape writes the brace), and *Values* shows the text as the last capture filled it in. Tags offer each value and
+  a `name-{value}` form. "Used in" now finds a value written either way, in texts and tags.
+- **Steady while ticking.** In the mock-up, ticking the files to read a value in moved the panel: rows changed
+  height and the newest/all choice came and went. Each file is now two fixed rows (name and time, then its value cut
+  to one line), the *Used* mark keeps its room when hidden, and the choice is always there.

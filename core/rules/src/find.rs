@@ -6,6 +6,9 @@
 //!   line (`GPU: RTX 4070` gives `RTX 4070`). Names are matched without regard to case.
 //! * **Text between** a start and an end on one line; with no end, up to the end of the line.
 //! * **Line with** a piece of text: the whole line.
+//! * **Picked** by selecting it in a file: in the lines with a text (or every line), right after
+//!   that text or from the start of the line, up to a stop (or the end of the line). The settings
+//!   window runs the same steps on the file shown (`ui/src/settings/data/pick.ts`).
 //!
 //! Each gives every place it finds; [`pick`] keeps the first, the last or all of them.
 
@@ -115,6 +118,50 @@ fn lines_with(text: &str, needle: &str) -> Vec<String> {
         .collect()
 }
 
+/// The value [`Find::Pick`] gives on each line it looks in. Byte positions are only ever taken
+/// from `find`, so every cut falls between characters.
+pub fn picked(
+    text: &str,
+    lines_with: &str,
+    from_line_start: bool,
+    stop: Option<&str>,
+) -> Vec<String> {
+    let stop = stop.filter(|s| !s.is_empty());
+    let mut out = Vec::new();
+    for line in text.lines() {
+        let Some(at) = (if lines_with.is_empty() {
+            Some(0)
+        } else {
+            line.find(lines_with)
+        }) else {
+            continue;
+        };
+        let mut from = if from_line_start {
+            0
+        } else {
+            at + lines_with.len()
+        };
+        from += line[from..].len() - line[from..].trim_start_matches(' ').len();
+        let to = match stop {
+            None => line.len(),
+            // the stop is looked for after the value's first character, so a value that starts
+            // with the stop (a "[" up to the next "[") is not empty
+            Some(s) => {
+                let first = line[from..].chars().next().map_or(0, char::len_utf8);
+                match line[from + first..].find(s) {
+                    Some(i) => from + first + i,
+                    None => continue,
+                }
+            }
+        };
+        let value = line[from..to].trim();
+        if !value.is_empty() {
+            out.push(value.to_string());
+        }
+    }
+    out
+}
+
 /// Every place `find` finds a value in `text`, the text of the file at `path`. `rule` is only
 /// read for [`Find::Advanced`].
 pub fn all(
@@ -154,6 +201,11 @@ pub fn all(
         }
         Find::Between { start, end } => between(text, start, end.as_deref()),
         Find::LineWith { text: needle } => lines_with(text, needle),
+        Find::Pick {
+            lines_with,
+            from_line_start,
+            stop,
+        } => picked(text, lines_with, *from_line_start, stop.as_deref()),
         Find::Advanced => vec![extract(rule, text)?],
         // made from other values, after the files are read (see `combine`)
         Find::Combine { .. } => Vec::new(),
@@ -188,6 +240,11 @@ pub fn check(find: &Find) -> Result<(), String> {
         Find::LineWith { text } if text.trim().is_empty() => {
             Err("Write a piece of text the line holds".into())
         }
+        Find::Pick {
+            lines_with,
+            from_line_start: false,
+            ..
+        } if lines_with.is_empty() => Err("Choose the text it comes right after".into()),
         Find::Combine { choices } => crate::combine::check(choices),
         _ => Ok(()),
     }
@@ -379,5 +436,82 @@ mod tests {
         })
         .is_err());
         assert!(check(&Find::LineWith { text: "x".into() }).is_ok());
+    }
+
+    const GAME_LOG: &str = "Log file open, 11/16/26 13:58:01\n\
+        [2026.11.16-13.58.09:877][  0]LogLoad: LoadMap: /Game/Maps/MainMenu?listen\n\
+        [2026.11.16-13.59.12:440][  0]LogLoad: LoadMap: /Game/Maps/Harbor_P?listen\n\
+        [2026.11.16-13.59.19:251][  0]LogLoad: Took 6.81 seconds to LoadMap(/Game/Maps/Harbor_P)\n\
+        [2026.11.16-13.59.28:300][  0]LogAI: Spawned 4 gulls on Harbor_P\n\
+        [2026.11.16-13.59.31:090][  0]LogAI: Spawned 12 crew on Harbor_P\n";
+
+    fn pick_find(lines_with: &str, from_line_start: bool, stop: Option<&str>) -> Find {
+        Find::Pick {
+            lines_with: lines_with.into(),
+            from_line_start,
+            stop: stop.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn a_value_picked_in_a_file_is_found_again_the_same_way() {
+        // right after a text, up to the next sign; a line without the sign gives nothing
+        let map = pick_find("Maps/", false, Some("?"));
+        assert_eq!(
+            picked(GAME_LOG, "Maps/", false, Some("?")),
+            ["MainMenu", "Harbor_P"]
+        );
+        assert_eq!(
+            run(&map, "Game.log", GAME_LOG, Which::Last).as_deref(),
+            Some("Harbor_P")
+        );
+        assert_eq!(
+            run(&map, "Game.log", GAME_LOG, Which::First).as_deref(),
+            Some("MainMenu")
+        );
+        // right after a text, to the end of the line
+        let spawned = pick_find("LogAI:", false, None);
+        assert_eq!(
+            run(&spawned, "Game.log", GAME_LOG, Which::Last).as_deref(),
+            Some("Spawned 12 crew on Harbor_P")
+        );
+        // every line, from its start up to the next "[": the time stamp, its own "[" kept
+        let stamp = pick_find("", true, Some("["));
+        assert_eq!(
+            run(&stamp, "Game.log", GAME_LOG, Which::Last).as_deref(),
+            Some("[2026.11.16-13.59.31:090]")
+        );
+        // the whole line with a text
+        assert_eq!(
+            run(
+                &pick_find("LogAI:", true, None),
+                "Game.log",
+                GAME_LOG,
+                Which::First
+            )
+            .as_deref(),
+            Some("[2026.11.16-13.59.28:300][  0]LogAI: Spawned 4 gulls on Harbor_P")
+        );
+        // a value with letters of any script is cut between characters
+        assert_eq!(
+            picked("Carte: Hafen_é?x", "Carte:", false, Some("?")),
+            ["Hafen_é"]
+        );
+        assert_eq!(
+            run(
+                &pick_find("Nowhere:", false, None),
+                "a.log",
+                GAME_LOG,
+                Which::Last
+            ),
+            None
+        );
+    }
+
+    #[test]
+    fn a_pick_needs_where_it_starts() {
+        assert!(check(&pick_find("", false, None)).is_err());
+        assert!(check(&pick_find("", true, Some("["))).is_ok());
+        assert!(check(&pick_find("GPU:", false, None)).is_ok());
     }
 }

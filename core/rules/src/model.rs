@@ -98,6 +98,18 @@ pub enum Find {
     Between { start: String, end: Option<String> },
     /// The whole line that holds a piece of text.
     LineWith { text: String },
+    /// Chosen by selecting the value in a file (0.5.0): in each line that has `lines_with`
+    /// (every line when it is empty), from right after that text, or from the start of the line
+    /// with `from_line_start`, up to `stop` (the end of the line when there is none). A line
+    /// where `stop` does not come after the start gives nothing. Case counts, as selected.
+    Pick {
+        #[serde(default)]
+        lines_with: String,
+        #[serde(default, skip_serializing_if = "is_false")]
+        from_line_start: bool,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        stop: Option<String>,
+    },
     /// A rule made before 0.3.0: its own format and query (the fields of [`Rule`]).
     Advanced,
     /// Made from other values, not read from a file: the first choice that fits gives the value,
@@ -148,7 +160,23 @@ impl Find {
     }
 }
 
-/// One value a rule reads, used in text as `{{rule.<key>}}`.
+/// When several files have the same value (the same key read in several rules).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Across {
+    /// The one in the file changed last.
+    #[default]
+    Newest,
+    /// Every different value, the newest file's first.
+    All,
+}
+
+fn is_false(b: &bool) -> bool {
+    !*b
+}
+
+/// One value a rule reads, used in text as `{<key>}` (or `{{rule.<key>}}`, as before 0.5.0). The
+/// same key may be read in several rules, one per file: `across` says which file wins.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ValueStep {
     /// The variable's name: `{{rule.<key>}}`. Letters, digits, `_` and `-`.
@@ -161,6 +189,9 @@ pub struct ValueStep {
     /// Used when the file or the value is missing.
     #[serde(default)]
     pub fallback: Option<String>,
+    /// When several files have this value. Every step of the same key says the same.
+    #[serde(default, skip_serializing_if = "is_default")]
+    pub across: Across,
 }
 
 fn is_default<T: Default + PartialEq>(v: &T) -> bool {
@@ -241,6 +272,7 @@ impl Rule {
             find: Find::Advanced,
             which: Which::First,
             fallback: self.fallback.clone(),
+            across: Across::Newest,
         }]
     }
 

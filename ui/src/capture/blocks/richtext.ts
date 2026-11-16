@@ -5,6 +5,7 @@
 //
 // Every character of the text is in the box, in order, one line per <div>: a place in the text
 // and a place in the box are found from each other by counting.
+import { valuesIn } from '../../lib/valueNames';
 
 /** A piece of a line, by where it starts and ends in the whole text. */
 export type Piece =
@@ -107,8 +108,16 @@ export function classify(line: string): { kind: LineKind; mark: number } {
 }
 
 const esc = (s: string) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-/** Plain text, with each {{variable}} shown as one. */
-const withVars = (s: string) => esc(s).replace(/\{\{[^{}\n]{1,80}\}\}/g, (v) => `<span class="var">${v}</span>`);
+/** Plain text, with each value (`{map}`, `{{rule.gpu}}`) shown as one. */
+function withVars(s: string): string {
+  let out = '';
+  let at = 0;
+  for (const v of valuesIn(s)) {
+    out += `${esc(s.slice(at, v.start))}<span class="var">${esc(s.slice(v.start, v.end))}</span>`;
+    at = v.end;
+  }
+  return out + esc(s.slice(at));
+}
 
 /** Whether a mark from `s` to `e` is where the selection is (or right next to it). */
 const touches = (s: number, e: number, sel: [number, number] | null) => sel !== null && s <= sel[1] && e >= sel[0];
