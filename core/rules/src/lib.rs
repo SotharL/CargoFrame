@@ -1,7 +1,9 @@
 //! Data from files: "if this file is found, read these values (and add it to the files)". A rule
 //! names a file in the project folder by its name or part of it, and lists values to read, each
 //! found by a name (`GPU: …`, a JSON key), the text around it, or the line that holds it. The
-//! file's kind is worked out from its name. Each value is used in text as `{{rule.<key>}}`.
+//! file's kind is worked out from its name. Each value is used in text as `{<key>}` (or
+//! `{{rule.<key>}}`). The same value may be read from several files: the newest file wins, or
+//! every different value is kept.
 //!
 //! * [`model`]: the rule as stored in `rules/<id>.json`.
 //! * [`combine`]: values made from other values ("if the shelf is found, stream_change_shelf").
@@ -24,7 +26,7 @@ pub mod text;
 pub use combine::combine_values;
 pub use extract::{check, extract, RuleError};
 pub use model::{
-    Choice, Cond, CondTest, Find, Format, Multiple, ReadMode, Rule, Several, ValueStep, Which,
-    DEFAULT_MAX_BYTES, HARD_MAX_BYTES,
+    Across, Choice, Cond, CondTest, Find, Format, Multiple, ReadMode, Rule, Several, ValueStep,
+    Which, DEFAULT_MAX_BYTES, HARD_MAX_BYTES,
 };
 pub use run::{peek, run_all, run_rules, FsFiles, Outcome, Peek, ProjectFiles, Report};

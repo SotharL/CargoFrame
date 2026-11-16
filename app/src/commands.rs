@@ -9,7 +9,9 @@ use crate::registry::AppRegistry;
 use crate::session::{self, check_png};
 use crate::share::{self, ShareResult};
 use crate::state::AppState;
-use crate::tools::{self, FilesPreview, RuleTest, VariableInfo};
+use crate::tools::{
+    self, FilesPreview, RuleTest, SampleFiles, SampleText, ValuesPreview, VariableInfo,
+};
 use crate::transfer;
 use crate::video;
 use crate::windowing;
@@ -529,27 +531,12 @@ pub async fn test_rule(
     rule: Rule,
     folder: Option<String>,
 ) -> Result<RuleTest, String> {
-    // The folder typed in, else the open capture's, else the one of the last capture's program.
+    // The folder typed in, else the last capture's.
     let folder = folder
         .filter(|f| !f.trim().is_empty())
-        .or_else(|| {
-            state
-                .sessions
-                .latest()
-                .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
-        })
-        .or_else(|| {
-            state
-                .last_program()
-                .and_then(|p| cargoframe_context::climb::resolve_project_folder(&p))
-                .map(|r| r.folder)
-        });
+        .or_else(|| last_folder(&state));
     // values made from other values are previewed with the saved rules and the last capture's
-    let others: Vec<(String, Rule)> = state
-        .store
-        .load_all::<Rule>(cargoframe_config::Kind::Rules)
-        .map(|l| l.items)
-        .unwrap_or_default();
+    let others = saved_rules(&state);
     let known = state
         .sessions
         .latest()
@@ -557,6 +544,71 @@ pub async fn test_rule(
         .unwrap_or_default();
     // Reading a big file can take a moment: not on the thread that draws the window.
     blocking(move || tools::test_rule(&rule, folder.as_deref(), &others, &known)).await
+}
+
+/// The project folder of the open capture taken last, else the one of the last capture's program.
+fn last_folder(state: &AppState) -> Option<String> {
+    state
+        .sessions
+        .latest()
+        .and_then(|s| s.view.project.as_ref().map(|p| p.folder.clone()))
+        .or_else(|| {
+            state
+                .last_program()
+                .and_then(|p| cargoframe_context::climb::resolve_project_folder(&p))
+                .map(|r| r.folder)
+        })
+}
+
+fn saved_rules(state: &AppState) -> Vec<(String, Rule)> {
+    state
+        .store
+        .load_all::<Rule>(cargoframe_config::Kind::Rules)
+        .map(|l| l.items)
+        .unwrap_or_default()
+}
+
+/// What every saved value gives in the last capture's folder, and the capture's other values.
+#[tauri::command]
+pub async fn preview_values(state: State<'_, AppState>) -> Result<ValuesPreview, String> {
+    let folder = last_folder(&state);
+    let rules = saved_rules(&state);
+    let known = state
+        .sessions
+        .latest()
+        .map(|s| s.view.variables.clone())
+        .unwrap_or_default();
+    blocking(move || tools::preview_values(&rules, folder.as_deref(), &known)).await
+}
+
+/// The files of the last capture to pick a value in.
+#[tauri::command]
+pub async fn list_sample_files(state: State<'_, AppState>) -> Result<SampleFiles, String> {
+    let folder = last_folder(&state);
+    let rules = saved_rules(&state);
+    // the files the open capture's Files blocks offer (found in its folder)
+    let offered: Vec<String> = state
+        .sessions
+        .latest()
+        .map(|s| {
+            s.view
+                .files
+                .values()
+                .flat_map(|f| f.entries.iter().map(|e| e.path.clone()))
+                .collect()
+        })
+        .unwrap_or_default();
+    blocking(move || tools::sample_files(folder.as_deref(), &offered, &rules)).await
+}
+
+/// The text of one of those files: only a file inside the last capture's folder.
+#[tauri::command]
+pub async fn read_sample_file(
+    state: State<'_, AppState>,
+    path: String,
+) -> Result<SampleText, String> {
+    let folder = last_folder(&state).ok_or("There is no capture to read files from yet")?;
+    blocking(move || tools::read_sample(&folder, &path)).await?
 }
 
 /// What a Files block would find. Without a program, the one of the last capture is used.

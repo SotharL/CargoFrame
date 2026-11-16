@@ -18,7 +18,8 @@ export function parseTarget(target: string | null | undefined): { page: PageId; 
   const page = resolvePage(name);
   if (!page) return null;
   // Connections is the lower half of Setup now; its old address scrolls there. Extra fields are
-  // the Fill fields tab of Data & fields.
+  // the Fill fields tab of the Layouts page (of Data & fields before 0.5.0: rules/fields goes there too).
+  if (page === 'rules' && rest.join('/') === 'fields') return { page: 'layouts', arg: 'fields' };
   const arg = rest.join('/') || (name === 'connections' ? 'connections' : name === 'infotypes' ? 'fields' : null);
   return { page, arg };
 }

@@ -117,7 +117,7 @@ pub fn builtins(exe_path: Option<&str>, title: Option<&str>, now: Moment) -> Bui
     Builtins { values, project }
 }
 
-/// The data rules a layout actually uses: `{{rule.<id>}}` in text blocks and rule sources in
+/// The data rules a layout actually uses: `{<key>}` or `{{rule.<key>}}` in text blocks and tags, and rule sources in
 /// sharing mappings. Rules nothing refers to are never reported on.
 pub fn referenced_rules(layout: &Layout) -> BTreeSet<String> {
     let mut out = BTreeSet::new();
@@ -125,8 +125,15 @@ pub fn referenced_rules(layout: &Layout) -> BTreeSet<String> {
         match &block.kind {
             BlockKind::Text(t) => {
                 for name in template::variables(&t.default_text) {
-                    if let Some(id) = name.strip_prefix("rule.") {
-                        out.insert(id.to_string());
+                    if let Some(key) = template::rule_key(&name) {
+                        out.insert(key.to_string());
+                    }
+                }
+            }
+            BlockKind::Tags(t) => {
+                for name in t.tags.iter().flat_map(|tag| template::variables(tag)) {
+                    if let Some(key) = template::rule_key(&name) {
+                        out.insert(key.to_string());
                     }
                 }
             }

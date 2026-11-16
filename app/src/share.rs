@@ -473,16 +473,22 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             );
             for step in t.all_steps() {
                 if let Some(w) = &step.when {
+                    // `rule.gpu`, `{{rule.gpu}}`, `{gpu}` or `gpu`
                     let subject = w
                         .subject
                         .trim()
-                        .trim_start_matches("{{")
-                        .trim_end_matches("}}");
+                        .trim_start_matches('{')
+                        .trim_end_matches('}')
+                        .trim();
                     let of = if subject.is_empty() {
                         value.clone()
                     } else {
                         view.variables
-                            .get(subject.trim())
+                            .get(subject)
+                            .or_else(|| {
+                                cargoframe_context::template::rule_key(subject)
+                                    .and_then(|k| view.variables.get(&format!("rule.{k}")))
+                            })
                             .cloned()
                             .unwrap_or_default()
                     };

@@ -133,7 +133,8 @@ fn fill(text: &str, payload: &Payload, into: Escape) -> Result<String, SendError
             Escape::Url => encode_component(&v),
         })
     };
-    let r = template::render(text, lookup);
+    // single braces are JSON and addresses here: only `{{name}}` is a value
+    let r = template::render_strict(text, lookup);
     if r.unresolved.is_empty() {
         Ok(r.text)
     } else {

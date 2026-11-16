@@ -124,7 +124,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 
 | Crate | Job | Main items |
 |-------|-----|------------|
-| `context` | Climb to the project folder; `{{variable}}` templates; the read allow-list | pure string logic |
+| `context` | Climb to the project folder; `{name}` and `{{name}}` templates; the read allow-list | pure string logic |
 | `safe` | What happens on failure: retry with backoff, failure classes, fallback ladder, zip names | `retry`, `FailureKind`, `SendError` |
 | `handoff` | Claude chat links, clipboard plan, pinned and recent chats | |
 | `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; where a window is (`WindowPlace`); Wayland focus, portal screenshot and screen sharing | `capture_with`, `wayland.rs`, `screencast.rs` |
@@ -225,6 +225,7 @@ flowchart LR
 | **12 · Tags, logs, continuous (0.4.0)** | Tags block and its fields per service; log viewer; files added by hand; values made from other values; continuous recording with hold-to-start; keys pressed over a recording; a recording that follows a moved window; settings search; Text blocks that keep one line | Each has unit and UI tests; a real continuous recording on a virtual screen hands out two clips; a real export shows the keys at their time and follows a moved window |
 | **13 · Time (0.4.1)** | The time over a recording; texts over a clip through one upload; log lines read by their time (during the recording, around the capture, between two times), with formats the person writes or a data rule sets | Each format of log time has a test; a share sends the keys and the time |
 | **14 · Layout round (0.4.1)** | Rows that hold one line; sharing labels cut, not overflowing; the log viewer opened large in the middle; the ring round the picture; the recording's tools as icons above it; sharing dots in each block's first row; one icon set; the Tabs block (2 to 5 tabs, names on any side) in the model, its checks, the builder and the window | Tabs checks and moves have Rust and TS tests; the window test opens a layout with tabs and switches them |
+| **15 · Values (0.5.0)** | A value made by selecting it in a file (`Find::Pick`: the lines with a label, right after it or from the line's start, up to a text); the same value read in several files (the newest, or every different value; empty or a text when none has it); `{name}` beside `{{name}}`, with Jira's own names and JSON left alone; Data & fields as Values and Files; Fill fields a tab of Layouts; `{` and a values preview in the builder | The pick and the short form have Rust and TS tests on the same text; several files have tests for the newest, all and none; the Settings page is tested selecting a value in a log |
 
 ---
 

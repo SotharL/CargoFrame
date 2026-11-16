@@ -30,6 +30,7 @@ describe('looksLikeAddress', () => {
   it('accepts web addresses and an address that starts with a variable', () => {
     expect(looksLikeAddress('https://example.com/a?b=1')).toBe(true);
     expect(looksLikeAddress('{{rule.tracker}}/issues/{{rule.build}}')).toBe(true);
+    expect(looksLikeAddress('{tracker}/issues/{build}')).toBe(true);
   });
   it('rejects the rest', () => {
     expect(looksLikeAddress('example.com')).toBe(false);

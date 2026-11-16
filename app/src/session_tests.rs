@@ -592,6 +592,7 @@ fn a_file_found_by_its_name_gives_its_values_and_is_ticked_in_the_files() {
             find: Find::ValueOf { name: "GPU".into() },
             which: Which::First,
             fallback: None,
+            across: Default::default(),
         }],
         ..Rule::default()
     };

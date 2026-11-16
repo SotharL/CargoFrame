@@ -986,11 +986,12 @@ fn a_field_fill_adds_values_when_its_conditions_hold_and_only_in_its_layouts() {
                 then: vec![add("crash")],
             },
             FillStep {
-                when: when("{{app.title}}", Test::Found, ""),
-                then: vec![add("in-{{app.title}}"), add("crash")],
+                // the short way of 0.5.0
+                when: when("{app.title}", Test::Found, ""),
+                then: vec![add("in-{app.title}"), add("crash")],
             },
             FillStep {
-                when: when("app.title", Test::Is, "Nope"),
+                when: when("{{app.title}}", Test::Is, "Nope"),
                 then: vec![Action {
                     act: Act::Set,
                     text: "never".into(),

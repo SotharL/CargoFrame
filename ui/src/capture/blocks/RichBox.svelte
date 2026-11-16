@@ -471,7 +471,7 @@
     background: color-mix(in srgb, var(--text) 9%, transparent);
   }
   .rich :global(.lm) { color: var(--quiet); }
-  /* a {{variable}}, filled in on each capture */
+  /* a value ({map}), filled in on each capture */
   .rich :global(.var) { color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); border-radius: 3px; }
   /* a quote: a bar on the left, its "> " kept in place but not drawn */
   .rich :global(.ln.quote) {

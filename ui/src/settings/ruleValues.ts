@@ -68,6 +68,8 @@ export function describe(find: RuleFind, r: Rule): string {
       return find.end ? `between “${find.start}” and “${find.end}”` : `after “${find.start}”, to the end of the line`;
     case 'line_with':
       return `the line with “${find.text}”`;
+    case 'pick':
+      return find.lines_with ? `after “${find.lines_with}”` : 'from the start of a line';
     case 'advanced':
       return `${r.format.toUpperCase()}: ${r.query ?? ''}`;
     case 'combine':
@@ -79,5 +81,5 @@ export function describe(find: RuleFind, r: Rule): string {
 
 /** The variables of a rule, for "where is it used". */
 export function tokens(id: string, r: Rule): string[] {
-  return valuesOf(id, r).map((v) => `{{rule.${v.key}}}`);
+  return valuesOf(id, r).map((v) => `{${v.key}}`);
 }

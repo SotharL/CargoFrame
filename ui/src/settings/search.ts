@@ -48,10 +48,11 @@ export const FINDINGS: Finding[] = [
   { page: 'triggers', title: 'What a trigger makes', target: 'triggers.makes', words: 'screenshot recording video layout opens' },
   { page: 'triggers', title: 'Shortcuts on this desktop', target: 'triggers.desktop', words: 'wayland gnome sway hyprland kde desktop shortcuts' },
   // Data & fields
-  { page: 'rules', title: 'Read from files', target: 'rules.add', arg: 'files', words: 'data rules values file version config log json xml ini yaml project folder read' },
-  { page: 'rules', title: 'Time format of a log', target: 'rules.log_time', arg: 'files', words: 'log viewer timestamp time format YYYY MM DD HH mm ss lines game log' },
-  { page: 'rules', title: 'Values made from other values', target: 'rules.add', arg: 'files', words: 'combine combination build id conditions if found missing choice' },
-  { page: 'rules', title: 'Fill fields', target: 'fields.add', arg: 'fields', words: 'jira labels priority component assignee field service fill mapping extra fields' },
+  { page: 'rules', title: 'New value: select it in a file', target: 'data.new', arg: 'values', words: 'data rules values file log select pick map version token name {value} read find' },
+  { page: 'rules', title: 'Files read in a capture', target: 'rules.add', arg: 'files', words: 'data rules file version config log json xml ini yaml project folder add to files newest several' },
+  { page: 'rules', title: 'Time format of a log', target: 'rules.add', arg: 'files', words: 'log viewer timestamp time format YYYY MM DD HH mm ss lines game log' },
+  { page: 'rules', title: 'Values made from other values', target: 'data.combined', arg: 'values', words: 'combine combination build id conditions if found missing choice' },
+  { page: 'layouts', title: 'Fill fields', target: 'fields.add', arg: 'fields', words: 'jira labels priority component assignee field service fill mapping extra fields' },
   // Recording
   { page: 'video', title: 'ffmpeg', section: 'ffmpeg', words: 'program path video tool find' },
   { page: 'video', title: 'Capture and compression', section: 'Capture and compression', words: 'quality crf fps frame rate height size codec encoder hardware seconds kept length sound audio microphone' },

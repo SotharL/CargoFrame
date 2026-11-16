@@ -3,6 +3,7 @@
  * pages that define them can say what each one is for instead of leaving it to guesswork.
  */
 import type { ItemEntry, Layout } from '../lib/types';
+import { usesKey } from '../lib/valueNames';
 
 type Layouts = readonly ItemEntry<Layout>[];
 
@@ -10,13 +11,17 @@ function names(layouts: Layouts, uses: (l: Layout) => boolean): string[] {
   return layouts.filter((l) => uses(l.item)).map((l) => l.item.name.trim() || l.id);
 }
 
-/** Layouts that put `{{rule.<id>}}` in a text block, or fill a field from the rule in a sharing button. */
+/**
+ * Layouts that write a value read from files in a text or a tag (`{gpu}`, `{{gpu}}` or
+ * `{{rule.gpu}}`), or fill a field from it in a sharing button.
+ */
 export function layoutsUsingRule(layouts: Layouts, ruleId: string, keys: readonly string[] = [ruleId]): string[] {
-  const tokens = keys.map((k) => `{{rule.${k}}}`);
+  const writes = (text: string) => keys.some((k) => usesKey(text, k));
   return names(layouts, (l) =>
     l.blocks.some(
       (b) =>
-        (b.type === 'text' && tokens.some((t) => b.default_text.includes(t))) ||
+        (b.type === 'text' && writes(b.default_text)) ||
+        (b.type === 'tags' && b.tags.some(writes)) ||
         (b.type === 'sharing_button' && b.mappings.some((m) => m.source.kind === 'rule' && keys.includes(m.source.value))),
     ),
   );

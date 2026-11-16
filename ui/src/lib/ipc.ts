@@ -8,7 +8,9 @@ import type {
   TextReading,
   FileEntry,
   LogText,
+  ValuesPreview, SampleFiles, SampleText,
 } from './types';
+import { DEMO_SAMPLES, demoValues } from './demoSamples';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
 import { valuesOf } from '../settings/ruleValues';
@@ -72,6 +74,12 @@ export interface Api {
   layoutFromTemplate(key: string, connectionId: string | null): Promise<Layout>;
   listVariables(): Promise<VariableInfo[]>;
   testRule(rule: Rule, folder: string | null): Promise<RuleTest>;
+  /** What the saved values give in the last capture's folder, and the file each came from. */
+  previewValues(): Promise<ValuesPreview>;
+  /** The text files of the last capture to pick a value in. */
+  listSampleFiles(): Promise<SampleFiles>;
+  /** One of them (a path inside the last capture's folder); the end of it when large. */
+  readSampleFile(path: string): Promise<SampleText>;
   /** What a Files block would find. Without a program, the one of the last capture is used. */
   previewFiles(block: Extract<Block, { type: 'files' }>, program: string | null): Promise<FilesPreview>;
 
@@ -233,6 +241,9 @@ async function tauriApi(): Promise<Api> {
     discardImport: () => invoke('discard_import'),
     listVariables: () => invoke('list_variables'),
     testRule: (rule, folder) => invoke('test_rule', { rule, folder }),
+    previewValues: () => invoke('preview_values'),
+    listSampleFiles: () => invoke('list_sample_files'),
+    readSampleFile: (path) => invoke('read_sample_file', { path }),
     previewFiles: (block, program) => invoke('preview_files', { block, program }),
     getShortcutStatus: () => invoke('get_shortcut_status'),
     listConnections: () => invoke('list_connections'),
@@ -753,19 +764,35 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       ...[...store.rule.entries()].flatMap(([id, r]) =>
         valuesOf(id, r as Rule).map((v) => ({
           name: `rule.${v.key}`,
-          description: `From a file: ${(r as Rule).name}, ${v.name}`,
+          description: `${v.name || v.key}, from ${(r as Rule).file || 'other values'}`,
         })),
       ),
     ],
+    previewValues: async () => demoValues([...store.rule.values()] as Rule[]),
+    listSampleFiles: async () => ({
+      folder: '/home/me/dev/Harbor',
+      files: DEMO_SAMPLES.map((f) => ({ path: f.path, size: f.text.length, modified_ms: f.modified_ms })),
+    }),
+    readSampleFile: async (path) => {
+      const f = DEMO_SAMPLES.find((d) => d.path === path);
+      if (!f) throw new Error(`${path} is not in the last capture's folder`);
+      return { text: f.text, cut: false, size: f.text.length, modified_ms: f.modified_ms };
+    },
     testRule: async (rule, folder) => {
       // A stand-in that answers like the real one: each value is "found" as "<its name> demo".
-      const file = rule.file.trim() || null;
-      const values = (rule.values ?? []).map((v) => ({
-        key: v.key,
-        value: file ? `${v.name || v.key} demo` : v.fallback,
-        problem: file ? null : 'no file matches',
-        used_fallback: !file && v.fallback !== null,
-      }));
+      // picks are run on the demo files; a file that is not one of them is "found" anyway
+      const demo = demoValues([rule]);
+      const inDemo = Object.keys(demo.sources).length > 0;
+      const file = rule.file.trim() ? (Object.values(demo.sources)[0] ?? rule.file.trim()) : null;
+      const values = (rule.values ?? []).map((v) => {
+        const got = inDemo || v.find.type === 'pick' ? (demo.values[`rule.${v.key}`] ?? null) : file ? `${v.name || v.key} demo` : null;
+        return {
+          key: v.key,
+          value: got ?? v.fallback,
+          problem: got ? null : 'no file matches',
+          used_fallback: !got && v.fallback !== null,
+        };
+      });
       return {
         folder: folder ?? '/home/me/dev/Foo',
         value: values[0]?.value ?? null,
