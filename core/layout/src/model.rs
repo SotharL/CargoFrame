@@ -370,7 +370,7 @@ pub struct TextBlock {
     pub placement: TitlePlacement,
     #[serde(default)]
     pub role: TextRole,
-    /// Initial content; may use `{{variables}}`.
+    /// Initial content; may use values (`{app.title}`, `{map}`, or `{{app.title}}`).
     #[serde(default)]
     pub default_text: String,
     /// Offer bold, italic, code, lists and the like above a plain text box, for the services that
