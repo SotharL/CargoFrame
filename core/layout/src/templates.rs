@@ -47,7 +47,7 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "jira-video",
         name: "Jira bug report with a recording",
-        description: "Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording, the screenshot taken from it and the logs. A shortcut that opens it records the screen.",
+        description: "Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
@@ -107,7 +107,7 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "slack-video",
         name: "Slack message with a recording",
-        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording, the screenshot taken from it and the logs. A shortcut that opens it records the screen.",
+        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.",
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
@@ -125,19 +125,19 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "x-post",
         name: "X post",
-        description: "Post the screenshot to your X account with a short text (280 characters).",
+        description: "Post the screenshot to your X account with a short text (280 characters), hashtags and a description of the picture.",
         service: Some(ConnectionKind::X),
     },
     TemplateInfo {
         key: "bluesky-post",
         name: "Bluesky post",
-        description: "Post the screenshot to your Bluesky account with a short text (300 characters) and a description of the picture.",
+        description: "Post the screenshot to your Bluesky account with a short text (300 characters), hashtags and a description of the picture.",
         service: Some(ConnectionKind::Bluesky),
     },
     TemplateInfo {
         key: "instagram-post",
         name: "Instagram post",
-        description: "Post the screenshot to your Instagram professional account with a caption.",
+        description: "Post the screenshot to your Instagram professional account with a caption and hashtags.",
         service: Some(ConnectionKind::Instagram),
     },
     TemplateInfo {
@@ -175,6 +175,23 @@ fn text(title: &str, role: TextRole, default_text: &str) -> BlockKind {
     })
 }
 
+/// A text of one line: a title, a link. Services do not format those.
+fn line(title: &str, default_text: &str) -> BlockKind {
+    BlockKind::Text(TextBlock {
+        title: title.to_string(),
+        placement: TitlePlacement::Above,
+        role: TextRole::Plain,
+        default_text: default_text.to_string(),
+        formatting: false,
+        one_line: true,
+    })
+}
+
+/// Hashtags added at the end of a post (X, Bluesky, Instagram).
+fn hashtags() -> BlockKind {
+    BlockKind::Tags(TagsBlock::new("Hashtags", &[]))
+}
+
 fn files(title: &str) -> BlockKind {
     BlockKind::Files(FilesBlock {
         title: title.to_string(),
@@ -203,6 +220,8 @@ fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
             whole,
             BlockKind::Video(VideoBlock {
                 screenshot_at_end: true,
+                // the time of each moment, to match the lines of the logs
+                clock: true,
                 ..Default::default()
             }),
         ));
@@ -216,6 +235,8 @@ fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
         rect(0, 3, 7, h - 3),
         BlockKind::LogView(LogViewBlock {
             title: "Log".into(),
+            // a recording's window starts on the lines written while it recorded
+            during: video,
             ..Default::default()
         }),
     ));
@@ -304,10 +325,10 @@ fn button(
 }
 
 /// What the person sees of the program in the first text boxes.
-const WHERE: &str = "{{app.title}}";
+const WHERE: &str = "{app.title}";
 /// Written with formatting: the templates that use it send it where formatting is shown.
 const SEEN_IN: &str =
-    "Seen in `{{app.exe}}` **({{project.name}})** on *{{capture.date}}* at *{{capture.time}}*.";
+    "Seen in `{app.exe}` **({project.name})** on *{capture.date}* at *{capture.time}*.";
 
 /// Build the template `key` as a layout, for the connection `connection_id`. Templates made for
 /// a service need one (`None` gives no template); the one that saves locally takes none. The
@@ -362,14 +383,10 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                     rect(7, 1, 5, 1),
                     web_list("Issue type", c, "issue_types"),
                 ),
-                block(
-                    "summary",
-                    rect(7, 2, 5, 2),
-                    text("Summary", TextRole::Plain, WHERE),
-                ),
+                block("summary", rect(7, 2, 5, 1), line("Summary", WHERE)),
                 block(
                     "description",
-                    rect(7, 4, 5, 3),
+                    rect(7, 3, 5, 4),
                     text("Description", TextRole::Plain, SEEN_IN),
                 ),
                 block("labels", rect(7, 7, 5, 1), tags("Labels", c, "labels")),
@@ -416,15 +433,11 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ("github-issue", Some(c)) => [
             capture_tabs(8, is_video, "Attach files"),
             vec![
-                block(
-                    "title",
-                    rect(7, 0, 5, 2),
-                    text("Title", TextRole::Plain, WHERE),
-                ),
-                block("labels", rect(7, 2, 5, 1), tags("Labels", c, "labels")),
+                block("title", rect(7, 0, 5, 1), line("Title", WHERE)),
+                block("labels", rect(7, 1, 5, 1), tags("Labels", c, "labels")),
                 block(
                     "description",
-                    rect(7, 3, 5, 4),
+                    rect(7, 2, 5, 5),
                     text("Description", TextRole::Plain, SEEN_IN),
                 ),
                 button(
@@ -479,29 +492,25 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             ),
         ],
         ("google-sheet", Some(c)) => vec![
-            shot(9),
+            shot(7),
             block(
                 "spreadsheet",
-                rect(7, 0, 5, 2),
-                text("Spreadsheet (id or link)", TextRole::Plain, ""),
+                rect(7, 0, 5, 1),
+                line("Spreadsheet (id or link)", ""),
             ),
-            block(
-                "sheet",
-                rect(7, 2, 5, 2),
-                text("Sheet tab", TextRole::Plain, "Sheet1"),
-            ),
+            block("sheet", rect(7, 1, 5, 1), line("Sheet tab", "Sheet1")),
             block(
                 "what",
-                rect(7, 4, 5, 2),
+                rect(7, 2, 5, 3),
                 text("What happened", TextRole::Plain, WHERE),
             ),
             block(
                 "project",
-                rect(7, 6, 5, 2),
-                text("Project", TextRole::Plain, "{{project.name}}"),
+                rect(7, 5, 5, 1),
+                line("Project", "{project.name}"),
             ),
             button(
-                rect(7, 8, 5, 1),
+                rect(7, 6, 5, 1),
                 "Add row",
                 Some(c),
                 None,
@@ -520,12 +529,8 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 rect(7, 0, 5, 1),
                 web_list("Subreddit", c, "subscribed"),
             ),
-            block(
-                "title",
-                rect(7, 1, 5, 2),
-                text("Title", TextRole::Plain, WHERE),
-            ),
-            block("body", rect(7, 3, 5, 4), text("Text", TextRole::Plain, "")),
+            block("title", rect(7, 1, 5, 1), line("Title", WHERE)),
+            block("body", rect(7, 2, 5, 5), text("Text", TextRole::Plain, "")),
             button(
                 rect(7, 7, 5, 1),
                 "Post",
@@ -542,16 +547,17 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             shot(8),
             block(
                 "text",
-                rect(7, 0, 5, 5),
+                rect(7, 0, 5, 4),
                 text("Post (280 characters)", TextRole::Plain, WHERE),
             ),
+            block("hashtags", rect(7, 4, 5, 1), hashtags()),
             block(
                 "alt",
                 rect(7, 5, 5, 2),
                 text(
                     "Picture description",
                     TextRole::Plain,
-                    "A screenshot of {{app.title}}",
+                    "A screenshot of {app.title}",
                 ),
             ),
             button(
@@ -559,23 +565,28 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 "Post to X",
                 Some(c),
                 None,
-                vec![from_block("text", "text"), from_block("alt", "alt")],
+                vec![
+                    from_block("text", "text"),
+                    from_block("hashtags", "hashtags"),
+                    from_block("alt", "alt"),
+                ],
             ),
         ],
         ("bluesky-post", Some(c)) => vec![
             shot(8),
             block(
                 "text",
-                rect(7, 0, 5, 5),
+                rect(7, 0, 5, 4),
                 text("Post (300 characters)", TextRole::Plain, WHERE),
             ),
+            block("hashtags", rect(7, 4, 5, 1), hashtags()),
             block(
                 "alt",
                 rect(7, 5, 5, 2),
                 text(
                     "Picture description",
                     TextRole::Plain,
-                    "A screenshot of {{app.title}}",
+                    "A screenshot of {app.title}",
                 ),
             ),
             button(
@@ -583,22 +594,30 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 "Post to Bluesky",
                 Some(c),
                 None,
-                vec![from_block("text", "text"), from_block("alt", "alt")],
+                vec![
+                    from_block("text", "text"),
+                    from_block("hashtags", "hashtags"),
+                    from_block("alt", "alt"),
+                ],
             ),
         ],
         ("instagram-post", Some(c)) => vec![
             shot(8),
             block(
                 "caption",
-                rect(7, 0, 5, 7),
+                rect(7, 0, 5, 6),
                 text("Caption", TextRole::Plain, WHERE),
             ),
+            block("hashtags", rect(7, 6, 5, 1), hashtags()),
             button(
                 rect(7, 7, 5, 1),
                 "Post to Instagram",
                 Some(c),
                 None,
-                vec![from_block("caption", "caption")],
+                vec![
+                    from_block("caption", "caption"),
+                    from_block("hashtags", "hashtags"),
+                ],
             ),
         ],
         ("claude-ask", Some(c)) => [
@@ -615,7 +634,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                     text(
                         "Prompt",
                         TextRole::Prompt,
-                        "What is wrong in {{app.title}}? The screenshot shows it.",
+                        "What is wrong in {app.title}? The screenshot shows it.",
                     ),
                 ),
                 button(
@@ -644,11 +663,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 block(
                     "thread",
                     rect(7, 8, 5, 1),
-                    text(
-                        "Reply in a thread (message link, optional)",
-                        TextRole::Plain,
-                        "",
-                    ),
+                    line("Reply in a thread (message link, optional)", ""),
                 ),
                 button(
                     rect(7, 9, 5, 1),
@@ -683,7 +698,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 block(
                     "title",
                     rect(7, 2, 5, 1),
-                    text("Title (a forum post's name)", TextRole::Plain, WHERE),
+                    line("Title (a forum post's name)", WHERE),
                 ),
                 block(
                     "message",
@@ -710,11 +725,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 rect(7, 0, 5, 1),
                 web_list("Chat or channel", c, "targets"),
             ),
-            block(
-                "title",
-                rect(7, 1, 5, 1),
-                text("Headline (optional)", TextRole::Plain, ""),
-            ),
+            block("title", rect(7, 1, 5, 1), line("Headline (optional)", "")),
             block(
                 "message",
                 rect(7, 2, 5, 4),
@@ -723,11 +734,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "thread",
                 rect(7, 6, 5, 1),
-                text(
-                    "Reply in a channel thread (message link, optional)",
-                    TextRole::Plain,
-                    "",
-                ),
+                line("Reply in a channel thread (message link, optional)", ""),
             ),
             button(
                 rect(7, 7, 5, 1),
@@ -743,17 +750,13 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         ("custom-post", Some(c)) => vec![
             shot(8),
-            block(
-                "title",
-                rect(7, 0, 5, 2),
-                text("Title", TextRole::Plain, WHERE),
-            ),
+            block("title", rect(7, 0, 5, 1), line("Title", WHERE)),
             block(
                 "message",
-                rect(7, 2, 5, 4),
+                rect(7, 1, 5, 4),
                 text("Message", TextRole::Plain, SEEN_IN),
             ),
-            block("files", rect(7, 6, 5, 2), files("Attach files")),
+            block("files", rect(7, 5, 5, 3), files("Attach files")),
             button(
                 rect(7, 8, 5, 1),
                 "Send",

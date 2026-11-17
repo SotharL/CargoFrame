@@ -376,27 +376,28 @@ export interface MemoryOptions {
   };
 }
 
+// the same as core/layout/src/templates.rs (TEMPLATES), in the same order
 const TEMPLATE_CATALOG: LayoutTemplate[] = [
-  { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip. No account needed.', service: null },
-  { key: 'local-video', name: 'Save a recording locally', description: 'The recording, a note and the files you tick, saved as a zip. A shortcut that opens it records the screen.', service: null },
-  { key: 'jira-bug', name: 'Jira bug report', description: 'Project, issue type, summary and description, with the screenshot and files attached.', service: 'jira' },
-  { key: 'jira-video', name: 'Jira bug report with a recording', description: 'Like the Jira bug report, with the recording attached. A shortcut that opens it records the screen.', service: 'jira' },
-  { key: 'jira-comment', name: 'Jira comment on an issue', description: 'Pick a recent issue and add a comment with the screenshot.', service: 'jira' },
-  { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and ticked files to a Drive folder.', service: 'google' },
-  { key: 'google-drive-video', name: 'Google Drive upload of a recording', description: 'Upload the recording and ticked files to a Drive folder. A shortcut that opens it records the screen.', service: 'google' },
-  { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet.', service: 'google' },
-  { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit, with a title and text.', service: 'reddit' },
-  { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt and hand the screenshot and prompt to Claude.', service: 'claude' },
-  { key: 'slack-video', name: 'Slack message with a recording', description: 'Post a message with the recording into a channel, or reply in a thread. A shortcut that opens it records the screen.', service: 'slack' },
-  { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged.', service: 'discord' },
-  { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread.', service: 'slack' },
-  { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
-  { key: 'x-post', name: 'X post', description: 'Post the screenshot to your X account with a short text (280 characters).', service: 'x' },
-  { key: 'github-issue', name: 'GitHub issue', description: 'Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it.', service: 'github' },
+  { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. No account needed.', service: null },
+  { key: 'local-video', name: 'Save a recording locally', description: 'The recording, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the screen. No account needed.', service: null },
+  { key: 'jira-bug', name: 'Jira bug report', description: 'Project, issue type, summary and description, with the screenshot and any files attached to a new issue. A Logs tab beside the screenshot reads the logs, to copy lines from.', service: 'jira' },
+  { key: 'jira-video', name: 'Jira bug report with a recording', description: 'Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.', service: 'jira' },
+  { key: 'jira-comment', name: 'Jira comment on an issue', description: 'Pick one of your recent issues and add a comment with the screenshot and files.', service: 'jira' },
+  { key: 'github-issue', name: 'GitHub issue', description: 'Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it. A Logs tab beside the screenshot reads the logs.', service: 'github' },
   { key: 'github-comment', name: 'GitHub comment on an issue', description: 'Pick an open issue of the repository and add a comment with the screenshot and files.', service: 'github' },
-  { key: 'bluesky-post', name: 'Bluesky post', description: 'Post the screenshot to your Bluesky account with a short text (300 characters) and a description of the picture.', service: 'bluesky' },
-  { key: 'instagram-post', name: 'Instagram post', description: 'Post the screenshot to your Instagram professional account with a caption.', service: 'instagram' },
-  { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot, sent through your request.', service: 'custom' },
+  { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and a zip of the ticked files to a Drive folder you pick.', service: 'google' },
+  { key: 'google-drive-video', name: 'Google Drive upload of a recording', description: 'Upload the recording and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the screen.', service: 'google' },
+  { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet: the date, two columns you fill, and links to the uploads.', service: 'google' },
+  { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit you follow, with a title and text.', service: 'reddit' },
+  { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude. A Logs tab beside the screenshot reads the logs, to copy lines into the prompt.', service: 'claude' },
+  { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread. A Logs tab beside the screenshot reads the logs.', service: 'slack' },
+  { key: 'slack-video', name: 'Slack message with a recording', description: 'Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.', service: 'slack' },
+  { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged. A Logs tab beside the screenshot reads the logs.', service: 'discord' },
+  { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
+  { key: 'x-post', name: 'X post', description: 'Post the screenshot to your X account with a short text (280 characters), hashtags and a description of the picture.', service: 'x' },
+  { key: 'bluesky-post', name: 'Bluesky post', description: 'Post the screenshot to your Bluesky account with a short text (300 characters), hashtags and a description of the picture.', service: 'bluesky' },
+  { key: 'instagram-post', name: 'Instagram post', description: 'Post the screenshot to your Instagram professional account with a caption and hashtags.', service: 'instagram' },
+  { key: 'custom-post', name: 'Custom API post', description: 'A title and a message with the screenshot and files, sent through the request you described.', service: 'custom' },
 ];
 
 /** A small stand-in for the backend's template: a screenshot, a note and a button. */
@@ -408,7 +409,7 @@ function templateLayout(t: LayoutTemplate, connectionId: string | null): Layout 
       t.key.endsWith('-video')
         ? { id: 'clip', type: 'video', rect: { x: 0, y: 0, w: 7, h: 7 } }
         : { id: 'shot', type: 'screenshot', rect: { x: 0, y: 0, w: 7, h: 7 } },
-      { id: 'note', type: 'text', rect: { x: 7, y: 0, w: 5, h: 3 }, title: 'Note', placement: 'above', role: 'plain', default_text: '{{app.title}}' },
+      { id: 'note', type: 'text', rect: { x: 7, y: 0, w: 5, h: 3 }, title: 'Note', placement: 'above', role: 'plain', default_text: '{app.title}' },
       {
         id: 'send', type: 'sharing_button', rect: { x: 7, y: 6, w: 5, h: 1 },
         label: t.service ? 'Send' : 'Save locally', connection_id: connectionId,
