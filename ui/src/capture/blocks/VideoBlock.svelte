@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { getApi } from '../../lib/ipc';
   import type { ClipEdit, KeyLine, VideoClipInfo } from '../../lib/types';
@@ -207,11 +208,11 @@
     return marks.annotations.length > 0 ? drawMarks(info.width, info.height, marks.annotations) : null;
   }
   const MARK_TOOLS: { tool: MarkTool; label: string }[] = [
-    { tool: 'pen', label: 'Draw' },
-    { tool: 'rect', label: 'Square' },
-    { tool: 'ellipse', label: 'Circle' },
-    { tool: 'arrow', label: 'Arrow' },
-    { tool: 'text', label: 'Text' },
+    { tool: 'pen', label: t('Draw') },
+    { tool: 'rect', label: t('Square') },
+    { tool: 'ellipse', label: t('Circle') },
+    { tool: 'arrow', label: t('Arrow') },
+    { tool: 'text', label: t('Text') },
   ];
 
   // The player's own controls are not used, so nothing else changes these.
@@ -331,7 +332,7 @@
       if (!frame) throw new Error('empty');
       onshot(frame);
     } catch {
-      shotProblem = 'This window could not take a picture from the recording.';
+      shotProblem = t('This window could not take a picture from the recording.');
     }
   }
 
@@ -353,60 +354,60 @@
 <div class="clip">
   {#if !problem}
     <!-- The tools sit above the picture, as on a screenshot; icons, so they take one short row. -->
-    <div class="bar" role="toolbar" aria-label="Recording tools">
-      <button type="button" class="tool" aria-label={crop && mode !== 'crop' ? 'Edit crop' : 'Crop'} title={crop && mode !== 'crop' ? 'Edit crop' : 'Crop: keep a part of the picture'} aria-pressed={mode === 'crop'} onclick={() => (mode === 'crop' ? applyCrop() : startCrop())}>
+    <div class="bar" role="toolbar" aria-label={t('Recording tools')}>
+      <button type="button" class="tool" aria-label={crop && mode !== 'crop' ? t('Edit crop') : t('Crop')} title={crop && mode !== 'crop' ? t('Edit crop') : t('Crop: keep a part of the picture')} aria-pressed={mode === 'crop'} onclick={() => (mode === 'crop' ? applyCrop() : startCrop())}>
         <Icon name="crop" />
       </button>
-      <button type="button" class="tool" aria-label={markOn && mode !== 'mark' ? 'Edit marks' : 'Mark'} title={markOn && mode !== 'mark' ? 'Edit marks' : 'Mark: draw on the recording'} aria-pressed={mode === 'mark'} onclick={() => (mode === 'mark' ? doneMark() : startMark())}>
+      <button type="button" class="tool" aria-label={markOn && mode !== 'mark' ? t('Edit marks') : t('Mark')} title={markOn && mode !== 'mark' ? t('Edit marks') : t('Mark: draw on the recording')} aria-pressed={mode === 'mark'} onclick={() => (mode === 'mark' ? doneMark() : startMark())}>
         <Icon name="pen" />
       </button>
       {#if mode === 'crop'}
         <span class="sep" aria-hidden="true"></span>
-        {#if !crop}<button type="button" class="small" onclick={middleBox}>Start from the middle</button>{/if}
-        <button type="button" class="small primary" onclick={applyCrop} disabled={!crop}>Apply crop</button>
-        <button type="button" class="small" onclick={cancelCrop}>Cancel</button>
-        <span class="quiet hint">{crop ? 'Drag the box or its corner, or draw a new one' : 'Drag over the picture to choose the part to keep'}</span>
+        {#if !crop}<button type="button" class="small" onclick={middleBox}>{t('Start from the middle')}</button>{/if}
+        <button type="button" class="small primary" onclick={applyCrop} disabled={!crop}>{t('Apply crop')}</button>
+        <button type="button" class="small" onclick={cancelCrop}>{t('Cancel')}</button>
+        <span class="quiet hint">{crop ? t('Drag the box or its corner, or draw a new one') : t('Drag over the picture to choose the part to keep')}</span>
       {:else if mode === 'mark'}
         <span class="sep" aria-hidden="true"></span>
-        <span class="tools" role="toolbar" aria-label="Marks on the recording" data-mark-tools>
-          {#each MARK_TOOLS as t (t.tool)}
-            <button type="button" class="tool" aria-label={t.label} title={t.label} aria-pressed={markTool === t.tool} onmousedown={(e) => e.preventDefault()} onclick={() => { markCanvas?.commitText(); markTool = t.tool; }}>
-              <Icon name={t.tool} />
+        <span class="tools" role="toolbar" aria-label={t('Marks on the recording')} data-mark-tools>
+          {#each MARK_TOOLS as item (item.tool)}
+            <button type="button" class="tool" aria-label={item.label} title={item.label} aria-pressed={markTool === item.tool} onmousedown={(e) => e.preventDefault()} onclick={() => { markCanvas?.commitText(); markTool = item.tool; }}>
+              <Icon name={item.tool} />
             </button>
           {/each}
           {#if markTool === 'text'}
-            <button type="button" class="tool letter" aria-label="Bold" title="Bold" aria-pressed={!!markText.bold} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.bold = !markText.bold)}><b>B</b></button>
-            <button type="button" class="tool letter" aria-label="Italic" title="Italic" aria-pressed={!!markText.italic} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.italic = !markText.italic)}><i>I</i></button>
-            <button type="button" class="tool" aria-label="On a box" title="On a box: readable on any picture" aria-pressed={!!markText.box} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.box = !markText.box)}><Icon name="onBox" /></button>
+            <button type="button" class="tool letter" aria-label={t('Bold')} title={t('Bold')} aria-pressed={!!markText.bold} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.bold = !markText.bold)}><b>B</b></button>
+            <button type="button" class="tool letter" aria-label={t('Italic')} title={t('Italic')} aria-pressed={!!markText.italic} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.italic = !markText.italic)}><i>I</i></button>
+            <button type="button" class="tool" aria-label={t('On a box')} title={t('On a box: readable on any picture')} aria-pressed={!!markText.box} onmousedown={(e) => e.preventDefault()} onclick={() => (markText.box = !markText.box)}><Icon name="onBox" /></button>
           {/if}
           <StylePicker colors={COLORS} thicknesses={THICKNESS} bind:color={markColor} bind:thickness={markThickness} />
-          <button type="button" class="tool" aria-label="Undo" title="Undo" disabled={!markOn} onclick={() => (marks = undo(marks))}><Icon name="undo" /></button>
-          <button type="button" class="tool" aria-label="Redo" title="Redo" disabled={marks.redo.length === 0} onclick={() => (marks = redo(marks))}><Icon name="redo" /></button>
-          {#if markOn}<button type="button" class="tool" aria-label="Remove marks" title="Remove marks" onclick={removeMarks}><Icon name="eraser" /></button>{/if}
+          <button type="button" class="tool" aria-label={t('Undo')} title={t('Undo')} disabled={!markOn} onclick={() => (marks = undo(marks))}><Icon name="undo" /></button>
+          <button type="button" class="tool" aria-label={t('Redo')} title={t('Redo')} disabled={marks.redo.length === 0} onclick={() => (marks = redo(marks))}><Icon name="redo" /></button>
+          {#if markOn}<button type="button" class="tool" aria-label={t('Remove marks')} title={t('Remove marks')} onclick={removeMarks}><Icon name="eraser" /></button>{/if}
         </span>
-        <button type="button" class="small primary" onclick={doneMark}>Done</button>
-        <span class="quiet hint">{markTool === 'text' ? 'Click to write, click a text to change it' : 'Drag on the picture'}</span>
+        <button type="button" class="small primary" onclick={doneMark}>{t('Done')}</button>
+        <span class="quiet hint">{markTool === 'text' ? t('Click to write, click a text to change it') : t('Drag on the picture')}</span>
       {:else}
         {#if hasKeys}
-          <button type="button" class="tool" aria-label="Keys" title="The keys pressed while it recorded" aria-pressed={keysOn} onclick={() => (keysOn = !keysOn)}><Icon name="keys" /></button>
+          <button type="button" class="tool" aria-label={t('Keys')} title={t('The keys pressed while it recorded')} aria-pressed={keysOn} onclick={() => (keysOn = !keysOn)}><Icon name="keys" /></button>
         {/if}
         {#if clock.length}
-          <button type="button" class="tool" aria-label="Time" title="The time of each moment, on this computer's clock" aria-pressed={clockOn} onclick={() => (clockOn = !clockOn)}><Icon name="clock" /></button>
+          <button type="button" class="tool" aria-label={t('Time')} title={t('The time of each moment, on this computer\'s clock')} aria-pressed={clockOn} onclick={() => (clockOn = !clockOn)}><Icon name="clock" /></button>
         {/if}
         {#if canFollow}
-          <button type="button" class="tool" aria-label="Follow window" title="Follow window: the crop moves with the window as it was moved" aria-pressed={followOn} onclick={toggleFollow}><Icon name="follow" /></button>
+          <button type="button" class="tool" aria-label={t('Follow window')} title={t('Follow window: the crop moves with the window as it was moved')} aria-pressed={followOn} onclick={toggleFollow}><Icon name="follow" /></button>
         {/if}
         <span class="sep" aria-hidden="true"></span>
         {#if crop}
-          <button type="button" class="tool" aria-label="Reset to full capture" title="Reset to full capture: show the whole picture again" onclick={resetCrop}><Icon name="wholePicture" /></button>
+          <button type="button" class="tool" aria-label={t('Reset to full capture')} title={t('Reset to full capture: show the whole picture again')} onclick={resetCrop}><Icon name="wholePicture" /></button>
         {/if}
         {#if markOn}
-          <button type="button" class="tool" aria-label="Remove marks" title="Remove marks" onclick={removeMarks}><Icon name="eraser" /></button>
+          <button type="button" class="tool" aria-label={t('Remove marks')} title={t('Remove marks')} onclick={removeMarks}><Icon name="eraser" /></button>
         {/if}
         {#if onshot}
-          <button type="button" class="tool" aria-label="Take screenshot" title="Take screenshot: keep the picture on screen for the screenshot block" onclick={takeShot} disabled={!url || cannotPlay}><Icon name="camera" /></button>
+          <button type="button" class="tool" aria-label={t('Take screenshot')} title={t('Take screenshot: keep the picture on screen for the screenshot block')} onclick={takeShot} disabled={!url || cannotPlay}><Icon name="camera" /></button>
         {/if}
-        <button type="button" class="tool" aria-label="Reset edits" title="Reset edits: back to how the window opened" onclick={resetEdits} disabled={pristine}><Icon name="reset" /></button>
+        <button type="button" class="tool" aria-label={t('Reset edits')} title={t('Reset edits: back to how the window opened')} onclick={resetEdits} disabled={pristine}><Icon name="reset" /></button>
       {/if}
       {#if shotProblem}<span class="error" role="alert">{shotProblem}</span>{/if}
     </div>
@@ -414,7 +415,7 @@
   {#if problem}
     <p class="problem" role="alert">{problem}</p>
   {:else if cannotPlay}
-    <p class="quiet note" role="status" data-content>This window cannot play the recording, but it is there and will be sent.</p>
+    <p class="quiet note" role="status" data-content>{t('This window cannot play the recording, but it is there and will be sent.')}</p>
   {:else if url}
     <!-- svelte-ignore a11y_no_noninteractive_tabindex, a11y_no_noninteractive_element_interactions -->
     <div
@@ -423,7 +424,7 @@
       bind:this={stage}
       tabindex="0"
       role="group"
-      aria-label="Recording player"
+      aria-label={t('Recording player')}
       onkeydown={onStageKey}
     >
       <!-- the picture itself is what a sharing button lights up, not the tools around it -->
@@ -450,7 +451,7 @@
           <video
             bind:this={player}
             src={url}
-            aria-label="Recording"
+            aria-label={t('Recording')}
             onclick={playOrPause}
             ondblclick={toggleFullscreen}
             ontimeupdate={tick}
@@ -474,10 +475,10 @@
           {#if mode === 'crop'}<CropBox width={info.width} height={info.height} bind:crop />{/if}
         </div>
         {#if showKeys && mode !== 'crop'}
-          <TextOverlay text={keyLine?.text ?? null} placeholder="Keys" name="the keys pressed" bind:at={keysAt} {shown} {hot} onremove={() => (keysOn = false)} />
+          <TextOverlay text={keyLine?.text ?? null} placeholder={t('Keys')} name={t('the keys pressed')} bind:at={keysAt} {shown} {hot} onremove={() => (keysOn = false)} />
         {/if}
         {#if clockOn && mode !== 'crop'}
-          <TextOverlay text={clockLine?.text ?? null} placeholder="Time" name="the time" bind:at={clockAt} {shown} {hot} onremove={() => (clockOn = false)} />
+          <TextOverlay text={clockLine?.text ?? null} placeholder={t('Time')} name={t('the time')} bind:at={clockAt} {shown} {hot} onremove={() => (clockOn = false)} />
         {/if}
         {#if mode !== 'crop'}
           <PlayerControls
@@ -501,7 +502,7 @@
       </div>
     </div>
   {:else}
-    <p class="quiet note">Loading the recording…</p>
+    <p class="quiet note">{t('Loading the recording…')}</p>
   {/if}
   {#if !problem}
     <div class="trim">
@@ -510,7 +511,15 @@
         {#if wholeClip}
           {total.toFixed(1)} s · {info.width}×{info.height} · {formatSize(info.bytes)}
         {:else}
-          {#if start > 0 || end < total}Keeping {start.toFixed(1)} s to {end.toFixed(1)} s ({kept.toFixed(1)} s of {total.toFixed(1)} s){:else}Keeping all {total.toFixed(1)} s{/if}{#if crop}, cropped to {crop.w}×{crop.h}{#if followOn}{' following the window'}{/if}{/if}{#if markOn}, marked{/if}{#if showKeys}, with the keys{/if}{#if clockOn}, with the time{/if}
+          {[
+            start > 0 || end < total
+              ? t('Keeping {from} s to {to} s ({kept} s of {total} s)', { from: start.toFixed(1), to: end.toFixed(1), kept: kept.toFixed(1), total: total.toFixed(1) })
+              : t('Keeping all {total} s', { total: total.toFixed(1) }),
+            crop ? (followOn ? t('cropped to {w}×{h} following the window', { w: crop.w, h: crop.h }) : t('cropped to {w}×{h}', { w: crop.w, h: crop.h })) : '',
+            markOn ? t('marked') : '',
+            showKeys ? t('with the keys') : '',
+            clockOn ? t('with the time') : '',
+          ].filter(Boolean).join(', ')}
         {/if}
       </p>
     </div>

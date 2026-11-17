@@ -55,11 +55,11 @@ impl Route {
     pub fn note(self) -> Option<&'static str> {
         Some(match self {
             Route::System => return None,
-            Route::Gnome => "This is a GNOME Wayland desktop: CargoFrame adds its shortcuts to GNOME's keyboard settings (Settings, Keyboard, Custom Shortcuts) and keeps them up to date.",
-            Route::Sway => "This is sway: CargoFrame adds its shortcuts to sway each time it starts. They are not written into your sway config.",
-            Route::Hyprland => "This is Hyprland: CargoFrame adds its shortcuts to Hyprland each time it starts. They are not written into your Hyprland config.",
-            Route::Portal => "On this Wayland desktop the shortcuts go through the desktop's shortcut service. The desktop may ask you once to confirm them.",
-            Route::Manual => "This Wayland desktop does not let programs set shortcuts. Add each command below to your desktop's keyboard shortcuts.",
+            Route::Gnome => cargoframe_i18n::t("This is a GNOME Wayland desktop: CargoFrame adds its shortcuts to GNOME's keyboard settings (Settings, Keyboard, Custom Shortcuts) and keeps them up to date."),
+            Route::Sway => cargoframe_i18n::t("This is sway: CargoFrame adds its shortcuts to sway each time it starts. They are not written into your sway config."),
+            Route::Hyprland => cargoframe_i18n::t("This is Hyprland: CargoFrame adds its shortcuts to Hyprland each time it starts. They are not written into your Hyprland config."),
+            Route::Portal => cargoframe_i18n::t("On this Wayland desktop the shortcuts go through the desktop's shortcut service. The desktop may ask you once to confirm them."),
+            Route::Manual => cargoframe_i18n::t("This Wayland desktop does not let programs set shortcuts. Add each command below to your desktop's keyboard shortcuts."),
         })
     }
 }

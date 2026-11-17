@@ -24,6 +24,7 @@ use cargoframe_connectors::{
     Progress, Settings,
 };
 use cargoframe_context::template;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{
     select, sharing_mode, sharing_state, validate, BlockKind, ConnectionKind, DropdownBlock,
     DropdownSource, FilesHow, Layout, OnSuccess, SendRules, SharingButton, SharingMode,
@@ -312,7 +313,7 @@ fn blocking_reasons(layout: &Layout, button_id: &str, reg: &AppRegistry) -> Vec<
         .map(|i| i.message)
         .collect();
     if messages.is_empty() {
-        vec!["This sharing button cannot send right now".to_string()]
+        vec![cargoframe_i18n::t("This sharing button cannot send right now").to_string()]
     } else {
         messages
     }
@@ -322,17 +323,22 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     let view = &session.view;
     if req.session_id != view.session_id {
         return Err(vec![
-            "This capture is no longer open. Take a new one".to_string()
+            t("This capture is no longer open. Take a new one").to_string()
         ]);
     }
     let Some(layout) = view.layout.as_ref() else {
-        return Err(vec!["This capture has no layout".to_string()]);
+        return Err(vec![
+            cargoframe_i18n::t("This capture has no layout").to_string()
+        ]);
     };
     if !matches!(
         layout.block(&req.button_id).map(|b| &b.kind),
         Some(BlockKind::SharingButton(_))
     ) {
-        return Err(vec!["That sharing button is not in this layout".to_string()]);
+        return Err(vec![cargoframe_i18n::t(cargoframe_i18n::t(
+            "That sharing button is not in this layout",
+        ))
+        .to_string()]);
     }
 
     let registry = AppRegistry::from_store(svc.store, svc.connections);
@@ -356,7 +362,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         None
     } else {
         let Some(id) = button.connection_id.clone() else {
-            return Err(vec!["Choose where this button shares to".to_string()]);
+            return Err(vec![cargoframe_i18n::t(cargoframe_i18n::t(
+                "Choose where this button shares to",
+            ))
+            .to_string()]);
         };
         let connection = svc.connections.load(svc.store, &id).map_err(|e| vec![e])?;
         Some(Destination { id, connection })
@@ -377,7 +386,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .map(|id| text_value(view, req, id).trim().to_string())
         .filter(|p| !p.is_empty());
     if is_ai && prompt.is_none() {
-        reasons.push("Write the prompt before sharing".to_string());
+        reasons.push(t("Write the prompt before sharing").to_string());
     }
 
     // The mapped fields, in the order the layout lists them.
@@ -407,7 +416,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         }
         if value.trim().is_empty() && info.is_some_and(|t| t.required) {
             let name = info.map(|t| t.name.as_str()).unwrap_or(&mapping.field);
-            reasons.push(format!("\u{201c}{name}\u{201d} needs a value"));
+            reasons.push(tf(
+                "\u{201c}{name}\u{201d} needs a value",
+                &[("name", &name)],
+            ));
         }
         let is_tags = matches!(
             &mapping.source,
@@ -501,7 +513,10 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
                 }
             }
             if value.trim().is_empty() && t.required {
-                reasons.push(format!("\u{201c}{}\u{201d} needs a value", t.name));
+                reasons.push(tf(
+                    "\u{201c}{name}\u{201d} needs a value",
+                    &[("name", &t.name)],
+                ));
             }
             match at {
                 Some(i) => fields[i].value = value,
@@ -521,9 +536,9 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         .filter(|t| Some(t.connection_id.as_str()) == connection_id && t.required && !t.fills())
     {
         if !mappings.iter().any(|m| m.field == t.field) {
-            reasons.push(format!(
-                "\u{201c}{}\u{201d} is required: map it to a block in the layout",
-                t.name
+            reasons.push(tf(
+                "\u{201c}{name}\u{201d} is required: map it to a block in the layout",
+                &[("name", &t.name)],
             ));
         }
     }
@@ -544,8 +559,9 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         for path in wanted {
             // found in the project, or added by hand (then already copied into the capture's folder)
             if !session.offers(&block.id, path) {
-                reasons.push(format!(
-                    "\u{201c}{path}\u{201d} is not one of the files offered for this capture"
+                reasons.push(tf(
+                    "\u{201c}{path}\u{201d} is not one of the files offered for this capture",
+                    &[("path", &path)],
                 ));
             } else if seen.insert(path.clone()) {
                 selected.push(path.clone());
@@ -554,7 +570,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
     }
     let added_by_hand = |p: &String| p.starts_with(&format!("{}/", crate::session::ADDED));
     if selected.iter().any(|p| !added_by_hand(p)) && session.files_root.is_none() {
-        reasons.push("There is no folder to read the ticked files from".to_string());
+        reasons.push(t("There is no folder to read the ticked files from").to_string());
     }
     if !reasons.is_empty() {
         return Err(reasons);
@@ -683,7 +699,12 @@ fn edited_recording(
     };
     let output = session
         .with_dir(svc.workspace, |d| d.path().join("recording-edited.mp4"))
-        .map_err(|e| format!("CargoFrame could not make room for the edited recording: {e}"))?;
+        .map_err(|e| {
+            tf(
+                "CargoFrame could not make room for the edited recording: {e}",
+                &[("e", &e)],
+            )
+        })?;
     let settings = svc
         .store
         .load_or_default::<cargoframe_config::Video>()
@@ -692,11 +713,12 @@ fn edited_recording(
     let mark = if edit.mark {
         let png = session
             .clip_mark()
-            .ok_or("The mark was not drawn: try again")?;
+            .ok_or(t("The mark was not drawn: try again"))?;
         let path = session
             .with_dir(svc.workspace, |d| d.path().join("clip-mark.png"))
-            .map_err(|e| format!("CargoFrame could not keep the mark: {e}"))?;
-        fs::write(&path, png).map_err(|e| format!("CargoFrame could not keep the mark: {e}"))?;
+            .map_err(|e| tf("CargoFrame could not keep the mark: {e}", &[("e", &e)]))?;
+        fs::write(&path, png)
+            .map_err(|e| tf("CargoFrame could not keep the mark: {e}", &[("e", &e)]))?;
         Some(path)
     } else {
         None
@@ -732,15 +754,26 @@ fn layer_list(
     clip: &crate::session::Clip,
     edit: &crate::video::ClipEdit,
 ) -> Result<PathBuf, String> {
-    let what = if name == "clock" {
-        "the time"
-    } else {
-        "the keys pressed"
+    // whole sentences, so each language can say them its own way
+    let clock = name == "clock";
+    let layer = session.clip_layer(name).ok_or_else(|| {
+        if clock {
+            t("The pictures of the time were not drawn: try again")
+        } else {
+            t("The pictures of the keys pressed were not drawn: try again")
+        }
+        .to_string()
+    })?;
+    let keep = |e: std::io::Error| {
+        if clock {
+            tf("CargoFrame could not keep the time: {e}", &[("e", &e)])
+        } else {
+            tf(
+                "CargoFrame could not keep the keys pressed: {e}",
+                &[("e", &e)],
+            )
+        }
     };
-    let layer = session
-        .clip_layer(name)
-        .ok_or_else(|| format!("The pictures of {what} were not drawn: try again"))?;
-    let keep = |e: std::io::Error| format!("CargoFrame could not keep {what}: {e}");
     let dir = session
         .with_dir(svc.workspace, |d| d.path().join(name))
         .map_err(keep)?;
@@ -773,23 +806,20 @@ fn video_attachment(
     if let Some(kind) = kind {
         let caps = cargoframe_layout::Capabilities::for_kind(kind, cfg!(windows));
         if !caps.video.works() {
-            return Err(format!(
-                "This destination cannot take a video: {}",
-                caps.video.note
+            return Err(tf(
+                "This destination cannot take a video: {note}",
+                &[("note", &caps.video.note)],
             ));
         }
     }
-    let size = fs::metadata(path)
-        .map(|m| m.len())
-        .map_err(|_| "The recording is no longer there: record it again".to_string())?;
+    let size = fs::metadata(path).map(|m| m.len()).map_err(|_| {
+        cargoframe_i18n::t("The recording is no longer there: record it again").to_string()
+    })?;
     if size > MAX_VIDEO_BYTES {
-        return Err(format!(
-            "The recording is {} MB and CargoFrame sends up to {} MB: record a shorter one, or lower the picture size in Settings, Video",
-            size / (1024 * 1024),
-            MAX_VIDEO_BYTES / (1024 * 1024),
-        ));
+        return Err(tf("The recording is {size} MB and CargoFrame sends up to {max} MB: record a shorter one, or lower the picture size in Settings, Recording", &[("size", &(size / (1024 * 1024))), ("max", &(MAX_VIDEO_BYTES / (1024 * 1024)))]));
     }
-    let data = fs::read(path).map_err(|e| format!("The recording could not be read: {e}"))?;
+    let data =
+        fs::read(path).map_err(|e| tf("The recording could not be read: {e}", &[("e", &e)]))?;
     Ok(Attachment {
         name: crate::session::CLIP_NAME.into(),
         mime: "video/mp4".into(),
@@ -888,15 +918,15 @@ fn zip_selected(svc: &Services, p: &Prepared) -> Result<(Vec<u8>, Vec<String>), 
 fn check_file_count(ticked: usize, with_screenshot: bool) -> Result<(), String> {
     let total = ticked + usize::from(with_screenshot);
     if total > MAX_FILES {
-        return Err(format!(
-            "Claude takes at most {MAX_FILES} files in one message{}: untick {} of the files",
-            if with_screenshot {
-                ", including the screenshot"
-            } else {
-                ""
-            },
-            total - MAX_FILES
-        ));
+        let over = total - MAX_FILES;
+        return Err(if with_screenshot {
+            tf("Claude takes at most {max} files in one message, including the screenshot: untick {over} of the files", &[("max", &MAX_FILES), ("over", &over)])
+        } else {
+            tf(
+                "Claude takes at most {max} files in one message: untick {over} of the files",
+                &[("max", &MAX_FILES), ("over", &over)],
+            )
+        });
     }
     Ok(())
 }
@@ -952,8 +982,12 @@ fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalC
         .with_dir(svc.workspace, |dir| {
             let screenshot = screenshot_bytes
                 .map(|bytes| {
-                    dir.write_screenshot(bytes)
-                        .map_err(|e| format!("The screenshot could not be saved for sending: {e}"))
+                    dir.write_screenshot(bytes).map_err(|e| {
+                        tf(
+                            "The screenshot could not be saved for sending: {e}",
+                            &[("e", &e)],
+                        )
+                    })
                 })
                 .transpose()?;
             let mut files = Vec::new();
@@ -963,22 +997,30 @@ fn stage_local(svc: &Services, session: &Session, p: &Prepared) -> Result<LocalC
                 let root = root
                     .as_deref()
                     .or_else(|| dir.staged(rel).map(|_| dir.path()))
-                    .ok_or("There is no folder to read the ticked files from")?;
-                let copy = dir
-                    .stage(root, rel, MAX_FILE_BYTES)
-                    .map_err(|e| format!("\u{201c}{rel}\u{201d} cannot be sent: {e}"))?;
+                    .ok_or(t("There is no folder to read the ticked files from"))?;
+                let copy = dir.stage(root, rel, MAX_FILE_BYTES).map_err(|e| {
+                    tf(
+                        "\u{201c}{rel}\u{201d} cannot be sent: {e}",
+                        &[("rel", &rel), ("e", &e)],
+                    )
+                })?;
                 total += std::fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
                 if total > total_limit {
-                    return Err(format!(
-                        "The ticked files are larger than {} MB together: untick some",
-                        total_limit / (1024 * 1024)
+                    return Err(tf(
+                        "The ticked files are larger than {max} MB together: untick some",
+                        &[("max", &(total_limit / (1024 * 1024)))],
                     ));
                 }
                 files.push((rel.clone(), copy));
             }
             Ok(LocalCopies { screenshot, files })
         })
-        .map_err(|e| format!("The temporary folder for this capture could not be made: {e}"))?
+        .map_err(|e| {
+            tf(
+                "The temporary folder for this capture could not be made: {e}",
+                &[("e", &e)],
+            )
+        })?
 }
 
 /// Walk the safe-settings ladder with a zip of everything the share held.
@@ -1010,8 +1052,10 @@ impl FallbackIo for ZipIo<'_> {
 /// Why a zip could not be written, in words.
 fn describe_write(f: &WriteFailure) -> String {
     match f {
-        WriteFailure::NotWritable => "the folder is missing or cannot be written to".to_string(),
-        WriteFailure::DiskFull => "the disk is full".to_string(),
+        WriteFailure::NotWritable => {
+            cargoframe_i18n::t("the folder is missing or cannot be written to").to_string()
+        }
+        WriteFailure::DiskFull => cargoframe_i18n::t("the disk is full").to_string(),
         WriteFailure::Other(e) => e.clone(),
     }
 }
@@ -1191,15 +1235,13 @@ fn save_locally(svc: &Services, p: &Prepared, view: &SessionView) -> ShareResult
         .map(|f| f.trim().to_string())
         .filter(|f| !f.is_empty());
     let Some(folder) = folder else {
-        return blocked(NEEDS_SAVE_FOLDER);
+        return blocked(cargoframe_i18n::t(NEEDS_SAVE_FOLDER));
     };
     if !Path::new(&folder).is_dir() {
-        return blocked(format!(
-            "The folder for saved zips cannot be used: {folder} is missing. Choose it again in Settings"
-        ));
+        return blocked(tf("The folder for saved zips cannot be used: {folder} is missing. Choose it again in Settings", &[("folder", &folder)]));
     }
     let Some(source) = build_keep_zip(svc, p, view, None) else {
-        return blocked("The zip could not be built");
+        return blocked(t("The zip could not be built"));
     };
     let saved = copy_atomic(&source, Path::new(&folder), &zip_name(svc, p));
     let _ = fs::remove_file(&source);
@@ -1212,9 +1254,9 @@ fn save_locally(svc: &Services, p: &Prepared, view: &SessionView) -> ShareResult
                 close: p.close,
             }
         }
-        Err(e) => blocked(format!(
-            "Could not save in {folder}: {}",
-            describe_write(&e)
+        Err(e) => blocked(tf(
+            "Could not save in {folder}: {value}",
+            &[("folder", &folder), ("value", &describe_write(&e))],
         )),
     }
 }
@@ -1253,12 +1295,11 @@ pub fn run(
                     prepared.payload.inline_files = move_text_inline(&mut local, limit);
                     let stayed = local.files.len();
                     if stayed > 0 {
-                        prepared.notes.push(format!(
-                            "{stayed} file{} not plain text or past the {} KB limit, so {} attached instead of written into the message",
-                            if stayed == 1 { " was" } else { "s were" },
-                            limit / 1024,
-                            if stayed == 1 { "it was" } else { "they were" },
-                        ));
+                        prepared.notes.push(if stayed == 1 {
+                            tf("1 file was not plain text or past the {limit} KB limit, so it was attached instead of written into the message", &[("limit", &(limit / 1024))])
+                        } else {
+                            tf("{n} files were not plain text or past the {limit} KB limit, so they were attached instead of written into the message", &[("n", &stayed), ("limit", &(limit / 1024))])
+                        });
                     }
                     if let Err(reason) =
                         check_file_count(local.files.len(), prepared.payload.image.is_some())
@@ -1283,7 +1324,7 @@ pub fn run(
                     data: bytes,
                 });
             }
-            Err(e) => return blocked(format!("The ticked files cannot be zipped: {e}")),
+            Err(e) => return blocked(tf("The ticked files cannot be zipped: {e}", &[("e", &e)])),
         }
     }
 
@@ -1345,7 +1386,7 @@ pub fn run(
             }
             let saved = keep_a_copy(svc, picker, &prepared, &session.view, &safe, &err, attempts);
             ShareResult::Failed {
-                label: err.kind.label().to_string(),
+                label: cargoframe_i18n::t(err.kind.label()).to_string(),
                 message: err.message,
                 reconnect,
                 attempts,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
@@ -21,11 +22,13 @@
   let busy = $state(false);
 
   const MODES: { value: CaptureMode; label: string; hint: string }[] = [
-    { value: 'active_window', label: 'The program in focus', hint: 'Falls back to the screen it is on when no window can be read.' },
-    { value: 'display', label: 'The screen under the mouse', hint: 'The whole display where the pointer is.' },
-    { value: 'all_displays', label: 'All screens', hint: 'Every display as one picture.' },
+    { value: 'active_window', label: t('The program in focus'), hint: t('Falls back to the screen it is on when no window can be read.') },
+    { value: 'display', label: t('The screen under the mouse'), hint: t('The whole display where the pointer is.') },
+    { value: 'all_displays', label: t('All screens'), hint: t('Every display as one picture.') },
   ];
-  const modeLabel = (m: CaptureMode) => MODES.find((x) => x.value === m)?.label ?? m;
+  /** The card's line for what a press captures: one whole sentence per mode, so each language says it its own way. */
+  const capturesLine = (m: CaptureMode) =>
+    m === 'display' ? t('Captures the screen under the mouse') : m === 'all_displays' ? t('Captures all screens') : t('Captures the program in focus');
 
   async function refresh() {
     await Promise.all([triggers.reload(), layouts.reload()]);
@@ -97,15 +100,15 @@
 
 <div class="page">
   {#if triggers.failure}<Chip kind="err" label={triggers.failure} />{/if}
-  {#each triggers.problems as p (p)}<Chip kind="warn" label={`Could not read a trigger file: ${p}`} />{/each}
+  {#each triggers.problems as p (p)}<Chip kind="warn" label={t('Could not read a trigger file: {problem}', { problem: p })} />{/each}
 
   {#if status.note}<p class="note" role="note" data-tour="triggers.desktop">{status.note}</p>{/if}
 
   {#if triggers.loaded && triggers.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No triggers yet</h2>
-      <p class="quiet">A trigger is a shortcut that captures your screen and opens a CargoFrame window with the layout you choose.</p>
-      <button class="primary" data-tour="triggers.add" onclick={add}>Add a trigger</button>
+      <h2>{t('No triggers yet')}</h2>
+      <p class="quiet">{t('A trigger is a shortcut that captures your screen and opens a CargoFrame window with the layout you choose.')}</p>
+      <button class="primary" data-tour="triggers.add" onclick={add}>{t('Add a trigger')}</button>
     </div>
   {/if}
 
@@ -117,85 +120,80 @@
           {#if item.shortcut}
             <span class="keys">{#each keycaps(item.shortcut) as k, i (i)}<kbd>{k}</kbd>{/each}</span>
           {:else}
-            <span class="quiet">Tray menu only</span>
+            <span class="quiet">{t('Tray menu only')}</span>
           {/if}
         </div>
         <p class="quiet">
-          {#if records(item.layout_id)}Records the screen{:else}Captures {modeLabel(item.capture).toLowerCase()}{/if}
-          · Layout:
-          {#if item.layout_id}
-            {layoutName(item.layout_id) ?? item.layout_id}
-          {:else}
-            none (opens an empty window)
-          {/if}
+          {records(item.layout_id) ? t('Records the screen') : capturesLine(item.capture)}
+          · {item.layout_id
+            ? t('Layout: {name}', { name: layoutName(item.layout_id) ?? item.layout_id })
+            : t('Layout: none (opens an empty window)')}
         </p>
         <div class="chips">
           {#if errors[id]}<Chip kind="err" label={errors[id]!} />{/if}
           {#if item.layout_id && layouts.loaded && !layouts.find(item.layout_id)}
-            <Chip kind="warn" label="This layout no longer exists" />
+            <Chip kind="warn" label={t('This layout no longer exists')} />
           {/if}
-          {#if item.enabled && !item.layout_id}<Chip kind="dbg" label="No layout chosen" />{/if}
+          {#if item.enabled && !item.layout_id}<Chip kind="dbg" label={t('No layout chosen')} />{/if}
         </div>
         {#if item.enabled && showCommand(id)}
           <div class="command">
-            <span class="quiet">Command for your desktop's shortcut:</span>
+            <span class="quiet">{t('Command for your desktop\'s shortcut:')}</span>
             <code>{status.commands[id]}</code>
-            <button type="button" onclick={() => copy(id)}>{copied === id ? 'Copied' : 'Copy'}</button>
+            <button type="button" onclick={() => copy(id)}>{copied === id ? t('Copied') : t('Copy')}</button>
           </div>
         {/if}
       </div>
       <div class="actions">
-        <Toggle label="On" checked={item.enabled} onchange={(v) => toggle(id, item, v)} />
-        <button onclick={() => edit(id, item)}>Edit</button>
+        <Toggle label={t('On')} checked={item.enabled} onchange={(v) => toggle(id, item, v)} />
+        <button onclick={() => edit(id, item)}>{t('Edit')}</button>
         {#if confirming === id}
-          <button class="danger" onclick={() => remove(id)}>Delete for good</button>
-          <button onclick={() => (confirming = null)}>Keep</button>
+          <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
+          <button onclick={() => (confirming = null)}>{t('Keep')}</button>
         {:else}
-          <button onclick={() => (confirming = id)}>Delete</button>
+          <button onclick={() => (confirming = id)}>{t('Delete')}</button>
         {/if}
       </div>
     </article>
   {/each}
 
   {#if triggers.items.length > 0 && !draft}
-    <div><button class="primary" data-tour="triggers.add" onclick={add}>Add a trigger</button></div>
+    <div><button class="primary" data-tour="triggers.add" onclick={add}>{t('Add a trigger')}</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit trigger' : 'New trigger'}</h2>
-      <Field label="Name"><input type="text" bind:value={draft.value.name} placeholder="Bug report" /></Field>
+      <h2>{draft.id ? t('Edit trigger') : t('New trigger')}</h2>
+      <Field label={t('Name')}><input type="text" bind:value={draft.value.name} placeholder={t('Bug report')} /></Field>
       <div class="field" data-tour="triggers.shortcut">
-        <span class="label">Shortcut</span>
-        <ShortcutInput bind:value={draft.value.shortcut} label="Shortcut" />
-        <p class="quiet hint">Click the box, then press the keys. Leave it empty to start this trigger from the tray menu only.</p>
+        <span class="label">{t('Shortcut')}</span>
+        <ShortcutInput bind:value={draft.value.shortcut} label={t('Shortcut')} />
+        <p class="quiet hint">{t('Click the box, then press the keys. Leave it empty to start this trigger from the tray menu only.')}</p>
       </div>
-      <Field label="Layout" hint="The window this trigger opens. It also says what a press does." tour="triggers.layout">
+      <Field label={t('Layout')} hint={t('The window this trigger opens. It also says what a press does.')} tour="triggers.layout">
         <select bind:value={draft.value.layout_id}>
-          <option value={null}>None (empty window)</option>
+          <option value={null}>{t('None (empty window)')}</option>
           {#each layouts.items as l (l.id)}<option value={l.id}>{l.item.name}</option>{/each}
         </select>
       </Field>
       {#if records(draft.value.layout_id)}
         <p class="quiet what" role="note" data-tour="triggers.makes">
-          This layout has a Video block, so a press records the screen: the first press starts, the next one stops
-          and opens the window with the clip. What is recorded and its sound are set in the Video block. Needs ffmpeg
-          (Setup).
+          {t('This layout has a Video block, so a press records the screen: the first press starts, the next one stops and opens the window with the clip. What is recorded and its sound are set in the Video block. Needs ffmpeg (Setup).')}
         </p>
       {:else}
-        <Field label="Screenshot of" hint={MODES.find((m) => m.value === draft!.value.capture)?.hint}>
+        <Field label={t('Screenshot of')} hint={MODES.find((m) => m.value === draft!.value.capture)?.hint}>
           <select bind:value={draft.value.capture} data-tour="triggers.makes">
             {#each MODES as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
           </select>
         </Field>
-        <p class="quiet what">A press takes a screenshot. Add a Video block to the layout to record the screen instead.</p>
+        <p class="quiet what">{t('A press takes a screenshot. Add a Video block to the layout to record the screen instead.')}</p>
       {/if}
-      <button type="button" class="link" onclick={() => go('layouts')}>Build a layout…</button>
-      <Toggle label="Enabled" bind:checked={draft.value.enabled} />
+      <button type="button" class="link" onclick={() => go('layouts')}>{t('Build a layout…')}</button>
+      <Toggle label={t('Enabled')} bind:checked={draft.value.enabled} />
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" data-tour="triggers.save" disabled={busy}>Save</button>
-        <button type="button" onclick={() => (draft = null)}>Cancel</button>
+        <button class="primary" type="submit" data-tour="triggers.save" disabled={busy}>{t('Save')}</button>
+        <button type="button" onclick={() => (draft = null)}>{t('Cancel')}</button>
       </div>
     </form>
   {/if}

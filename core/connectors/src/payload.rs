@@ -1,5 +1,6 @@
 //! What a share carries, and what comes back.
 
+use cargoframe_i18n::tf;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -227,12 +228,16 @@ pub fn with_tags_line(body: Option<String>, payload: &Payload) -> Option<String>
     if tags.is_empty() {
         return body;
     }
-    let line = format!(
-        "**Tags:** {}",
-        tags.iter()
-            .map(|t| format!("`{}`", t.replace('`', "'")))
-            .collect::<Vec<_>>()
-            .join(" ")
+    let line = tf(
+        "**Tags:** {tags}",
+        &[(
+            "tags",
+            &tags
+                .iter()
+                .map(|t| format!("`{}`", t.replace('`', "'")))
+                .collect::<Vec<_>>()
+                .join(" "),
+        )],
     );
     Some(match body {
         Some(b) if !b.trim().is_empty() => format!("{}\n\n{line}", b.trim_end()),

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { untrack } from 'svelte';
   import Icon from '../../lib/components/Icon.svelte';
   import { roleTag } from '../../lib/roles';
@@ -196,10 +197,10 @@
   }
 
   function label(b: Block): string {
-    if (b.type === 'screenshot') return 'Screenshot';
-    if (b.type === 'video') return 'Video';
-    if (b.type === 'tabs') return 'Tabs';
-    return b.type === 'sharing_button' ? b.label || 'Share' : b.title || typeLabel(b.type);
+    if (b.type === 'screenshot') return t('Screenshot');
+    if (b.type === 'video') return t('Video');
+    if (b.type === 'tabs') return t('Tabs');
+    return b.type === 'sharing_button' ? b.label || t('Share') : b.title || typeLabel(b.type);
   }
 
   function worst(id: string): 'error' | 'warning' | 'debug' | null {
@@ -227,7 +228,7 @@
     return r ? lineFor(r, shown, kindOf(shown)) : null;
   };
   /** The short tag on the block; the whole sentence is in its tooltip and in the side panel. */
-  const tag = (l: Line) => (l.state === 'cannot_send' ? '✕ Cannot send' : l.state === 'sent' ? '✓ Sent' : l.state === 'switched_off' ? '– Left out' : '– Not used');
+  const tag = (l: Line) => (l.state === 'cannot_send' ? t('✕ Cannot send') : l.state === 'sent' ? t('✓ Sent') : l.state === 'switched_off' ? t('– Left out') : t('– Not used'));
 
   const gridStyle = $derived(
     `grid-template-columns:repeat(${cols},minmax(0,1fr));grid-template-rows:repeat(${rows},${ROW}px);gap:${GAP}px;` +
@@ -241,28 +242,28 @@
 </script>
 
 <div class="canvas">
-  <div class="palette" role="toolbar" aria-label="Add a block">
-    <span class="quiet">Add:</span>
-    {#each BLOCK_TYPES as t (t.type)}
+  <div class="palette" role="toolbar" aria-label={t('Add a block')}>
+    <span class="quiet">{t('Add:')}</span>
+    {#each BLOCK_TYPES as item (item.type)}
       <button
         type="button"
         class="chip"
-        disabled={t.type === 'sharing_button' && buttonsFull}
-        title={t.type === 'sharing_button' && buttonsFull
-          ? `A window has room for ${MAX_SHARING_BUTTONS} sharing buttons. Remove one to add another.`
-          : `${t.hint}. Click to add, or drag onto the grid.`}
-        onpointerdown={(e) => beginNew(e, t.type)}
-        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addAt(t.type); } }}
-      >＋ {t.label}</button>
+        disabled={item.type === 'sharing_button' && buttonsFull}
+        title={item.type === 'sharing_button' && buttonsFull
+          ? t('A window has room for {MAX_SHARING_BUTTONS} sharing buttons. Remove one to add another.', { MAX_SHARING_BUTTONS })
+          : t('{hint}. Click to add, or drag onto the grid.', { hint: item.hint })}
+        onpointerdown={(e) => beginNew(e, item.type)}
+        onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addAt(item.type); } }}
+      >＋ {item.label}</button>
     {/each}
-    <span class="cols" role="group" aria-label="Columns">
-      <span class="quiet">Columns:</span>
+    <span class="cols" role="group" aria-label={t('Columns')}>
+      <span class="quiet">{t('Columns:')}</span>
       <button
         type="button"
         class="step"
         disabled={!canNarrow}
-        aria-label="Remove the last column"
-        title={canNarrow ? 'Remove the last column' : cols <= MIN_COLUMNS ? `A layout has at least ${MIN_COLUMNS} columns` : 'Move the blocks out of the last column first'}
+        aria-label={t('Remove the last column')}
+        title={canNarrow ? t('Remove the last column') : cols <= MIN_COLUMNS ? t('A layout has at least {MIN_COLUMNS} columns', { MIN_COLUMNS }) : t('Move the blocks out of the last column first')}
         onclick={() => (columns = cols - 1 === COLUMNS ? undefined : cols - 1)}
       >−</button>
       <span class="count-cols" aria-live="polite">{cols}</span>
@@ -270,8 +271,8 @@
         type="button"
         class="step"
         disabled={!canWiden}
-        aria-label="Add a column on the side"
-        title={canWiden ? 'Add a column on the right side: the window opens wider' : `A layout has at most ${MAX_COLUMNS} columns`}
+        aria-label={t('Add a column on the side')}
+        title={canWiden ? t('Add a column on the right side: the window opens wider') : t('A layout has at most {MAX_COLUMNS} columns', { MAX_COLUMNS })}
         onclick={() => (columns = cols + 1)}
       >＋</button>
     </span>
@@ -295,7 +296,7 @@
           style={cell(b.rect) + (b.type === 'sharing_button' ? kindStyle(kindOf(b)) : '')}
           role="button"
           tabindex="0"
-          aria-label="{typeLabel(b.type)} block {label(b)}, column {b.rect.x + 1}, row {b.rect.y + 1}, {b.rect.w} by {b.rect.h}. Arrow keys move it, Shift with arrows resizes it, Delete removes it.{l ? ` ${l.text}.` : ''}"
+          aria-label={t('{type} block {name}, column {x}, row {y}, {w} by {h}. Arrow keys move it, Shift with arrows resizes it, Delete removes it.', { type: typeLabel(b.type), name: label(b), x: b.rect.x + 1, y: b.rect.y + 1, w: b.rect.w, h: b.rect.h }) + (l ? ` ${l.text}.` : '')}
           aria-pressed={selected === b.id}
           onpointerdown={(e) => begin(e, b.id, 'move')}
           onfocus={() => (selected = b.id)}
@@ -305,16 +306,16 @@
                the small (type) after it and the badges on the right stay visible. -->
           {#if b.type === 'tabs'}
             <!-- The names, on their side: a click opens the tab, to see and place its blocks. -->
-            <div class="tabnames {b.side ?? 'top'}" role="tablist" aria-label="Tabs">
-              {#each b.tabs as t, i (i)}
+            <div class="tabnames {b.side ?? 'top'}" role="tablist" aria-label={t('Tabs')}>
+              {#each b.tabs as item, i (i)}
                 <button
                   type="button"
                   role="tab"
                   aria-selected={openTab(b, open) === i}
-                  title="{t.name}: {(t.blocks ?? []).length} blocks. Click to see them; a block dropped here goes in it."
+                  title={tn('{name}: {n} block. Click to see it; a block dropped here goes in this tab.', t('{name}: {n} blocks. Click to see them; a block dropped here goes in this tab.'), (item.blocks ?? []).length, { name: item.name })}
                   onpointerdown={(e) => e.stopPropagation()}
                   onclick={() => { open[b.id] = i; selected = b.id; }}
-                >{t.name || `Tab ${i + 1}`}</button>
+                >{item.name || t('Tab {n}', { n: i + 1 })}</button>
               {/each}
             </div>
             <!-- A grip that stays over the blocks of its tabs: when one fills a tab, the Tabs block
@@ -323,8 +324,8 @@
               type="button"
               class="grip"
               tabindex="-1"
-              aria-label="Move {label(b)}"
-              title="Drag to move the tabs and their blocks; click to choose them"
+              aria-label={t('Move {label}', { label: label(b) })}
+              title={t('Drag to move the tabs and their blocks; click to choose them')}
               onpointerdown={(e) => begin(e, b.id, 'move')}
             ><Icon name="move" size={14} /></button>
           {/if}
@@ -333,13 +334,13 @@
             <span class="kind">({typeLabel(b.type).toLowerCase()})</span>
             {#if b.type === 'text' && roleTag(b.role)}<span class="tag">{roleTag(b.role)}</span>{/if}
             {#if l}<span class="reach {l.state}" title={l.text}>{tag(l)}</span>{/if}
-            {#if count(b.id)}<span class="count {w}" title="{count(b.id)} to look at">{w === 'error' ? '✕' : w === 'warning' ? '!' : '?'} {count(b.id)}</span>{/if}
+            {#if count(b.id)}<span class="count {w}" title={t('{count} to look at', { count: count(b.id) })}>{w === 'error' ? '✕' : w === 'warning' ? '!' : '?'} {count(b.id)}</span>{/if}
           </div>
           <button
             type="button"
             class="handle"
             tabindex="-1"
-            aria-label="Resize {label(b)}"
+            aria-label={t('Resize {label}', { label: label(b) })}
             onpointerdown={(e) => begin(e, b.id, 'resize')}
           ></button>
         </div>

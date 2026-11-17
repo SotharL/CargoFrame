@@ -15,6 +15,7 @@
 
 use cargoframe_context::climb::{resolve_project_folder, Match, Resolution};
 use cargoframe_context::template;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{BlockKind, Layout, ValueSource};
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -34,15 +35,19 @@ pub const NAMES: [&str; 9] = [
 /// A short description of each built-in variable, for the builder's variable picker.
 pub fn describe_name(name: &str) -> &'static str {
     match name {
-        "app.exe" => "File name of the program in focus",
-        "app.path" => "Full path of that program",
-        "app.title" => "The title of its window",
-        "project.folder" => "The project folder found from the program's path",
-        "project.name" => "That folder's name",
-        "capture.date" => "Date of the capture (YYYY-MM-DD)",
-        "capture.time" => "Time of the capture (HH:MM:SS)",
-        "capture.screenshot" => "The screenshot, shown here in the text (Jira, GitHub, Teams)",
-        "capture.recording" => "The recording, shown here in the text (Jira, GitHub)",
+        "app.exe" => cargoframe_i18n::t("File name of the program in focus"),
+        "app.path" => cargoframe_i18n::t("Full path of that program"),
+        "app.title" => cargoframe_i18n::t("The title of its window"),
+        "project.folder" => cargoframe_i18n::t("The project folder found from the program's path"),
+        "project.name" => cargoframe_i18n::t("That folder's name"),
+        "capture.date" => cargoframe_i18n::t("Date of the capture (YYYY-MM-DD)"),
+        "capture.time" => cargoframe_i18n::t("Time of the capture (HH:MM:SS)"),
+        "capture.screenshot" => {
+            cargoframe_i18n::t("The screenshot, shown here in the text (Jira, GitHub, Teams)")
+        }
+        "capture.recording" => {
+            cargoframe_i18n::t("The recording, shown here in the text (Jira, GitHub)")
+        }
         _ => "",
     }
 }
@@ -153,12 +158,15 @@ pub fn referenced_rules(layout: &Layout) -> BTreeSet<String> {
 /// A short phrase for how the folder was found, for a tooltip.
 pub fn describe(how: &Match) -> String {
     match how {
-        Match::SameName { levels_up: 0 } => "the folder holding the program has its name".into(),
-        Match::SameName { levels_up } => {
-            format!("{levels_up} folder(s) above the program has its name")
+        Match::SameName { levels_up: 0 } => {
+            cargoframe_i18n::t("the folder holding the program has its name").into()
         }
+        Match::SameName { levels_up } => tf(
+            "{levels_up} folder(s) above the program has its name",
+            &[("levels_up", &levels_up)],
+        ),
         Match::ParentFallback => {
-            "no folder has the program's name, so its own folder is used".into()
+            t("no folder has the program's name, so its own folder is used").into()
         }
     }
 }

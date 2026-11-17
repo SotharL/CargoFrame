@@ -8,6 +8,7 @@
   "permissions": [
     "allow-app-info",
     "allow-get-general",
+    "allow-get-language",
     "allow-get-data-report",
     "allow-clean-data",
     "allow-reset-everything",

@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.5.1. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.6.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -259,7 +259,7 @@ service are grouped under *Connect a service*, below the others.
 | | **Triggers** | Shortcuts and the layout each opens |
 | | **Data & fields** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or one opened or dropped), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives; a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read, each added to the window's files or not, with its lines' time format and its values |
 | | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, following a window that is moved, the outline and dot shown while recording |
-| CargoFrame | **General** | Appearance, startup, notifications, what happens when a share fails, windows kept ready |
+| CargoFrame | **General** | Appearance, language (the computer's by default; English, French, Spanish, Italian, German), startup, notifications, what happens when a share fails, windows kept ready |
 | | **Your data** | What is kept on this computer, clear or reset, export and import |
 | | **About** | Version, updates, speed and memory numbers |
 
@@ -318,7 +318,8 @@ flowchart TB
 |-------|-------|-----|
 | Tray program | `app/` | Tray, shortcuts, windows on demand, commands, secrets, `cargoframe open` |
 | Windows | `ui/` | `settings.html` and `capture.html`, built once, loaded on demand |
-| Logic | `core/*` (17 crates) | Everything testable without a display: capture rules, layout, config, rules, connectors, net, video, update… |
+| Logic | `core/*` (19 crates) | Everything testable without a display: capture rules, layout, config, rules, connectors, net, video, update… |
+| Languages | `core/i18n`, `ui/src/lib/i18n` | English in the code; a pack per language (French, Spanish, Italian, German) mapping each English text to its translation, for the program and for the windows. `t()` in both, checked by `scripts/i18n/check.mjs` on every push ([languages](i18n.md)) |
 | Installers | `installers/` | Windows NSIS (one button), Linux AppImage and `install.sh` |
 | CI | `.github/` | Linux on pull requests; Windows and Linux on `main`; installers; release draft; security audit |
 

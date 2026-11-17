@@ -1420,3 +1420,33 @@ first (*Data & fields 0.5.0*), after two rounds of feedback.
 - **Steady while ticking.** In the mock-up, ticking the files to read a value in moved the panel: rows changed
   height and the newest/all choice came and went. Each file is now two fixed rows (name and time, then its value cut
   to one line), the *Used* mark keeps its room when hidden, and the choice is always there.
+
+### 0.6.0, 17 Nov 2026: languages
+
+Asked for: the windows and the connectors in French, Spanish, Italian and German (more later), packs updated with
+each push, and translations whose sense matches what each control does. Chosen with the person: all four languages
+in one round, the computer's language by default with a setting, and a check on every push.
+
+- **English as the key.** The code keeps its English text and each pack maps it to a translation (the gettext way),
+  rather than ids like `settings.general.title`. The code stays readable, a text missing from a pack shows in English
+  instead of an id, and a reviewer sees the English beside each translation. Two packs: the windows' texts
+  (`ui/src/lib/i18n/packs`) load before the window mounts; the program's own texts (connector errors, checks,
+  templates, tray, notifications) are embedded in the binary (`core/i18n/packs`) so they work before any window.
+- **Translated where shown.** Texts kept in tables or consts are only marked (`msg`, `msg!`) and translated where
+  they are shown, so a language change needs no restart of the program: Settings opens again in the new language,
+  the tray menu is rebuilt, and windows kept ready are let go. A window already on screen keeps its language until
+  it closes, so nothing typed in it is lost. Connector descriptions are translated at the app boundary
+  (`Describe::translated`). Logs and saved data stay in English.
+- **Whole sentences.** Sentences that were built from pieces ("your " + window, "file" + "s", "the " + time) were
+  rewritten as whole sentences or plurals: the other languages change order, gender and case. Where a phrase still
+  slots into a sentence (`Could not {what}`), each language has one form for it (the glossary in `i18n.md`).
+- **Sense over words.** Each text was translated beside the other texts of its file, and the code was opened where a
+  short label was ambiguous; the buttons the help texts name (*Test*, *Done*, *Sign in*) use the button's own
+  translation. Doing this turned up English that no longer matched the app (*Settings, Video*, *General, Safety*,
+  *Test connection*, the Claude connection's description) and labels never marked at all (the line on each sharing
+  button saying what it sends, block names, tick-box hints); those were fixed in English first.
+- **What stays English.** The names of buttons on other sites that help texts point at (they are what the person sees
+  there), service and product names, queries sent to a service, command lines and data-rule syntax.
+- **Checked on every push.** `scripts/i18n/check.mjs` reads the calls in both codebases and fails when a pack misses a
+  text, keeps a stale one, or a translation changes a `{name}`; it runs in the local gate and in CI. `--missing`,
+  `--merge` and `--where` make the update quick.

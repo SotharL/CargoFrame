@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   // Tags, like Jira's labels: chips with a × each, a box to type a new one (Enter, a comma or Tab
   // adds it; Backspace in the empty box takes the last one out), at most 25. Under the box: the
   // last five tags used here, and while typing, the service's own tags (Jira's labels) that match.
@@ -35,7 +36,7 @@
     if (!suggest) return;
     suggest()
       .then((o) => (listed = o))
-      .catch((e) => (problem = `The tags of the service could not be listed: ${String(e)}`));
+      .catch((e) => (problem = t('The tags of the service could not be listed: {problem}', { problem: String(e) })));
   });
 
   const has = (t: string) => tags.some((x) => x.toLowerCase() === t.toLowerCase());
@@ -94,10 +95,10 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="box" data-content onclick={() => input?.focus()}>
     <ul class="chips" aria-label={`${block.title || 'Tags'}: ${tags.length} tags`}>
-      {#each tags as t, i (t)}
+      {#each tags as item, i (item)}
         <li class="chip">
-          <span class="selectable">{t}</span>
-          <button type="button" class="x" aria-label={`Remove ${t}`} onclick={() => remove(i)}>×</button>
+          <span class="selectable">{item}</span>
+          <button type="button" class="x" aria-label={t('Remove {name}', { name: item })} onclick={() => remove(i)}>×</button>
         </li>
       {/each}
     </ul>
@@ -109,26 +110,26 @@
       onpaste={onPaste}
       onblur={() => typed.trim() && add(typed)}
       disabled={full}
-      placeholder={full ? `${MAX_TAGS} tags, the most` : tags.length ? 'Add a tag…' : 'Type a tag, then Enter'}
-      aria-label={`Add a tag to ${block.title || 'the tags'}`}
+      placeholder={full ? t('{max} tags, the most', { max: MAX_TAGS }) : tags.length ? t('Add a tag…') : t('Type a tag, then Enter')}
+      aria-label={t('Add a tag to {what}', { what: block.title || t('the tags') })}
       autocomplete="off"
     />
   </div>
   {#if matches.length}
-    <div class="offer" role="group" aria-label="Tags of the service">
+    <div class="offer" role="group" aria-label={t('Tags of the service')}>
       {#each matches as o (o.value)}
         <button type="button" class="pick" onmousedown={(e) => e.preventDefault()} onclick={() => add(o.value)}>{o.label}</button>
       {/each}
     </div>
   {:else if recents.length && !full}
-    <div class="offer" role="group" aria-label="Last tags used">
-      <span class="quiet">Last used:</span>
-      {#each recents as t (t)}
-        <button type="button" class="pick" onclick={() => add(t)}>{t}</button>
+    <div class="offer" role="group" aria-label={t('Last tags used')}>
+      <span class="quiet">{t('Last used:')}</span>
+      {#each recents as item (item)}
+        <button type="button" class="pick" onclick={() => add(item)}>{item}</button>
       {/each}
     </div>
   {/if}
-  {#if over > 0}<p class="quiet note">{over} more {over === 1 ? 'tag was' : 'tags were'} left out: a block holds {MAX_TAGS}.</p>{/if}
+  {#if over > 0}<p class="quiet note">{tn('{n} more tag was left out: a block holds {max}.', t('{n} more tags were left out: a block holds {max}.'), over, { max: MAX_TAGS })}</p>{/if}
   {#if problem}<p class="quiet note">{problem}</p>{/if}
 </div>
 

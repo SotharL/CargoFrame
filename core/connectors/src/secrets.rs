@@ -7,9 +7,9 @@ use std::sync::Mutex;
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum SecretError {
     /// There is no credential store to talk to (for example no keyring service on Linux).
-    #[error("No secure credential store is available: {0}")]
+    #[error("{}", cargoframe_i18n::tf("No secure credential store is available: {value}", &[("value", &.0)]))]
     Unavailable(String),
-    #[error("The credential store refused: {0}")]
+    #[error("{}", cargoframe_i18n::tf("The credential store refused: {value}", &[("value", &.0)]))]
     Failed(String),
 }
 

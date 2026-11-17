@@ -15,6 +15,7 @@ use crate::media::to_jpeg;
 use crate::model;
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, encode_component, Body, Method, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -70,7 +71,11 @@ impl InstagramConnector {
         ctx.secret("token")?
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty())
-            .ok_or_else(|| not_set_up("Instagram needs an access token: add it to the connection"))
+            .ok_or_else(|| {
+                not_set_up(t(
+                    "Instagram needs an access token: add it to the connection",
+                ))
+            })
     }
 
     fn graph(&self, ctx: &Ctx, method: Method, path: &str) -> Result<Request, SendError> {
@@ -88,15 +93,20 @@ impl InstagramConnector {
             return Err(refusal(&resp, what));
         }
         resp.json().ok_or_else(|| {
-            invalid(format!(
-                "Instagram answered {what} with something unreadable"
+            invalid(tf(
+                "Instagram answered {what} with something unreadable",
+                &[("what", &t(what))],
             ))
         })
     }
 
     /// The account's id and name.
     fn me(&self, ctx: &Ctx) -> Result<(String, String), SendError> {
-        let v = self.get_json(ctx, "/me?fields=user_id,username", "check the sign-in")?;
+        let v = self.get_json(
+            ctx,
+            "/me?fields=user_id,username",
+            msg!("check the sign-in"),
+        )?;
         let id = v
             .get("user_id")
             .or_else(|| v.get("id"))
@@ -105,11 +115,11 @@ impl InstagramConnector {
                     .map(String::from)
                     .or_else(|| i.as_u64().map(|n| n.to_string()))
             })
-            .ok_or_else(|| invalid("Instagram did not say which account the token is for"))?;
+            .ok_or_else(|| invalid(t("Instagram did not say which account the token is for")))?;
         let name = v
             .get("username")
             .and_then(Value::as_str)
-            .unwrap_or("your account")
+            .unwrap_or(t("your account"))
             .to_string();
         Ok((id, name))
     }
@@ -149,15 +159,13 @@ impl InstagramConnector {
             self.settings.public_url.trim(),
         );
         if !upload.contains("{name}") || !public.contains("{name}") {
-            return Err(not_set_up(
-                "Instagram needs the upload address and the public address of your picture server, each with {name} in it",
-            ));
+            return Err(not_set_up(t("Instagram needs the upload address and the public address of your picture server, each with {name} in it")));
         }
         let name = format!("cargoframe-{}.jpg", random_hex(8));
         let upload = upload.replace("{name}", &name);
         let public = public.replace("{name}", &name);
-        check_url(&upload).map_err(|e| invalid(format!("The upload address: {e}")))?;
-        check_url(&public).map_err(|e| invalid(format!("The public address: {e}")))?;
+        check_url(&upload).map_err(|e| invalid(tf("The upload address: {e}", &[("e", &e)])))?;
+        check_url(&public).map_err(|e| invalid(tf("The public address: {e}", &[("e", &e)])))?;
         let mut req = Request::new(Method::Put, upload)
             .timeout(ctx.timeout)
             .body(Body::Bytes {
@@ -170,9 +178,7 @@ impl InstagramConnector {
                 .secret("host_key")?
                 .filter(|k| !k.trim().is_empty())
                 .ok_or_else(|| {
-                    not_set_up(format!(
-                        "The picture server needs its key (sent as {header}): add it to the connection"
-                    ))
+                    not_set_up(tf("The picture server needs its key (sent as {header}): add it to the connection", &[("header", &header)]))
                 })?;
             req = req.header(header, key.trim());
         }
@@ -180,7 +186,7 @@ impl InstagramConnector {
         if !resp.is_success() {
             return Err(from_response(
                 &resp,
-                "put the picture on your picture server",
+                msg!("put the picture on your picture server"),
             ));
         }
         Ok(public)
@@ -201,7 +207,7 @@ fn refusal(resp: &cargoframe_net::Response, what: &str) -> SendError {
         .and_then(|v| v.pointer("/error/code").and_then(Value::as_u64));
     if code == Some(190) {
         err.kind = FailureKind::AuthExpired;
-        err.message = "The Instagram token has expired: make a new one in the Meta app dashboard and paste it into the connection".into();
+        err.message = t("The Instagram token has expired: make a new one in the Meta app dashboard and paste it into the connection").into();
     }
     err
 }
@@ -212,19 +218,19 @@ impl Connector for InstagramConnector {
             fields: vec![
                 FieldSpec {
                     key: "caption",
-                    label: "Caption",
-                    hint: "Up to 2,200 characters. Defaults to the prompt, then the window title",
+                    label: msg!("Caption"),
+                    hint: msg!("Up to 2,200 characters. Defaults to the prompt, then the window title"),
                     list: None,
                 },
                 FieldSpec {
                     key: "hashtags",
-                    label: "Hashtags",
-                    hint: "Added at the end of the caption as #tags. Separate several with commas",
+                    label: msg!("Hashtags"),
+                    hint: msg!("Added at the end of the caption as #tags. Separate several with commas"),
                     list: None,
                 },
             ],
             lists: Vec::new(),
-            summary: "Posts the screenshot with a caption to your Instagram professional account. The picture is first put on your own picture server, because Instagram only takes pictures from a public address. Files and videos are not sent.".into(),
+            summary: msg!("Posts the screenshot with a caption to your Instagram professional account. The picture is first put on your own picture server, because Instagram only takes pictures from a public address. Files and videos are not sent.").into(),
         }
     }
 
@@ -243,18 +249,19 @@ impl Connector for InstagramConnector {
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
         let (_, name) = self.me(ctx)?;
         self.renew(ctx);
-        Ok(format!("Signed in to Instagram as @{name}"))
+        Ok(tf("Signed in to Instagram as @{name}", &[("name", &name)]))
     }
 
     fn options(&self, _ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
-        Err(invalid(format!("Instagram has no list called \"{list}\"")))
+        Err(invalid(tf(
+            "Instagram has no list called \"{list}\"",
+            &[("list", &list)],
+        )))
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
         if ctx.progress.done("instagram.published") {
-            return Err(invalid(
-                "An earlier attempt may already have posted this. Check your Instagram profile before trying again",
-            ));
+            return Err(invalid(t("An earlier attempt may already have posted this. Check your Instagram profile before trying again")));
         }
         let mut notes = Vec::new();
         let picture = payload
@@ -263,18 +270,21 @@ impl Connector for InstagramConnector {
             .filter(|a| a.mime.starts_with("image/"))
             .or(payload.still.as_ref())
             .ok_or_else(|| {
-                invalid("An Instagram post needs a picture: add a screenshot to the layout")
+                invalid(t(
+                    "An Instagram post needs a picture: add a screenshot to the layout",
+                ))
             })?;
         if payload
             .image
             .as_ref()
             .is_some_and(|a| a.mime.starts_with("video/"))
         {
-            notes.push("Instagram gets the screenshot, not the recording".to_string());
+            notes.push(t("Instagram gets the screenshot, not the recording").to_string());
         }
         if payload.files_zip.is_some() {
-            notes
-                .push("Instagram cannot take files, so the ticked files were not sent".to_string());
+            notes.push(
+                t("Instagram cannot take files, so the ticked files were not sent").to_string(),
+            );
         }
         let source = payload
             .value("caption")
@@ -283,7 +293,10 @@ impl Connector for InstagramConnector {
             .unwrap_or_else(|| payload.title.clone());
         let (caption, cut) = crate::payload::with_hashtags(&source, payload, MAX_CAPTION);
         if cut {
-            notes.push(format!("The caption was cut to {MAX_CAPTION} characters"));
+            notes.push(tf(
+                "The caption was cut to {MAX_CAPTION} characters",
+                &[("MAX_CAPTION", &MAX_CAPTION)],
+            ));
         }
 
         let (account, name) = self.me(ctx)?;
@@ -294,7 +307,9 @@ impl Connector for InstagramConnector {
             None => {
                 let jpeg = to_jpeg(picture, MAX_PICTURE).map_err(invalid)?;
                 if jpeg.shrunk {
-                    notes.push("The picture was made smaller to fit Instagram's 8 MB".to_string());
+                    notes.push(
+                        t("The picture was made smaller to fit Instagram's 8 MB").to_string(),
+                    );
                 }
                 let url = self.host(ctx, &jpeg.picture.data)?;
                 ctx.progress.set("instagram.picture", &url);
@@ -313,12 +328,12 @@ impl Connector for InstagramConnector {
                     ));
                 let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
                 if !resp.is_success() {
-                    return Err(refusal(&resp, "give the picture to Instagram"));
+                    return Err(refusal(&resp, msg!("give the picture to Instagram")));
                 }
                 let id = resp
                     .json()
                     .and_then(|v| v.get("id").and_then(Value::as_str).map(String::from))
-                    .ok_or_else(|| invalid("Instagram did not say which draft it made"))?;
+                    .ok_or_else(|| invalid(t("Instagram did not say which draft it made")))?;
                 ctx.progress.set("instagram.container", &id);
                 id
             }
@@ -333,7 +348,7 @@ impl Connector for InstagramConnector {
             let v = self.get_json(
                 ctx,
                 &format!("/{container}?fields=status_code"),
-                "ask whether Instagram has the picture",
+                msg!("ask whether Instagram has the picture"),
             )?;
             match v.get("status_code").and_then(Value::as_str) {
                 Some("FINISHED") => {
@@ -342,9 +357,7 @@ impl Connector for InstagramConnector {
                 }
                 Some("ERROR") | Some("EXPIRED") => {
                     ctx.progress.clear("instagram.container");
-                    return Err(invalid(
-                        "Instagram could not fetch the picture from your picture server: check that its public address opens in a browser without signing in",
-                    ));
+                    return Err(invalid(t("Instagram could not fetch the picture from your picture server: check that its public address opens in a browser without signing in")));
                 }
                 _ => {}
             }
@@ -352,7 +365,7 @@ impl Connector for InstagramConnector {
         if !ready {
             return Err(SendError::new(
                 FailureKind::Timeout,
-                "Instagram is still fetching the picture; try again in a minute",
+                t("Instagram is still fetching the picture; try again in a minute"),
             ));
         }
 
@@ -366,10 +379,7 @@ impl Connector for InstagramConnector {
             Err(e) => {
                 let mut err = from_net(&e);
                 err.kind = FailureKind::Rejected(0);
-                err.message = format!(
-                    "{}. Instagram may or may not have posted it, so CargoFrame did not retry: check your profile",
-                    err.message
-                );
+                err.message = tf("{message}. Instagram may or may not have posted it, so CargoFrame did not retry: check your profile", &[("message", &err.message)]);
                 return Err(err);
             }
         };
@@ -377,7 +387,7 @@ impl Connector for InstagramConnector {
             if resp.status < 500 {
                 ctx.progress.clear("instagram.published");
             }
-            return Err(refusal(&resp, "publish the post"));
+            return Err(refusal(&resp, msg!("publish the post")));
         }
         let media = resp
             .json()
@@ -387,7 +397,7 @@ impl Connector for InstagramConnector {
                 self.get_json(
                     ctx,
                     &format!("/{m}?fields=permalink"),
-                    "find the post's address",
+                    msg!("find the post's address"),
                 )
                 .ok()
             })
@@ -395,7 +405,7 @@ impl Connector for InstagramConnector {
             .filter(|u| check_url(u).is_ok());
         self.renew(ctx);
         Ok(SendOutcome {
-            summary: format!("Posted to Instagram as @{name}"),
+            summary: tf("Posted to Instagram as @{name}", &[("name", &name)]),
             url,
             notes,
             place: None,

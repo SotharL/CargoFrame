@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../i18n/index.svelte';
   // A drop down you can search: type to narrow the list, arrows and Enter to pick, Esc to close.
   // `free` lets the person keep what they typed when it is not in the list (a field key, say);
   // without it the value is always one of the options. `also` holds choices that are not listed
@@ -11,11 +12,11 @@
     also = [],
     value = $bindable(''),
     free = false,
-    placeholder = 'Type to search…',
+    placeholder = t('Type to search…'),
     label,
     id,
     disabled = false,
-    emptyText = 'Nothing matches',
+    emptyText = t('Nothing matches'),
     onchange,
   }: {
     options: readonly ComboOption[];
@@ -190,7 +191,7 @@
           {#if o.note}<span class="note">{o.note}</span>{/if}
         </li>
       {:else}
-        <li class="none" role="presentation">{free && typing && query.trim() ? `Use “${query.trim()}”` : emptyText}</li>
+        <li class="none" role="presentation">{free && typing && query.trim() ? t('Use “{text}”', { text: query.trim() }) : emptyText}</li>
       {/each}
     </ul>
   {/if}

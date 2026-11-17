@@ -5,6 +5,7 @@ fn main() {
         tauri_build::AppManifest::new().commands(&[
             "app_info",
             "get_general",
+            "get_language",
             "get_data_report",
             "clean_data",
             "reset_everything",

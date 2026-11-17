@@ -11,6 +11,7 @@ use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use base64::engine::general_purpose::{STANDARD, URL_SAFE_NO_PAD};
 use base64::Engine;
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{encode_component, Body, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde::{Deserialize, Serialize};
@@ -134,9 +135,11 @@ fn parse_tokens(
     now: u64,
     previous_refresh: Option<&str>,
 ) -> Result<Tokens, SendError> {
-    let json = resp
-        .json()
-        .ok_or_else(|| invalid("The service answered the sign-in with something unreadable"))?;
+    let json = resp.json().ok_or_else(|| {
+        invalid(t(
+            "The service answered the sign-in with something unreadable",
+        ))
+    })?;
     if let Some(err) = json.get("error").and_then(|e| e.as_str()) {
         let detail = json
             .get("error_description")
@@ -154,14 +157,17 @@ fn parse_tokens(
         };
         return Err(SendError::new(
             kind,
-            format!("Sign-in refused ({err}{detail})"),
+            tf(
+                "Sign-in refused ({err}{detail})",
+                &[("err", &err), ("detail", &detail)],
+            ),
         ));
     }
     let access = json
         .get("access_token")
         .and_then(|t| t.as_str())
         .filter(|t| !t.is_empty())
-        .ok_or_else(|| invalid("The service did not return an access token"))?;
+        .ok_or_else(|| invalid(t("The service did not return an access token")))?;
     let refresh = json
         .get("refresh_token")
         .and_then(|t| t.as_str())
@@ -251,13 +257,28 @@ pub fn authorization_url(
     format!("{}{sep}{query}", client.auth_url)
 }
 
-const DONE_PAGE: &str = "<!doctype html><meta charset=utf-8><title>CargoFrame</title>\
+/// The page the browser shows when the sign-in comes back, in the language in use.
+fn page(title: &str, text: &str) -> String {
+    format!(
+        "<!doctype html><meta charset=utf-8><title>CargoFrame</title>\
 <body style=\"font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem\">\
-<h1>You can close this tab</h1><p>CargoFrame is now signed in. Go back to the CargoFrame window.</p></body>";
+<h1>{title}</h1><p>{text}</p></body>"
+    )
+}
 
-const FAILED_PAGE: &str = "<!doctype html><meta charset=utf-8><title>CargoFrame</title>\
-<body style=\"font-family:system-ui,sans-serif;max-width:32rem;margin:4rem auto;padding:0 1rem\">\
-<h1>Sign-in did not finish</h1><p>Go back to the CargoFrame window for details.</p></body>";
+fn done_page() -> String {
+    page(
+        t("You can close this tab"),
+        t("CargoFrame is now signed in. Go back to the CargoFrame window."),
+    )
+}
+
+fn failed_page() -> String {
+    page(
+        t("Sign-in did not finish"),
+        t("Go back to the CargoFrame window for details."),
+    )
+}
 
 fn respond(stream: &mut TcpStream, status: &str, body: &str) {
     let msg = format!(
@@ -332,16 +353,16 @@ fn wait_for_code(
 ) -> Result<String, SendError> {
     listener
         .set_nonblocking(true)
-        .map_err(|e| invalid(format!("Cannot wait for the sign-in: {e}")))?;
+        .map_err(|e| invalid(tf("Cannot wait for the sign-in: {e}", &[("e", &e)])))?;
     let started = Instant::now();
     loop {
         if cancelled() {
-            return Err(invalid("Sign-in cancelled"));
+            return Err(invalid(t("Sign-in cancelled")));
         }
         if started.elapsed() > wait {
             return Err(SendError::new(
                 FailureKind::Timeout,
-                "Sign-in timed out: the browser page was not completed in time",
+                t("Sign-in timed out: the browser page was not completed in time"),
             ));
         }
         let mut stream = match listener.accept() {
@@ -350,7 +371,12 @@ fn wait_for_code(
                 std::thread::sleep(Duration::from_millis(40));
                 continue;
             }
-            Err(e) => return Err(invalid(format!("Cannot wait for the sign-in: {e}"))),
+            Err(e) => {
+                return Err(invalid(tf(
+                    "Cannot wait for the sign-in: {e}",
+                    &[("e", &e)],
+                )))
+            }
         };
         let _ = stream.set_nonblocking(false);
         let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
@@ -374,33 +400,36 @@ fn wait_for_code(
             || (answers("code") || answers("state") || answers("error"));
         if method != "GET" || path != redirect.path() || !is_answer {
             // a favicon request, a probe: not the callback
-            respond(&mut stream, "404 Not Found", "Not found");
+            respond(&mut stream, "404 Not Found", t("Not found"));
             continue;
         }
         let get = |k: &str| pairs.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
         if get("state") != Some(state) {
-            respond(&mut stream, "400 Bad Request", FAILED_PAGE);
-            return Err(invalid(
+            respond(&mut stream, "400 Bad Request", &failed_page());
+            return Err(invalid(t(
                 "The sign-in answer could not be verified (wrong state); try again",
-            ));
+            )));
         }
         if let Some(err) = get("error") {
-            respond(&mut stream, "200 OK", FAILED_PAGE);
+            respond(&mut stream, "200 OK", &failed_page());
             let why = get("error_description").map(first_line).unwrap_or_default();
             return Err(invalid(if why.is_empty() {
-                format!("The service refused the sign-in ({err})")
+                tf("The service refused the sign-in ({err})", &[("err", &err)])
             } else {
-                format!("The service refused the sign-in ({err}): {why}")
+                tf(
+                    "The service refused the sign-in ({err}): {why}",
+                    &[("err", &err), ("why", &why)],
+                )
             }));
         }
         match get("code") {
             Some(code) if !code.is_empty() => {
-                respond(&mut stream, "200 OK", DONE_PAGE);
+                respond(&mut stream, "200 OK", &done_page());
                 return Ok(code.to_string());
             }
             _ => {
-                respond(&mut stream, "400 Bad Request", FAILED_PAGE);
-                return Err(invalid("The sign-in answer had no code"));
+                respond(&mut stream, "400 Bad Request", &failed_page());
+                return Err(invalid(t("The sign-in answer had no code")));
             }
         }
     }
@@ -411,10 +440,11 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
     let port = client.redirect_port.unwrap_or(0);
     let listener = TcpListener::bind(("127.0.0.1", port)).map_err(|e| {
         invalid(if port == 0 {
-            format!("Cannot listen for the sign-in on this computer: {e}")
+            tf("Cannot listen for the sign-in on this computer: {e}", &[("e", &e)])
         } else {
-            format!(
-                "Port {port} is in use, so the sign-in answer cannot be received. Close what uses it and try again ({e})"
+            tf(
+                "Port {port} is in use, so the sign-in answer cannot be received. Close what uses it and try again ({e})",
+                &[("port", &port), ("e", &e)],
             )
         })
     })?;
@@ -425,15 +455,15 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
     let redirect_uri = client.redirect.uri(port);
     let state = random_hex(16);
     if state.is_empty() {
-        return Err(invalid(
+        return Err(invalid(t(
             "This computer could not provide secure random numbers",
-        ));
+        )));
     }
     let pkce = if client.pkce { pkce_pair() } else { None };
     if client.pkce && pkce.is_none() {
-        return Err(invalid(
+        return Err(invalid(t(
             "This computer could not provide secure random numbers",
-        ));
+        )));
     }
     let url = authorization_url(
         client,
@@ -443,7 +473,7 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
     );
     ctx.browser
         .open(&url)
-        .map_err(|e| invalid(format!("Could not open the browser: {e}")))?;
+        .map_err(|e| invalid(tf("Could not open the browser: {e}", &[("e", &e)])))?;
 
     let code = wait_for_code(
         &listener,
@@ -470,7 +500,7 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
         // Services put the reason in the body (`invalid_grant`); show it.
         match parse_tokens(&resp, (ctx.now)(), None) {
             Err(e) => return Err(e),
-            Ok(_) => return Err(from_response(&resp, "finish the sign-in")),
+            Ok(_) => return Err(from_response(&resp, msg!("finish the sign-in"))),
         }
     };
     store_tokens(ctx, &tokens)?;
@@ -480,7 +510,7 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
 /// A valid access token, renewed first if it is about to expire.
 pub fn access_token(client: &OAuthClient, ctx: &Ctx) -> Result<String, SendError> {
     let tokens = load_tokens(ctx)?
-        .ok_or_else(|| not_set_up("Not signed in yet: open Connections and press Sign in"))?;
+        .ok_or_else(|| not_set_up(t("Not signed in yet: open Connections and press Sign in")))?;
     let now = (ctx.now)();
     if tokens.expires_at > now + 60 {
         return Ok(tokens.access_token);
@@ -488,7 +518,7 @@ pub fn access_token(client: &OAuthClient, ctx: &Ctx) -> Result<String, SendError
     let Some(refresh) = tokens.refresh_token.clone() else {
         return Err(SendError::new(
             FailureKind::AuthExpired,
-            "The sign-in has expired: press Sign in again",
+            t("The sign-in has expired: press Sign in again"),
         ));
     };
     let req = request_with_client(
@@ -507,7 +537,7 @@ pub fn access_token(client: &OAuthClient, ctx: &Ctx) -> Result<String, SendError
             return Err(if resp.is_success() {
                 e
             } else if matches!(e.kind, FailureKind::Rejected(_)) {
-                from_response(&resp, "renew the sign-in")
+                from_response(&resp, msg!("renew the sign-in"))
             } else {
                 e
             })

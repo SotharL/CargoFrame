@@ -1,5 +1,6 @@
 import type { Api } from '../lib/ipc';
 import type { DropdownOption, DropdownState, SessionView } from '../lib/types';
+import { t } from '../lib/i18n/index.svelte';
 
 /** What a dropdown starts on, apart from its first option. */
 export interface Memory {
@@ -26,7 +27,7 @@ export function withOptions(
     status: 'ready',
     options,
     selected: keep ? chosen : start,
-    message: options.length === 0 ? 'The service returned no options' : null,
+    message: options.length === 0 ? t('The service returned no options') : null,
   };
 }
 
@@ -41,7 +42,7 @@ export function withFailure(
     status: 'needs_connection',
     options: [],
     selected: null,
-    message: reconnect ? `${message} Reconnect it in Settings.` : message,
+    message: reconnect ? t('{message} Reconnect it in Settings.', { message }) : message,
   };
 }
 

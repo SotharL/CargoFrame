@@ -3,20 +3,21 @@
 // `*italic*`, `__underline__`, `` `code` ``, and `> `, `- `, `1. ` at the start of a line); the
 // code that sends it writes them the way each service wants (core/connectors/src/richtext.rs).
 import type { Block, ServiceKind, SessionView } from '../../lib/types';
+import { msg, t, translated } from '../../lib/i18n/index.svelte';
 
 export type Mark = 'bold' | 'italic' | 'underline' | 'code' | 'quote' | 'bullets' | 'numbers' | 'codeblock' | 'table';
 
-export const MARKS: { mark: Mark; label: string; text: string; hint: string }[] = [
-  { mark: 'bold', label: 'Bold', text: 'B', hint: 'Bold (Ctrl+B)' },
-  { mark: 'italic', label: 'Italic', text: 'I', hint: 'Italic (Ctrl+I)' },
-  { mark: 'underline', label: 'Underline', text: 'U', hint: 'Underline (Ctrl+U)' },
-  { mark: 'code', label: 'Code', text: '</>', hint: 'Code (Ctrl+E)' },
-  { mark: 'quote', label: 'Quote', text: '❝', hint: 'Quote (Ctrl+Shift+9)' },
-  { mark: 'bullets', label: 'Bulleted list', text: '•', hint: 'Bulleted list (Ctrl+Shift+8)' },
-  { mark: 'numbers', label: 'Numbered list', text: '1.', hint: 'Numbered list (Ctrl+Shift+7)' },
-  { mark: 'codeblock', label: 'Code block', text: '{ }', hint: 'Code block: lines kept exactly as they are' },
-  { mark: 'table', label: 'Table', text: '▦', hint: 'Table' },
-];
+export const MARKS: { mark: Mark; label: string; text: string; hint: string }[] = translated([
+  { mark: 'bold', label: msg('Bold'), text: 'B', hint: msg('Bold (Ctrl+B)') },
+  { mark: 'italic', label: msg('Italic'), text: 'I', hint: msg('Italic (Ctrl+I)') },
+  { mark: 'underline', label: msg('Underline'), text: 'U', hint: msg('Underline (Ctrl+U)') },
+  { mark: 'code', label: msg('Code'), text: '</>', hint: msg('Code (Ctrl+E)') },
+  { mark: 'quote', label: msg('Quote'), text: '❝', hint: msg('Quote (Ctrl+Shift+9)') },
+  { mark: 'bullets', label: msg('Bulleted list'), text: '•', hint: msg('Bulleted list (Ctrl+Shift+8)') },
+  { mark: 'numbers', label: msg('Numbered list'), text: '1.', hint: msg('Numbered list (Ctrl+Shift+7)') },
+  { mark: 'codeblock', label: msg('Code block'), text: '{ }', hint: msg('Code block: lines kept exactly as they are') },
+  { mark: 'table', label: msg('Table'), text: '▦', hint: msg('Table') },
+]);
 
 /** The mark a key press asks for: Ctrl+B, I, U, E, and Ctrl+Shift+9, 8, 7 (as in Slack and Docs). */
 export function shortcut(e: Pick<KeyboardEvent, 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey' | 'key' | 'code'>): Mark | null {
@@ -144,7 +145,7 @@ function lines(text: string, start: number, end: number, mark: Mark): Edit {
 }
 
 /** A table to start from: a head and one empty row. */
-export const NEW_TABLE = '| Column 1 | Column 2 |\n| --- | --- |\n|  |  |';
+export const NEW_TABLE = msg('| Column 1 | Column 2 |\n| --- | --- |\n|  |  |');
 
 /** Put `block` on lines of its own where the cursor is: after the line it is in. */
 export function insertBlock(text: string, at: number, block: string): Edit {
@@ -190,7 +191,7 @@ function codeBlock(text: string, start: number, end: number): Edit {
 
 /** What pressing a button does to the text, given the selection. */
 export function applyMark(text: string, start: number, end: number, mark: Mark): Edit {
-  if (mark === 'table') return insertBlock(text, end, NEW_TABLE);
+  if (mark === 'table') return insertBlock(text, end, t(NEW_TABLE));
   if (mark === 'codeblock') return codeBlock(text, start, end);
   const m = WRAP[mark];
   return m ? wrap(text, start, end, m) : lines(text, start, end, mark);

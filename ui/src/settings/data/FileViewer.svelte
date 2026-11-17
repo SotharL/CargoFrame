@@ -18,6 +18,7 @@
 </script>
 
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // A file of the last capture, one 20px line per line of the file with scroll bars both ways,
   // and a search like Ctrl+F. Only the lines in view are drawn, so a large log stays quick.
   // A click or a drag on a line is handed to `onselect` as where it is on that line.
@@ -204,13 +205,13 @@
   class="viewer"
   class:over
   data-tour="data.viewer"
-  aria-label="The file"
+  aria-label={t('The file')}
   onkeydown={onKey}
   ondragover={(e) => { e.preventDefault(); over = true; }}
   ondragleave={() => (over = false)}
   ondrop={onDrop}
 >
-  <div class="tabs" role="tablist" aria-label="Files of the last capture">
+  <div class="tabs" role="tablist" aria-label={t('Files of the last capture')}>
     {#each files as f (f.id)}
       <button
         type="button"
@@ -220,7 +221,7 @@
         onclick={() => { current = f.id; hit = 0; top = 0; if (scroller) scroller.scrollTop = 0; }}
       >{f.name}{#if q}<span class="count" class:none={!counts(f)}>{counts(f)}</span>{/if}</button>
     {/each}
-    <button type="button" class="open" onclick={() => picker?.click()}>＋ Open or drop a file</button>
+    <button type="button" class="open" onclick={() => picker?.click()}>{t('＋ Open or drop a file')}</button>
     <input bind:this={picker} type="file" multiple hidden onchange={(e) => { const l = [...(e.currentTarget.files ?? [])]; e.currentTarget.value = ''; if (l.length) onopen(l); }} />
   </div>
 
@@ -231,32 +232,32 @@
       bind:value={q}
       oninput={() => (hit = 0)}
       onkeydown={onSearchKey}
-      placeholder="Find in the files (Ctrl+F)"
-      aria-label="Find in the files"
+      placeholder={t('Find in the files (Ctrl+F)')}
+      aria-label={t('Find in the files')}
     />
-    <span class="where" aria-live="polite">{q ? (hitsHere.length ? `${at + 1} of ${hitsHere.length}` : 'Not here') : ''}</span>
-    <button type="button" class="tiny" aria-label="Previous" disabled={!hitsHere.length} onclick={() => step(-1)}>↑</button>
-    <button type="button" class="tiny" aria-label="Next" disabled={!hitsHere.length} onclick={() => step(1)}>↓</button>
-    <label class="only"><input type="checkbox" bind:checked={only} /> Only lines with it</label>
+    <span class="where" aria-live="polite">{q ? (hitsHere.length ? `${at + 1} of ${hitsHere.length}` : t('Not here')) : ''}</span>
+    <button type="button" class="tiny" aria-label={t('Previous')} disabled={!hitsHere.length} onclick={() => step(-1)}>↑</button>
+    <button type="button" class="tiny" aria-label={t('Next')} disabled={!hitsHere.length} onclick={() => step(1)}>↓</button>
+    <label class="only"><input type="checkbox" bind:checked={only} /> {t('Only lines with it')}</label>
   </div>
 
   {#if editing}
     <div class="editing" role="status">
       <span>{editing}</span>
-      <button type="button" onclick={() => oncancel?.()}>Cancel</button>
+      <button type="button" onclick={() => oncancel?.()}>{t('Cancel')}</button>
     </div>
   {/if}
 
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div class="lines" bind:this={scroller} style:height="{HEIGHT}px" onscroll={(e) => (top = e.currentTarget.scrollTop)} onmouseup={onUp}>
     {#if !file}
-      <p class="note">No file yet: open or drop one.</p>
+      <p class="note">{t('No file yet: open or drop one.')}</p>
     {:else if file.lines === null}
-      <p class="note">Reading {file.name}…</p>
+      <p class="note">{t('Reading {name}…', { name: file.name })}</p>
     {:else if file.problem}
       <p class="note">{file.problem}</p>
     {:else if lines.length === 0}
-      <p class="note">{file.name} is empty.</p>
+      <p class="note">{t('{name} is empty.', { name: file.name })}</p>
     {:else}
       <div class="inner" style:min-width="calc({widest}ch + 70px)" style:padding-top="{first * ROW}px" style:padding-bottom="{(shown.length - last) * ROW}px">
         {#each shown.slice(first, last) as n (n)}
@@ -266,12 +267,12 @@
     {/if}
   </div>
   <p class="legend">
-    {#if file?.cut}<span>Only the end of this large file is here.</span>{/if}
-    <span><span class="sel">Selected</span></span>
-    <span><span class="found">Also found</span></span>
-    <span><span class="hit">Search</span></span>
-    <span><span class="anchor">Lines it looks in</span></span>
-    {#if file && file.modified_ms}<span class="changed">changed {changedAt(file.modified_ms)}</span>{/if}
+    {#if file?.cut}<span>{t('Only the end of this large file is here.')}</span>{/if}
+    <span><span class="sel">{t('Selected')}</span></span>
+    <span><span class="found">{t('Also found')}</span></span>
+    <span><span class="hit">{t('Search')}</span></span>
+    <span><span class="anchor">{t('Lines it looks in')}</span></span>
+    {#if file && file.modified_ms}<span class="changed">{t('changed {time}', { time: changedAt(file.modified_ms) })}</span>{/if}
   </p>
 </section>
 

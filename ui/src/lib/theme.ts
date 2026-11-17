@@ -1,4 +1,5 @@
 import type { ThemeChoice } from './types';
+import { msg } from './i18n/index.svelte';
 
 /** `system` follows the operating system; the other two force a theme. */
 export function applyTheme(choice: ThemeChoice, root: HTMLElement = document.documentElement): void {
@@ -14,12 +15,12 @@ export const DEFAULT_ACCENT = '#4f8ee0';
 
 /** A few suggestions for the accent; each stays visible (3:1) on both the light and the dark page. */
 export const ACCENT_PRESETS = [
-  { name: 'Blue', hex: '#4f8ee0' },
-  { name: 'Orange', hex: '#e8590c' },
-  { name: 'Teal', hex: '#1f9d8f' },
-  { name: 'Green', hex: '#3d9a4b' },
-  { name: 'Purple', hex: '#8b6fe0' },
-  { name: 'Pink', hex: '#d6458f' },
+  { name: msg('Blue'), hex: '#4f8ee0' },
+  { name: msg('Orange'), hex: '#e8590c' },
+  { name: msg('Teal'), hex: '#1f9d8f' },
+  { name: msg('Green'), hex: '#3d9a4b' },
+  { name: msg('Purple'), hex: '#8b6fe0' },
+  { name: msg('Pink'), hex: '#d6458f' },
 ];
 
 /** The page backgrounds of the two themes, for telling when an accent is hard to see. */

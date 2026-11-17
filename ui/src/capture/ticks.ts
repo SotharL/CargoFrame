@@ -3,6 +3,7 @@
 // the same Rust code that does the sharing); the person can clear a box, or tick one the button
 // has switched off, for this capture only. A box that cannot be ticked says why.
 import type { Block, BlockReach, ServiceKind, SessionView } from '../lib/types';
+import { t } from '../lib/i18n/index.svelte';
 
 type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
 
@@ -57,22 +58,26 @@ export function setTick(ticks: Ticks, buttonId: string, blockId: string, on: boo
 
 /** What a button says it is called: a button that only saves a zip reads "Save locally". */
 export function buttonLabel(view: SessionView, button: SharingBlock): string {
-  return view.sharing[button.id]?.mode === 'save_locally' ? 'Save locally' : button.label || 'Share';
+  return view.sharing[button.id]?.mode === 'save_locally' ? t('Save locally') : button.label || t('Share');
 }
 
 function describe(r: BlockReach | undefined, label: string, on: boolean): { title: string; disabled: boolean } {
-  if (!r) return { title: `${label} does not use this block`, disabled: true };
+  if (!r) return { title: t('{label} does not use this block', { label }), disabled: true };
   switch (r.state) {
     case 'sent':
-      if (r.role === 'field') return { title: `${label} ${on ? 'sends this' : 'leaves this out'} (the “${r.field}” field)`, disabled: false };
-      if (r.role === 'prompt') return { title: `${label} ${on ? 'sends this as the prompt' : 'leaves out the prompt'}`, disabled: false };
-      return { title: `${label} ${on ? 'sends this' : 'leaves this out'}`, disabled: false };
+      if (r.role === 'field')
+        return {
+          title: on ? t('{label} sends this (the “{field}” field)', { label, field: r.field ?? '' }) : t('{label} leaves this out (the “{field}” field)', { label, field: r.field ?? '' }),
+          disabled: false,
+        };
+      if (r.role === 'prompt') return { title: on ? t('{label} sends this as the prompt', { label }) : t('{label} leaves out the prompt', { label }), disabled: false };
+      return { title: on ? t('{label} sends this', { label }) : t('{label} leaves this out', { label }), disabled: false };
     case 'switched_off':
-      return { title: `${label} leaves this out. Tick to send it this time`, disabled: false };
+      return { title: t('{label} leaves this out. Tick to send it this time', { label }), disabled: false };
     case 'cannot_send':
-      return { title: `${label} cannot send this: ${r.why}`, disabled: true };
+      return { title: t('{label} cannot send this: {why}', { label, why: r.why }), disabled: true };
     default:
-      return { title: `${label} has no field for this. Set it up in the layout`, disabled: true };
+      return { title: t('{label} has no field for this. Set it up in the layout', { label }), disabled: true };
   }
 }
 
@@ -101,7 +106,7 @@ export function boxesFor(view: SessionView, blockId: string, ticks: Ticks): Tick
       checked: on,
       locked,
       disabled,
-      title: locked ? `${title}. It is required, so it stays` : title,
+      title: locked ? t('{title}. It is required, so it stays', { title }) : title,
       badge: same ? String(kinds.slice(0, i + 1).filter((k) => k === kind).length) : null,
     };
   });

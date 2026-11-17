@@ -10,6 +10,16 @@ export interface General {
   accent: string;
   /** Which notices CargoFrame may show. */
   notifications: Notifications;
+  /** 'system' (the computer's language) or a code: 'fr'. Absent in files from before 0.6.0. */
+  language?: string;
+}
+
+/** The language CargoFrame speaks now, and the ones it can. */
+export interface LanguageInfo {
+  code: string;
+  /** The computer's language, as the system says it ('fr-FR'). */
+  system: string | null;
+  languages: [string, string][];
 }
 
 /** A notice can show up inside a recording of the screen, so each kind can be switched off. */

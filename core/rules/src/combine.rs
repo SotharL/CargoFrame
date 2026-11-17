@@ -11,6 +11,7 @@
 use crate::model::{Choice, Cond, CondTest, Find, Rule};
 use crate::run::{Outcome, Report};
 use cargoframe_context::template;
+use cargoframe_i18n::t;
 use std::collections::BTreeMap;
 
 /// `{{rule.shelf}}`, `{shelf}`, `rule.shelf` or `shelf` → the name the capture knows it by.
@@ -92,7 +93,7 @@ pub fn combine_values<'a>(
                 None => Outcome {
                     value: step.fallback.clone(),
                     problem: Some(
-                        "none of its choices fits: a value it needs was not found".into(),
+                        t("none of its choices fits: a value it needs was not found").into(),
                     ),
                     used_fallback: step.fallback.is_some(),
                 },
@@ -109,22 +110,23 @@ pub fn combine_values<'a>(
 /// Check the choices a person wrote.
 pub fn check(choices: &[Choice]) -> Result<(), String> {
     if choices.is_empty() {
-        return Err("Add a choice: the text the value is made of".into());
+        return Err(t("Add a choice: the text the value is made of").into());
     }
     for c in choices {
         if c.text.trim().is_empty() {
-            return Err(
-                "Write what each choice is made of, like {{rule.stream}}_{{rule.config}}".into(),
-            );
+            return Err(t(
+                "Write what each choice is made of, like {{rule.stream}}_{{rule.config}}",
+            )
+            .into());
         }
         for w in &c.when {
             if name_of(&w.value).is_empty() {
-                return Err("Choose the value each condition looks at".into());
+                return Err(t("Choose the value each condition looks at").into());
             }
             if matches!(w.test, CondTest::Is | CondTest::IsNot | CondTest::Contains)
                 && w.text.trim().is_empty()
             {
-                return Err("Write the text a condition looks for".into());
+                return Err(cargoframe_i18n::t("Write the text a condition looks for").into());
             }
         }
     }

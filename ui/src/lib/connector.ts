@@ -1,9 +1,10 @@
 import type { ServiceKind } from './types';
+import { msg, translated } from './i18n/index.svelte';
 
 /** What a sharing button looks like and is called, by the destination it sends to. */
 export type KindKey = ServiceKind | 'local';
 
-export const KIND_NAME: Record<KindKey, string> = {
+export const KIND_NAME: Record<KindKey, string> = translated({
   jira: 'Jira',
   google: 'Google',
   reddit: 'Reddit',
@@ -15,9 +16,9 @@ export const KIND_NAME: Record<KindKey, string> = {
   bluesky: 'Bluesky',
   instagram: 'Instagram',
   github: 'GitHub',
-  custom: 'Custom API',
-  local: 'This computer',
-};
+  custom: msg('Custom API'),
+  local: msg('This computer'),
+}, 'all');
 
 /** `null` is a button with no active connection: it saves a zip here. */
 export function kindKey(kind: ServiceKind | null | undefined): KindKey {

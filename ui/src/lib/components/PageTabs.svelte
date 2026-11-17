@@ -21,17 +21,17 @@
 </script>
 
 <div class="tabs" role="tablist" aria-label={label} tabindex="-1" onkeydown={onKey}>
-  {#each tabs as t (t.id)}
+  {#each tabs as item (item.id)}
     <button
-      id="tab-{t.id}"
+      id="tab-{item.id}"
       type="button"
       role="tab"
-      data-tour={t.tour}
-      aria-selected={value === t.id}
-      aria-controls="panel-{t.id}"
-      tabindex={value === t.id ? 0 : -1}
-      onclick={() => (value = t.id)}
-    >{t.label}{#if t.count !== undefined} <span class="count">{t.count}</span>{/if}</button>
+      data-tour={item.tour}
+      aria-selected={value === item.id}
+      aria-controls="panel-{item.id}"
+      tabindex={value === item.id ? 0 : -1}
+      onclick={() => (value = item.id)}
+    >{item.label}{#if item.count !== undefined} <span class="count">{item.count}</span>{/if}</button>
   {/each}
 </div>
 

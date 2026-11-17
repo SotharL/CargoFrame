@@ -1,5 +1,6 @@
 //! Turning what went wrong into the failure classes the retry and fallback logic understands.
 
+use cargoframe_i18n::{t, tf};
 use cargoframe_net::{NetError, Response};
 use cargoframe_safe::{FailureKind, SendError};
 
@@ -103,13 +104,23 @@ pub fn from_response(resp: &Response, what: &str) -> SendError {
     let mut detail = service_message(resp);
     if (300..400).contains(&resp.status) {
         if let Some(to) = resp.header("location") {
-            detail = format!("the server redirected to {to}; use that address instead");
+            detail = tf(
+                "the server redirected to {to}; use that address instead",
+                &[("to", &to)],
+            );
         }
     }
+    let (what, status) = (t(what), resp.status);
     let message = if detail.is_empty() {
-        format!("Could not {what} (HTTP {})", resp.status)
+        tf(
+            "Could not {what} (HTTP {status})",
+            &[("what", &t(what)), ("status", &status)],
+        )
     } else {
-        format!("Could not {what} (HTTP {}): {detail}", resp.status)
+        tf(
+            "Could not {what} (HTTP {status}): {detail}",
+            &[("what", &t(what)), ("status", &status), ("detail", &detail)],
+        )
     };
     let mut err = SendError::new(kind, message);
     if let Some(after) = resp.retry_after() {

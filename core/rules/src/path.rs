@@ -2,6 +2,7 @@
 //! `items[*].name`. It covers what people write for "the version in package.json" without the
 //! weight of a full JSONPath engine.
 
+use cargoframe_i18n::t;
 use serde_json::Value;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -24,7 +25,7 @@ pub fn parse(path: &str) -> Result<Vec<Seg>, String> {
             '.' => {
                 i += 1;
                 if matches!(chars.get(i), None | Some('.') | Some('[')) {
-                    return Err("empty name in the path".into());
+                    return Err(cargoframe_i18n::t("empty name in the path").into());
                 }
             }
             '[' => {
@@ -39,7 +40,7 @@ pub fn parse(path: &str) -> Result<Vec<Seg>, String> {
                 }
                 let key: String = chars[start..i].iter().collect();
                 if key.is_empty() {
-                    return Err("empty name in the path".into());
+                    return Err(t("empty name in the path").into());
                 }
                 segs.push(if key == "*" { Seg::Each } else { Seg::Key(key) });
             }
@@ -60,13 +61,13 @@ fn bracket(chars: &[char], open: usize) -> Result<(Seg, usize), String> {
                 i += 1;
             }
             if chars.get(i) != Some(&quote) || chars.get(i + 1) != Some(&']') {
-                return Err("a quoted name in [] must end with the quote and ]".into());
+                return Err(t("a quoted name in [] must end with the quote and ]").into());
             }
             Ok((Seg::Key(key), i + 2))
         }
         Some('*') => {
             if chars.get(i + 1) != Some(&']') {
-                return Err("expected ] after *".into());
+                return Err(t("expected ] after *").into());
             }
             Ok((Seg::Each, i + 2))
         }
@@ -76,15 +77,15 @@ fn bracket(chars: &[char], open: usize) -> Result<(Seg, usize), String> {
                 i += 1;
             }
             if chars.get(i) != Some(&']') {
-                return Err("expected ] after the number".into());
+                return Err(t("expected ] after the number").into());
             }
             let n: String = chars[start..i].iter().collect();
             let n = n
                 .parse::<usize>()
-                .map_err(|_| "index too large".to_string())?;
+                .map_err(|_| cargoframe_i18n::t("index too large").to_string())?;
             Ok((Seg::Index(n), i + 1))
         }
-        _ => Err("expected a number, * or a quoted name inside []".into()),
+        _ => Err(t("expected a number, * or a quoted name inside []").into()),
     }
 }
 

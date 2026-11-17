@@ -15,6 +15,7 @@
 //
 // Other lowercase letters are themselves; letters meant as themselves that are tokens go in
 // quotes ('Date') or after a backslash.
+import { msg, t } from '../../lib/i18n/index.svelte';
 
 export type FormatPart =
   | 'year4' | 'year2' | 'month' | 'monthName' | 'day' | 'hour' | 'hour12' | 'ampm'
@@ -61,7 +62,7 @@ const escape = (c: string) => c.replace(/[.*+?^${}()|[\]\\/]/g, '\\$&');
 /** Read a format, or say what is wrong with it. */
 export function compile(source: string): TimeFormat | { problem: string } {
   const text = source.trim();
-  if (!text) return { problem: 'Write a format, such as [YYYY-MM-DD HH:mm:ss]' };
+  if (!text) return { problem: t('Write a format, such as [YYYY-MM-DD HH:mm:ss]') };
   let re = '';
   const parts: FormatPart[] = [];
   let i = 0;
@@ -74,7 +75,7 @@ export function compile(source: string): TimeFormat | { problem: string } {
     }
     if (c === "'") {
       const end = text.indexOf("'", i + 1);
-      if (end < 0) return { problem: 'A quote is not closed' };
+      if (end < 0) return { problem: t('A quote is not closed') };
       re += escape(text.slice(i + 1, end));
       i = end + 1;
       continue;
@@ -107,7 +108,7 @@ export function compile(source: string): TimeFormat | { problem: string } {
   const has = (p: FormatPart) => parts.includes(p);
   const timeParts: FormatPart[] = ['hour', 'hour12', 'minute', 'second', 'unix', 'day', 'monthName', 'month'];
   if (!parts.some((p) => timeParts.includes(p))) {
-    return { problem: 'The format has no time in it: use HH for the hour, mm for the minutes…' };
+    return { problem: t('The format has no time in it: use HH for the hour, mm for the minutes…') };
   }
   if (has('hour12') && !has('ampm')) {
     // a 12-hour clock needs AM or PM; without it, hh is read as a 24-hour clock
@@ -125,7 +126,7 @@ export function compile(source: string): TimeFormat | { problem: string } {
   try {
     return { source: text, regex: new RegExp(re), parts, unit };
   } catch {
-    return { problem: 'This format cannot be read' };
+    return { problem: t('This format cannot be read') };
   }
 }
 
@@ -260,5 +261,6 @@ export const COMMON_FORMATS = [
 ];
 
 /** The letters a format can use, said briefly (shown next to a format box). */
-export const FORMAT_HELP =
-  "YYYY year, MM month, DD day, HH hour, mm minutes, ss seconds, SSS milliseconds, A AM/PM, Z zone, # a number, * anything; the rest is matched as written ('quotes' for letters meant as themselves)";
+export const FORMAT_HELP = msg(
+  "YYYY year, MM month, DD day, HH hour, mm minutes, ss seconds, SSS milliseconds, A AM/PM, Z zone, # a number, * anything; the rest is matched as written ('quotes' for letters meant as themselves)",
+);

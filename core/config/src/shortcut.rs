@@ -4,6 +4,7 @@
 //! Rules: at least one modifier unless the key is a function key, one non-modifier key, no
 //! repeated modifier. Modifier-only and empty shortcuts are refused.
 
+use cargoframe_i18n::{t, tf};
 use std::fmt;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -19,15 +20,19 @@ pub enum ShortcutError {
 impl fmt::Display for ShortcutError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Empty => write!(f, "Press the keys you want to use"),
-            Self::NoKey => write!(
-                f,
-                "Add a key after the modifiers (for example Ctrl+Shift+F9)"
-            ),
-            Self::TwoKeys(a, b) => write!(f, "Only one key is allowed, found {a} and {b}"),
-            Self::UnknownKey(k) => write!(f, "'{k}' is not a key CargoFrame can use"),
-            Self::RepeatedModifier(m) => write!(f, "{m} is used twice"),
-            Self::NeedsModifier => write!(f, "Add Ctrl, Alt, Shift or Win/Super to this key"),
+            Self::Empty => f.write_str(t("Press the keys you want to use")),
+            Self::NoKey => f.write_str(t(
+                "Add a key after the modifiers (for example Ctrl+Shift+F9)",
+            )),
+            Self::TwoKeys(a, b) => f.write_str(&tf(
+                "Only one key is allowed, found {a} and {b}",
+                &[("a", a), ("b", b)],
+            )),
+            Self::UnknownKey(k) => {
+                f.write_str(&tf("'{k}' is not a key CargoFrame can use", &[("k", k)]))
+            }
+            Self::RepeatedModifier(m) => f.write_str(&tf("{m} is used twice", &[("m", m)])),
+            Self::NeedsModifier => f.write_str(t("Add Ctrl, Alt, Shift or Win/Super to this key")),
         }
     }
 }

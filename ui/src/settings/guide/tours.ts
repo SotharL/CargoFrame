@@ -4,6 +4,7 @@
 // points at something that no longer exists, so a guide cannot silently go stale.
 import type { PageId } from '../nav';
 import { PAGES, type GetLinkSpec } from '../../lib/connectorHelp';
+import { msg, translated } from '../../lib/i18n/index.svelte';
 
 export interface Step {
   /** The `data-tour` name of what to point at. */
@@ -16,6 +17,8 @@ export interface Step {
   click?: boolean;
   /** A web page the step points to, opened in the browser from the bubble. */
   link?: GetLinkSpec;
+  /** What fills the `{names}` of `say`. */
+  values?: Record<string, string>;
 }
 
 export interface Tour {
@@ -32,183 +35,184 @@ const SETUP: PageId = 'setup';
 /** The same ending for the services that need a sign-in in the browser. */
 const signIn = (service: string): Step => ({
   target: 'conn.signin',
-  say: `Sign in: your browser opens ${service}'s own page.`,
+  say: msg("Sign in: your browser opens {service}'s own page."),
+  values: { service },
 });
 
-export const TOURS: Tour[] = [
+export const TOURS: Tour[] = translated([
   {
     id: 'connect-jira',
-    title: 'Connect Jira',
+    title: msg('Connect Jira'),
     steps: [
-      { target: 'add-jira', say: 'Start here: add a Jira connection.', page: SETUP, click: true },
-      { target: 'jira.address', say: 'Your Jira address, like https://acme.atlassian.net.' },
-      { target: 'jira.auth', say: 'Jira Cloud uses e-mail and a token. Server uses a personal token.' },
-      { target: 'jira.email', say: 'The e-mail you sign in to Jira with.' },
-      { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
-      { target: 'conn.secret', say: 'Paste the token. Make one on this page:', link: PAGES.jiraToken },
-      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+      { target: 'add-jira', say: msg('Start here: add a Jira connection.'), page: SETUP, click: true },
+      { target: 'jira.address', say: msg('Your Jira address, like https://acme.atlassian.net.') },
+      { target: 'jira.auth', say: msg('Jira Cloud uses e-mail and a token. Server uses a personal token.') },
+      { target: 'jira.email', say: msg('The e-mail you sign in to Jira with.') },
+      { target: 'conn.save', say: msg('Save. The token box appears under the form.'), click: true },
+      { target: 'conn.secret', say: msg('Paste the token. Make one on this page:'), link: PAGES.jiraToken },
+      { target: 'conn.done', say: msg('Press Done, then Test on the card.') },
     ],
   },
   {
     id: 'connect-google',
-    title: 'Connect Google Drive and Sheets',
+    title: msg('Connect Google Drive and Sheets'),
     steps: [
-      { target: 'add-google', say: 'Start here: add a Google connection.', page: SETUP, click: true },
-      { target: 'google.client_id', say: 'Paste your Client ID (a "Desktop app" one). Make it here:', link: PAGES.googleCredentials },
-      { target: 'conn.save', say: 'Save. A box for the client secret appears.', click: true },
-      { target: 'conn.secret', say: 'Paste the client secret from the same page.' },
-      { target: 'conn.done', say: 'Press Done.' },
+      { target: 'add-google', say: msg('Start here: add a Google connection.'), page: SETUP, click: true },
+      { target: 'google.client_id', say: msg('Paste your Client ID (a "Desktop app" one). Make it here:'), link: PAGES.googleCredentials },
+      { target: 'conn.save', say: msg('Save. A box for the client secret appears.'), click: true },
+      { target: 'conn.secret', say: msg('Paste the client secret from the same page.') },
+      { target: 'conn.done', say: msg('Press Done.') },
       signIn('Google'),
     ],
   },
   {
     id: 'connect-reddit',
-    title: 'Connect Reddit',
+    title: msg('Connect Reddit'),
     steps: [
-      { target: 'add-reddit', say: 'Start here: add a Reddit connection.', page: SETUP, click: true },
-      { target: 'reddit.client_id', say: 'Paste the app id of an "installed app". Register one here:', link: PAGES.redditApps },
-      { target: 'conn.save', say: 'Save.', click: true },
+      { target: 'add-reddit', say: msg('Start here: add a Reddit connection.'), page: SETUP, click: true },
+      { target: 'reddit.client_id', say: msg('Paste the app id of an "installed app". Register one here:'), link: PAGES.redditApps },
+      { target: 'conn.save', say: msg('Save.'), click: true },
       signIn('Reddit'),
     ],
   },
   {
     id: 'connect-claude',
-    title: 'Connect Claude',
+    title: msg('Connect Claude'),
     steps: [
-      { target: 'add-claude', say: 'Start here: add a Claude connection.', page: SETUP, click: true },
-      { target: 'claude.open_with', say: 'Where chats open. The desktop app is the smoother way.' },
-      { target: 'conn.save', say: 'Save. There is no token to paste.', click: true },
+      { target: 'add-claude', say: msg('Start here: add a Claude connection.'), page: SETUP, click: true },
+      { target: 'claude.open_with', say: msg('Where chats open. The desktop app is the smoother way.') },
+      { target: 'conn.save', say: msg('Save. There is no token to paste.'), click: true },
     ],
   },
   {
     id: 'connect-slack',
-    title: 'Connect Slack',
+    title: msg('Connect Slack'),
     steps: [
-      { target: 'add-slack', say: 'Start here: add a Slack connection.', page: SETUP, click: true },
-      { target: 'slack.steps', say: 'These steps make the bot token you need, on this page:', link: PAGES.slackApps },
-      { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
-      { target: 'conn.secret', say: 'Paste the bot token (it starts with xoxb-).' },
-      { target: 'conn.done', say: 'Press Done. In each channel, type /invite @ and the app name.' },
+      { target: 'add-slack', say: msg('Start here: add a Slack connection.'), page: SETUP, click: true },
+      { target: 'slack.steps', say: msg('These steps make the bot token you need, on this page:'), link: PAGES.slackApps },
+      { target: 'conn.save', say: msg('Save. The token box appears under the form.'), click: true },
+      { target: 'conn.secret', say: msg('Paste the bot token (it starts with xoxb-).') },
+      { target: 'conn.done', say: msg('Press Done. In each channel, type /invite @ and the app name.') },
     ],
   },
   {
     id: 'connect-discord',
-    title: 'Connect Discord',
+    title: msg('Connect Discord'),
     steps: [
-      { target: 'add-discord', say: 'Start here: add a Discord connection.', page: SETUP, click: true },
-      { target: 'discord.mode', say: 'Webhook is the easy way: no bot needed.' },
-      { target: 'discord.add-channel', say: 'Add a channel to post in.', click: true },
-      { target: 'discord.channels', say: 'Give it a name, like bugs. Add one for each channel you use.' },
-      { target: 'conn.save', say: 'Save. A link box appears for each channel.', click: true },
-      { target: 'conn.secret', say: "Paste the channel's webhook link. How to make one:", link: PAGES.discordWebhooks },
-      { target: 'conn.done', say: 'Press Done.' },
-      { target: 'layouts.templates', say: 'Then start a layout from a template.', page: 'layouts', click: true },
-      { target: 'template-discord-message', say: 'This one lists only threads named like your Title.' },
+      { target: 'add-discord', say: msg('Start here: add a Discord connection.'), page: SETUP, click: true },
+      { target: 'discord.mode', say: msg('Webhook is the easy way: no bot needed.') },
+      { target: 'discord.add-channel', say: msg('Add a channel to post in.'), click: true },
+      { target: 'discord.channels', say: msg('Give it a name, like bugs. Add one for each channel you use.') },
+      { target: 'conn.save', say: msg('Save. A link box appears for each channel.'), click: true },
+      { target: 'conn.secret', say: msg("Paste the channel's webhook link. How to make one:"), link: PAGES.discordWebhooks },
+      { target: 'conn.done', say: msg('Press Done.') },
+      { target: 'layouts.templates', say: msg('Then start a layout from a template.'), page: 'layouts', click: true },
+      { target: 'template-discord-message', say: msg('This one lists only threads named like your Title.') },
     ],
   },
   {
     id: 'connect-teams',
-    title: 'Connect Microsoft Teams',
+    title: msg('Connect Microsoft Teams'),
     steps: [
-      { target: 'add-teams', say: 'Start here: add a Teams connection.', page: SETUP, click: true },
-      { target: 'teams.steps', say: 'These steps register the small app Teams needs.' },
-      { target: 'teams.client_id', say: 'Paste its Application (client) ID, from this page:', link: PAGES.teamsApps },
-      { target: 'conn.save', say: 'Save.', click: true },
+      { target: 'add-teams', say: msg('Start here: add a Teams connection.'), page: SETUP, click: true },
+      { target: 'teams.steps', say: msg('These steps register the small app Teams needs.') },
+      { target: 'teams.client_id', say: msg('Paste its Application (client) ID, from this page:'), link: PAGES.teamsApps },
+      { target: 'conn.save', say: msg('Save.'), click: true },
       signIn('Microsoft'),
     ],
   },
   {
     id: 'connect-x',
-    title: 'Connect X',
+    title: msg('Connect X'),
     steps: [
-      { target: 'add-x', say: 'Start here: add an X connection.', page: SETUP, click: true },
-      { target: 'x.steps', say: 'These steps make the small app X needs.' },
-      { target: 'x.client_id', say: 'Paste its OAuth 2.0 Client ID, from the portal:', link: PAGES.xPortal },
-      { target: 'conn.save', say: 'Save.', click: true },
+      { target: 'add-x', say: msg('Start here: add an X connection.'), page: SETUP, click: true },
+      { target: 'x.steps', say: msg('These steps make the small app X needs.') },
+      { target: 'x.client_id', say: msg('Paste its OAuth 2.0 Client ID, from the portal:'), link: PAGES.xPortal },
+      { target: 'conn.save', say: msg('Save.'), click: true },
       signIn('X'),
     ],
   },
   {
     id: 'connect-github',
-    title: 'Connect GitHub',
+    title: msg('Connect GitHub'),
     steps: [
-      { target: 'add-github', say: 'Start here: add a GitHub connection.', page: SETUP, click: true },
-      { target: 'github.repository', say: 'The repository issues go to, like octo-org/app.' },
-      { target: 'github.files', say: 'Pictures go in a branch of it, shown in the issue.' },
-      { target: 'conn.save', say: 'Save. A box for the token appears.', click: true },
-      { target: 'conn.secret', say: 'Paste a fine-grained token: Issues and Contents, read and write.', link: PAGES.githubToken },
-      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+      { target: 'add-github', say: msg('Start here: add a GitHub connection.'), page: SETUP, click: true },
+      { target: 'github.repository', say: msg('The repository issues go to, like octo-org/app.') },
+      { target: 'github.files', say: msg('Pictures go in a branch of it, shown in the issue.') },
+      { target: 'conn.save', say: msg('Save. A box for the token appears.'), click: true },
+      { target: 'conn.secret', say: msg('Paste a fine-grained token: Issues and Contents, read and write.'), link: PAGES.githubToken },
+      { target: 'conn.done', say: msg('Press Done, then Test on the card.') },
     ],
   },
   {
     id: 'connect-bluesky',
-    title: 'Connect Bluesky',
+    title: msg('Connect Bluesky'),
     steps: [
-      { target: 'add-bluesky', say: 'Start here: add a Bluesky connection.', page: SETUP, click: true },
-      { target: 'bluesky.handle', say: 'Your handle, like jane.bsky.social.' },
-      { target: 'conn.save', say: 'Save. A box for the app password appears.', click: true },
-      { target: 'conn.secret', say: 'Paste an app password. Make one here:', link: PAGES.blueskyPasswords },
-      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+      { target: 'add-bluesky', say: msg('Start here: add a Bluesky connection.'), page: SETUP, click: true },
+      { target: 'bluesky.handle', say: msg('Your handle, like jane.bsky.social.') },
+      { target: 'conn.save', say: msg('Save. A box for the app password appears.'), click: true },
+      { target: 'conn.secret', say: msg('Paste an app password. Make one here:'), link: PAGES.blueskyPasswords },
+      { target: 'conn.done', say: msg('Press Done, then Test on the card.') },
     ],
   },
   {
     id: 'connect-instagram',
-    title: 'Connect Instagram',
+    title: msg('Connect Instagram'),
     steps: [
-      { target: 'add-instagram', say: 'Start here: add an Instagram connection.', page: SETUP, click: true },
-      { target: 'instagram.upload', say: 'Where CargoFrame puts the picture first, on your own server.' },
-      { target: 'instagram.public', say: 'The public address of that file. Instagram fetches it there.' },
-      { target: 'conn.save', say: 'Save. The token box appears under the form.', click: true },
-      { target: 'conn.secret', say: 'Paste the token made in your Meta app (Generate token):', link: PAGES.metaApps },
-      { target: 'conn.done', say: 'Press Done, then Test on the card.' },
+      { target: 'add-instagram', say: msg('Start here: add an Instagram connection.'), page: SETUP, click: true },
+      { target: 'instagram.upload', say: msg('Where CargoFrame puts the picture first, on your own server.') },
+      { target: 'instagram.public', say: msg('The public address of that file. Instagram fetches it there.') },
+      { target: 'conn.save', say: msg('Save. The token box appears under the form.'), click: true },
+      { target: 'conn.secret', say: msg('Paste the token made in your Meta app (Generate token):'), link: PAGES.metaApps },
+      { target: 'conn.done', say: msg('Press Done, then Test on the card.') },
     ],
   },
   {
     id: 'connect-custom',
-    title: 'Connect your own API',
+    title: msg('Connect your own API'),
     steps: [
-      { target: 'add-custom', say: 'Start here: add a custom connection.', page: SETUP, click: true },
-      { target: 'custom.url', say: 'The address your API lives at. It must start with https://.' },
-      { target: 'custom.auth', say: 'How your API wants you to sign in.' },
-      { target: 'conn.save', say: 'Save.', click: true },
+      { target: 'add-custom', say: msg('Start here: add a custom connection.'), page: SETUP, click: true },
+      { target: 'custom.url', say: msg('The address your API lives at. It must start with https://.') },
+      { target: 'custom.auth', say: msg('How your API wants you to sign in.') },
+      { target: 'conn.save', say: msg('Save.'), click: true },
     ],
   },
   {
     id: 'first-capture',
-    title: 'Make your first capture',
+    title: msg('Make your first capture'),
     steps: [
-      { target: 'layouts.templates', say: 'A layout is the window a capture opens. Start from a template.', page: 'layouts', click: true },
-      { target: 'template-local-capture', say: 'This one needs no account: it saves a zip on this computer.', click: true },
-      { target: 'layouts.save', say: 'Save it as your own layout.', click: true },
-      { target: 'triggers.add', say: 'Now a trigger: a shortcut that opens the layout.', page: 'triggers', click: true },
-      { target: 'triggers.shortcut', say: 'Click the box, then press the keys you want.' },
-      { target: 'triggers.layout', say: 'Pick the layout you just saved.' },
-      { target: 'triggers.save', say: 'Save. Press the shortcut anywhere to try it.' },
+      { target: 'layouts.templates', say: msg('A layout is the window a capture opens. Start from a template.'), page: 'layouts', click: true },
+      { target: 'template-local-capture', say: msg('This one needs no account: it saves a zip on this computer.'), click: true },
+      { target: 'layouts.save', say: msg('Save it as your own layout.'), click: true },
+      { target: 'triggers.add', say: msg('Now a trigger: a shortcut that opens the layout.'), page: 'triggers', click: true },
+      { target: 'triggers.shortcut', say: msg('Click the box, then press the keys you want.') },
+      { target: 'triggers.layout', say: msg('Pick the layout you just saved.') },
+      { target: 'triggers.save', say: msg('Save. Press the shortcut anywhere to try it.') },
     ],
   },
   {
     id: 'data-from-files',
-    title: 'Add a value from a file',
+    title: msg('Add a value from a file'),
     steps: [
-      { target: 'data.values', say: 'Values: what CargoFrame reads in the files of each capture.', page: 'rules', click: true },
-      { target: 'data.new', say: 'Make one by selecting it in a file of the last capture, like the map in a game log.', click: true },
-      { target: 'data.viewer', say: 'Click a word or drag over the text. Name it, check each file, save. Layouts write {map}.' },
+      { target: 'data.values', say: msg('Values: what CargoFrame reads in the files of each capture.'), page: 'rules', click: true },
+      { target: 'data.new', say: msg('Make one by selecting it in a file of the last capture, like the map in a game log.'), click: true },
+      { target: 'data.viewer', say: msg('Click a word or drag over the text. Name it, check each file, save. Layouts write {map}.') },
     ],
   },
   {
     id: 'destination-fields',
-    title: 'Fill a field on the service (like Labels)',
+    title: msg('Fill a field on the service (like Labels)'),
     steps: [
-      { target: 'layouts.fields', say: 'Fill fields: what goes in a field of the service on each share.', page: 'layouts', click: true },
-      { target: 'fields.add', say: 'Fill a field, like Jira Labels, from values found in files.', click: true },
-      { target: 'fields.connection', say: 'The service it goes to.' },
-      { target: 'fields.field', say: 'The field. Search the ones the service offers.' },
-      { target: 'fields.steps', say: 'Steps: if {gpu} is found, add gpu-{gpu}. Add more with "+ and".' },
-      { target: 'fields.layouts', say: 'Every layout that shares there, or only some.' },
-      { target: 'fields.save', say: 'Save. It fills the field on the next share.' },
+      { target: 'layouts.fields', say: msg('Fill fields: what goes in a field of the service on each share.'), page: 'layouts', click: true },
+      { target: 'fields.add', say: msg('Fill a field, like Jira Labels, from values found in files.'), click: true },
+      { target: 'fields.connection', say: msg('The service it goes to.') },
+      { target: 'fields.field', say: msg('The field. Search the ones the service offers.') },
+      { target: 'fields.steps', say: msg('Steps: if {gpu} is found, add gpu-{gpu}. Add more with "+ and".') },
+      { target: 'fields.layouts', say: msg('Every layout that shares there, or only some.') },
+      { target: 'fields.save', say: msg('Save. It fills the field on the next share.') },
     ],
   },
-];
+]);
 
 export const tourById = (id: string): Tour | undefined => TOURS.find((t) => t.id === id);
 

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
   // In the top-right corner of a block: one dot per sharing button, in that button's colour. A full
   // dot means that button sends this block; an empty ring (still in the button's colour, so it is
   // told apart, and full against empty is never colour alone) leaves the block out of that
@@ -28,7 +29,7 @@
 </script>
 
 {#if boxes.length > 0}
-  <div class="ticks" class:edge role="group" aria-label="Sent by">
+  <div class="ticks" class:edge role="group" aria-label={t('Sent by')}>
     {#each boxes as b (b.buttonId)}
       <label
         class="dot"

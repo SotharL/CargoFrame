@@ -8,6 +8,7 @@
 //! API address.
 
 use cargoframe_connectors::SecretStore;
+use cargoframe_i18n::t;
 use cargoframe_net::Http;
 use cargoframe_update::{
     self as up, Available, Check, Platform, Progress, Source, UpdateError, Version,
@@ -251,10 +252,10 @@ impl Updates {
             return Err(UpdateError::Unsupported.to_string());
         }
         if self.busy() {
-            return Err("An update is already in progress".into());
+            return Err(t("An update is already in progress").into());
         }
         let Some(available) = self.lock().available.clone() else {
-            return Err("Check for updates first".into());
+            return Err(t("Check for updates first").into());
         };
         self.lock().phase = Phase::Downloading {
             done: 0,
@@ -311,9 +312,10 @@ impl Updates {
             let mut s = self.lock();
             if s.phase == Phase::Installing {
                 s.phase = Phase::Failed {
-                    message:
-                        "The installer did not take over. Run the downloaded installer yourself"
-                            .into(),
+                    message: t(
+                        "The installer did not take over. Run the downloaded installer yourself",
+                    )
+                    .into(),
                     installer: Some(shown),
                     needs_token: false,
                 };

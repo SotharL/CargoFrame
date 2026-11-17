@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // A text laid over the recording (the keys pressed, the time): black letters with a white
   // outline, as the sent clip has them. Dragged (or moved with the arrow keys) where it goes,
   // and taken off with its × (or Delete). Where it is, as parts of the picture, is bound.
@@ -72,8 +73,8 @@
   style:font-size="{Math.max(9, shown.h * KEY_SIZE)}px"
   role="group"
   tabindex="0"
-  aria-label={`${name[0]?.toUpperCase()}${name.slice(1)} over the recording: drag, or use the arrow keys, to move it; Delete takes it off`}
-  title="Drag to move"
+  aria-label={t('{what} over the recording: drag, or use the arrow keys, to move it; Delete takes it off', { what: name[0]?.toUpperCase() + name.slice(1) })}
+  title={t('Drag to move')}
   onpointerdown={down}
   onpointermove={move}
   onpointerup={up}
@@ -81,7 +82,7 @@
   onkeydown={key}
 >
   <span class="line">{text ?? placeholder}</span>
-  <button type="button" class="off" aria-label={`Take ${name} off the recording`} title="Take it off" onclick={onremove}>×</button>
+  <button type="button" class="off" aria-label={t('Take {what} off the recording', { what: name })} title={t('Take it off')} onclick={onremove}>×</button>
 </div>
 
 <style>

@@ -100,7 +100,7 @@ describe('DropdownBlock with servers and categories', () => {
     const recent = [{ value: '4', label: '#lounge' }, { value: '2', label: '#bugs' }];
     render(DropdownBlock, { block: channel, info: twoServers, value: '1', recent });
     await fireEvent.focus(screen.getByRole('combobox', { name: 'Channel' }));
-    expect(screen.getByText('Recent')).toBeTruthy();
+    expect(screen.getByText('Recently used')).toBeTruthy();
     const first = listed().slice(0, 2).map((x) => x.textContent?.replace(/\s+/g, ' ').trim());
     expect(first).toEqual(['#lounge Friends', '#bugs Acme · Support']);
   });

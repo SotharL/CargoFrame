@@ -6,6 +6,7 @@
 // Every character of the text is in the box, in order, one line per <div>: a place in the text
 // and a place in the box are found from each other by counting.
 import { valuesIn } from '../../lib/valueNames';
+import { t as tx } from '../../lib/i18n/index.svelte';
 
 /** A piece of a line, by where it starts and ends in the whole text. */
 export type Piece =
@@ -226,16 +227,16 @@ function tableHtml(t: Table, raw: string): string {
     `<span class="cell" contenteditable="true" data-r="${r}" data-c="${k}" spellcheck="true">${esc(c)}</span>`;
   const x = (act: string, n: number, title: string) =>
     `<button type="button" class="tw-x" data-act="${act}" data-n="${n}" title="${title}" aria-label="${title}" tabindex="-1">×</button>`;
-  const tops = t.head.map((_, k) => `<th class="tw-top">${t.head.length > 1 ? x('col', k, `Remove column ${k + 1}`) : ''}</th>`).join('');
+  const tops = t.head.map((_, k) => `<th class="tw-top">${t.head.length > 1 ? x('col', k, tx('Remove column {n}', { n: k + 1 })) : ''}</th>`).join('');
   const head = t.head.map((c, k) => `<th>${cell(c, 0, k)}</th>`).join('');
   const rows = t.rows
-    .map((r, ri) => `<tr>${r.map((c, k) => `<td>${cell(c, ri + 1, k)}</td>`).join('')}<td class="tw-side">${x('row', ri, `Remove row ${ri + 1}`)}</td></tr>`)
+    .map((r, ri) => `<tr>${r.map((c, k) => `<td>${cell(c, ri + 1, k)}</td>`).join('')}<td class="tw-side">${x('row', ri, tx('Remove row {n}', { n: ri + 1 }))}</td></tr>`)
     .join('');
   return (
     `<div class="ln tw" contenteditable="false" data-text="${escAttr(raw)}">` +
-    `<table><thead><tr>${tops}<th class="tw-side"></th></tr><tr>${head}<td class="tw-side"><button type="button" class="tw-add" data-act="addcol" title="Add a column" aria-label="Add a column" tabindex="-1">+</button></td></tr></thead>` +
+    `<table><thead><tr>${tops}<th class="tw-side"></th></tr><tr>${head}<td class="tw-side"><button type="button" class="tw-add" data-act="addcol" title="${tx('Add a column')}" aria-label="${tx('Add a column')}" tabindex="-1">+</button></td></tr></thead>` +
     `<tbody>${rows}</tbody></table>` +
-    `<button type="button" class="tw-add row" data-act="addrow" title="Add a row" aria-label="Add a row" tabindex="-1">+</button>` +
+    `<button type="button" class="tw-add row" data-act="addrow" title="${tx('Add a row')}" aria-label="${tx('Add a row')}" tabindex="-1">+</button>` +
     `</div>`
   );
 }

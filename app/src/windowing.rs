@@ -5,6 +5,7 @@
 use crate::state::AppState;
 use crate::warm::{self, OnClose};
 use cargoframe_config::General;
+use cargoframe_i18n::{t, tf};
 use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 pub const SETTINGS: &str = "settings";
@@ -68,7 +69,7 @@ fn open_settings_now(app: &AppHandle) -> tauri::Result<()> {
         return Ok(());
     }
     WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("settings.html".into()))
-        .title("CargoFrame settings")
+        .title(t("CargoFrame settings"))
         .inner_size(1000.0, 720.0)
         .min_inner_size(760.0, 520.0)
         .center()
@@ -145,7 +146,10 @@ fn open_capture_now(app: &AppHandle, label: &str) -> tauri::Result<()> {
         .title(if first {
             "CargoFrame".to_string()
         } else {
-            format!("CargoFrame {}", label.trim_start_matches("capture-"))
+            tf(
+                "CargoFrame {value}",
+                &[("value", &label.trim_start_matches("capture-"))],
+            )
         })
         .inner_size(capture_width(app, label), 760.0)
         .min_inner_size(640.0, 420.0)
@@ -174,7 +178,7 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
         }
         let url = format!("settings.html?page={page}");
         if let Err(e) = WebviewWindowBuilder::new(&app, SETTINGS, WebviewUrl::App(url.into()))
-            .title("CargoFrame settings")
+            .title(cargoframe_i18n::t("CargoFrame settings"))
             .inner_size(1000.0, 720.0)
             .min_inner_size(760.0, 520.0)
             .center()
@@ -183,6 +187,17 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
             tracing::error!("could not open settings: {e}");
         }
     });
+}
+
+/// Destroy the CargoFrame windows that are hidden and kept ready, so the next capture opens a
+/// new one (after the language changed). Windows on screen are left as they are.
+pub fn release_hidden_captures(app: &AppHandle) {
+    for (label, win) in app.webview_windows() {
+        if is_capture_label(&label) && !win.is_visible().unwrap_or(true) {
+            tracing::debug!(window = %label, "releasing a kept window for the new language");
+            let _ = win.destroy();
+        }
+    }
 }
 
 /// A Settings or CargoFrame window is being closed. In Low memory it closes (and is destroyed);

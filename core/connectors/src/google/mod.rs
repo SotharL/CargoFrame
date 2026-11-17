@@ -12,6 +12,7 @@ use crate::model;
 use crate::oauth::{self, ClientAuth, OAuthClient};
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, encode_component, Body, Method, Multipart, Request};
 use cargoframe_safe::SendError;
 use serde_json::{json, Value};
@@ -79,7 +80,7 @@ impl GoogleConnector {
 
     fn client(&self, ctx: &Ctx) -> Result<OAuthClient, SendError> {
         let secret = ctx.secret("client_secret")?.filter(|s| !s.is_empty()).ok_or_else(|| {
-            not_set_up("Google needs the client secret of your OAuth client: open Connections, paste it and press Save")
+            not_set_up(t("Google needs the client secret of your OAuth client: open Connections, paste it and press Save"))
         })?;
         Ok(OAuthClient {
             auth_url: self.ep.auth.clone(),
@@ -113,8 +114,12 @@ impl GoogleConnector {
         if !resp.is_success() {
             return Err(from_response(&resp, what));
         }
-        resp.json()
-            .ok_or_else(|| invalid(format!("Google answered {what} with something unreadable")))
+        resp.json().ok_or_else(|| {
+            invalid(tf(
+                "Google answered {what} with something unreadable",
+                &[("what", &t(what))],
+            ))
+        })
     }
 
     fn drive(&self, path: &str) -> String {
@@ -124,8 +129,12 @@ impl GoogleConnector {
     /// The folder uploads go to.
     fn folder(&self, ctx: &Ctx, payload: &Payload) -> Result<String, SendError> {
         if let Some(raw) = payload.value("folder") {
-            let id = id_from_link(raw, "folders")
-                .ok_or_else(|| invalid(format!("\"{raw}\" is not a Drive folder id or link")))?;
+            let id = id_from_link(raw, "folders").ok_or_else(|| {
+                invalid(tf(
+                    "\"{raw}\" is not a Drive folder id or link",
+                    &[("raw", &raw)],
+                ))
+            })?;
             return Ok(id);
         }
         if let Some(id) = ctx.progress.get("google.folder") {
@@ -142,7 +151,7 @@ impl GoogleConnector {
                     encode_component(&q)
                 )),
             )?,
-            "look for the CargoFrame folder",
+            msg!("look for the CargoFrame folder"),
         )?;
         let id = match found.pointer("/files/0/id").and_then(Value::as_str) {
             Some(id) => id.to_string(),
@@ -153,12 +162,12 @@ impl GoogleConnector {
                         .body(Body::json(
                             &json!({"name": APP_FOLDER, "mimeType": FOLDER_MIME}),
                         )),
-                    "create the CargoFrame folder",
+                    msg!("create the CargoFrame folder"),
                 )?;
                 created
                     .get("id")
                     .and_then(Value::as_str)
-                    .ok_or_else(|| invalid("Google did not say which folder it created"))?
+                    .ok_or_else(|| invalid(t("Google did not say which folder it created")))?
                     .to_string()
             }
         };
@@ -185,7 +194,7 @@ impl GoogleConnector {
                 ),
             )?
             .body(Body::multipart(body));
-        let v = self.call_json(ctx, req, &format!("upload {}", att.name))?;
+        let v = self.call_json(ctx, req, &tf("upload {name}", &[("name", &att.name)]))?;
         Ok(v.get("webViewLink")
             .and_then(Value::as_str)
             .map(String::from)
@@ -225,17 +234,17 @@ impl Connector for GoogleConnector {
         };
         Describe {
             fields: vec![
-                f("folder", "Drive folder", "A folder id or link. Empty: the CargoFrame folder", Some("folders")),
-                f("spreadsheet", "Spreadsheet", "An id or link: adds a row there (needs the spreadsheet option)", None),
-                f("sheet", "Sheet tab", "Defaults to Sheet1", None),
-                f("col1", "Column 1", "Value for the first column after the date", None),
-                f("col2", "Column 2", "", None),
-                f("col3", "Column 3", "", None),
-                f("col4", "Column 4", "", None),
-                f("col5", "Column 5", "", None),
+                f("folder", msg!("Drive folder"), msg!("A folder id or link. Empty: the CargoFrame folder"), Some("folders")),
+                f("spreadsheet", msg!("Spreadsheet"), msg!("An id or link: adds a row there (needs the spreadsheet option)"), None),
+                f("sheet", msg!("Sheet tab"), msg!("Defaults to Sheet1"), None),
+                f("col1", msg!("Column 1"), msg!("Value for the first column after the date"), None),
+                f("col2", msg!("Column 2"), "", None),
+                f("col3", msg!("Column 3"), "", None),
+                f("col4", msg!("Column 4"), "", None),
+                f("col5", msg!("Column 5"), "", None),
             ],
-            lists: vec![ListSpec { id: "folders".into(), label: "Drive folders".into(), param: None, inside: None }],
-            summary: "Uploads the screenshot and the zip of ticked files to Drive. A spreadsheet row holds the date, the columns you map, and the links.".into(),
+            lists: vec![ListSpec { id: "folders".into(), label: msg!("Drive folders").into(), param: None, inside: None }],
+            summary: msg!("Uploads the screenshot and the zip of ticked files to Drive. A spreadsheet row holds the date, the columns you map, and the links.").into(),
         }
     }
 
@@ -271,18 +280,21 @@ impl Connector for GoogleConnector {
                 Method::Get,
                 self.drive("/about?fields=user(displayName,emailAddress)"),
             )?,
-            "check the sign-in",
+            msg!("check the sign-in"),
         )?;
         let who = ["/user/emailAddress", "/user/displayName"]
             .iter()
             .find_map(|p| v.pointer(p).and_then(Value::as_str))
-            .unwrap_or("your account");
-        Ok(format!("Signed in to Google as {who}"))
+            .unwrap_or(t("your account"));
+        Ok(tf("Signed in to Google as {who}", &[("who", &who)]))
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
         if list != "folders" {
-            return Err(invalid(format!("Google has no list called \"{list}\"")));
+            return Err(invalid(tf(
+                "Google has no list called \"{list}\"",
+                &[("list", &list)],
+            )));
         }
         let q = format!("mimeType = '{FOLDER_MIME}' and trashed = false");
         let v = self.call_json(
@@ -295,7 +307,7 @@ impl Connector for GoogleConnector {
                     encode_component(&q)
                 )),
             )?,
-            "list folders",
+            msg!("list folders"),
         )?;
         Ok(v.get("files")
             .and_then(Value::as_array)
@@ -317,19 +329,18 @@ impl Connector for GoogleConnector {
             None => None,
             Some(raw) => {
                 if !self.settings.sheets {
-                    return Err(invalid(
-                        "A spreadsheet is mapped, but this Google connection has the spreadsheet option off: turn it on and sign in again",
-                    ));
+                    return Err(invalid(t("A spreadsheet is mapped, but this Google connection has the spreadsheet option off: turn it on and sign in again")));
                 }
-                Some(
-                    id_from_link(raw, "d").ok_or_else(|| {
-                        invalid(format!("\"{raw}\" is not a spreadsheet id or link"))
-                    })?,
-                )
+                Some(id_from_link(raw, "d").ok_or_else(|| {
+                    invalid(tf(
+                        "\"{raw}\" is not a spreadsheet id or link",
+                        &[("raw", &raw)],
+                    ))
+                })?)
             }
         };
         if payload.image.is_none() && payload.files_zip.is_none() && sheet_id.is_none() {
-            return Err(invalid("There is nothing to send to Google"));
+            return Err(invalid(t("There is nothing to send to Google")));
         }
 
         let mut links: Vec<(&str, String)> = Vec::new();
@@ -348,7 +359,7 @@ impl Connector for GoogleConnector {
                         let l = self.upload(ctx, &folder, att).map_err(|mut e| {
                             if !self.settings.full_drive && payload.value("folder").is_some() {
                                 e.message.push_str(
-                                    " (without the full Drive option CargoFrame can only use folders it created; leave the folder empty or turn that option on)",
+                                    t(" (without the full Drive option CargoFrame can only use folders it created; leave the folder empty or turn that option on)"),
                                 );
                             }
                             e
@@ -403,16 +414,18 @@ impl Connector for GoogleConnector {
                     .body(Body::json(&json!({ "values": [row] })));
                 let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
                 if !resp.is_success() {
-                    let mut e = from_response(&resp, "add the row to the spreadsheet");
+                    let mut e = from_response(&resp, msg!("add the row to the spreadsheet"));
                     if !links.is_empty() {
-                        e.message =
-                            format!("The files were uploaded, but {}", lower_first(&e.message));
+                        e.message = tf(
+                            "The files were uploaded, but {problem}",
+                            &[("problem", &lower_first(&e.message))],
+                        );
                     }
                     return Err(e);
                 }
                 ctx.progress.set("google.row", "1");
             }
-            notes.push("Added a row to the spreadsheet".to_string());
+            notes.push(t("Added a row to the spreadsheet").to_string());
         }
 
         let url = links
@@ -420,9 +433,9 @@ impl Connector for GoogleConnector {
             .map(|(_, l)| l.clone())
             .find(|l| check_url(l).is_ok());
         let summary = match (links.is_empty(), sheet_id.is_some()) {
-            (false, false) => "Uploaded to Google Drive".to_string(),
-            (false, true) => "Uploaded to Google Drive and added a row".to_string(),
-            (true, _) => "Added a row to the spreadsheet".to_string(),
+            (false, false) => t("Uploaded to Google Drive").to_string(),
+            (false, true) => t("Uploaded to Google Drive and added a row").to_string(),
+            (true, _) => t("Added a row to the spreadsheet").to_string(),
         };
         if !links.is_empty() && sheet_id.is_some() {
             notes.clear();

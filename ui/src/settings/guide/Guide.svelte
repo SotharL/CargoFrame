@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, fill } from '../../lib/i18n/index.svelte';
   // The guide on top of Settings: a box in the accent colour around what the step points at, and
   // one short sentence under it. It opens the page the step belongs to, waits for the thing to
   // appear, and follows it if the page moves. Esc closes it.
@@ -131,15 +132,15 @@
     style:left={caption ? `${caption.left}px` : undefined}
     style:top={caption ? `${caption.top}px` : undefined}
   >
-    <p>{step.say}{#if !box && !waiting} <span class="later">(Not on the screen yet: do the step before, then press Next.)</span>{/if}</p>
+    <p>{fill(step.say, step.values)}{#if !box && !waiting} <span class="later">{t('(Not on the screen yet: do the step before, then press Next.)')}</span>{/if}</p>
     {#if step.link}
       <a class="web" href={step.link.url} title={step.link.url} onclick={(e) => { e.preventDefault(); void openPage(step!.link!.url); }}>{step.link.label} <span aria-hidden="true">↗</span></a>
     {/if}
     <div class="row">
       <span class="count">{guide.index + 1} / {tour.steps.length}</span>
-      {#if guide.index > 0}<button type="button" onclick={back}>Back</button>{/if}
-      <button type="button" class="go" onclick={next}>{last ? 'Done' : 'Next'}</button>
-      <button type="button" aria-label="Close the guide" onclick={stopTour}>✕</button>
+      {#if guide.index > 0}<button type="button" onclick={back}>{t('Back')}</button>{/if}
+      <button type="button" class="go" onclick={next}>{last ? t('Done') : t('Next')}</button>
+      <button type="button" aria-label={t('Close the guide')} onclick={stopTour}>✕</button>
     </div>
   </div>
 {/if}

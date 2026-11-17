@@ -45,6 +45,7 @@ serde_json.workspace = true
 tracing.workspace = true
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 cargoframe-config = { path = "../core/config" }
+cargoframe-i18n = { path = "../core/i18n" }
 cargoframe-capture = { path = "../core/capture" }
 cargoframe-indicator = { path = "../core/indicator" }
 cargoframe-ocr = { path = "../core/ocr" }

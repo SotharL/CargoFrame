@@ -10,6 +10,7 @@
 //! in words for the person.
 
 use crate::validate::ConnectionKind;
+use cargoframe_i18n::msg;
 use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -24,8 +25,13 @@ pub enum Support {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 pub struct Capability {
     pub support: Support,
-    /// One short line: how it is used, or why it cannot be.
+    /// One short line: how it is used, or why it cannot be. Written in English; sent translated.
+    #[serde(serialize_with = "translated")]
     pub note: &'static str,
+}
+
+fn translated<S: serde::Serializer>(note: &&'static str, s: S) -> Result<S::Ok, S::Error> {
+    s.serialize_str(cargoframe_i18n::t(note))
 }
 
 impl Capability {
@@ -83,92 +89,92 @@ impl Capabilities {
     pub fn for_kind(kind: ConnectionKind, windows: bool) -> Self {
         match kind {
             ConnectionKind::Jira => Self {
-                text: Capability::yes("Becomes the issue summary and description"),
-                dropdown: Capability::yes("Priority, labels, components and more come from your Jira"),
-                screenshot: Capability::yes("Attached to the issue"),
-                video: Capability::limited("Attached to the issue, within your Jira's attachment size limit"),
-                files: Capability::yes("Attached to the issue as one zip"),
-                link: Capability::yes("Links use Jira wiki style: [word|https://…]"),
+                text: Capability::yes(msg!("Becomes the issue summary and description")),
+                dropdown: Capability::yes(msg!("Priority, labels, components and more come from your Jira")),
+                screenshot: Capability::yes(msg!("Attached to the issue")),
+                video: Capability::limited(msg!("Attached to the issue, within your Jira's attachment size limit")),
+                files: Capability::yes(msg!("Attached to the issue as one zip")),
+                link: Capability::yes(msg!("Links use Jira wiki style: [word|https://…]")),
             },
             ConnectionKind::Google => Self {
-                text: Capability::limited("Goes into the spreadsheet columns you map, as plain text"),
-                dropdown: Capability::limited("Only the Drive folder has a list to pick from"),
-                screenshot: Capability::yes("Uploaded to Drive, with a link in the row"),
-                video: Capability::yes("Uploaded to Drive, with a link in the row"),
-                files: Capability::yes("Uploaded to Drive as one zip, with a link in the row"),
-                link: Capability::limited("Addresses stay plain text in a cell"),
+                text: Capability::limited(msg!("Goes into the spreadsheet columns you map, as plain text")),
+                dropdown: Capability::limited(msg!("Only the Drive folder has a list to pick from")),
+                screenshot: Capability::yes(msg!("Uploaded to Drive, with a link in the row")),
+                video: Capability::yes(msg!("Uploaded to Drive, with a link in the row")),
+                files: Capability::yes(msg!("Uploaded to Drive as one zip, with a link in the row")),
+                link: Capability::limited(msg!("Addresses stay plain text in a cell")),
             },
             ConnectionKind::Reddit => Self {
-                text: Capability::yes("Becomes the post title and text"),
-                dropdown: Capability::yes("The subreddit and flair come from your Reddit"),
-                screenshot: Capability::yes("Posted as an image post"),
-                video: Capability::no("Reddit video posts are not supported yet"),
-                files: Capability::no("Reddit cannot take files on a post"),
-                link: Capability::yes("The post text understands Markdown links; the Link field makes a link post"),
+                text: Capability::yes(msg!("Becomes the post title and text")),
+                dropdown: Capability::yes(msg!("The subreddit and flair come from your Reddit")),
+                screenshot: Capability::yes(msg!("Posted as an image post")),
+                video: Capability::no(msg!("Reddit video posts are not supported yet")),
+                files: Capability::no(msg!("Reddit cannot take files on a post")),
+                link: Capability::yes(msg!("The post text understands Markdown links; the Link field makes a link post")),
             },
             ConnectionKind::Claude if windows => Self {
-                text: Capability::yes("The prompt and title are typed into the chat"),
-                dropdown: Capability::limited("Only the chat to open can be picked"),
-                screenshot: Capability::yes("Pasted into the chat as a picture"),
-                video: Capability::no("Claude cannot watch a video"),
-                files: Capability::yes("Pasted into the chat as files (20 at most, 30 MB each), or as text"),
-                link: Capability::yes("Addresses are typed into the message as written"),
+                text: Capability::yes(msg!("The prompt and title are typed into the chat")),
+                dropdown: Capability::limited(msg!("Only the chat to open can be picked")),
+                screenshot: Capability::yes(msg!("Pasted into the chat as a picture")),
+                video: Capability::no(msg!("Claude cannot watch a video")),
+                files: Capability::yes(msg!("Pasted into the chat as files (20 at most, 30 MB each), or as text")),
+                link: Capability::yes(msg!("Addresses are typed into the message as written")),
             },
             ConnectionKind::Claude => Self {
-                text: Capability::yes("The prompt and title are typed into the chat"),
-                dropdown: Capability::limited("Only the chat to open can be picked"),
-                screenshot: Capability::no("Pasting a picture into another program works on Windows only for now"),
-                video: Capability::no("Claude cannot watch a video"),
-                files: Capability::limited("Pasting files works on Windows only for now; text files can go inside the message"),
-                link: Capability::yes("Addresses are typed into the message as written"),
+                text: Capability::yes(msg!("The prompt and title are typed into the chat")),
+                dropdown: Capability::limited(msg!("Only the chat to open can be picked")),
+                screenshot: Capability::no(msg!("Pasting a picture into another program works on Windows only for now")),
+                video: Capability::no(msg!("Claude cannot watch a video")),
+                files: Capability::limited(msg!("Pasting files works on Windows only for now; text files can go inside the message")),
+                link: Capability::yes(msg!("Addresses are typed into the message as written")),
             },
             ConnectionKind::Slack => Self {
-                text: Capability::yes("Posted as the message (or the comment on the files)"),
-                dropdown: Capability::limited("Only the channel has a list to pick from"),
-                screenshot: Capability::yes("Uploaded to the channel as a picture"),
-                video: Capability::yes("Uploaded to the channel as a video"),
-                files: Capability::yes("Uploaded to the channel as one zip"),
-                link: Capability::yes("Addresses turn into links by themselves; <, > and & are shown as typed"),
+                text: Capability::yes(msg!("Posted as the message (or the comment on the files)")),
+                dropdown: Capability::limited(msg!("Only the channel has a list to pick from")),
+                screenshot: Capability::yes(msg!("Uploaded to the channel as a picture")),
+                video: Capability::yes(msg!("Uploaded to the channel as a video")),
+                files: Capability::yes(msg!("Uploaded to the channel as one zip")),
+                link: Capability::yes(msg!("Addresses turn into links by themselves; <, > and & are shown as typed")),
             },
             ConnectionKind::Discord => Self {
-                text: Capability::yes("Posted as the message, up to 2000 characters (a forum post's title is the name)"),
-                dropdown: Capability::limited("The channel (or forum) and an existing thread can be picked"),
-                screenshot: Capability::yes("Attached to the message"),
-                video: Capability::limited("Attached to the message, within the server's upload limit (often 10 MB)"),
-                files: Capability::limited("Attached as one zip, within the server's upload limit"),
-                link: Capability::yes("Addresses and [word](https://…) links are shown as links"),
+                text: Capability::yes(msg!("Posted as the message, up to 2000 characters (a forum post's title is the name)")),
+                dropdown: Capability::limited(msg!("The channel (or forum) and an existing thread can be picked")),
+                screenshot: Capability::yes(msg!("Attached to the message")),
+                video: Capability::limited(msg!("Attached to the message, within the server's upload limit (often 10 MB)")),
+                files: Capability::limited(msg!("Attached as one zip, within the server's upload limit")),
+                link: Capability::yes(msg!("Addresses and [word](https://…) links are shown as links")),
             },
             ConnectionKind::Teams => Self {
-                text: Capability::yes("Posted as the message (a new channel post uses the title as its headline)"),
-                dropdown: Capability::limited("Your chats and channels can be picked; a thread is chosen by its link"),
-                screenshot: Capability::yes("Shown inside the message"),
-                video: Capability::no("Teams needs files in OneDrive, which CargoFrame does not use yet"),
-                files: Capability::no("Teams needs files in OneDrive, which CargoFrame does not use yet"),
-                link: Capability::yes("Addresses are shown as typed and Teams links them by itself; markup is shown as text"),
+                text: Capability::yes(msg!("Posted as the message (a new channel post uses the title as its headline)")),
+                dropdown: Capability::limited(msg!("Your chats and channels can be picked; a thread is chosen by its link")),
+                screenshot: Capability::yes(msg!("Shown inside the message")),
+                video: Capability::no(msg!("Teams needs files in OneDrive, which CargoFrame does not use yet")),
+                files: Capability::no(msg!("Teams needs files in OneDrive, which CargoFrame does not use yet")),
+                link: Capability::yes(msg!("Addresses are shown as typed and Teams links them by itself; markup is shown as text")),
             },
             ConnectionKind::X => Self {
-                text: Capability::limited("Posted as the post, at most 280 characters; formatting is shown as plain text"),
-                dropdown: Capability::no("X has no lists to pick from"),
-                screenshot: Capability::yes("Attached to the post, made smaller when over 5 MB"),
-                video: Capability::no("Videos are not sent to X yet; the screenshot is"),
-                files: Capability::no("X cannot take files"),
-                link: Capability::yes("Addresses become links by themselves"),
+                text: Capability::limited(msg!("Posted as the post, at most 280 characters; formatting is shown as plain text")),
+                dropdown: Capability::no(msg!("X has no lists to pick from")),
+                screenshot: Capability::yes(msg!("Attached to the post, made smaller when over 5 MB")),
+                video: Capability::no(msg!("Videos are not sent to X yet; the screenshot is")),
+                files: Capability::no(msg!("X cannot take files")),
+                link: Capability::yes(msg!("Addresses become links by themselves")),
             },
             ConnectionKind::Bluesky => Self {
-                text: Capability::limited("Posted as the post, at most 300 characters; formatting is shown as plain text"),
-                dropdown: Capability::no("Bluesky has no lists to pick from"),
-                screenshot: Capability::yes("Attached to the post, made smaller when over 1 MB"),
-                video: Capability::no("Videos are not sent to Bluesky yet; the screenshot is"),
-                files: Capability::no("Bluesky cannot take files"),
-                link: Capability::yes("Addresses in the text are marked as links"),
+                text: Capability::limited(msg!("Posted as the post, at most 300 characters; formatting is shown as plain text")),
+                dropdown: Capability::no(msg!("Bluesky has no lists to pick from")),
+                screenshot: Capability::yes(msg!("Attached to the post, made smaller when over 1 MB")),
+                video: Capability::no(msg!("Videos are not sent to Bluesky yet; the screenshot is")),
+                files: Capability::no(msg!("Bluesky cannot take files")),
+                link: Capability::yes(msg!("Addresses in the text are marked as links")),
             },
             ConnectionKind::Instagram => Self {
-                text: Capability::limited("The caption, at most 2,200 characters; formatting is shown as plain text"),
-                dropdown: Capability::no("Instagram has no lists to pick from"),
-                screenshot: Capability::yes("The post's picture, put on your picture server first, as a JPEG"),
-                video: Capability::no("Videos are not sent to Instagram yet; the screenshot is"),
-                files: Capability::no("Instagram cannot take files"),
-                link: Capability::limited("Addresses are shown as text: Instagram captions have no links"),
+                text: Capability::limited(msg!("The caption, at most 2,200 characters; formatting is shown as plain text")),
+                dropdown: Capability::no(msg!("Instagram has no lists to pick from")),
+                screenshot: Capability::yes(msg!("The post's picture, put on your picture server first, as a JPEG")),
+                video: Capability::no(msg!("Videos are not sent to Instagram yet; the screenshot is")),
+                files: Capability::no(msg!("Instagram cannot take files")),
+                link: Capability::limited(msg!("Addresses are shown as text: Instagram captions have no links")),
             },
             ConnectionKind::Github => Self::github(true),
             ConnectionKind::CustomApi => Self::custom(CustomShape::default()),
@@ -178,32 +184,38 @@ impl Capabilities {
     /// GitHub: `files` says whether pictures and files go in a branch of the repository (its API
     /// cannot attach them to an issue) or are not sent.
     pub fn github(files: bool) -> Self {
-        let off = "Not sent: the connection sends text only (its pictures setting is off)";
+        let off = msg!("Not sent: the connection sends text only (its pictures setting is off)");
         Self {
-            text: Capability::yes("The issue's title and description, in GitHub's Markdown"),
-            dropdown: Capability::yes(
-                "The repository, labels, people, milestone and an open issue come from GitHub",
-            ),
+            text: Capability::yes(msg!(
+                "The issue's title and description, in GitHub's Markdown"
+            )),
+            dropdown: Capability::yes(msg!(
+                "The repository, labels, people, milestone and an open issue come from GitHub"
+            )),
             screenshot: if files {
-                Capability::yes("Put in the repository's attachments branch and shown in the issue")
+                Capability::yes(msg!(
+                    "Put in the repository's attachments branch and shown in the issue"
+                ))
             } else {
                 Capability::no(off)
             },
             video: if files {
-                Capability::limited(
-                    "Put in the attachments branch and linked from the issue, up to 100 MB",
-                )
+                Capability::limited(msg!(
+                    "Put in the attachments branch and linked from the issue, up to 100 MB"
+                ))
             } else {
                 Capability::no(off)
             },
             files: if files {
-                Capability::limited(
-                    "One zip in the attachments branch, linked from the issue, up to 100 MB",
-                )
+                Capability::limited(msg!(
+                    "One zip in the attachments branch, linked from the issue, up to 100 MB"
+                ))
             } else {
                 Capability::no(off)
             },
-            link: Capability::yes("Addresses and [word](https://…) links are shown as links"),
+            link: Capability::yes(msg!(
+                "Addresses and [word](https://…) links are shown as links"
+            )),
         }
     }
 
@@ -211,39 +223,43 @@ impl Capabilities {
     pub fn custom(shape: CustomShape) -> Self {
         Self {
             text: if shape.has_body {
-                Capability::yes("Placed in the request where you write {{prompt}} or {{field}}")
+                Capability::yes(msg!(
+                    "Placed in the request where you write {{prompt}} or {{field}}"
+                ))
             } else {
-                Capability::no("This request has no body to put text in")
+                Capability::no(msg!("This request has no body to put text in"))
             },
             dropdown: if shape.has_lists {
-                Capability::yes("The lists you set up on the connection")
+                Capability::yes(msg!("The lists you set up on the connection"))
             } else {
-                Capability::no("This connection has no lists to pick from")
+                Capability::no(msg!("This connection has no lists to pick from"))
             },
             screenshot: if shape.screenshot_field {
-                Capability::yes("Sent in the multipart field you named")
+                Capability::yes(msg!("Sent in the multipart field you named"))
             } else {
-                Capability::no("The request has no multipart field for the screenshot")
+                Capability::no(msg!(
+                    "The request has no multipart field for the screenshot"
+                ))
             },
-            video: Capability::no("A Custom API connection cannot send a video yet"),
+            video: Capability::no(msg!("A Custom API connection cannot send a video yet")),
             files: if shape.files_field {
-                Capability::yes("Sent as one zip in the multipart field you named")
+                Capability::yes(msg!("Sent as one zip in the multipart field you named"))
             } else {
-                Capability::no("The request has no multipart field for files")
+                Capability::no(msg!("The request has no multipart field for files"))
             },
-            link: Capability::limited("Sent as written; the service decides what it shows"),
+            link: Capability::limited(msg!("Sent as written; the service decides what it shows")),
         }
     }
 
     /// Saving a zip on this computer keeps everything.
     pub fn local() -> Self {
         Self {
-            text: Capability::yes("Kept in share.json inside the zip"),
-            dropdown: Capability::yes("The choices are kept in share.json inside the zip"),
-            screenshot: Capability::yes("Kept as screenshot.png inside the zip"),
-            video: Capability::yes("Kept as recording.mp4 inside the zip"),
-            files: Capability::yes("Kept in the zip's files folder"),
-            link: Capability::yes("Kept as written"),
+            text: Capability::yes(msg!("Kept in share.json inside the zip")),
+            dropdown: Capability::yes(msg!("The choices are kept in share.json inside the zip")),
+            screenshot: Capability::yes(msg!("Kept as screenshot.png inside the zip")),
+            video: Capability::yes(msg!("Kept as recording.mp4 inside the zip")),
+            files: Capability::yes(msg!("Kept in the zip's files folder")),
+            link: Capability::yes(msg!("Kept as written")),
         }
     }
 }

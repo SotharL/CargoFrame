@@ -13,6 +13,7 @@ use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, encode_component, Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Map, Value};
@@ -31,7 +32,8 @@ impl JiraConnector {
     }
 
     fn base(&self) -> Result<String, SendError> {
-        check_url(&self.settings.site_url).map_err(|e| invalid(format!("Jira address: {e}")))?;
+        check_url(&self.settings.site_url)
+            .map_err(|e| invalid(tf("Jira address: {e}", &[("e", &e)])))?;
         Ok(self
             .settings
             .site_url
@@ -45,7 +47,9 @@ impl JiraConnector {
             .secret("token")?
             .filter(|t| !t.is_empty())
             .ok_or_else(|| {
-                not_set_up("Jira has no API token yet: open Connections, paste it and press Save")
+                not_set_up(t(
+                    "Jira has no API token yet: open Connections, paste it and press Save",
+                ))
             })?;
         Ok(match self.settings.auth {
             JiraAuth::ApiToken => format!(
@@ -75,8 +79,12 @@ impl JiraConnector {
 
     fn get_json(&self, ctx: &Ctx, path: &str, what: &str) -> Result<Value, SendError> {
         let resp = self.call(ctx, self.request(ctx, Method::Get, path)?, what)?;
-        resp.json()
-            .ok_or_else(|| invalid(format!("Jira answered {what} with something unreadable")))
+        resp.json().ok_or_else(|| {
+            invalid(tf(
+                "Jira answered {what} with something unreadable",
+                &[("what", &t(what))],
+            ))
+        })
     }
 
     fn attach(
@@ -100,8 +108,12 @@ impl JiraConnector {
                 mime,
                 data.to_vec(),
             )));
-        self.call(ctx, req, &format!("attach {name} to {key}"))
-            .map(|_| ())
+        self.call(
+            ctx,
+            req,
+            &tf("attach {name} to {key}", &[("name", &name), ("key", &key)]),
+        )
+        .map(|_| ())
     }
 }
 
@@ -201,13 +213,20 @@ fn shape(f: &Field, cloud: bool) -> Result<Value, String> {
         _ => match f.kind {
             FieldKind::Text => Value::String(f.value.trim_end().to_string()),
             FieldKind::Number => {
-                let n: f64 = v
-                    .replace(',', ".")
-                    .parse()
-                    .map_err(|_| format!("\"{v}\" is not a number (field {})", f.key))?;
+                let n: f64 = v.replace(',', ".").parse().map_err(|_| {
+                    tf(
+                        "\"{v}\" is not a number (field {field})",
+                        &[("v", &v), ("field", &f.key)],
+                    )
+                })?;
                 serde_json::Number::from_f64(n)
                     .map(Value::Number)
-                    .ok_or_else(|| format!("\"{v}\" is not a number (field {})", f.key))?
+                    .ok_or_else(|| {
+                        tf(
+                            "\"{v}\" is not a number (field {key})",
+                            &[("v", &v), ("key", &f.key)],
+                        )
+                    })?
             }
             FieldKind::Flag => Value::Bool(matches!(
                 v.to_lowercase().as_str(),
@@ -247,13 +266,11 @@ pub fn build_fields(payload: &Payload, cloud: bool) -> Result<Map<String, Value>
         out.insert(f.key.clone(), v);
     }
     if !out.contains_key("project") || !out.contains_key("issuetype") {
-        return Err(invalid(
-            "Jira needs a project and an issue type: map them to the fields \"project\" and \"issuetype\" on the sharing button",
-        ));
+        return Err(invalid(t("Jira needs a project and an issue type: map them to the fields \"project\" and \"issuetype\" on the sharing button")));
     }
     if !out.contains_key("summary") {
         let title = if payload.title.trim().is_empty() {
-            "CargoFrame capture"
+            t("CargoFrame capture")
         } else {
             payload.title.trim()
         };
@@ -294,37 +311,37 @@ impl Connector for JiraConnector {
         };
         Describe {
             fields: vec![
-                f("project", "Project", "A project key such as PROJ", Some("projects")),
-                f("issuetype", "Issue type", "Bug, Task, Story...", Some("issue_types")),
-                f("summary", "Summary", "One line. Defaults to the window title", None),
-                f("description", "Description", "Defaults to the prompt text", None),
-                f("priority", "Priority", "", Some("priorities")),
-                f("labels", "Labels", "Separate several with commas", Some("labels")),
-                f("assignee", "Assignee", "", Some("assignable_users")),
-                f("components", "Components", "Separate several with commas", Some("components")),
-                f("fixVersions", "Fix versions", "Separate several with commas", Some("versions")),
-                f("versions", "Affects versions", "Separate several with commas", Some("versions")),
-                f("duedate", "Due date", "YYYY-MM-DD", None),
-                f("environment", "Environment", "", None),
-                f("parent", "Parent issue", "An issue key, for sub-tasks", Some("recent_issues")),
+                f("project", msg!("Project"), msg!("A project key such as PROJ"), Some("projects")),
+                f("issuetype", msg!("Issue type"), msg!("Bug, Task, Story..."), Some("issue_types")),
+                f("summary", msg!("Summary"), msg!("One line. Defaults to the window title"), None),
+                f("description", msg!("Description"), msg!("Defaults to the prompt text"), None),
+                f("priority", msg!("Priority"), "", Some("priorities")),
+                f("labels", msg!("Labels"), msg!("Separate several with commas"), Some("labels")),
+                f("assignee", msg!("Assignee"), "", Some("assignable_users")),
+                f("components", msg!("Components"), msg!("Separate several with commas"), Some("components")),
+                f("fixVersions", msg!("Fix versions"), msg!("Separate several with commas"), Some("versions")),
+                f("versions", msg!("Affects versions"), msg!("Separate several with commas"), Some("versions")),
+                f("duedate", msg!("Due date"), msg!("YYYY-MM-DD"), None),
+                f("environment", msg!("Environment"), "", None),
+                f("parent", msg!("Parent issue"), msg!("An issue key, for sub-tasks"), Some("recent_issues")),
                 f(
                     "issue",
-                    "Add to an existing issue",
-                    "An issue key: adds a comment and the attachments instead of creating an issue",
+                    msg!("Add to an existing issue"),
+                    msg!("An issue key: adds a comment and the attachments instead of creating an issue"),
                     Some("recent_issues"),
                 ),
             ],
             lists: vec![
-                l("projects", "Projects", None),
-                l("issue_types", "Issue types", None),
-                l("priorities", "Priorities", None),
-                l("labels", "Labels", None),
-                l("recent_issues", "Issues I reported recently", None),
-                l("assignable_users", "People who can be assigned", Some("project key")),
-                l("components", "Components of a project", Some("project key")),
-                l("versions", "Versions of a project", Some("project key")),
+                l("projects", msg!("Projects"), None),
+                l("issue_types", msg!("Issue types"), None),
+                l("priorities", msg!("Priorities"), None),
+                l("labels", msg!("Labels"), None),
+                l("recent_issues", msg!("Issues I reported recently"), None),
+                l("assignable_users", msg!("People who can be assigned"), Some(msg!("project key"))),
+                l("components", msg!("Components of a project"), Some(msg!("project key"))),
+                l("versions", msg!("Versions of a project"), Some(msg!("project key"))),
             ],
-            summary: "Creates an issue and attaches the screenshot (and a zip of the ticked files). Custom fields use their key, such as customfield_10042.".into(),
+            summary: msg!("Creates an issue and attaches the screenshot (and a zip of the ticked files). Custom fields use their key, such as customfield_10042.").into(),
         }
     }
 
@@ -342,13 +359,16 @@ impl Connector for JiraConnector {
     }
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
-        let me = self.get_json(ctx, "/rest/api/2/myself", "check the sign-in")?;
+        let me = self.get_json(ctx, "/rest/api/2/myself", msg!("check the sign-in"))?;
         let who = ["displayName", "emailAddress", "name"]
             .iter()
             .find_map(|k| me.get(k).and_then(Value::as_str))
-            .unwrap_or("your account");
+            .unwrap_or(t("your account"));
         let host = check_url(&self.settings.site_url).unwrap_or_default();
-        Ok(format!("Signed in to {host} as {who}"))
+        Ok(tf(
+            "Signed in to {host} as {who}",
+            &[("host", &host), ("who", &who)],
+        ))
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
@@ -358,15 +378,17 @@ impl Connector for JiraConnector {
         };
         let need_project = || {
             let key = param.filter(|p| !p.is_empty()).ok_or_else(|| {
-                invalid(format!(
-                    "The list \"{name}\" needs a project key, like {name}:PROJ"
+                invalid(tf(
+                    "The list \"{name}\" needs a project key, like {name}:PROJ",
+                    &[("name", &name)],
                 ))
             })?;
             if key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
                 Ok(key.to_string())
             } else {
-                Err(invalid(format!(
-                    "\"{key}\" is not a project key (letters, digits and _ only)"
+                Err(invalid(tf(
+                    "\"{key}\" is not a project key (letters, digits and _ only)",
+                    &[("key", &key)],
                 )))
             }
         };
@@ -376,12 +398,12 @@ impl Connector for JiraConnector {
                 let v = match self.get_json(
                     ctx,
                     "/rest/api/2/project/search?maxResults=100&orderBy=name",
-                    "list projects",
+                    msg!("list projects"),
                 ) {
                     Ok(v) => v.get("values").cloned().unwrap_or(v),
                     // Server and Data Center have no search endpoint
                     Err(e) if matches!(e.kind, FailureKind::Rejected(404)) => {
-                        self.get_json(ctx, "/rest/api/2/project", "list projects")?
+                        self.get_json(ctx, "/rest/api/2/project", msg!("list projects"))?
                     }
                     Err(e) => return Err(e),
                 };
@@ -405,7 +427,11 @@ impl Connector for JiraConnector {
                 } else {
                     "/rest/api/2/priority"
                 };
-                let v = self.get_json(ctx, path, &format!("list {}", name.replace('_', " ")))?;
+                let v = self.get_json(
+                    ctx,
+                    path,
+                    &tf("list {list}", &[("list", &name.replace('_', " "))]),
+                )?;
                 Ok(v.as_array()
                     .map(|a| {
                         a.iter()
@@ -418,7 +444,8 @@ impl Connector for JiraConnector {
                     .unwrap_or_default())
             }
             "labels" => {
-                let v = self.get_json(ctx, "/rest/api/2/label?maxResults=200", "list labels")?;
+                let v =
+                    self.get_json(ctx, "/rest/api/2/label?maxResults=200", msg!("list labels"))?;
                 Ok(v.get("values")
                     .and_then(Value::as_array)
                     .map(|a| {
@@ -433,7 +460,7 @@ impl Connector for JiraConnector {
                 let v = self.get_json(
                     ctx,
                     &format!("/rest/api/2/project/{}/components", need_project()?),
-                    "list components",
+                    msg!("list components"),
                 )?;
                 Ok(v.as_array()
                     .map(|a| {
@@ -449,7 +476,7 @@ impl Connector for JiraConnector {
                 let v = self.get_json(
                     ctx,
                     &format!("/rest/api/2/project/{}/versions", need_project()?),
-                    "list versions",
+                    msg!("list versions"),
                 )?;
                 Ok(v.as_array()
                     .map(|a| {
@@ -469,7 +496,7 @@ impl Connector for JiraConnector {
                         "/rest/api/2/user/assignable/search?project={}&maxResults=100",
                         need_project()?
                     ),
-                    "list people",
+                    msg!("list people"),
                 )?;
                 Ok(v.as_array()
                     .map(|a| {
@@ -493,7 +520,7 @@ impl Connector for JiraConnector {
                 } else {
                     format!("/rest/api/2/search?jql={jql}&fields=summary&maxResults=25")
                 };
-                let v = self.get_json(ctx, &path, "list recent issues")?;
+                let v = self.get_json(ctx, &path, msg!("list recent issues"))?;
                 Ok(v.get("issues")
                     .and_then(Value::as_array)
                     .map(|a| {
@@ -510,7 +537,10 @@ impl Connector for JiraConnector {
                     })
                     .unwrap_or_default())
             }
-            other => Err(invalid(format!("Jira has no list called \"{other}\""))),
+            other => Err(invalid(tf(
+                "Jira has no list called \"{other}\"",
+                &[("other", &other)],
+            ))),
         }
     }
 
@@ -518,8 +548,9 @@ impl Connector for JiraConnector {
         let existing = payload.value("issue").map(str::to_string);
         if let Some(k) = &existing {
             if !issue_key_ok(k) {
-                return Err(invalid(format!(
-                    "\"{k}\" is not an issue key (like PROJ-123)"
+                return Err(invalid(tf(
+                    "\"{k}\" is not an issue key (like PROJ-123)",
+                    &[("k", &k)],
                 )));
             }
         }
@@ -534,11 +565,11 @@ impl Connector for JiraConnector {
                 let req = self
                     .request(ctx, Method::Post, "/rest/api/2/issue")?
                     .body(Body::json(&json!({ "fields": fields })));
-                let resp = self.call(ctx, req, "create the issue")?;
+                let resp = self.call(ctx, req, msg!("create the issue"))?;
                 let key = resp
                     .json()
                     .and_then(|v| v.get("key").and_then(Value::as_str).map(String::from))
-                    .ok_or_else(|| invalid("Jira did not say which issue it created"))?;
+                    .ok_or_else(|| invalid(t("Jira did not say which issue it created")))?;
                 ctx.progress.set("jira.issue", &key);
                 (key, true)
             }
@@ -560,7 +591,7 @@ impl Connector for JiraConnector {
                         &format!("/rest/api/2/issue/{}/comment", encode_component(&key)),
                     )?
                     .body(Body::json(&json!({ "body": text })));
-                self.call(ctx, req, &format!("comment on {key}"))?;
+                self.call(ctx, req, &tf("comment on {key}", &[("key", &key)]))?;
             }
             ctx.progress.set("jira.comment", "1");
         }
@@ -579,9 +610,9 @@ impl Connector for JiraConnector {
             }
             if let Err(mut e) = self.attach(ctx, &key, &att.name, &att.mime, &att.data) {
                 e.message = if created {
-                    format!(
-                        "The issue {key} was created, but {}",
-                        lower_first(&e.message)
+                    tf(
+                        "The issue {key} was created, but {problem}",
+                        &[("key", &key), ("problem", &lower_first(&e.message))],
                     )
                 } else {
                     e.message
@@ -591,14 +622,14 @@ impl Connector for JiraConnector {
             ctx.progress.set(step, "1");
         }
         if existing.is_none() && payload.image.is_none() && payload.files_zip.is_none() {
-            notes.push("There was nothing to attach".to_string());
+            notes.push(t("There was nothing to attach").to_string());
         }
 
         Ok(SendOutcome {
             summary: if created {
-                format!("Created {key}")
+                tf("Created {key}", &[("key", &key)])
             } else {
-                format!("Added to {key}")
+                tf("Added to {key}", &[("key", &key)])
             },
             url: Some(format!("{base}/browse/{key}")),
             notes,

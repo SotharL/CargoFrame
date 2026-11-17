@@ -55,15 +55,15 @@ impl FailureKind {
     /// Short text for the status chip. The chip always pairs it with an icon.
     pub fn label(&self) -> &'static str {
         match self {
-            Self::NoNetwork => "No network",
-            Self::Timeout => "Timed out",
-            Self::AuthExpired => "Sign-in expired",
-            Self::Rejected(_) => "Rejected by the service",
-            Self::Throttled(_) => "Too many requests",
-            Self::Server(_) => "Service error",
-            Self::ConnectorUnavailable => "Connection not set up",
-            Self::Certificate => "Certificate not trusted",
-            Self::NotDelivered => "Not delivered",
+            Self::NoNetwork => cargoframe_i18n::msg!("No network"),
+            Self::Timeout => cargoframe_i18n::msg!("Timed out"),
+            Self::AuthExpired => cargoframe_i18n::msg!("Sign-in expired"),
+            Self::Rejected(_) => cargoframe_i18n::msg!("Rejected by the service"),
+            Self::Throttled(_) => cargoframe_i18n::msg!("Too many requests"),
+            Self::Server(_) => cargoframe_i18n::msg!("Service error"),
+            Self::ConnectorUnavailable => cargoframe_i18n::msg!("Connection not set up"),
+            Self::Certificate => cargoframe_i18n::msg!("Certificate not trusted"),
+            Self::NotDelivered => cargoframe_i18n::msg!("Not delivered"),
         }
     }
 }

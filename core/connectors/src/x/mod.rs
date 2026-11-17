@@ -14,6 +14,7 @@ use crate::model;
 use crate::oauth::{self, ClientAuth, OAuthClient, Redirect};
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{Body, Method, Multipart, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -91,9 +92,9 @@ impl XConnector {
 
     fn api(&self, ctx: &Ctx, method: Method, path: &str) -> Result<Request, SendError> {
         if self.settings.client_id.trim().is_empty() {
-            return Err(crate::error::not_set_up(
+            return Err(crate::error::not_set_up(t(
                 "X needs the Client ID of your app: add it to the connection",
-            ));
+            )));
         }
         let token = oauth::access_token(&self.client(), ctx)?;
         Ok(Request::new(method, format!("{}{path}", self.ep.api))
@@ -107,7 +108,7 @@ fn refusal(resp: &cargoframe_net::Response, what: &str) -> SendError {
     let mut err = from_response(resp, what);
     if resp.status == 403 {
         err.message.push_str(
-            ". If the app's access is read only, set it to read and write in the X developer portal, then sign in again",
+            t(". If the app's access is read only, set it to read and write in the X developer portal, then sign in again"),
         );
     }
     err
@@ -123,12 +124,12 @@ impl Connector for XConnector {
         };
         Describe {
             fields: vec![
-                f("text", "Text", "The post, at most 280 characters. Defaults to the prompt, then the window title"),
-                f("alt", "Picture description", "Read out to people who cannot see the picture"),
-                f("hashtags", "Hashtags", "Added at the end as #tags. Separate several with commas"),
+                f("text", msg!("Text"), msg!("The post, at most 280 characters. Defaults to the prompt, then the window title")),
+                f("alt", msg!("Picture description"), msg!("Read out to people who cannot see the picture")),
+                f("hashtags", msg!("Hashtags"), msg!("Added at the end as #tags. Separate several with commas")),
             ],
             lists: Vec::new(),
-            summary: "Posts the text and the screenshot (made smaller when it is over 5 MB) to your X account. Formatting is shown as plain text. Files and videos are not sent.".into(),
+            summary: msg!("Posts the text and the screenshot (made smaller when it is over 5 MB) to your X account. Formatting is shown as plain text. Files and videos are not sent.").into(),
         }
     }
 
@@ -142,9 +143,9 @@ impl Connector for XConnector {
 
     fn connect(&self, ctx: &Ctx) -> Result<String, SendError> {
         if self.settings.client_id.trim().is_empty() {
-            return Err(crate::error::not_set_up(
+            return Err(crate::error::not_set_up(t(
                 "Paste the Client ID of your X app first",
-            ));
+            )));
         }
         oauth::authorize(&self.client(), ctx)?;
         self.test(ctx)
@@ -160,7 +161,7 @@ impl Connector for XConnector {
             .send(&self.api(ctx, Method::Get, "/2/users/me")?)
             .map_err(|e| from_net(&e))?;
         if !resp.is_success() {
-            return Err(refusal(&resp, "check the sign-in"));
+            return Err(refusal(&resp, msg!("check the sign-in")));
         }
         let name = resp
             .json()
@@ -169,19 +170,20 @@ impl Connector for XConnector {
                     .and_then(Value::as_str)
                     .map(String::from)
             })
-            .unwrap_or_else(|| "your account".into());
-        Ok(format!("Signed in to X as @{name}"))
+            .unwrap_or_else(|| t("your account").into());
+        Ok(tf("Signed in to X as @{name}", &[("name", &name)]))
     }
 
     fn options(&self, _ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
-        Err(invalid(format!("X has no list called \"{list}\"")))
+        Err(invalid(tf(
+            "X has no list called \"{list}\"",
+            &[("list", &list)],
+        )))
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
         if ctx.progress.done("x.posted") {
-            return Err(invalid(
-                "An earlier attempt may already have posted this. Check your X profile before trying again",
-            ));
+            return Err(invalid(t("An earlier attempt may already have posted this. Check your X profile before trying again")));
         }
         let mut notes = Vec::new();
         let source = payload
@@ -191,8 +193,9 @@ impl Connector for XConnector {
             .unwrap_or_else(|| payload.title.clone());
         let (text, cut) = crate::payload::with_hashtags(&source, payload, MAX_TEXT);
         if cut {
-            notes.push(format!(
-                "The text was cut to {MAX_TEXT} characters, the most X shows"
+            notes.push(tf(
+                "The text was cut to {MAX_TEXT} characters, the most X shows",
+                &[("MAX_TEXT", &MAX_TEXT)],
             ));
         }
         let picture = payload
@@ -205,13 +208,15 @@ impl Connector for XConnector {
             .as_ref()
             .is_some_and(|a| a.mime.starts_with("video/"))
         {
-            notes.push("X gets the screenshot, not the recording".to_string());
+            notes.push(t("X gets the screenshot, not the recording").to_string());
         }
         if payload.files_zip.is_some() {
-            notes.push("X cannot take files, so the ticked files were not sent".to_string());
+            notes.push(t("X cannot take files, so the ticked files were not sent").to_string());
         }
         if picture.is_none() && text.trim().is_empty() {
-            return Err(invalid("There is nothing to post: no text and no picture"));
+            return Err(invalid(t(
+                "There is nothing to post: no text and no picture",
+            )));
         }
 
         // Step 1: the picture, once.
@@ -219,7 +224,7 @@ impl Connector for XConnector {
         if let (Some(pic), None) = (picture, &media_id) {
             let fitted = fit(pic, MAX_PICTURE, "X").map_err(invalid)?;
             if fitted.shrunk {
-                notes.push("The picture was made smaller to fit X's 5 MB".to_string());
+                notes.push(t("The picture was made smaller to fit X's 5 MB").to_string());
             }
             let form = Multipart::form_data()
                 .field("media_category", "tweet_image")
@@ -234,7 +239,7 @@ impl Connector for XConnector {
                 .body(Body::multipart(form));
             let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
             if !resp.is_success() {
-                return Err(refusal(&resp, "upload the picture to X"));
+                return Err(refusal(&resp, msg!("upload the picture to X")));
             }
             let id = resp
                 .json()
@@ -243,7 +248,7 @@ impl Connector for XConnector {
                         .and_then(Value::as_str)
                         .map(String::from)
                 })
-                .ok_or_else(|| invalid("X did not say which picture it kept"))?;
+                .ok_or_else(|| invalid(t("X did not say which picture it kept")))?;
             if let Some(alt) = payload.value("alt") {
                 // a description is a nicety: a failure here does not stop the post
                 let alt_req = self
@@ -253,7 +258,7 @@ impl Connector for XConnector {
                         "metadata": {"alt_text": {"text": plain_text(alt, 1000).0}},
                     })));
                 if !ctx.http.send(&alt_req).is_ok_and(|r| r.is_success()) {
-                    notes.push("The picture description could not be added".to_string());
+                    notes.push(t("The picture description could not be added").to_string());
                 }
             }
             ctx.progress.set("x.media", &id);
@@ -274,10 +279,7 @@ impl Connector for XConnector {
             Err(e) => {
                 let mut err = from_net(&e);
                 err.kind = FailureKind::Rejected(0);
-                err.message = format!(
-                    "{}. X may or may not have posted it, so CargoFrame did not retry: check your profile",
-                    err.message
-                );
+                err.message = tf("{message}. X may or may not have posted it, so CargoFrame did not retry: check your profile", &[("message", &err.message)]);
                 return Err(err);
             }
         };
@@ -285,7 +287,7 @@ impl Connector for XConnector {
             if resp.status < 500 {
                 ctx.progress.clear("x.posted");
             }
-            return Err(refusal(&resp, "post to X"));
+            return Err(refusal(&resp, msg!("post to X")));
         }
         let url = resp
             .json()
@@ -297,7 +299,7 @@ impl Connector for XConnector {
             .filter(|id| id.chars().all(|c| c.is_ascii_digit()))
             .map(|id| format!("https://x.com/i/web/status/{id}"));
         Ok(SendOutcome {
-            summary: "Posted to X".into(),
+            summary: t("Posted to X").into(),
             url,
             notes,
             place: None,

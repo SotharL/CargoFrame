@@ -2,6 +2,7 @@
 
 use crate::{state::AppState, triggers, windowing};
 use cargoframe_config::{General, Kind, Trigger};
+use cargoframe_i18n::{t, tf};
 use tauri::{
     image::Image,
     menu::{CheckMenuItem, Menu, MenuItem, PredefinedMenuItem},
@@ -90,8 +91,8 @@ fn recording_by_trigger(app: &AppHandle) -> bool {
 
 fn tooltip(recording: bool, continuous: bool) -> &'static str {
     match (recording, continuous) {
-        (true, true) => "CargoFrame is recording your screen continuously. Press a shortcut for the last seconds; hold it to stop.",
-        (true, false) => "CargoFrame is recording your screen. Press the video shortcut again to stop.",
+        (true, true) => cargoframe_i18n::t("CargoFrame is recording your screen continuously. Press a shortcut for the last seconds; hold it to stop."),
+        (true, false) => cargoframe_i18n::t("CargoFrame is recording your screen. Press the video shortcut again to stop."),
         _ => "CargoFrame",
     }
 }
@@ -122,21 +123,27 @@ fn continuous_trigger(app: &AppHandle) -> Option<String> {
 }
 
 fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
-    let open = MenuItem::with_id(app, ID_OPEN, "Open settings", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, ID_OPEN, t("Open settings"), true, None::<&str>)?;
     let paused = app
         .try_state::<AppState>()
         .map(|s| s.paused())
         .unwrap_or(false);
-    let pause =
-        CheckMenuItem::with_id(app, ID_PAUSE, "Pause triggers", true, paused, None::<&str>)?;
-    let quit = MenuItem::with_id(app, ID_QUIT, "Quit CargoFrame", true, None::<&str>)?;
+    let pause = CheckMenuItem::with_id(
+        app,
+        ID_PAUSE,
+        t("Pause triggers"),
+        true,
+        paused,
+        None::<&str>,
+    )?;
+    let quit = MenuItem::with_id(app, ID_QUIT, t("Quit CargoFrame"), true, None::<&str>)?;
     let separator = PredefinedMenuItem::separator(app)?;
     // while a video trigger is recording, a way to throw the recording away
     let recording_now = recording_by_trigger(app);
     let stop_recording = MenuItem::with_id(
         app,
         ID_STOP_RECORDING,
-        "Recording: stop and discard it",
+        t("Recording: stop and discard it"),
         true,
         None::<&str>,
     )?;
@@ -149,7 +156,7 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         Some(MenuItem::with_id(
             app,
             ID_CONTINUOUS,
-            "Stop continuous recording",
+            t("Stop continuous recording"),
             true,
             None::<&str>,
         )?)
@@ -157,7 +164,7 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
         Some(MenuItem::with_id(
             app,
             ID_CONTINUOUS,
-            "Record continuously",
+            t("Record continuously"),
             true,
             None::<&str>,
         )?)
@@ -175,9 +182,12 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
                     t.name.clone()
                 };
                 let label = if t.shortcut.is_empty() {
-                    format!("Capture: {name}")
+                    tf("Capture: {name}", &[("name", &name)])
                 } else {
-                    format!("Capture: {name}  ({})", t.shortcut)
+                    tf(
+                        "Capture: {name}  ({shortcut})",
+                        &[("name", &name), ("shortcut", &t.shortcut)],
+                    )
                 };
                 captures.push(MenuItem::with_id(
                     app,

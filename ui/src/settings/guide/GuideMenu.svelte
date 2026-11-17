@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The list of all guides, at the foot of the sidebar.
   import { onMount } from 'svelte';
   import { startTour } from './tourState.svelte';
@@ -25,18 +26,18 @@
 </script>
 
 <details class="menu" bind:this={menu}>
-  <summary>Guides</summary>
+  <summary>{t('Guides')}</summary>
   <ul>
-    {#each usage as t (t.id)}
-      <li><button type="button" onclick={() => pick(t.id)}>{t.title}</button></li>
+    {#each usage as item (item.id)}
+      <li><button type="button" onclick={() => pick(item.id)}>{item.title}</button></li>
     {/each}
   </ul>
   {#if services.length}
     <details class="services">
-      <summary>Connect a service</summary>
+      <summary>{t('Connect a service')}</summary>
       <ul>
-        {#each services as t (t.id)}
-          <li><button type="button" onclick={() => pick(t.id)}>{t.title.replace(/^Connect /, '')}</button></li>
+        {#each services as item (item.id)}
+          <li><button type="button" onclick={() => pick(item.id)}>{item.title.replace(/^Connect /, '')}</button></li>
         {/each}
       </ul>
     </details>

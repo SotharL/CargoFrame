@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   import { onDestroy, onMount } from 'svelte';
   import Section from '../../lib/components/Section.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
@@ -97,23 +99,23 @@
 </script>
 
 <Section
-  title="Updates"
-  hint="CargoFrame looks for a newer release on GitHub, checks the download against its published checksum, and installs it over this one. Your settings stay."
+  title={t('Updates')}
+  hint={t('CargoFrame looks for a newer release on GitHub, checks the download against its published checksum, and installs it over this one. Your settings stay.')}
 >
   {#if view}
     <p>
-      Version <span class="mono selectable">{view.current}</span>
+      <Tr text={t('Version {version}')}>{#snippet version()}<span class="mono selectable">{view!.current}</span>{/snippet}</Tr>
     </p>
 
     {#if !view.supported}
       <p class="quiet">
-        There is no installer for this kind of computer yet, so CargoFrame cannot update itself here.
+        {t('There is no installer for this kind of computer yet, so CargoFrame cannot update itself here.')}
       </p>
     {/if}
 
     <div class="actions">
       <button type="button" class="primary" onclick={check} disabled={working || !view.supported}>
-        {view.phase.state === 'checking' ? 'Checking…' : 'Check for updates'}
+        {view.phase.state === 'checking' ? t('Checking…') : t('Check for updates')}
       </button>
       {#if view.phase.state === 'checking'}<span class="spinner" aria-hidden="true"></span>{/if}
     </div>
@@ -122,55 +124,51 @@
       {#if view.phase.state === 'downloading'}
         {@const p = percent(view.phase.done, view.phase.total)}
         <p>
-          Downloading
-          {#if view.phase.total}
-            {formatSize(view.phase.done)} of {formatSize(view.phase.total)}
-          {:else}
-            {formatSize(view.phase.done)}
-          {/if}
+          {view.phase.total
+            ? t('Downloading {done} of {total}', { done: formatSize(view.phase.done), total: formatSize(view.phase.total) })
+            : t('Downloading {done}', { done: formatSize(view.phase.done) })}
         </p>
         <progress
-          aria-label="Download progress"
+          aria-label={t('Download progress')}
           max={view.phase.total ?? undefined}
           value={p === null ? undefined : view.phase.done}
         ></progress>
       {:else if view.phase.state === 'verifying'}
-        <p>Checking the download against its checksum…</p>
+        <p>{t('Checking the download against its checksum…')}</p>
       {:else if view.phase.state === 'installing'}
         <p>
-          Installing. CargoFrame will close and open again by itself; this window closes with it.
+          {t('Installing. CargoFrame will close and open again by itself; this window closes with it.')}
         </p>
       {:else if view.phase.state === 'failed'}
-        <p><Chip kind="err" label="The update did not finish" /></p>
+        <p><Chip kind="err" label={t('The update did not finish')} /></p>
         <p class="error" role="alert">{view.phase.message}</p>
         {#if view.phase.installer}
           <p class="quiet">
-            The downloaded installer was checked and kept here, so you can run it yourself:
-            <span class="mono selectable">{view.phase.installer}</span>
+            <Tr text={t('The downloaded installer was checked and kept here, so you can run it yourself: {path}')}>{#snippet path()}<span class="mono selectable">{(view!.phase as { installer?: string }).installer}</span>{/snippet}</Tr>
           </p>
         {/if}
       {:else if view.last?.state === 'up_to_date'}
-        <p><Chip kind="ok" label="CargoFrame is up to date" /></p>
-        <p class="quiet">The newest release is {view.last.latest}.</p>
+        <p><Chip kind="ok" label={t('CargoFrame is up to date')} /></p>
+        <p class="quiet">{t('The newest release is {latest}.', { latest: view.last.latest })}</p>
       {:else if view.last?.state === 'failed'}
-        <p><Chip kind="err" label="Could not check" /></p>
+        <p><Chip kind="err" label={t('Could not check')} /></p>
         <p class="error" role="alert">{view.last.message}</p>
       {/if}
 
       {#if view.last?.state === 'available' && !working && view.phase.state !== 'failed'}
         <p>
-          <Chip kind="warn" label={`Version ${view.last.version} is available`} />
+          <Chip kind="warn" label={t('Version {version} is available', { version: view.last.version })} />
         </p>
         <p class="quiet">
-          {[view.last.installer, formatSize(view.last.size), day(view.last.published) && `released ${day(view.last.published)}`].filter(Boolean).join(' · ')}
+          {[view.last.installer, formatSize(view.last.size), day(view.last.published) && t('released {day}', { day: day(view.last.published) })].filter(Boolean).join(' · ')}
         </p>
         {#if view.last.notes.trim()}
-          <pre class="notes selectable" aria-label="Release notes">{view.last.notes.trim()}</pre>
+          <pre class="notes selectable" aria-label={t('Release notes')}>{view.last.notes.trim()}</pre>
         {/if}
         <div class="actions">
-          <button type="button" class="primary" onclick={install}>Download and install</button>
+          <button type="button" class="primary" onclick={install}>{t('Download and install')}</button>
           <button type="button" onclick={() => open(view!.last?.state === 'available' ? view!.last.page : '')}>
-            Release page
+            {t('Release page')}
           </button>
         </div>
       {/if}
@@ -178,23 +176,22 @@
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
-    <Toggle bind:checked={auto} label="Look for a newer version once a day" onchange={onauto} />
+    <Toggle bind:checked={auto} label={t('Look for a newer version once a day')} onchange={onauto} />
     <p class="quiet">
-      You get a notification when one is found. Nothing is downloaded or installed until you press
-      the button above.
+      {t('You get a notification when one is found. Nothing is downloaded or installed until you press the button above.')}
     </p>
 
     <div class="token" class:ask={wantsToken}>
       <SecretInput
-        label="GitHub access token"
+        label={t('GitHub access token')}
         stored={view.token_set}
         onsave={saveToken}
         onclear={() => saveToken('')}
-        hint={`While the ${view.repository} repository is private, GitHub only answers with a token. Create a fine-grained token that can only read this repository's contents. It is kept in your system's password store and sent to api.github.com only. Leave it empty once the repository is public.`}
+        hint={t('While the {repository} repository is private, GitHub only answers with a token. Create a fine-grained token that can only read this repository\'s contents. It is kept in your system\'s password store and sent to api.github.com only. Leave it empty once the repository is public.', { repository: view.repository })}
       />
       {#if view.token_problem}
         <p class="error" role="alert">
-          The password store could not be read, so a token cannot be used: {view.token_problem}
+          {t('The password store could not be read, so a token cannot be used: {token_problem}', { token_problem: view.token_problem })}
         </p>
       {/if}
     </div>

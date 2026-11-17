@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // Values made from other values, in no file: `{stream}_{change}`, with choices tried from the
   // top and conditions ("if {shelf} is found"). Stored as a rule that reads no file
   // (core/rules/src/combine.rs).
@@ -41,7 +42,7 @@
 
   const COND_TESTS: { value: RuleCondTest; label: string; needsText: boolean }[] = [
     { value: 'found', label: 'is found', needsText: false },
-    { value: 'missing', label: 'is not found', needsText: false },
+    { value: 'missing', label: t('is not found'), needsText: false },
     { value: 'is', label: 'is', needsText: true },
     { value: 'is_not', label: 'is not', needsText: true },
     { value: 'contains', label: 'contains', needsText: true },
@@ -75,7 +76,7 @@
     failure = '';
     try {
       const value = $state.snapshot(draft) as Rule;
-      if (!value.name.trim()) value.name = value.values?.[0]?.name || 'Made from other values';
+      if (!value.name.trim()) value.name = value.values?.[0]?.name || t('Made from other values');
       await onsave(id, value);
     } catch (e) {
       failure = String(e);
@@ -85,58 +86,58 @@
 </script>
 
 <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-  <button type="button" class="back" onclick={oncancel}>← Values</button>
-  <h2>{id ? 'Values made from other values' : 'New value made from other values'}</h2>
-  <p class="quiet small">Tried from the top: the first choice that fits gives the value. A choice with no condition fits when every value it names is found, so put the one with the most values first.</p>
+  <button type="button" class="back" onclick={oncancel}>{t('← Values')}</button>
+  <h2>{id ? t('Values made from other values') : t('New value made from other values')}</h2>
+  <p class="quiet small">{t('Tried from the top: the first choice that fits gives the value. A choice with no condition fits when every value it names is found, so put the one with the most values first.')}</p>
 
   {#each draft.values ?? [] as v, i (i)}
     {#if v.find.type === 'combine'}
       {@const choices = v.find.choices}
       <div class="value">
         <div class="line">
-          <input type="text" class="name" value={v.name} oninput={(e) => { v.name = e.currentTarget.value; renamed(v); }} placeholder="Build id" aria-label="Name of the value" />
+          <input type="text" class="name" value={v.name} oninput={(e) => { v.name = e.currentTarget.value; renamed(v); }} placeholder={t('Build id')} aria-label={t('Name of the value')} />
           <code class="token">{token(v.key)}</code>
           {#if (draft.values?.length ?? 0) > 1}
-            <button type="button" class="tiny end" aria-label={`Remove ${v.name || 'this value'}`} onclick={() => (draft.values = draft.values!.filter((_, n) => n !== i))}>×</button>
+            <button type="button" class="tiny end" aria-label={t('Remove {name}', { name: v.name || t('this value') })} onclick={() => (draft.values = draft.values!.filter((_, n) => n !== i))}>×</button>
           {/if}
         </div>
         {#each choices as c, ci (ci)}
           <div class="choice">
             <div class="line">
-              <span class="word">{ci === 0 ? 'Use' : 'else'}</span>
-              <input type="text" class="grow mono" bind:value={c.text} list="combine-values" placeholder={'{branch}_{build}'} aria-label={`Choice ${ci + 1}`} />
-              <button type="button" class="tiny" aria-label={`Move choice ${ci + 1} up`} disabled={ci === 0} onclick={() => moveChoice(choices, ci, -1)}>↑</button>
-              <button type="button" class="tiny" aria-label={`Move choice ${ci + 1} down`} disabled={ci === choices.length - 1} onclick={() => moveChoice(choices, ci, 1)}>↓</button>
-              <button type="button" class="tiny" aria-label={`Remove choice ${ci + 1}`} disabled={choices.length === 1} onclick={() => choices.splice(ci, 1)}>×</button>
+              <span class="word">{ci === 0 ? t('Use') : t('else')}</span>
+              <input type="text" class="grow mono" bind:value={c.text} list="combine-values" placeholder={'{branch}_{build}'} aria-label={t('Choice {n}', { n: ci + 1 })} />
+              <button type="button" class="tiny" aria-label={t('Move choice {n} up', { n: ci + 1 })} disabled={ci === 0} onclick={() => moveChoice(choices, ci, -1)}>↑</button>
+              <button type="button" class="tiny" aria-label={t('Move choice {n} down', { n: ci + 1 })} disabled={ci === choices.length - 1} onclick={() => moveChoice(choices, ci, 1)}>↓</button>
+              <button type="button" class="tiny" aria-label={t('Remove choice {n}', { n: ci + 1 })} disabled={choices.length === 1} onclick={() => choices.splice(ci, 1)}>×</button>
             </div>
             {#each c.when ?? [] as w, wi (wi)}
               <div class="line cond">
                 <span class="word quiet">{wi === 0 ? 'if' : 'and'}</span>
-                <input type="text" class="name mono" bind:value={w.value} list="combine-values" placeholder="shelf" aria-label={`Value condition ${wi + 1} of choice ${ci + 1} looks at`} />
-                <select bind:value={w.test} aria-label={`Test of condition ${wi + 1} of choice ${ci + 1}`}>
-                  {#each COND_TESTS as t (t.value)}<option value={t.value}>{t.label}</option>{/each}
+                <input type="text" class="name mono" bind:value={w.value} list="combine-values" placeholder="shelf" aria-label={t('Value condition {n} of choice {n2} looks at', { n: wi + 1, n2: ci + 1 })} />
+                <select bind:value={w.test} aria-label={t('Test of condition {n} of choice {n2}', { n: wi + 1, n2: ci + 1 })}>
+                  {#each COND_TESTS as item (item.value)}<option value={item.value}>{item.label}</option>{/each}
                 </select>
                 {#if needsText(w.test)}
-                  <input type="text" class="grow" bind:value={w.text} placeholder="Release" aria-label={`Text of condition ${wi + 1} of choice ${ci + 1}`} />
+                  <input type="text" class="grow" bind:value={w.text} placeholder={t('Release')} aria-label={t('Text of condition {n} of choice {n2}', { n: wi + 1, n2: ci + 1 })} />
                 {/if}
-                <button type="button" class="tiny" aria-label={`Remove condition ${wi + 1} of choice ${ci + 1}`} onclick={() => c.when?.splice(wi, 1)}>×</button>
+                <button type="button" class="tiny" aria-label={t('Remove condition {n} of choice {choice}', { n: wi + 1, choice: ci + 1 })} onclick={() => c.when?.splice(wi, 1)}>×</button>
               </div>
             {/each}
-            <div><button type="button" class="link" onclick={() => (c.when = [...(c.when ?? []), { value: '', test: 'found', text: '' }])}>Add a condition</button></div>
+            <div><button type="button" class="link" onclick={() => (c.when = [...(c.when ?? []), { value: '', test: 'found', text: '' }])}>{t('Add a condition')}</button></div>
           </div>
         {/each}
-        <div><button type="button" onclick={() => choices.push({ text: '' })}>Add a choice</button></div>
+        <div><button type="button" onclick={() => choices.push({ text: '' })}>{t('Add a choice')}</button></div>
         <div class="line">
-          <span class="word quiet">If none fits</span>
-          <input type="text" class="grow" value={v.fallback ?? ''} oninput={(e) => (v.fallback = e.currentTarget.value === '' ? null : e.currentTarget.value)} placeholder="leave it empty" aria-label="Value if no choice fits" />
+          <span class="word quiet">{t('If none fits')}</span>
+          <input type="text" class="grow" value={v.fallback ?? ''} oninput={(e) => (v.fallback = e.currentTarget.value === '' ? null : e.currentTarget.value)} placeholder={t('leave it empty')} aria-label={t('Value if no choice fits')} />
         </div>
       </div>
     {/if}
   {/each}
-  <div><button type="button" onclick={addValue}>Add a value</button></div>
+  <div><button type="button" onclick={addValue}>{t('Add a value')}</button></div>
 
-  <Field label="Group name" hint="Shown when something cannot be made. Optional.">
-    <input type="text" bind:value={draft.name} placeholder="Build id" />
+  <Field label={t('Group name')} hint={t('Shown when something cannot be made. Optional.')}>
+    <input type="text" bind:value={draft.name} placeholder={t('Build id')} />
   </Field>
 
   <datalist id="combine-values">
@@ -145,8 +146,8 @@
 
   {#if failure}<p class="error" role="alert">{failure}</p>{/if}
   <div class="buttons">
-    <button class="primary" type="submit" disabled={busy}>Save</button>
-    <button type="button" onclick={oncancel}>Cancel</button>
+    <button class="primary" type="submit" disabled={busy}>{t('Save')}</button>
+    <button type="button" onclick={oncancel}>{t('Cancel')}</button>
   </div>
 </form>
 

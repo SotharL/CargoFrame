@@ -12,6 +12,7 @@ use crate::model::{
     TextBlock, TextRole, TitlePlacement, ValueSource, VideoBlock,
 };
 use crate::validate::ConnectionKind;
+use cargoframe_i18n::{msg, t};
 
 /// What the person sees in the list of starting points.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -28,122 +29,122 @@ pub struct TemplateInfo {
 pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "local-capture",
-        name: "Save a capture locally",
-        description: "The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. No account needed.",
+        name: msg!("Save a capture locally"),
+        description: msg!("The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. No account needed."),
         service: None,
     },
     TemplateInfo {
         key: "local-video",
-        name: "Save a recording locally",
-        description: "The recording, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the screen. No account needed.",
+        name: msg!("Save a recording locally"),
+        description: msg!("The recording, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the screen. No account needed."),
         service: None,
     },
     TemplateInfo {
         key: "jira-bug",
-        name: "Jira bug report",
-        description: "Project, issue type, summary and description, with the screenshot and any files attached to a new issue. A Logs tab beside the screenshot reads the logs, to copy lines from.",
+        name: msg!("Jira bug report"),
+        description: msg!("Project, issue type, summary and description, with the screenshot and any files attached to a new issue. A Logs tab beside the screenshot reads the logs, to copy lines from."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
         key: "jira-video",
-        name: "Jira bug report with a recording",
-        description: "Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.",
+        name: msg!("Jira bug report with a recording"),
+        description: msg!("Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
         key: "jira-comment",
-        name: "Jira comment on an issue",
-        description: "Pick one of your recent issues and add a comment with the screenshot and files.",
+        name: msg!("Jira comment on an issue"),
+        description: msg!("Pick one of your recent issues and add a comment with the screenshot and files."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
         key: "github-issue",
-        name: "GitHub issue",
-        description: "Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it. A Logs tab beside the screenshot reads the logs.",
+        name: msg!("GitHub issue"),
+        description: msg!("Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it. A Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
         key: "github-comment",
-        name: "GitHub comment on an issue",
-        description: "Pick an open issue of the repository and add a comment with the screenshot and files.",
+        name: msg!("GitHub comment on an issue"),
+        description: msg!("Pick an open issue of the repository and add a comment with the screenshot and files."),
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
         key: "google-drive",
-        name: "Google Drive upload",
-        description: "Upload the screenshot and a zip of the ticked files to a Drive folder you pick.",
+        name: msg!("Google Drive upload"),
+        description: msg!("Upload the screenshot and a zip of the ticked files to a Drive folder you pick."),
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
         key: "google-drive-video",
-        name: "Google Drive upload of a recording",
-        description: "Upload the recording and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the screen.",
+        name: msg!("Google Drive upload of a recording"),
+        description: msg!("Upload the recording and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the screen."),
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
         key: "google-sheet",
-        name: "Google Sheet row",
-        description: "Add a row to a spreadsheet: the date, two columns you fill, and links to the uploads.",
+        name: msg!("Google Sheet row"),
+        description: msg!("Add a row to a spreadsheet: the date, two columns you fill, and links to the uploads."),
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
         key: "reddit-post",
-        name: "Reddit post",
-        description: "Post the screenshot to a subreddit you follow, with a title and text.",
+        name: msg!("Reddit post"),
+        description: msg!("Post the screenshot to a subreddit you follow, with a title and text."),
         service: Some(ConnectionKind::Reddit),
     },
     TemplateInfo {
         key: "claude-ask",
-        name: "Ask Claude about a capture",
-        description: "Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude. A Logs tab beside the screenshot reads the logs, to copy lines into the prompt.",
+        name: msg!("Ask Claude about a capture"),
+        description: msg!("Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude. A Logs tab beside the screenshot reads the logs, to copy lines into the prompt."),
         service: Some(ConnectionKind::Claude),
     },
     TemplateInfo {
         key: "slack-message",
-        name: "Slack message",
-        description: "Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread. A Logs tab beside the screenshot reads the logs.",
+        name: msg!("Slack message"),
+        description: msg!("Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread. A Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
         key: "slack-video",
-        name: "Slack message with a recording",
-        description: "Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.",
+        name: msg!("Slack message with a recording"),
+        description: msg!("Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen."),
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
         key: "discord-message",
-        name: "Discord message",
-        description: "Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged. A Logs tab beside the screenshot reads the logs.",
+        name: msg!("Discord message"),
+        description: msg!("Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged. A Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Discord),
     },
     TemplateInfo {
         key: "teams-message",
-        name: "Teams message",
-        description: "Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.",
+        name: msg!("Teams message"),
+        description: msg!("Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you."),
         service: Some(ConnectionKind::Teams),
     },
     TemplateInfo {
         key: "x-post",
-        name: "X post",
-        description: "Post the screenshot to your X account with a short text (280 characters), hashtags and a description of the picture.",
+        name: msg!("X post"),
+        description: msg!("Post the screenshot to your X account with a short text (280 characters), hashtags and a description of the picture."),
         service: Some(ConnectionKind::X),
     },
     TemplateInfo {
         key: "bluesky-post",
-        name: "Bluesky post",
-        description: "Post the screenshot to your Bluesky account with a short text (300 characters), hashtags and a description of the picture.",
+        name: msg!("Bluesky post"),
+        description: msg!("Post the screenshot to your Bluesky account with a short text (300 characters), hashtags and a description of the picture."),
         service: Some(ConnectionKind::Bluesky),
     },
     TemplateInfo {
         key: "instagram-post",
-        name: "Instagram post",
-        description: "Post the screenshot to your Instagram professional account with a caption and hashtags.",
+        name: msg!("Instagram post"),
+        description: msg!("Post the screenshot to your Instagram professional account with a caption and hashtags."),
         service: Some(ConnectionKind::Instagram),
     },
     TemplateInfo {
         key: "custom-post",
-        name: "Custom API post",
-        description: "A title and a message with the screenshot and files, sent through the request you described.",
+        name: msg!("Custom API post"),
+        description: msg!("A title and a message with the screenshot and files, sent through the request you described."),
         service: Some(ConnectionKind::CustomApi),
     },
 ];
@@ -166,10 +167,10 @@ fn block(id: &str, r: Rect, kind: BlockKind) -> Block {
 
 fn text(title: &str, role: TextRole, default_text: &str) -> BlockKind {
     BlockKind::Text(TextBlock {
-        title: title.to_string(),
+        title: t(title).to_string(),
         placement: TitlePlacement::Above,
         role,
-        default_text: default_text.to_string(),
+        default_text: t(default_text).to_string(),
         formatting: true,
         one_line: false,
     })
@@ -178,10 +179,10 @@ fn text(title: &str, role: TextRole, default_text: &str) -> BlockKind {
 /// A text of one line: a title, a link. Services do not format those.
 fn line(title: &str, default_text: &str) -> BlockKind {
     BlockKind::Text(TextBlock {
-        title: title.to_string(),
+        title: t(title).to_string(),
         placement: TitlePlacement::Above,
         role: TextRole::Plain,
-        default_text: default_text.to_string(),
+        default_text: t(default_text).to_string(),
         formatting: false,
         one_line: true,
     })
@@ -189,12 +190,12 @@ fn line(title: &str, default_text: &str) -> BlockKind {
 
 /// Hashtags added at the end of a post (X, Bluesky, Instagram).
 fn hashtags() -> BlockKind {
-    BlockKind::Tags(TagsBlock::new("Hashtags", &[]))
+    BlockKind::Tags(TagsBlock::new(t("Hashtags"), &[]))
 }
 
 fn files(title: &str) -> BlockKind {
     BlockKind::Files(FilesBlock {
-        title: title.to_string(),
+        title: t(title).to_string(),
         include: vec!["*.log".to_string(), "*.txt".to_string()],
         preselect: Vec::new(),
         look_in: Default::default(),
@@ -208,13 +209,13 @@ fn files(title: &str) -> BlockKind {
 fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
     let whole = rect(0, 0, 7, h);
     let tab = |name: &str, ids: &[&str]| Tab {
-        name: name.into(),
+        name: t(name).into(),
         blocks: ids.iter().map(|id| id.to_string()).collect(),
     };
     let mut tabs = Vec::new();
     let mut blocks = Vec::new();
     if video {
-        tabs.push(tab("Recording", &["clip"]));
+        tabs.push(tab(msg!("Recording"), &["clip"]));
         blocks.push(block(
             "clip",
             whole,
@@ -226,15 +227,15 @@ fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
             }),
         ));
     }
-    tabs.push(tab("Screenshot", &["shot"]));
+    tabs.push(tab(msg!("Screenshot"), &["shot"]));
     blocks.push(block("shot", whole, BlockKind::Screenshot));
-    tabs.push(tab("Logs", &["files", "log"]));
+    tabs.push(tab(msg!("Logs"), &["files", "log"]));
     blocks.push(block("files", rect(0, 0, 7, 3), files(files_title)));
     blocks.push(block(
         "log",
         rect(0, 3, 7, h - 3),
         BlockKind::LogView(LogViewBlock {
-            title: "Log".into(),
+            title: t("Log").into(),
             // a recording's window starts on the lines written while it recorded
             during: video,
             ..Default::default()
@@ -256,7 +257,7 @@ fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
 
 fn web_list(title: &str, connection_id: &str, options_id: &str) -> BlockKind {
     BlockKind::Dropdown(DropdownBlock::new(
-        title,
+        t(title),
         DropdownSource::WebApi {
             connection_id: connection_id.to_string(),
             options_id: options_id.to_string(),
@@ -292,7 +293,7 @@ fn tags(title: &str, connection_id: &str, options_id: &str) -> BlockKind {
             connection_id: connection_id.to_string(),
             options_id: options_id.to_string(),
         }),
-        ..TagsBlock::new(title, &[])
+        ..TagsBlock::new(t(title), &[])
     })
 }
 
@@ -314,7 +315,7 @@ fn button(
         "send",
         r,
         BlockKind::SharingButton(SharingButton {
-            label: label.to_string(),
+            label: t(label).to_string(),
             connection_id: connection_id.map(String::from),
             prompt_block_id: prompt_block_id.map(String::from),
             mappings,
@@ -328,13 +329,13 @@ fn button(
 const WHERE: &str = "{app.title}";
 /// Written with formatting: the templates that use it send it where formatting is shown.
 const SEEN_IN: &str =
-    "Seen in `{app.exe}` **({project.name})** on *{capture.date}* at *{capture.time}*.";
+    msg!("Seen in `{app.exe}` **({project.name})** on *{capture.date}* at *{capture.time}*.");
 
 /// Build the template `key` as a layout, for the connection `connection_id`. Templates made for
 /// a service need one (`None` gives no template); the one that saves locally takes none. The
 /// layout has no id: the caller chooses it when the person saves a copy.
 pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
-    let t = info(key)?;
+    let tpl = info(key)?;
     // A template for a recording is the one for a picture with the picture block swapped for a
     // video block, so the two cannot drift apart.
     let (key, is_video) = match key {
@@ -345,7 +346,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         other => (other, false),
     };
     let c = match (
-        t.service,
+        tpl.service,
         connection_id.map(str::trim).filter(|c| !c.is_empty()),
     ) {
         (Some(_), None) => return None,
@@ -359,40 +360,44 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "note",
                 rect(7, 0, 5, 3),
-                text("Note", TextRole::Plain, WHERE),
+                text(msg!("Note"), TextRole::Plain, WHERE),
             ),
-            block("files", rect(7, 3, 5, 3), files("Files to keep")),
+            block("files", rect(7, 3, 5, 3), files(msg!("Files to keep"))),
             button(
                 rect(7, 6, 5, 1),
-                "Save locally",
+                msg!("Save locally"),
                 None,
                 None,
                 vec![from_block("note", "note")],
             ),
         ],
         ("jira-bug", Some(c)) => [
-            capture_tabs(9, is_video, "Attach files"),
+            capture_tabs(9, is_video, msg!("Attach files")),
             vec![
                 block(
                     "project",
                     rect(7, 0, 5, 1),
-                    web_list("Project", c, "projects"),
+                    web_list(msg!("Project"), c, "projects"),
                 ),
                 block(
                     "type",
                     rect(7, 1, 5, 1),
-                    web_list("Issue type", c, "issue_types"),
+                    web_list(msg!("Issue type"), c, "issue_types"),
                 ),
-                block("summary", rect(7, 2, 5, 1), line("Summary", WHERE)),
+                block("summary", rect(7, 2, 5, 1), line(msg!("Summary"), WHERE)),
                 block(
                     "description",
                     rect(7, 3, 5, 4),
-                    text("Description", TextRole::Plain, SEEN_IN),
+                    text(msg!("Description"), TextRole::Plain, SEEN_IN),
                 ),
-                block("labels", rect(7, 7, 5, 1), tags("Labels", c, "labels")),
+                block(
+                    "labels",
+                    rect(7, 7, 5, 1),
+                    tags(msg!("Labels"), c, "labels"),
+                ),
                 button(
                     rect(7, 8, 5, 1),
-                    "Create issue",
+                    msg!("Create issue"),
                     Some(c),
                     None,
                     vec![
@@ -411,17 +416,17 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "issue",
                 rect(7, 0, 5, 1),
-                web_list("Issue", c, "recent_issues"),
+                web_list(msg!("Issue"), c, "recent_issues"),
             ),
             block(
                 "comment",
                 rect(7, 1, 5, 4),
-                text("Comment", TextRole::Plain, SEEN_IN),
+                text(msg!("Comment"), TextRole::Plain, SEEN_IN),
             ),
-            block("files", rect(7, 5, 5, 3), files("Attach files")),
+            block("files", rect(7, 5, 5, 3), files(msg!("Attach files"))),
             button(
                 rect(7, 8, 5, 1),
-                "Add comment",
+                msg!("Add comment"),
                 Some(c),
                 None,
                 vec![
@@ -431,18 +436,22 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             ),
         ],
         ("github-issue", Some(c)) => [
-            capture_tabs(8, is_video, "Attach files"),
+            capture_tabs(8, is_video, msg!("Attach files")),
             vec![
-                block("title", rect(7, 0, 5, 1), line("Title", WHERE)),
-                block("labels", rect(7, 1, 5, 1), tags("Labels", c, "labels")),
+                block("title", rect(7, 0, 5, 1), line(msg!("Title"), WHERE)),
+                block(
+                    "labels",
+                    rect(7, 1, 5, 1),
+                    tags(msg!("Labels"), c, "labels"),
+                ),
                 block(
                     "description",
                     rect(7, 2, 5, 5),
-                    text("Description", TextRole::Plain, SEEN_IN),
+                    text(msg!("Description"), TextRole::Plain, SEEN_IN),
                 ),
                 button(
                     rect(7, 7, 5, 1),
-                    "Open issue",
+                    msg!("Open issue"),
                     Some(c),
                     None,
                     vec![
@@ -459,17 +468,17 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "issue",
                 rect(7, 0, 5, 1),
-                web_list("Issue", c, "recent_issues"),
+                web_list(msg!("Issue"), c, "recent_issues"),
             ),
             block(
                 "comment",
                 rect(7, 1, 5, 4),
-                text("Comment", TextRole::Plain, SEEN_IN),
+                text(msg!("Comment"), TextRole::Plain, SEEN_IN),
             ),
-            block("files", rect(7, 5, 5, 3), files("Attach files")),
+            block("files", rect(7, 5, 5, 3), files(msg!("Attach files"))),
             button(
                 rect(7, 8, 5, 1),
-                "Add comment",
+                msg!("Add comment"),
                 Some(c),
                 None,
                 vec![from_block("issue", "issue"), from_block("body", "comment")],
@@ -480,12 +489,12 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "folder",
                 rect(7, 0, 5, 1),
-                web_list("Drive folder", c, "folders"),
+                web_list(msg!("Drive folder"), c, "folders"),
             ),
-            block("files", rect(7, 1, 5, 4), files("Files to upload")),
+            block("files", rect(7, 1, 5, 4), files(msg!("Files to upload"))),
             button(
                 rect(7, 5, 5, 1),
-                "Upload to Drive",
+                msg!("Upload to Drive"),
                 Some(c),
                 None,
                 vec![from_block("folder", "folder")],
@@ -496,22 +505,22 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "spreadsheet",
                 rect(7, 0, 5, 1),
-                line("Spreadsheet (id or link)", ""),
+                line(msg!("Spreadsheet (id or link)"), ""),
             ),
-            block("sheet", rect(7, 1, 5, 1), line("Sheet tab", "Sheet1")),
+            block("sheet", rect(7, 1, 5, 1), line(msg!("Sheet tab"), "Sheet1")),
             block(
                 "what",
                 rect(7, 2, 5, 3),
-                text("What happened", TextRole::Plain, WHERE),
+                text(msg!("What happened"), TextRole::Plain, WHERE),
             ),
             block(
                 "project",
                 rect(7, 5, 5, 1),
-                line("Project", "{project.name}"),
+                line(msg!("Project"), "{project.name}"),
             ),
             button(
                 rect(7, 6, 5, 1),
-                "Add row",
+                msg!("Add row"),
                 Some(c),
                 None,
                 vec![
@@ -527,13 +536,17 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "subreddit",
                 rect(7, 0, 5, 1),
-                web_list("Subreddit", c, "subscribed"),
+                web_list(msg!("Subreddit"), c, "subscribed"),
             ),
-            block("title", rect(7, 1, 5, 1), line("Title", WHERE)),
-            block("body", rect(7, 2, 5, 5), text("Text", TextRole::Plain, "")),
+            block("title", rect(7, 1, 5, 1), line(msg!("Title"), WHERE)),
+            block(
+                "body",
+                rect(7, 2, 5, 5),
+                text(msg!("Text"), TextRole::Plain, ""),
+            ),
             button(
                 rect(7, 7, 5, 1),
-                "Post",
+                msg!("Post"),
                 Some(c),
                 None,
                 vec![
@@ -548,21 +561,21 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "text",
                 rect(7, 0, 5, 4),
-                text("Post (280 characters)", TextRole::Plain, WHERE),
+                text(msg!("Post (280 characters)"), TextRole::Plain, WHERE),
             ),
             block("hashtags", rect(7, 4, 5, 1), hashtags()),
             block(
                 "alt",
                 rect(7, 5, 5, 2),
                 text(
-                    "Picture description",
+                    msg!("Picture description"),
                     TextRole::Plain,
-                    "A screenshot of {app.title}",
+                    msg!("A screenshot of {app.title}"),
                 ),
             ),
             button(
                 rect(7, 7, 5, 1),
-                "Post to X",
+                msg!("Post to X"),
                 Some(c),
                 None,
                 vec![
@@ -577,21 +590,21 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "text",
                 rect(7, 0, 5, 4),
-                text("Post (300 characters)", TextRole::Plain, WHERE),
+                text(msg!("Post (300 characters)"), TextRole::Plain, WHERE),
             ),
             block("hashtags", rect(7, 4, 5, 1), hashtags()),
             block(
                 "alt",
                 rect(7, 5, 5, 2),
                 text(
-                    "Picture description",
+                    msg!("Picture description"),
                     TextRole::Plain,
-                    "A screenshot of {app.title}",
+                    msg!("A screenshot of {app.title}"),
                 ),
             ),
             button(
                 rect(7, 7, 5, 1),
-                "Post to Bluesky",
+                msg!("Post to Bluesky"),
                 Some(c),
                 None,
                 vec![
@@ -606,12 +619,12 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "caption",
                 rect(7, 0, 5, 6),
-                text("Caption", TextRole::Plain, WHERE),
+                text(msg!("Caption"), TextRole::Plain, WHERE),
             ),
             block("hashtags", rect(7, 6, 5, 1), hashtags()),
             button(
                 rect(7, 7, 5, 1),
-                "Post to Instagram",
+                msg!("Post to Instagram"),
                 Some(c),
                 None,
                 vec![
@@ -621,25 +634,25 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             ),
         ],
         ("claude-ask", Some(c)) => [
-            capture_tabs(9, is_video, "Files to mention"),
+            capture_tabs(9, is_video, msg!("Files to mention")),
             vec![
                 block(
                     "chat",
                     rect(7, 0, 5, 1),
-                    BlockKind::Dropdown(DropdownBlock::new("Chat", DropdownSource::ClaudeChats)),
+                    BlockKind::Dropdown(DropdownBlock::new(t("Chat"), DropdownSource::ClaudeChats)),
                 ),
                 block(
                     "prompt",
                     rect(7, 1, 5, 7),
                     text(
-                        "Prompt",
+                        msg!("Prompt"),
                         TextRole::Prompt,
-                        "What is wrong in {app.title}? The screenshot shows it.",
+                        msg!("What is wrong in {app.title}? The screenshot shows it."),
                     ),
                 ),
                 button(
                     rect(7, 8, 5, 1),
-                    "Ask Claude",
+                    msg!("Ask Claude"),
                     Some(c),
                     Some("prompt"),
                     vec![from_block("chat", "chat")],
@@ -648,26 +661,26 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ]
         .concat(),
         ("slack-message", Some(c)) => [
-            capture_tabs(10, is_video, "Attach files"),
+            capture_tabs(10, is_video, msg!("Attach files")),
             vec![
                 block(
                     "channel",
                     rect(7, 0, 5, 1),
-                    web_list("Channel", c, "channels"),
+                    web_list(msg!("Channel"), c, "channels"),
                 ),
                 block(
                     "message",
                     rect(7, 1, 5, 7),
-                    text("Message", TextRole::Plain, SEEN_IN),
+                    text(msg!("Message"), TextRole::Plain, SEEN_IN),
                 ),
                 block(
                     "thread",
                     rect(7, 8, 5, 1),
-                    line("Reply in a thread (message link, optional)", ""),
+                    line(msg!("Reply in a thread (message link, optional)"), ""),
                 ),
                 button(
                     rect(7, 9, 5, 1),
-                    "Post to Slack",
+                    msg!("Post to Slack"),
                     Some(c),
                     Some("message"),
                     vec![
@@ -679,7 +692,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ]
         .concat(),
         ("discord-message", Some(c)) => [
-            capture_tabs(10, is_video, "Attach files"),
+            capture_tabs(10, is_video, msg!("Attach files")),
             // The whole path in one dropdown: the channel, then (when there is one to choose) the
             // thread or forum post inside it. The title narrows the second list.
             vec![
@@ -687,7 +700,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                     "channel",
                     rect(7, 0, 5, 2),
                     path_list(
-                        "Where to post",
+                        msg!("Where to post"),
                         c,
                         "channels",
                         "threads",
@@ -698,16 +711,16 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 block(
                     "title",
                     rect(7, 2, 5, 1),
-                    line("Title (a forum post's name)", WHERE),
+                    line(msg!("Title (a forum post's name)"), WHERE),
                 ),
                 block(
                     "message",
                     rect(7, 3, 5, 6),
-                    text("Message", TextRole::Plain, SEEN_IN),
+                    text(msg!("Message"), TextRole::Plain, SEEN_IN),
                 ),
                 button(
                     rect(7, 9, 5, 1),
-                    "Post to Discord",
+                    msg!("Post to Discord"),
                     Some(c),
                     Some("message"),
                     vec![
@@ -723,22 +736,29 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             block(
                 "target",
                 rect(7, 0, 5, 1),
-                web_list("Chat or channel", c, "targets"),
+                web_list(msg!("Chat or channel"), c, "targets"),
             ),
-            block("title", rect(7, 1, 5, 1), line("Headline (optional)", "")),
+            block(
+                "title",
+                rect(7, 1, 5, 1),
+                line(msg!("Headline (optional)"), ""),
+            ),
             block(
                 "message",
                 rect(7, 2, 5, 4),
-                text("Message", TextRole::Plain, SEEN_IN),
+                text(msg!("Message"), TextRole::Plain, SEEN_IN),
             ),
             block(
                 "thread",
                 rect(7, 6, 5, 1),
-                line("Reply in a channel thread (message link, optional)", ""),
+                line(
+                    msg!("Reply in a channel thread (message link, optional)"),
+                    "",
+                ),
             ),
             button(
                 rect(7, 7, 5, 1),
-                "Post to Teams",
+                msg!("Post to Teams"),
                 Some(c),
                 Some("message"),
                 vec![
@@ -750,16 +770,16 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         ("custom-post", Some(c)) => vec![
             shot(8),
-            block("title", rect(7, 0, 5, 1), line("Title", WHERE)),
+            block("title", rect(7, 0, 5, 1), line(msg!("Title"), WHERE)),
             block(
                 "message",
                 rect(7, 1, 5, 4),
-                text("Message", TextRole::Plain, SEEN_IN),
+                text(msg!("Message"), TextRole::Plain, SEEN_IN),
             ),
-            block("files", rect(7, 5, 5, 3), files("Attach files")),
+            block("files", rect(7, 5, 5, 3), files(msg!("Attach files"))),
             button(
                 rect(7, 8, 5, 1),
-                "Send",
+                msg!("Send"),
                 Some(c),
                 Some("message"),
                 vec![from_block("title", "title")],
@@ -787,7 +807,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         accepts_input: false,
         columns: crate::GRID_COLUMNS,
         id: String::new(),
-        name: t.name.to_string(),
+        name: t(tpl.name).to_string(),
         blocks,
     })
 }

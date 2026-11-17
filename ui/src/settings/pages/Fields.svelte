@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // Layouts → Fill fields: a field of a service (Jira's Labels, Priority, a custom field) and
   // the steps that fill it on every share to that service, from values found in files or anything
   // else the capture knows: "If {gpu} is found → add gpu-{gpu}". Sending a block in a
@@ -24,11 +26,11 @@
   let busy = $state(false);
 
   const KINDS: { value: InfoKind; label: string }[] = [
-    { value: 'text', label: 'Text' },
-    { value: 'number', label: 'Number' },
-    { value: 'flag', label: 'On / off' },
-    { value: 'choice', label: 'One choice from a list' },
-    { value: 'multi_choice', label: 'Several choices from a list' },
+    { value: 'text', label: t('Text') },
+    { value: 'number', label: t('Number') },
+    { value: 'flag', label: t('On / off') },
+    { value: 'choice', label: t('One choice from a list') },
+    { value: 'multi_choice', label: t('Several choices from a list') },
   ];
   const isList = (k: InfoKind) => k === 'choice' || k === 'multi_choice';
 
@@ -40,10 +42,12 @@
   });
   const connectionOf = (id: string) => connections.find((c) => c.id === id);
   const nameOf = (id: string) => connectionOf(id)?.name ?? id;
-  const fieldLabel = (t: InfoType) => connectionOf(t.connection_id)?.describe.fields.find((f) => f.key === t.field)?.label ?? t.field;
+  const fieldLabel = (it: InfoType) => connectionOf(it.connection_id)?.describe.fields.find((f) => f.key === it.field)?.label ?? it.field;
   const layoutName = (id: string) => layouts.items.find((l) => l.id === id)?.item.name ?? id;
-  const where = (t: InfoType) =>
-    (t.layouts ?? []).length === 0 ? 'In every layout that shares there' : `Only in ${(t.layouts ?? []).map(layoutName).join(', ')}`;
+  const where = (it: InfoType) =>
+    (it.layouts ?? []).length === 0
+      ? t('In every layout that shares there')
+      : t('Only in {layouts}', { layouts: (it.layouts ?? []).map(layoutName).join(', ') });
 
   /** The service's own fields, label first, the key as a note. */
   const knownFields = $derived<ComboOption[]>(
@@ -56,10 +60,10 @@
   );
   /** What a step can look at: this field, then the values read from files, then the rest. */
   const subjects = $derived<ComboOption[]>([
-    { value: '', label: 'this field' },
+    { value: '', label: t('this field') },
     ...[...variables]
       .sort((a, b) => Number(!a.name.startsWith('rule.')) - Number(!b.name.startsWith('rule.')))
-      .map((v) => ({ value: v.name, label: token(v.name), note: v.description, group: v.name.startsWith('rule.') ? 'From files' : 'From the capture' })),
+      .map((v) => ({ value: v.name, label: token(v.name), note: v.description, group: v.name.startsWith('rule.') ? t('From files') : t('From the capture') })),
   ]);
   /** The layouts that can share to the chosen service. */
   const sharingLayouts = $derived(
@@ -124,20 +128,23 @@
 
 <div class="page">
   {#if fills.failure}<Chip kind="err" label={fills.failure} />{/if}
-  {#each fills.problems as p (p)}<Chip kind="warn" label={`Could not read a field fill: ${p}`} />{/each}
+  {#each fills.problems as p (p)}<Chip kind="warn" label={t('Could not read a field fill: {problem}', { problem: p })} />{/each}
 
   {#if fills.loaded && fills.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No fields filled yet</h2>
+      <h2>{t('No fields filled yet')}</h2>
       <p class="quiet">
-        Fill a field of the service on every share, from what was found in the files or anything the
-        capture knows. For a box of the layout, choose its field on the sharing button instead.
+        {t('Fill a field of the service on every share, from what was found in the files or anything the capture knows. For a box of the layout, choose its field on the sharing button instead.')}
       </p>
       <p class="example">
-        Example: <strong>Jira → Labels</strong>: if <span class="mono">{'{gpu}'}</span> is found,
-        add <span class="mono">gpu-{'{gpu}'}</span> and add <span class="mono">needs-triage</span>.
+        <Tr text={t('Example: {field}: if {value} is found, add {tag} and add {other}.')}>
+          {#snippet field()}<strong>{t('Jira → Labels')}</strong>{/snippet}
+          {#snippet value()}<span class="mono">{'{gpu}'}</span>{/snippet}
+          {#snippet tag()}<span class="mono">{'gpu-{gpu}'}</span>{/snippet}
+          {#snippet other()}<span class="mono">needs-triage</span>{/snippet}
+        </Tr>
       </p>
-      <button class="primary" data-tour="fields.add" onclick={add}>Fill a field</button>
+      <button class="primary" data-tour="fields.add" onclick={add}>{t('Fill a field')}</button>
     </div>
   {/if}
 
@@ -146,93 +153,95 @@
       <div class="main">
         <h2>{nameOf(item.connection_id)} → {fieldLabel(item)}</h2>
         {#each stepLines(item) as line, i (i)}<p class="step-line">{line}</p>{:else}
-          <p class="quiet">No steps: offered to the layout builder, where a block fills it.</p>
+          <p class="quiet">{t('No steps: offered to the layout builder, where a block fills it.')}</p>
         {/each}
         <p class="quiet use">{where(item)}{item.required ? ' · required' : ''}</p>
       </div>
       <div class="actions">
-        <button onclick={() => edit(id, item)}>Edit</button>
+        <button onclick={() => edit(id, item)}>{t('Edit')}</button>
         {#if confirming === id}
-          <button class="danger" onclick={() => remove(id)}>Delete for good</button>
-          <button onclick={() => (confirming = null)}>Keep</button>
+          <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
+          <button onclick={() => (confirming = null)}>{t('Keep')}</button>
         {:else}
-          <button onclick={() => (confirming = id)}>Delete</button>
+          <button onclick={() => (confirming = id)}>{t('Delete')}</button>
         {/if}
       </div>
     </article>
   {/each}
 
   {#if fills.items.length > 0 && !draft}
-    <div><button class="primary" data-tour="fields.add" onclick={add}>Fill a field</button></div>
+    <div><button class="primary" data-tour="fields.add" onclick={add}>{t('Fill a field')}</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit the field fill' : 'Fill a field'}</h2>
+      <h2>{draft.id ? t('Edit the field fill') : t('Fill a field')}</h2>
       <div class="sentence">
-        <Field label="On" tour="fields.connection" hint={connections.length === 0 ? 'Add a connection in Setup first.' : ''}>
-          <select bind:value={draft.value.connection_id} aria-label="Service">
-            <option value="">Choose a service…</option>
+        <Field label={t('On')} tour="fields.connection" hint={connections.length === 0 ? t('Add a connection in Setup first.') : ''}>
+          <select bind:value={draft.value.connection_id} aria-label={t('Service')}>
+            <option value="">{t('Choose a service…')}</option>
             {#if draft.value.connection_id && !connectionOf(draft.value.connection_id)}
-              <option value={draft.value.connection_id}>{draft.value.connection_id} (missing)</option>
+              <option value={draft.value.connection_id}>{t('{connection_id} (missing)', { connection_id: draft.value.connection_id })}</option>
             {/if}
             {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
           </select>
         </Field>
-        <Field label="Fill" tour="fields.field" hint="A field the service offers, or a custom field's key such as customfield_10042.">
-          <Combobox label="Field" options={knownFields} free bind:value={draft.value.field} placeholder="Labels, Priority…" />
+        <Field label={t('Fill')} tour="fields.field" hint={t('A field the service offers, or a custom field\'s key such as customfield_10042.')}>
+          <Combobox label={t('Field')} options={knownFields} free bind:value={draft.value.field} placeholder={t('Labels, Priority…')} />
         </Field>
       </div>
 
       <fieldset class="steps" data-tour="fields.steps">
-        <legend>Steps, in order</legend>
+        <legend>{t('Steps, in order')}</legend>
         {#each draft.steps as step, si (si)}
           <div class="step">
             <div class="row">
               <select
-                aria-label="When"
+                aria-label={t('When')}
                 value={step.when ? 'if' : 'always'}
                 onchange={(e) => (step.when = e.currentTarget.value === 'if' ? newWhen() : null)}
               >
-                <option value="always">Always</option>
-                <option value="if">If</option>
+                <option value="always">{t('Always')}</option>
+                <option value="if">{t('If')}</option>
               </select>
               {#if step.when}
-                <div class="subject"><Combobox label="What to look at" options={subjects} free bind:value={step.when.subject} placeholder={'{gpu}'} /></div>
-                <select aria-label="Test" bind:value={step.when.test}>
-                  {#each TESTS as t (t.value)}<option value={t.value}>{step.when.subject === '' && t.value === 'missing' ? 'is empty' : step.when.subject === '' && t.value === 'found' ? 'has a value' : t.label}</option>{/each}
+                <div class="subject"><Combobox label={t('What to look at')} options={subjects} free bind:value={step.when.subject} placeholder={'{gpu}'} /></div>
+                <select aria-label={t('Test')} bind:value={step.when.test}>
+                  {#each TESTS as item (item.value)}<option value={item.value}>{step.when.subject === '' && item.value === 'missing' ? 'is empty' : step.when.subject === '' && item.value === 'found' ? 'has a value' : item.label}</option>{/each}
                 </select>
-                {#if needsText(step.when.test)}<input type="text" aria-label="Text" bind:value={step.when.text} placeholder="text" />{/if}
+                {#if needsText(step.when.test)}<input type="text" aria-label={t('Text')} bind:value={step.when.text} placeholder="text" />{/if}
               {/if}
-              <button type="button" class="x" aria-label="Remove this step" onclick={() => draft!.steps.splice(si, 1)}>✕</button>
+              <button type="button" class="x" aria-label={t('Remove this step')} onclick={() => draft!.steps.splice(si, 1)}>✕</button>
             </div>
             {#each step.then as a, ai (ai)}
               <div class="row then">
                 <span class="quiet">{ai === 0 ? 'then' : 'and'}</span>
-                <select aria-label="Add or set" bind:value={a.do}>
-                  <option value="add">add</option>
-                  <option value="set">set it to</option>
+                <select aria-label={t('Add or set')} bind:value={a.do}>
+                  <option value="add">{t('add')}</option>
+                  <option value="set">{t('set it to')}</option>
                 </select>
-                <input type="text" class="grow" aria-label="Text to add" bind:value={a.text} placeholder="gpu-{'{gpu}'}" />
+                <input type="text" class="grow" aria-label={t('Text to add')} bind:value={a.text} placeholder={t('gpu-{gpu}')} />
                 {#if step.then.length > 1}
-                  <button type="button" class="x" aria-label="Remove this action" onclick={() => step.then.splice(ai, 1)}>✕</button>
+                  <button type="button" class="x" aria-label={t('Remove this action')} onclick={() => step.then.splice(ai, 1)}>✕</button>
                 {/if}
               </div>
             {/each}
-            <button type="button" class="link" onclick={() => step.then.push({ do: 'add', text: '' })}>+ and</button>
+            <button type="button" class="link" onclick={() => step.then.push({ do: 'add', text: '' })}>{t('+ and')}</button>
           </div>
         {/each}
-        <div><button type="button" onclick={() => draft!.steps.push(newStep())}>Add a step</button></div>
+        <div><button type="button" onclick={() => draft!.steps.push(newStep())}>{t('Add a step')}</button></div>
         <p class="quiet hint">
-          Add puts one more value in a list (a label), a new line in a description, or words at the end
-          of a title. Values such as {'{gpu}'} come from <em>Data &amp; fields</em>.
+          <Tr text={t('Add puts one more value in a list (a label), a new line in a description, or words at the end of a title. Values such as {value} come from {page}.')}>
+            {#snippet value()}{'{gpu}'}{/snippet}
+            {#snippet page()}<em>{t('Data & fields')}</em>{/snippet}
+          </Tr>
         </p>
       </fieldset>
 
-      <Field label="In which layouts" tour="fields.layouts">
+      <Field label={t('In which layouts')} tour="fields.layouts">
         <div class="where">
-          <label class="check"><input type="radio" name="where" checked={!draft.some} onchange={() => (draft!.some = false)} /> Every layout that shares there</label>
-          <label class="check"><input type="radio" name="where" checked={draft.some} onchange={() => (draft!.some = true)} /> Only these</label>
+          <label class="check"><input type="radio" name="where" checked={!draft.some} onchange={() => (draft!.some = false)} /> {t('Every layout that shares there')}</label>
+          <label class="check"><input type="radio" name="where" checked={draft.some} onchange={() => (draft!.some = true)} /> {t('Only these')}</label>
           {#if draft.some}
             <div class="layouts">
               {#each sharingLayouts as l (l.id)}
@@ -241,7 +250,7 @@
                   {l.item.name}
                 </label>
               {:else}
-                <p class="quiet">No layout has a sharing button to this service yet.</p>
+                <p class="quiet">{t('No layout has a sharing button to this service yet.')}</p>
               {/each}
             </div>
           {/if}
@@ -249,46 +258,46 @@
       </Field>
 
       <details class="about">
-        <summary>About this field (for a custom field)</summary>
-        <Field label="Name" hint="What it is called in CargoFrame. Empty: the field's own name.">
+        <summary>{t('About this field (for a custom field)')}</summary>
+        <Field label={t('Name')} hint={t('What it is called in CargoFrame. Empty: the field\'s own name.')}>
           <input type="text" bind:value={draft.value.name} placeholder={fieldLabel(draft.value) || 'Priority'} />
         </Field>
-        <Field label="Kind">
+        <Field label={t('Kind')}>
           <select bind:value={draft.value.kind} onchange={onKind}>
             {#each KINDS as k (k.value)}<option value={k.value}>{k.label}</option>{/each}
           </select>
         </Field>
         {#if isList(draft.value.kind)}
-          <Field label="Options come from">
+          <Field label={t('Options come from')}>
             <select value={draft.listKind} onchange={(e) => setListKind(e.currentTarget.value as 'fixed' | 'api')}>
-              <option value="fixed">A list I type in</option>
-              <option value="api">The service's API</option>
+              <option value="fixed">{t('A list I type in')}</option>
+              <option value="api">{t('The service\'s API')}</option>
             </select>
           </Field>
           {#if draft.value.options.type === 'fixed'}
             <div class="options">
               {#each draft.value.options.options as o, i (i)}
                 <div class="opt">
-                  <input type="text" bind:value={o.value} placeholder="Value sent" aria-label="Option value" />
-                  <input type="text" bind:value={o.label} placeholder="Label shown" aria-label="Option label" />
-                  <button type="button" aria-label="Remove option" onclick={() => draft!.value.options.type === 'fixed' && draft!.value.options.options.splice(i, 1)}>✕</button>
+                  <input type="text" bind:value={o.value} placeholder={t('Value sent')} aria-label={t('Option value')} />
+                  <input type="text" bind:value={o.label} placeholder={t('Label shown')} aria-label={t('Option label')} />
+                  <button type="button" aria-label={t('Remove option')} onclick={() => draft!.value.options.type === 'fixed' && draft!.value.options.options.splice(i, 1)}>✕</button>
                 </div>
               {/each}
-              <button type="button" onclick={() => draft!.value.options.type === 'fixed' && draft!.value.options.options.push({ value: '', label: '' })}>Add an option</button>
+              <button type="button" onclick={() => draft!.value.options.type === 'fixed' && draft!.value.options.options.push({ value: '', label: '' })}>{t('Add an option')}</button>
             </div>
           {:else if draft.value.options.type === 'api'}
-            <Field label="API list" hint="For a list that needs a project key, write list:KEY, for example components:PROJ.">
-              <Combobox label="API list" options={knownLists} free bind:value={draft.value.options.options_id} placeholder="priorities" />
+            <Field label={t('API list')} hint={t('For a list that needs a project key, write list:KEY, for example components:PROJ.')}>
+              <Combobox label={t('API list')} options={knownLists} free bind:value={draft.value.options.options_id} placeholder="priorities" />
             </Field>
           {/if}
         {/if}
-        <label class="check"><input type="checkbox" bind:checked={draft.value.required} /><span>A value is required before sharing</span></label>
+        <label class="check"><input type="checkbox" bind:checked={draft.value.required} /><span>{t('A value is required before sharing')}</span></label>
       </details>
 
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" data-tour="fields.save" disabled={busy}>Save</button>
-        <button type="button" onclick={() => (draft = null)}>Cancel</button>
+        <button class="primary" type="submit" data-tour="fields.save" disabled={busy}>{t('Save')}</button>
+        <button type="button" onclick={() => (draft = null)}>{t('Cancel')}</button>
       </div>
     </form>
   {/if}

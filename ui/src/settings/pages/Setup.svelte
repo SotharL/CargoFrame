@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // The apps CargoFrame uses, whether they are on this computer, and one button for what is
   // missing. Windows installs ffmpeg by itself (winget); Linux gets the command to run.
   import { onDestroy, onMount } from 'svelte';
@@ -64,7 +66,7 @@
       setTimeout(() => (copied = false), 2500);
     } catch {
       // the command is on the page to select by hand
-      error = 'Could not use the clipboard. Select the command and copy it.';
+      error = t('Could not use the clipboard. Select the command and copy it.');
     }
   }
 
@@ -84,29 +86,28 @@
 
   const chip = (i: SetupItem): { kind: 'ok' | 'warn' | 'dbg'; label: string } =>
     i.status === 'ok'
-      ? { kind: 'ok', label: 'Found' }
+      ? { kind: 'ok', label: t('Found') }
       : i.status === 'missing'
-        ? { kind: 'warn', label: 'Missing' }
-        : { kind: 'dbg', label: 'Not checked yet' };
+        ? { kind: 'warn', label: t('Missing') }
+        : { kind: 'dbg', label: t('Not checked yet') };
 </script>
 
 <p class="quiet lead">
-  CargoFrame itself needs nothing else: screenshots and sharing work as soon as it is installed. These apps only
-  switch on video, its sound, and pasting into a Claude chat.
+  {t('CargoFrame itself needs nothing else: screenshots and sharing work as soon as it is installed. These apps only switch on video, its sound, and pasting into a Claude chat.')}
 </p>
 
-<Section title="This computer">
+<Section title={t('This computer')}>
   <div class="summary">
     {#if checking}
-      <Spinner label="Checking this computer" />
-      <span class="quiet">Checking this computer…</span>
+      <Spinner label={t('Checking this computer')} />
+      <span class="quiet">{t('Checking this computer…')}</span>
     {:else if report && report.missing === 0}
-      <Chip kind="ok" label="Everything CargoFrame can use is here" />
+      <Chip kind="ok" label={t('Everything CargoFrame can use is here')} />
     {:else if report}
-      <Chip kind="warn" label={report.missing === 1 ? '1 app is missing' : `${report.missing} apps are missing`} />
+      <Chip kind="warn" label={tn('{n} app is missing', '{n} apps are missing', report.missing)} />
     {/if}
     <button type="button" class="again" onclick={() => refresh()} disabled={checking || report?.install.type === 'running'}>
-      Check again
+      {t('Check again')}
     </button>
   </div>
 
@@ -114,7 +115,7 @@
        something needs attention. -->
   <ul class="items">
     {#if !report}
-      <li class="item"><div class="head"><strong>Looking at this computer…</strong><span class="state"><Spinner label="Checking" /></span></div></li>
+      <li class="item"><div class="head"><strong>{t('Looking at this computer…')}</strong><span class="state"><Spinner label={t('Checking')} /></span></div></li>
     {:else}
       {#each report.items as i (i.id)}
         {@const c = chip(i)}
@@ -124,14 +125,14 @@
               <span class="caret" aria-hidden="true">▸</span>
               <strong>{i.name}</strong>
               <span class="state">
-                {#if checking}<Spinner label={`Checking ${i.name}`} />{:else}<Chip kind={c.kind} label={c.label} />{/if}
+                {#if checking}<Spinner label={t('Checking {name}', { name: i.name })} />{:else}<Chip kind={c.kind} label={c.label} />{/if}
               </span>
             </summary>
             <div class="body">
               <p class="quiet what">{i.what_for}</p>
               <p class="detail selectable">{i.detail}</p>
               {#if i.action === 'sound_settings'}
-                <button type="button" onclick={openSound}>Open the Windows sound settings</button>
+                <button type="button" onclick={openSound}>{t('Open the Windows sound settings')}</button>
               {/if}
             </div>
           </details>
@@ -144,33 +145,31 @@
 {#if report}
   {@const step = report.install}
   {#if step.type !== 'none'}
-    <Section title="Install what is missing">
+    <Section title={t('Install what is missing')}>
       {#if step.type === 'run'}
         <p class="quiet">
-          Uses Windows' own package manager (winget). It downloads ffmpeg from its official catalogue, checks
-          the download, and installs it for you only: no administrator password is asked.
+          {t('Uses Windows\' own package manager (winget). It downloads ffmpeg from its official catalogue, checks the download, and installs it for you only: no administrator password is asked.')}
         </p>
         <div><button type="button" class="primary" onclick={runInstall}>{step.label}</button></div>
       {:else if step.type === 'running'}
         <div role="status" class="running">
-          <Chip kind="dbg" label="Installing ffmpeg…" />
-          <span class="quiet">This can take a minute or two. You can keep using CargoFrame.</span>
+          <Chip kind="dbg" label={t('Installing ffmpeg…')} />
+          <span class="quiet">{t('This can take a minute or two. You can keep using CargoFrame.')}</span>
         </div>
       {:else if step.type === 'failed'}
         <div role="alert" class="failed">
-          <Chip kind="err" label="The install did not work" />
+          <Chip kind="err" label={t('The install did not work')} />
           <p class="selectable">{step.message}</p>
         </div>
-        <div><button type="button" class="primary" onclick={runInstall}>Try again</button></div>
+        <div><button type="button" class="primary" onclick={runInstall}>{t('Try again')}</button></div>
       {:else if step.type === 'copy'}
         <p class="quiet">
-          Linux asks for your password to install programs, so CargoFrame cannot do it for you. Run this in a
-          terminal, then press <em>Check again</em>.
+          <Tr text={t('Linux asks for your password to install programs, so CargoFrame cannot do it for you. Run this in a terminal, then press {button}.')}>{#snippet button()}<em>{t('Check again')}</em>{/snippet}</Tr>
         </p>
         <code class="command selectable">{step.command}</code>
         <div>
           <button type="button" class="primary" onclick={() => copy(step.command)}>
-            {copied ? 'Copied' : 'Copy the command'}
+            {copied ? t('Copied') : t('Copy the command')}
           </button>
         </div>
       {:else if step.type === 'manual'}

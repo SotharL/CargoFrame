@@ -25,6 +25,7 @@ use crate::model::{self, DiscordMode};
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
 use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, InsideSpec, ListSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -103,9 +104,9 @@ impl DiscordConnector {
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty())
             .ok_or_else(|| {
-                not_set_up(
+                not_set_up(t(
                     "Discord has no bot token yet: open Connections, paste it and press Save",
-                )
+                ))
             })
     }
 
@@ -131,7 +132,7 @@ impl DiscordConnector {
     }
 
     fn guilds(&self, ctx: &Ctx) -> Result<Vec<Guild>, SendError> {
-        let v = self.get(ctx, "/users/@me/guilds?limit=100", "list the servers")?;
+        let v = self.get(ctx, "/users/@me/guilds?limit=100", msg!("list the servers"))?;
         Ok(v.as_array()
             .into_iter()
             .flatten()
@@ -165,30 +166,22 @@ impl DiscordConnector {
         } else {
             parse_place(raw).map_err(invalid)?
         };
-        let info = self.get(ctx, &format!("/channels/{id}"), "look at the channel")?;
+        let info = self.get(ctx, &format!("/channels/{id}"), msg!("look at the channel"))?;
         let kind = info.get("type").and_then(Value::as_i64).unwrap_or(-1);
         let place = match kind {
             0 | 5 | 10 | 11 | 12 => Place::Talk,
             15 => Place::Forum,
             2 | 13 => {
-                return Err(invalid(
-                    "That is a voice or stage channel: choose a text channel, a thread or a forum",
-                ))
+                return Err(invalid(t("That is a voice or stage channel: choose a text channel, a thread or a forum")))
             }
             4 => {
-                return Err(invalid(
-                    "That is a category, not a channel: choose a channel inside it",
-                ))
+                return Err(invalid(t("That is a category, not a channel: choose a channel inside it")))
             }
             16 => {
-                return Err(invalid(
-                    "Media channels are not supported: choose a text channel, a thread or a forum",
-                ))
+                return Err(invalid(t("Media channels are not supported: choose a text channel, a thread or a forum")))
             }
             _ => {
-                return Err(invalid(
-                    "That is not a place the bot can post in: choose a text channel, a thread or a forum",
-                ))
+                return Err(invalid(t("That is not a place the bot can post in: choose a text channel, a thread or a forum")))
             }
         };
         Ok(Target {
@@ -205,7 +198,7 @@ impl DiscordConnector {
     fn channel_named(&self, ctx: &Ctx, name: &str) -> Result<String, SendError> {
         let wanted = name.to_lowercase();
         if wanted.is_empty() {
-            return Err(invalid("The Discord channel is empty"));
+            return Err(invalid(t("The Discord channel is empty")));
         }
         let found: Vec<_> = self
             .all_channels(ctx)?
@@ -214,12 +207,8 @@ impl DiscordConnector {
             .collect();
         match found.as_slice() {
             [one] => Ok(one.id.clone()),
-            [] => Err(invalid(format!(
-                "Discord has no channel called #{wanted} that the bot can see. Add the bot to the server and let it view the channel"
-            ))),
-            _ => Err(invalid(format!(
-                "Several servers have a channel called #{wanted}: pick it from the list instead"
-            ))),
+            [] => Err(invalid(tf("Discord has no channel called #{wanted} that the bot can see. Add the bot to the server and let it view the channel", &[("wanted", &wanted)]))),
+            _ => Err(invalid(tf("Several servers have a channel called #{wanted}: pick it from the list instead", &[("wanted", &wanted)]))),
         }
     }
 
@@ -236,7 +225,7 @@ impl DiscordConnector {
             let list = match self.get(
                 ctx,
                 &format!("/guilds/{}/channels", g.id),
-                "list the channels",
+                msg!("list the channels"),
             ) {
                 Ok(v) => v,
                 Err(e) if Self::skippable(&e) => continue,
@@ -284,7 +273,11 @@ impl DiscordConnector {
     /// searched, and an older post is reached by pasting its link.
     fn threads_of(&self, ctx: &Ctx, channel: &str) -> Result<Vec<OptionItem>, SendError> {
         let channel = parse_place(channel).map_err(invalid)?;
-        let info = self.get(ctx, &format!("/channels/{channel}"), "look at the channel")?;
+        let info = self.get(
+            ctx,
+            &format!("/channels/{channel}"),
+            msg!("look at the channel"),
+        )?;
         let mut found: Vec<(u64, OptionItem)> = Vec::new();
         let mut take = |threads: Option<&Value>, group: &str| {
             for t in threads.and_then(Value::as_array).into_iter().flatten() {
@@ -307,7 +300,7 @@ impl DiscordConnector {
             match self.get(
                 ctx,
                 &format!("/guilds/{guild}/threads/active"),
-                "list the threads",
+                msg!("list the threads"),
             ) {
                 Ok(v) => {
                     let mine: Vec<Value> = v
@@ -328,7 +321,7 @@ impl DiscordConnector {
         match self.get(
             ctx,
             &format!("/channels/{channel}/threads/archived/public?limit=50"),
-            "list the older threads",
+            msg!("list the older threads"),
         ) {
             Ok(v) => take(v.get("threads"), "Older"),
             Err(e) if Self::skippable(&e) => {}
@@ -368,7 +361,7 @@ impl DiscordConnector {
             body["attachments"] = attachments_json(files);
             req.body(multipart(&body, files))
         };
-        self.call(ctx, req, "post the message")
+        self.call(ctx, req, msg!("post the message"))
     }
 
     /// A new post in a forum channel. Its outcome is never guessed: if the answer is lost, or
@@ -398,17 +391,14 @@ impl DiscordConnector {
             });
         let maybe = |mut e: SendError| {
             e.kind = FailureKind::Rejected(0);
-            e.message = format!(
-                "{}. Discord may or may not have created the post, so CargoFrame did not retry: look in the forum",
-                e.message
-            );
+            e.message = tf("{message}. Discord may or may not have created the post, so CargoFrame did not retry: look in the forum", &[("message", &e.message)]);
             e
         };
         let resp = ctx.http.send(&req).map_err(|e| maybe(from_net(&e)))?;
         if resp.is_success() {
             return Ok(resp.json().unwrap_or(Value::Null));
         }
-        let err = discord_error(&resp, "start the forum post");
+        let err = discord_error(&resp, msg!("start the forum post"));
         Err(match err.kind {
             FailureKind::Server(_) | FailureKind::Timeout | FailureKind::NoNetwork => maybe(err),
             _ => err,
@@ -457,9 +447,7 @@ pub fn parse_place(raw: &str) -> Result<String, String> {
         return Ok(raw.to_string());
     }
     let bad = || {
-        format!(
-            "\"{raw}\" is not a Discord channel or thread: pick one from the list, or paste its link (Copy Link in Discord)"
-        )
+        tf("\"{raw}\" is not a Discord channel or thread: pick one from the list, or paste its link (Copy Link in Discord)", &[("raw", &raw)])
     };
     let rest = raw.strip_prefix("https://").ok_or_else(bad)?;
     let (authority, path) = rest.split_once('/').ok_or_else(bad)?;
@@ -519,7 +507,7 @@ pub fn post_name(payload: &Payload) -> String {
         .unwrap_or_else(|| payload.title.clone());
     let one: String = raw.split_whitespace().collect::<Vec<_>>().join(" ");
     let name = if one.is_empty() {
-        "CargoFrame capture".to_string()
+        t("CargoFrame capture").to_string()
     } else {
         one
     };
@@ -546,54 +534,60 @@ pub fn discord_error(resp: &Response, what: &str) -> SendError {
     let (kind, text) = match (status, code) {
         (401, _) => (
             FailureKind::AuthExpired,
-            "Discord does not accept the bot token any more: open Connections and paste a new one".to_string(),
+            t("Discord does not accept the bot token any more: open Connections and paste a new one").to_string(),
         ),
         (_, 10015 | 50027) => (
             FailureKind::AuthExpired,
-            "Discord does not know that webhook any more: make a new one in the channel's settings and paste its link".to_string(),
+            t("Discord does not know that webhook any more: make a new one in the channel's settings and paste its link").to_string(),
         ),
         (429, _) => (
             FailureKind::Throttled(429),
-            "Discord says to slow down".to_string(),
+            t("Discord says to slow down").to_string(),
         ),
         (_, 50001) => (
             FailureKind::Rejected(status),
-            "The bot cannot see that channel: add the bot to the server and let it View Channel".to_string(),
+            t("The bot cannot see that channel: add the bot to the server and let it View Channel").to_string(),
         ),
         (_, 50013) => (
             FailureKind::Rejected(status),
-            "The bot is missing a permission in that channel (it needs Send Messages and Attach Files; for a forum, Create Public Threads)".to_string(),
+            t("The bot is missing a permission in that channel (it needs Send Messages and Attach Files; for a forum, Create Public Threads)").to_string(),
         ),
         (_, 10003) => (
             FailureKind::Rejected(status),
-            "Discord cannot find that channel".to_string(),
+            t("Discord cannot find that channel").to_string(),
         ),
         (_, 40005) => (
             FailureKind::Rejected(status),
-            "The files are bigger than this server allows for uploads".to_string(),
+            t("The files are bigger than this server allows for uploads").to_string(),
         ),
         (_, 50035) => (
             FailureKind::Rejected(status),
             if message.is_empty() {
-                "Discord refused the message as malformed".to_string()
+                t("Discord refused the message as malformed").to_string()
             } else {
-                format!("Discord refused the message: {message}")
+                tf("Discord refused the message: {message}", &[("message", &message)])
             },
         ),
         (s, _) if s >= 500 => (
             FailureKind::Server(s),
-            "Discord had a problem on its side".to_string(),
+            t("Discord had a problem on its side").to_string(),
         ),
         (s, _) => (
             FailureKind::Rejected(s),
             if message.is_empty() {
-                format!("Discord answered HTTP {s}")
+                tf("Discord answered HTTP {s}", &[("s", &s)])
             } else {
-                format!("Discord said \"{message}\"")
+                tf("Discord said \"{message}\"", &[("message", &message)])
             },
         ),
     };
-    let mut err = SendError::new(kind, format!("Could not {what}: {text}"));
+    let mut err = SendError::new(
+        kind,
+        tf(
+            "Could not {what}: {text}",
+            &[("what", &t(what)), ("text", &text)],
+        ),
+    );
     if status == 429 {
         let wait = resp.retry_after().or_else(|| {
             v.get("retry_after")
@@ -649,52 +643,52 @@ impl Connector for DiscordConnector {
             fields: vec![
                 f(
                     "channel",
-                    "Channel",
+                    msg!("Channel"),
                     if hooks {
-                        "One of the channels you added a webhook for"
+                        msg!("One of the channels you added a webhook for")
                     } else {
-                        "A text channel, or a forum to start a post in. The bot must be able to see it"
+                        msg!("A text channel, or a forum to start a post in. The bot must be able to see it")
                     },
                     Some("channels"),
                 ),
                 f(
                     "thread",
-                    "Thread or forum post",
+                    msg!("Thread or forum post"),
                     if hooks {
-                        "To reply in an existing one: paste its link (Copy Link in Discord). A webhook cannot list threads. Overrides the channel"
+                        msg!("To reply in an existing one: paste its link (Copy Link in Discord). A webhook cannot list threads. Overrides the channel")
                     } else {
-                        "To reply in an existing one: pick it, or paste its link. Overrides the channel"
+                        msg!("To reply in an existing one: pick it, or paste its link. Overrides the channel")
                     },
                     Some("threads"),
                 ),
-                f("message", "Message", "Defaults to the prompt text, then the window title. 2000 characters at most", None),
-                f("title", "Title", "The name of a forum post; a bold first line in a channel. Defaults to the window title for a forum", None),
-                f("tags", "Tags", "Added as a last line. Separate several with commas", None),
+                f("message", msg!("Message"), msg!("Defaults to the prompt text, then the window title. 2000 characters at most"), None),
+                f("title", msg!("Title"), msg!("The name of a forum post; a bold first line in a channel. Defaults to the window title for a forum"), None),
+                f("tags", msg!("Tags"), msg!("Added as a last line. Separate several with commas"), None),
             ],
             lists: vec![
                 ListSpec {
                     id: "channels".into(),
                     label: if hooks {
-                        "Channels you added a webhook for".into()
+                        msg!("Channels you added a webhook for").into()
                     } else {
-                        "Channels and forums the bot can see".into()
+                        msg!("Channels and forums the bot can see").into()
                     },
                     param: None,
                     // one dropdown goes on to the threads of the channel (the posts of a forum)
                     inside: Some(InsideSpec {
                         list: "threads",
                         field: "thread",
-                        label: "Thread or post",
+                        label: msg!("Thread or post"),
                     }),
                 },
                 ListSpec {
                     id: "threads".into(),
-                    label: "Active threads and forum posts".into(),
+                    label: msg!("Active threads and forum posts").into(),
                     param: None,
                     inside: None,
                 },
             ],
-            summary: "Posts a message into a channel or thread, or starts a forum post, with the screenshot and a zip of the ticked files attached. Nobody is pinged.".into(),
+            summary: msg!("Posts a message into a channel or thread, or starts a forum post, with the screenshot and a zip of the ticked files attached. Nobody is pinged.").into(),
         }
     }
 
@@ -727,22 +721,20 @@ impl Connector for DiscordConnector {
         if self.webhooks() {
             return self.test_webhooks(ctx);
         }
-        let me = self.get(ctx, "/users/@me", "check the sign-in")?;
+        let me = self.get(ctx, "/users/@me", msg!("check the sign-in"))?;
         let name = ["global_name", "username"]
             .iter()
             .find_map(|k| me.get(k).and_then(Value::as_str).filter(|s| !s.is_empty()))
-            .unwrap_or("your bot");
+            .unwrap_or(t("your bot"));
         // Whether the bot has been added anywhere is the usual first mistake.
         Ok(match self.guilds(ctx) {
-            Ok(g) if g.is_empty() => format!(
-                "Signed in as {name}, but the bot is not in any server yet: open its invite link and add it to one"
+            Ok(g) if g.is_empty() => tf(
+                "Signed in as {name}, but the bot is not in any server yet: open its invite link and add it to one",
+                &[("name", &name)],
             ),
-            Ok(g) => format!(
-                "Signed in as {name}, in {} server{}",
-                g.len(),
-                if g.len() == 1 { "" } else { "s" }
-            ),
-            Err(_) => format!("Signed in as {name}"),
+            Ok(g) if g.len() == 1 => tf("Signed in as {name}, in 1 server", &[("name", &name)]),
+            Ok(g) => tf("Signed in as {name}, in {n} servers", &[("name", &name), ("n", &g.len())]),
+            Err(_) => tf("Signed in as {name}", &[("name", &name)]),
         })
     }
 
@@ -761,7 +753,10 @@ impl Connector for DiscordConnector {
             return match list {
                 "channels" => self.hook_options(ctx),
                 "threads" => Ok(Vec::new()),
-                other => Err(invalid(format!("Discord has no list called \"{other}\""))),
+                other => Err(invalid(tf(
+                    "Discord has no list called \"{other}\"",
+                    &[("other", &other)],
+                ))),
             };
         }
         match list {
@@ -794,7 +789,7 @@ impl Connector for DiscordConnector {
                     let v = match self.get(
                         ctx,
                         &format!("/guilds/{}/threads/active", g.id),
-                        "list the threads",
+                        msg!("list the threads"),
                     ) {
                         Ok(v) => v,
                         Err(e) if Self::skippable(&e) => continue,
@@ -826,7 +821,10 @@ impl Connector for DiscordConnector {
                 });
                 Ok(out)
             }
-            other => Err(invalid(format!("Discord has no list called \"{other}\""))),
+            other => Err(invalid(tf(
+                "Discord has no list called \"{other}\"",
+                &[("other", &other)],
+            ))),
         }
     }
 
@@ -857,9 +855,7 @@ impl Connector for DiscordConnector {
             .value("thread")
             .or_else(|| payload.value("channel"))
             .ok_or_else(|| {
-                invalid(
-                    "Discord needs a channel: map one to the field \"channel\" on the sharing button",
-                )
+                invalid(t("Discord needs a channel: map one to the field \"channel\" on the sharing button"))
             })?
             .to_string();
 
@@ -867,14 +863,15 @@ impl Connector for DiscordConnector {
         let forum = target.place == Place::Forum;
         let (content, cut) = compose(payload, !forum);
         if content.is_empty() && files.is_empty() {
-            return Err(invalid(
+            return Err(invalid(t(
                 "There is nothing to send to Discord: no text, no screenshot and no files",
-            ));
+            )));
         }
         let mut notes = Vec::new();
         if cut {
-            notes.push(format!(
-                "The message was cut to Discord's {MAX_CONTENT} characters"
+            notes.push(tf(
+                "The message was cut to Discord's {MAX_CONTENT} characters",
+                &[("MAX_CONTENT", &MAX_CONTENT)],
             ));
         }
 
@@ -892,7 +889,7 @@ impl Connector for DiscordConnector {
                 .map(String::from)
                 .or(target.guild.clone());
             (
-                "Started a post in the Discord forum".to_string(),
+                t("Started a post in the Discord forum").to_string(),
                 link_to(guild.as_deref(), &thread, None),
             )
         } else {
@@ -900,7 +897,7 @@ impl Connector for DiscordConnector {
             let v = self.post_message(ctx, &target.id, &content, &files, &nonce)?;
             let message = v.get("id").and_then(Value::as_str);
             (
-                "Posted to Discord".to_string(),
+                t("Posted to Discord").to_string(),
                 link_to(target.guild.as_deref(), &target.id, message),
             )
         };

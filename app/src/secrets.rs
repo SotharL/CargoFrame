@@ -3,6 +3,7 @@
 //! kept; they are never written to a config file, a log or a zip.
 
 use cargoframe_connectors::{SecretError, SecretStore};
+use cargoframe_i18n::tf;
 
 const SERVICE: &str = "CargoFrame";
 
@@ -17,9 +18,10 @@ fn map(e: keyring::Error) -> SecretError {
         // The service itself is missing or locked out: say so, so the window can explain it.
         keyring::Error::NoStorageAccess(inner) => SecretError::Unavailable(inner.to_string()),
         keyring::Error::PlatformFailure(inner) => SecretError::Unavailable(inner.to_string()),
-        keyring::Error::TooLong(what, max) => {
-            SecretError::Failed(format!("the {what} is too long (at most {max})"))
-        }
+        keyring::Error::TooLong(what, max) => SecretError::Failed(tf(
+            "the {what} is too long (at most {max})",
+            &[("what", &what), ("max", &max)],
+        )),
         other => SecretError::Failed(other.to_string()),
     }
 }

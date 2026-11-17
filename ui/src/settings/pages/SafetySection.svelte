@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
@@ -23,14 +24,14 @@
   async function save() {
     try {
       await (await getApi()).setSafe({ ...safe, folder: folderText.trim() || null });
-      onstatus('ok', 'Saved');
+      onstatus('ok', t('Saved'));
     } catch (e) {
       onstatus('err', String(e));
     }
   }
 
   async function choose() {
-    const p = await (await getApi()).pickFolder('Choose the folder for saved zips');
+    const p = await (await getApi()).pickFolder(t('Choose the folder for saved zips'));
     if (p) {
       folderText = p;
       folderCheck = null;
@@ -42,7 +43,7 @@
     folderCheck = null;
     try {
       await (await getApi()).testSafeFolder(folderText);
-      folderCheck = { ok: true, text: 'CargoFrame can save here' };
+      folderCheck = { ok: true, text: t('CargoFrame can save here') };
     } catch (e) {
       folderCheck = { ok: false, text: String(e) };
     }
@@ -51,41 +52,41 @@
 
 {#if loaded}
   <Section
-    title="When sharing fails"
-    hint="Nothing you captured is lost: CargoFrame tries again, then keeps a zip in a folder you choose."
+    title={t('When sharing fails')}
+    hint={t('Nothing you captured is lost: CargoFrame tries again, then keeps a zip in a folder you choose.')}
   >
     <details class="steps">
-      <summary>What happens, step by step</summary>
+      <summary>{t('What happens, step by step')}</summary>
       <ol>
-        <li>CargoFrame tries again a few times, waiting a little longer each time.</li>
-        <li>If it still fails, it saves everything as a zip in the folder below.</li>
-        <li>If that folder is not set or cannot be written, it asks you where to save.</li>
-        <li>If you cancel, the zip is kept in CargoFrame's own folder and you are told where.</li>
+        <li>{t('CargoFrame tries again a few times, waiting a little longer each time.')}</li>
+        <li>{t('If it still fails, it saves everything as a zip in the folder below.')}</li>
+        <li>{t('If that folder is not set or cannot be written, it asks you where to save.')}</li>
+        <li>{t('If you cancel, the zip is kept in CargoFrame\'s own folder and you are told where.')}</li>
       </ol>
     </details>
 
     <div class="sub">
-      <h3>Folder for saved zips</h3>
+      <h3>{t('Folder for saved zips')}</h3>
       <Field
-        label="Folder"
-        hint="Also where “Save locally” puts its zip when a button has no active connection. Leave it empty to be asked after a failed share; “Save locally” needs it set."
+        label={t('Folder')}
+        hint={t('Also where “Save locally” puts its zip when a button has no active connection. Leave it empty to be asked after a failed share; “Save locally” needs it set.')}
       >
         <div class="row">
-          <input type="text" bind:value={folderText} onchange={save} placeholder="Ask me each time" />
-          <button type="button" onclick={choose}>Choose…</button>
-          <button type="button" onclick={check} disabled={!folderText.trim()}>Test</button>
+          <input type="text" bind:value={folderText} onchange={save} placeholder={t('Ask me each time')} />
+          <button type="button" onclick={choose}>{t('Choose…')}</button>
+          <button type="button" onclick={check} disabled={!folderText.trim()}>{t('Test')}</button>
         </div>
       </Field>
       {#if folderCheck}<Chip kind={folderCheck.ok ? 'ok' : 'err'} label={folderCheck.text} />{/if}
     </div>
 
     <div class="sub">
-      <h3>Retries</h3>
+      <h3>{t('Retries')}</h3>
       <div class="two">
-        <Field label="Retries" hint="Extra attempts after the first one (0 to 10).">
+        <Field label={t('Retries')} hint={t('Extra attempts after the first one (0 to 10).')}>
           <input type="number" min="0" max="10" bind:value={safe.max_retries} onchange={save} />
         </Field>
-        <Field label="Give up after (seconds)" hint="How long one attempt may take.">
+        <Field label={t('Give up after (seconds)')} hint={t('How long one attempt may take.')}>
           <input type="number" min="5" max="300" bind:value={safe.timeout_secs} onchange={save} />
         </Field>
       </div>

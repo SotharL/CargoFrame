@@ -97,6 +97,25 @@ pub struct Describe {
     pub summary: String,
 }
 
+impl Describe {
+    /// The labels, hints and summary in the language in use (they are written with `msg!`).
+    pub fn translated(mut self) -> Self {
+        use cargoframe_i18n::t;
+        for f in &mut self.fields {
+            f.label = t(f.label);
+            f.hint = t(f.hint);
+        }
+        for l in &mut self.lists {
+            l.label = t(&l.label).to_string();
+            if let Some(inside) = &mut l.inside {
+                inside.label = t(inside.label);
+            }
+        }
+        self.summary = t(&self.summary).to_string();
+        self
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {

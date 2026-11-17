@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // Discord: a webhook per channel (no bot, the easy way) or a bot (can list servers and channels).
   import Field from '../../lib/components/Field.svelte';
   import Segmented from '../../lib/components/Segmented.svelte';
@@ -32,88 +34,85 @@
   }
 </script>
 
-<Field label="How should CargoFrame post?" tour="discord.mode">
+<Field label={t('How should CargoFrame post?')} tour="discord.mode">
   <Segmented
-    label="How CargoFrame posts to Discord"
+    label={t('How CargoFrame posts to Discord')}
     bind:value={value.mode}
     options={[
-      { value: 'webhook', label: 'Webhook (easiest)' },
-      { value: 'bot', label: 'Bot (advanced)' },
+      { value: 'webhook', label: t('Webhook (easiest)') },
+      { value: 'bot', label: t('Bot (advanced)') },
     ]}
   />
 </Field>
 
 {#if value.mode === 'webhook'}
   <p class="quiet">
-    A webhook is a private link to one channel. No bot, no developer account: you copy the link
-    from the channel's settings. Posts appear under the name you choose, and nobody is pinged.
+    {t('A webhook is a private link to one channel. No bot, no developer account: you copy the link from the channel\'s settings. Posts appear under the name you choose, and nobody is pinged.')}
   </p>
-  <Field label="Name shown on posts (optional)" hint="Leave it empty to keep the webhook's own name. Discord does not allow “discord” in it.">
-    <input type="text" bind:value={value.shown_as} placeholder="Your name" maxlength="80" />
+  <Field label={t('Name shown on posts (optional)')} hint={t('Leave it empty to keep the webhook\'s own name. Discord does not allow “discord” in it.')}>
+    <input type="text" bind:value={value.shown_as} placeholder={t('Your name')} maxlength="80" />
   </Field>
 
   <div class="channels" data-tour="discord.channels">
-    <span class="title">Channels</span>
+    <span class="title">{t('Channels')}</span>
     {#each value.hooks as h (h.slot)}
       <div class="channel">
         <div class="pair">
-          <Field label="Name" hint="How you will see it in the list.">
+          <Field label={t('Name')} hint={t('How you will see it in the list.')}>
             <input type="text" bind:value={h.name} placeholder="bugs" />
           </Field>
-          <Field label="Server (optional)" hint="Groups the list when you post in several servers.">
-            <input type="text" bind:value={h.server} placeholder="My team" />
+          <Field label={t('Server (optional)')} hint={t('Groups the list when you post in several servers.')}>
+            <input type="text" bind:value={h.server} placeholder={t('My team')} />
           </Field>
         </div>
         {#if hooks}
           <SecretInput
-            label="Webhook link"
-            hint="Kept in your system's password store. You cannot read it back from here."
+            label={t('Webhook link')}
+            hint={t('Kept in your system\'s password store. You cannot read it back from here.')}
             stored={hooks.stored(h.slot)}
             get={getLinkFor(value, 'webhook')}
             onsave={(link) => hooks.save(h.slot, link)}
             onclear={() => hooks.clear(h.slot)}
           />
         {:else}
-          <p class="quiet">Save this connection first, then paste the link here.</p>
+          <p class="quiet">{t('Save this connection first, then paste the link here.')}</p>
         {/if}
-        <button type="button" class="remove" onclick={() => remove(h.slot)}>Remove this channel</button>
+        <button type="button" class="remove" onclick={() => remove(h.slot)}>{t('Remove this channel')}</button>
       </div>
     {/each}
     {#if value.hooks.length < MAX}
-      <button type="button" data-tour="discord.add-channel" onclick={add}>{value.hooks.length === 0 ? 'Add a channel' : 'Add another channel'}</button>
+      <button type="button" data-tour="discord.add-channel" onclick={add}>{value.hooks.length === 0 ? t('Add a channel') : t('Add another channel')}</button>
     {/if}
   </div>
 
   <details class="steps" data-tour="discord.steps">
-    <summary>How to make a webhook</summary>
+    <summary>{t('How to make a webhook')}</summary>
     <ol>
-      <li>In Discord, open the channel's settings (the gear beside its name), then Integrations, then Webhooks.</li>
-      <li>Choose New Webhook, then Copy Webhook URL. You need the Manage Webhooks permission in that channel.</li>
-      <li>Add a channel above, give it a name, and paste the link. Do this once for each channel you post in.</li>
-      <li>Forums work too: the webhook starts a new post named from your title.</li>
-      <li>To reply in an existing thread, paste the thread's link in the Thread box of the layout (Copy Link in Discord).</li>
+      <li>{t('In Discord, open the channel\'s settings (the gear beside its name), then Integrations, then Webhooks.')}</li>
+      <li>{t('Choose New Webhook, then Copy Webhook URL. You need the Manage Webhooks permission in that channel.')}</li>
+      <li>{t('Add a channel above, give it a name, and paste the link. Do this once for each channel you post in.')}</li>
+      <li>{t('Forums work too: the webhook starts a new post named from your title.')}</li>
+      <li>{t('To reply in an existing thread, paste the thread\'s link in the Thread box of the layout (Copy Link in Discord).')}</li>
     </ol>
-    <p class="quiet">Anyone who has a webhook link can post to that channel, so keep it private. If one leaks, delete the webhook in Discord and make a new one.</p>
+    <p class="quiet">{t('Anyone who has a webhook link can post to that channel, so keep it private. If one leaks, delete the webhook in Discord and make a new one.')}</p>
     <GetLink link={getLinkFor(value, 'webhook')} />
   </details>
 {:else}
   <p class="quiet">
-    CargoFrame posts as a Discord bot you create. Nothing here to fill in: the token you paste
-    below, and the servers you add the bot to, decide where it can post. A bot can list your
-    servers, categories, channels and threads, so you pick instead of pasting links.
+    {t('CargoFrame posts as a Discord bot you create. Nothing here to fill in: the token you paste below, and the servers you add the bot to, decide where it can post. A bot can list your servers, categories, channels and threads, so you pick instead of pasting links.')}
   </p>
   <details class="steps">
-    <summary>How to get the token</summary>
+    <summary>{t('How to get the token')}</summary>
     <ol>
-      <li>Open <span class="mono">discord.com/developers/applications</span> and choose New Application.</li>
-      <li>Under Bot, choose Reset Token and copy it. You do not need any of the privileged intents.</li>
+      <li><Tr text={t('Open {site} and choose New Application.')}>{#snippet site()}<span class="mono">discord.com/developers/applications</span>{/snippet}</Tr></li>
+      <li>{t('Under Bot, choose Reset Token and copy it. You do not need any of the privileged intents.')}</li>
       <li>
-        Under OAuth2, URL Generator: tick <span class="mono">bot</span>, then the permissions
-        View Channels, Send Messages, Send Messages in Threads, Attach Files and Create Public
-        Threads (for forum posts).
+        <Tr text={t('Under OAuth2, URL Generator: tick {bot}, then the permissions View Channels, Send Messages, Send Messages in Threads, Attach Files and Create Public Threads (for forum posts).')}>
+          {#snippet bot()}<span class="mono">bot</span>{/snippet}
+        </Tr>
       </li>
-      <li>Open the address it makes and add the bot to your server.</li>
-      <li>Save this connection, then paste the token below. Test connection says how many servers the bot is in.</li>
+      <li>{t('Open the address it makes and add the bot to your server.')}</li>
+      <li>{t('Save this connection, then paste the token below. Test, on its card, says how many servers the bot is in.')}</li>
     </ol>
   </details>
 {/if}

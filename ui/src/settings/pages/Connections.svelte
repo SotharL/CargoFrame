@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import { createItems } from '../../lib/items.svelte';
@@ -21,18 +22,18 @@
   let messages = $state<Record<string, { kind: 'ok' | 'err'; text: string }>>({});
 
   const KINDS: { kind: ServiceKind; label: string; blurb: string }[] = [
-    { kind: 'jira', label: 'Jira', blurb: 'Create an issue or comment on one, with the screenshot attached.' },
-    { kind: 'github', label: 'GitHub', blurb: 'Open an issue in a repository, or comment on one, with the screenshot shown in it.' },
-    { kind: 'google', label: 'Google', blurb: 'Save the screenshot and files to Drive, and optionally log a row in a sheet.' },
-    { kind: 'reddit', label: 'Reddit', blurb: 'Post the screenshot to a subreddit you choose.' },
-    { kind: 'claude', label: 'Claude', blurb: 'Copy the screenshot and open a chat, so you can paste it into your message.' },
-    { kind: 'slack', label: 'Slack', blurb: 'Post a message with the screenshot and files into a channel or thread.' },
-    { kind: 'discord', label: 'Discord', blurb: 'Post a message with the screenshot and files into a channel, thread or forum.' },
-    { kind: 'teams', label: 'Teams', blurb: 'Post a message with the screenshot into a chat, channel or channel thread, as you.' },
-    { kind: 'x', label: 'X', blurb: 'Post the screenshot with a short text to your X account.' },
-    { kind: 'bluesky', label: 'Bluesky', blurb: 'Post the screenshot with a short text to your Bluesky account. Needs only an app password.' },
-    { kind: 'instagram', label: 'Instagram', blurb: 'Post the screenshot with a caption to your Instagram professional account.' },
-    { kind: 'custom', label: 'Custom API', blurb: 'Send to any web service that has an HTTP API.' },
+    { kind: 'jira', label: t('Jira'), blurb: t('Create an issue or comment on one, with the screenshot attached.') },
+    { kind: 'github', label: 'GitHub', blurb: t('Open an issue in a repository, or comment on one, with the screenshot shown in it.') },
+    { kind: 'google', label: t('Google'), blurb: t('Save the screenshot and files to Drive, and optionally log a row in a sheet.') },
+    { kind: 'reddit', label: t('Reddit'), blurb: t('Post the screenshot to a subreddit you choose.') },
+    { kind: 'claude', label: t('Claude'), blurb: t('Open a chat and paste the screenshot, the ticked files and your message into it.') },
+    { kind: 'slack', label: t('Slack'), blurb: t('Post a message with the screenshot and files into a channel or thread.') },
+    { kind: 'discord', label: t('Discord'), blurb: t('Post a message with the screenshot and files into a channel, thread or forum.') },
+    { kind: 'teams', label: t('Teams'), blurb: t('Post a message with the screenshot into a chat, channel or channel thread, as you.') },
+    { kind: 'x', label: 'X', blurb: t('Post the screenshot with a short text to your X account.') },
+    { kind: 'bluesky', label: t('Bluesky'), blurb: t('Post the screenshot with a short text to your Bluesky account. Needs only an app password.') },
+    { kind: 'instagram', label: t('Instagram'), blurb: t('Post the screenshot with a caption to your Instagram professional account.') },
+    { kind: 'custom', label: t('Custom API'), blurb: t('Send to any web service that has an HTTP API.') },
   ];
   // a company build can leave services out: only the ones this copy has are offered
   let built = $state<ServiceKind[] | null>(null);
@@ -43,7 +44,7 @@
       case 'jira':
         return { kind, name: 'Jira', enabled: true, site_url: 'https://', auth: 'api_token', email: '' };
       case 'google':
-        return { kind, name: 'Google Drive', enabled: true, client_id: '', sheets: false, full_drive: false };
+        return { kind, name: t('Google Drive'), enabled: true, client_id: '', sheets: false, full_drive: false };
       case 'reddit':
         return { kind, name: 'Reddit', enabled: true, client_id: '', redirect_port: 53682 };
       case 'claude':
@@ -64,7 +65,7 @@
         return { kind, name: 'Instagram', enabled: true, upload_url: 'https://', public_url: 'https://', host_header: '' };
       case 'custom':
         return {
-          kind, name: 'My API', enabled: true, base_url: 'https://', auth: { type: 'none' },
+          kind, name: t('My API'), enabled: true, base_url: 'https://', auth: { type: 'none' },
           send: { method: 'POST', path: '', headers: [], body: { type: 'json', template: '{\n  "text": "{{prompt}}"\n}' } },
           lists: [], test_path: '', result_url_path: '',
         };
@@ -89,26 +90,26 @@
 
   function stateChip(c: ConnectionView, saved: Connection): { kind: 'ok' | 'warn' | 'err' | 'dbg'; label: string } {
     switch (c.state) {
-      case 'connected': return { kind: 'ok', label: c.kind === 'claude' ? 'Ready' : 'Connected' };
-      case 'expired': return { kind: 'err', label: 'Sign-in expired' };
-      case 'disabled': return { kind: 'dbg', label: 'Turned off' };
-      case 'not_in_build': return { kind: 'dbg', label: 'Not in this copy of CargoFrame' };
-      default: return { kind: 'warn', label: oauth(c.kind) ? 'Not signed in' : saved.kind === 'discord' && saved.mode === 'webhook' ? 'Needs a webhook link' : 'Needs its token' };
+      case 'connected': return { kind: 'ok', label: c.kind === 'claude' ? t('Ready') : t('Connected') };
+      case 'expired': return { kind: 'err', label: t('Sign-in expired') };
+      case 'disabled': return { kind: 'dbg', label: t('Turned off') };
+      case 'not_in_build': return { kind: 'dbg', label: t('Not in this copy of CargoFrame') };
+      default: return { kind: 'warn', label: oauth(c.kind) ? t('Not signed in') : saved.kind === 'discord' && saved.mode === 'webhook' ? t('Needs a webhook link') : t('Needs its token') };
     }
   }
 
   function secretLabel(c: Connection, name: string): string {
-    if (name === 'client_secret') return 'Client secret';
-    if (c.kind === 'jira') return c.auth === 'pat' ? 'Personal access token' : 'API token';
-    if (c.kind === 'slack') return 'Bot token (starts with xoxb-)';
-    if (c.kind === 'discord') return 'Bot token';
-    if (c.kind === 'bluesky') return 'App password';
-    if (c.kind === 'github') return 'Personal access token';
-    if (c.kind === 'instagram') return name === 'host_key' ? 'Key of the picture server' : 'Access token';
+    if (name === 'client_secret') return t('Client secret');
+    if (c.kind === 'jira') return c.auth === 'pat' ? t('Personal access token') : t('API token');
+    if (c.kind === 'slack') return t('Bot token (starts with xoxb-)');
+    if (c.kind === 'discord') return t('Bot token');
+    if (c.kind === 'bluesky') return t('App password');
+    if (c.kind === 'github') return t('Personal access token');
+    if (c.kind === 'instagram') return name === 'host_key' ? t('Key of the picture server') : t('Access token');
     if (c.kind === 'custom') {
-      return { bearer: 'Token', header: 'Key', basic: 'Password', query: 'Key', none: 'Key' }[c.auth.type];
+      return { bearer: t('Token'), header: t('Key'), basic: t('Password'), query: t('Key'), none: t('Key') }[c.auth.type];
     }
-    return 'Secret';
+    return t('Secret');
   }
   const needsSecret = (c: Connection, name: string) => {
     if (c.kind === 'custom' && name === 'secret' && c.auth.type === 'none') return false;
@@ -163,7 +164,7 @@
       if (wasNew && (wantsSecret || wantsLinks)) {
         // Stay open: the token or link can only be stored once the connection exists.
         d.id = id;
-        note = wantsLinks ? 'Saved. Now add a channel and paste its webhook link.' : 'Saved. Now add the token below.';
+        note = wantsLinks ? t('Saved. Now add a channel and paste its webhook link.') : t('Saved. Now add the token below.');
       } else {
         draft = null;
       }
@@ -212,23 +213,21 @@
 <div class="page">
   {#if view?.store_problem}
     <div class="problem" role="alert">
-      <Chip kind="err" label="No password store" />
+      <Chip kind="err" label={t('No password store')} />
       <span>
-        {view.store_problem}. Tokens and sign-ins cannot be saved until it works. On Linux, install
-        and unlock GNOME Keyring or KDE Wallet.
+        {t('{store_problem}. Tokens and sign-ins cannot be saved until it works. On Linux, install and unlock GNOME Keyring or KDE Wallet.', { store_problem: view.store_problem })}
       </span>
     </div>
   {/if}
   {#if items.failure}<Chip kind="err" label={items.failure} />{/if}
-  {#each items.problems as p (p)}<Chip kind="warn" label={`Could not read a connection file: ${p}`} />{/each}
+  {#each items.problems as p (p)}<Chip kind="warn" label={t('Could not read a connection file: {problem}', { problem: p })} />{/each}
   {#each view?.problems ?? [] as p (p)}<Chip kind="warn" label={p} />{/each}
 
   {#if items.loaded && items.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No connections yet</h2>
+      <h2>{t('No connections yet')}</h2>
       <p class="quiet">
-        A connection tells CargoFrame where a sharing button sends your capture. Passwords and tokens
-        are kept in your system's password store, never in a file.
+        {t('A connection tells CargoFrame where a sharing button sends your capture. Passwords and tokens are kept in your system\'s password store, never in a file.')}
       </p>
     </div>
   {/if}
@@ -251,26 +250,26 @@
         {#if v && item.enabled && v.state !== 'not_in_build'}
           {#if oauth(item.kind)}
             {#if signingIn === id}
-              <span class="quiet">Waiting for your browser…</span>
-              <button onclick={() => (void (async () => (await getApi()).cancelSignIn())())}>Cancel</button>
+              <span class="quiet">{t('Waiting for your browser…')}</span>
+              <button onclick={() => (void (async () => (await getApi()).cancelSignIn())())}>{t('Cancel')}</button>
             {:else if v.state === 'connected'}
-              <button data-tour="conn.test" onclick={() => act(id, (api) => api.testConnection(id))}>Test</button>
-              <button onclick={() => act(id, (api) => api.disconnectConnection(id))}>Sign out</button>
+              <button data-tour="conn.test" onclick={() => act(id, (api) => api.testConnection(id))}>{t('Test')}</button>
+              <button onclick={() => act(id, (api) => api.disconnectConnection(id))}>{t('Sign out')}</button>
             {:else}
-              <button class="primary" data-tour="conn.signin" onclick={() => signIn(id)}>{v.state === 'expired' ? 'Sign in again' : 'Sign in'}</button>
+              <button class="primary" data-tour="conn.signin" onclick={() => signIn(id)}>{v.state === 'expired' ? t('Sign in again') : t('Sign in')}</button>
             {/if}
           {:else if item.kind !== 'claude'}
             {#if v.state === 'connected' || v.state === 'expired'}
-              <button data-tour="conn.test" onclick={() => act(id, (api) => api.testConnection(id))}>Test</button>
+              <button data-tour="conn.test" onclick={() => act(id, (api) => api.testConnection(id))}>{t('Test')}</button>
             {/if}
           {/if}
         {/if}
-        <button onclick={() => edit(id, item)}>Edit</button>
+        <button onclick={() => edit(id, item)}>{t('Edit')}</button>
         {#if confirming === id}
-          <button class="danger" onclick={() => remove(id)}>Delete for good</button>
-          <button onclick={() => (confirming = null)}>Keep</button>
+          <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
+          <button onclick={() => (confirming = null)}>{t('Keep')}</button>
         {:else}
-          <button onclick={() => (confirming = id)}>Delete</button>
+          <button onclick={() => (confirming = id)}>{t('Delete')}</button>
         {/if}
       </div>
     </article>
@@ -281,8 +280,8 @@
   {/if}
 
   {#if !draft}
-    <section class="adders" aria-label="Add a connection">
-      <h2>Add a connection</h2>
+    <section class="adders" aria-label={t('Add a connection')}>
+      <h2>{t('Add a connection')}</h2>
       <div class="kinds">
         {#each offered as k (k.kind)}
           <button class="kind" data-tour={`add-${k.kind}`} onclick={() => add(k.kind)}>
@@ -294,7 +293,7 @@
     </section>
   {:else}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? 'Edit connection' : `New ${KINDS.find((k) => k.kind === draft!.value.kind)?.label} connection`}</h2>
+      <h2>{draft.id ? t('Edit connection') : t('New {service} connection', { service: KINDS.find((k) => k.kind === draft!.value.kind)?.label ?? '' })}</h2>
       <ConnectionForm bind:value={draft.value} hooks={hookStore()} />
       {#if draft.id}
         {@const v = viewOf(draft.id)}
@@ -302,7 +301,7 @@
           {#if needsSecret(draft.value, s.name)}
             <SecretInput
               label={secretLabel(draft.value, s.name)}
-              hint="Kept in your system's password store. You cannot read it back from here."
+              hint={t('Kept in your system\'s password store. You cannot read it back from here.')}
               stored={s.stored}
               get={getLinkFor(draft.value, s.name === 'client_secret' ? 'client_secret' : s.name === 'app_password' ? 'app_password' : 'token')}
               onsave={async (value) => {
@@ -322,8 +321,8 @@
       {#if note}<div role="status"><Chip kind="ok" label={note} /></div>{/if}
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" data-tour="conn.save" disabled={busy}>Save</button>
-        <button type="button" data-tour="conn.done" onclick={() => (draft = null)}>{draft.id ? 'Done' : 'Cancel'}</button>
+        <button class="primary" type="submit" data-tour="conn.save" disabled={busy}>{t('Save')}</button>
+        <button type="button" data-tour="conn.done" onclick={() => (draft = null)}>{draft.id ? t('Done') : t('Cancel')}</button>
       </div>
     </form>
   {/if}

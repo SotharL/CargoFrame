@@ -6,6 +6,7 @@ use cargoframe_bundle::{CaptureDir, Workspace};
 use cargoframe_capture as cap;
 use cargoframe_config::{CaptureMode, Kind, Store, Trigger};
 use cargoframe_handoff::ChatList;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::Layout;
 use cargoframe_rules::{run_rules, FsFiles, Rule};
 use cargoframe_window::files::{self, Limits, Scan};
@@ -147,13 +148,13 @@ impl Session {
         from: &Path,
     ) -> Result<files::FileEntry, String> {
         if !self.view.files.contains_key(block_id) {
-            return Err("That Files block is not in this capture".into());
+            return Err(t("That Files block is not in this capture").into());
         }
         let name = from
             .file_name()
             .map(|n| n.to_string_lossy().to_string())
             .filter(|n| !n.trim().is_empty())
-            .ok_or("That is not a file")?;
+            .ok_or(t("That is not a file"))?;
         let mut added = self.added.lock().unwrap_or_else(|e| e.into_inner());
         let taken = |p: &str| {
             added.values().flatten().any(|e| e.path == p)
@@ -175,8 +176,13 @@ impl Session {
         }
         let copy = self
             .with_dir(workspace, |dir| dir.adopt(from, &path, MAX_ADDED_BYTES))
-            .map_err(|e| format!("The capture's folder could not be used: {e}"))?
-            .map_err(|e| format!("\u{201c}{name}\u{201d} cannot be added: {e}"))?;
+            .map_err(|e| tf("The capture's folder could not be used: {e}", &[("e", &e)]))?
+            .map_err(|e| {
+                tf(
+                    "\u{201c}{name}\u{201d} cannot be added: {e}",
+                    &[("name", &name), ("e", &e)],
+                )
+            })?;
         let size = std::fs::metadata(&copy).map(|m| m.len()).unwrap_or(0);
         let entry = files::FileEntry {
             path,
@@ -196,7 +202,7 @@ impl Session {
     pub fn read_offered(&self, path: &str) -> Result<LogText, String> {
         let offered = self.view.files.keys().any(|block| self.offers(block, path));
         if !offered {
-            return Err("That file is not one this capture offers".into());
+            return Err(t("That file is not one this capture offers").into());
         }
         let copy = self
             .dir
@@ -210,11 +216,12 @@ impl Session {
                 let root = self
                     .files_root
                     .as_deref()
-                    .ok_or("There is no folder to read the file from")?;
+                    .ok_or(t("There is no folder to read the file from"))?;
                 cargoframe_bundle::inside(Path::new(root), path).map_err(|e| e.to_string())?
             }
         };
-        read_end(&real, MAX_LOG_BYTES).map_err(|e| format!("The file could not be read: {e}"))
+        read_end(&real, MAX_LOG_BYTES)
+            .map_err(|e| tf("The file could not be read: {e}", &[("e", &e)]))
     }
 
     /// This capture is a recording: tell the window about it.
@@ -489,17 +496,17 @@ pub const MAX_EDITED_PNG: usize = 64 * 1024 * 1024;
 /// Accept only what is plainly a PNG of a sane size.
 pub fn check_png(bytes: &[u8]) -> Result<(), String> {
     if bytes.len() > MAX_EDITED_PNG {
-        return Err("The edited picture is too large".into());
+        return Err(t("The edited picture is too large").into());
     }
     if bytes.len() < 8 || bytes[..8] != [0x89, b'P', b'N', b'G', 0x0D, 0x0A, 0x1A, 0x0A] {
-        return Err("The edited picture is not a PNG".into());
+        return Err(t("The edited picture is not a PNG").into());
     }
     Ok(())
 }
 
 #[derive(Debug, thiserror::Error)]
 pub enum PrepareError {
-    #[error("trigger \"{0}\" does not exist")]
+    #[error("{}", cargoframe_i18n::tf("trigger \"{value}\" does not exist", &[("value", &.0)]))]
     NoTrigger(String),
     #[error("{0}")]
     Config(String),
@@ -577,11 +584,17 @@ pub fn prepare_video(
             move_file(clip, &target).map(|()| target)
         })
         .map_err(|e| {
-            PrepareError::Clip(format!(
-                "CargoFrame could not make a folder for the recording: {e}"
+            PrepareError::Clip(tf(
+                "CargoFrame could not make a folder for the recording: {e}",
+                &[("e", &e)],
             ))
         })?
-        .map_err(|e| PrepareError::Clip(format!("CargoFrame could not keep the recording: {e}")))?;
+        .map_err(|e| {
+            PrepareError::Clip(tf(
+                "CargoFrame could not keep the recording: {e}",
+                &[("e", &e)],
+            ))
+        })?;
     let started = session
         .view
         .captured_at_ms
@@ -634,7 +647,7 @@ pub fn apply_incoming(view: &mut SessionView, values: &[(String, String)]) {
     };
     if !layout.accepts_input {
         view.notes.push(
-            "Another program sent values, but this layout does not accept them: turn on \"Other programs can fill this\" in the layout".into(),
+            t("Another program sent values, but this layout does not accept them: turn on \"Other programs can fill this\" in the layout").into(),
         );
         return;
     }
@@ -664,10 +677,7 @@ pub fn apply_incoming(view: &mut SessionView, values: &[(String, String)]) {
         }
     }
     if !unknown.is_empty() {
-        view.notes.push(format!(
-            "Another program sent values for {}, which this layout has no text box, dropdown or tags for",
-            unknown.join(", ")
-        ));
+        view.notes.push(tf("Another program sent values for {value}, which this layout has no text box, dropdown or tags for", &[("value", &unknown.join(", "))]));
     }
 }
 
@@ -819,13 +829,17 @@ pub fn prepare_with(
                     .filter(|n| !n.trim().is_empty())
                     .unwrap_or_else(|| key.clone());
                 let tail = if outcome.used_fallback {
-                    " (using its fallback value)"
+                    t(" (using its fallback value)")
                 } else {
                     ""
                 };
-                notes.push(format!(
-                    "From a file, \u{201c}{}\u{201d}: {problem}{tail}",
-                    name.trim()
+                notes.push(tf(
+                    "From a file, \u{201c}{name}\u{201d}: {problem}{tail}",
+                    &[
+                        ("name", &name.trim()),
+                        ("problem", &problem),
+                        ("tail", &tail),
+                    ],
                 ));
             }
         }
@@ -856,7 +870,7 @@ pub fn prepare_with(
     let scan = |f: &cargoframe_layout::FilesBlock| -> Scan {
         let Some(root) = &files_root else {
             return Scan {
-                problem: Some("No project folder could be found for this capture".into()),
+                problem: Some(t("No project folder could be found for this capture").into()),
                 ..Scan::default()
             };
         };
@@ -869,7 +883,7 @@ pub fn prepare_with(
                 .collect::<Vec<_>>()
                 .join("; ");
             return Scan {
-                problem: Some(format!("No folder to look in ({why})")),
+                problem: Some(tf("No folder to look in ({why})", &[("why", &why)])),
                 ..Scan::default()
             };
         }

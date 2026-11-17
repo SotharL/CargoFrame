@@ -9,7 +9,9 @@ import type {
   FileEntry,
   LogText,
   ValuesPreview, SampleFiles, SampleText,
+  LanguageInfo,
 } from './types';
+import { LANGUAGES, resolve as resolveLanguage } from './i18n/index.svelte';
 import { DEMO_SAMPLES, demoValues } from './demoSamples';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
@@ -32,6 +34,8 @@ export function asOptionsError(e: unknown): OptionsError {
 export interface Api {
   appInfo(): Promise<AppInfo>;
   getGeneral(): Promise<General>;
+  /** The language the program speaks (from General, or the computer's). */
+  getLanguage(): Promise<LanguageInfo>;
   setGeneral(general: General): Promise<void>;
   getAutostart(): Promise<boolean>;
   setAutostart(enabled: boolean): Promise<void>;
@@ -198,6 +202,7 @@ async function tauriApi(): Promise<Api> {
   return {
     appInfo: () => invoke<AppInfo>('app_info'),
     getGeneral: () => invoke<General>('get_general'),
+    getLanguage: () => invoke<LanguageInfo>('get_language'),
     setGeneral: (general) => invoke('set_general', { general }),
     getAutostart: () => invoke<boolean>('get_autostart'),
     setAutostart: (enabled) => invoke('set_autostart', { enabled }),
@@ -419,6 +424,8 @@ function templateLayout(t: LayoutTemplate, connectionId: string | null): Layout 
   };
 }
 
+const DEMO_LANGUAGE = 'cargoframe.demo.language';
+
 export function memoryApi(opts: MemoryOptions = {}): Api {
   const initial = opts.general;
   let general: General = {
@@ -429,6 +436,15 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     notifications: { routine: true, problems: true },
     ...initial,
   };
+  // the preview in a browser keeps its language across reloads (the app keeps it in its settings)
+  if (!initial?.language) {
+    try {
+      const saved = globalThis.localStorage?.getItem(DEMO_LANGUAGE);
+      if (saved) general.language = saved;
+    } catch {
+      // no storage here: the computer's language
+    }
+  }
   // what the Your data section finds, and clears (sizes in bytes)
   let kept: Record<string, { files: number; bytes: number }> = {
     work: { files: 4, bytes: 5_300_000 }, kept: { files: 0, bytes: 0 }, logs: { files: 3, bytes: 120_000 }, updates: { files: 0, bytes: 0 },
@@ -478,7 +494,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       const claudeMissing = opensApp && !claudeInstalled;
       if (!installed || claudeMissing) {
         install = scenario === 'windows_no_winget'
-          ? { type: 'manual', text: 'Windows\' package manager (winget) was not found. Install "App Installer" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Video.' }
+          ? { type: 'manual', text: 'Windows\' package manager (winget) was not found. Install "App Installer" from the Microsoft Store, then come back; or download ffmpeg yourself and choose its folder under Recording.' }
           : { type: 'run', label: !installed && claudeMissing ? 'Install what is missing' : installed ? 'Install the Claude app' : 'Install ffmpeg' };
       }
     } else {
@@ -661,8 +677,21 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       tray_available: true,
     }),
     getGeneral: async () => ({ ...general }),
+    getLanguage: async () => {
+      const system = typeof navigator === 'undefined' ? null : navigator.language;
+      return {
+        code: resolveLanguage(general.language, system ?? undefined),
+        system,
+        languages: LANGUAGES.map((l) => [l.code, l.name] as [string, string]),
+      };
+    },
     setGeneral: async (g) => {
       general = { ...g };
+      try {
+        if (g.language) globalThis.localStorage?.setItem(DEMO_LANGUAGE, g.language);
+      } catch {
+        // the language lasts until the page is reloaded
+      }
     },
     getAutostart: async () => autostart,
     setAutostart: async (enabled) => {

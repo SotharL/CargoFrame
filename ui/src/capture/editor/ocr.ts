@@ -3,6 +3,7 @@
 // are shown where they are on the picture.
 import type { TextReading } from '../../lib/types';
 import type { PxRect } from './model';
+import { t } from '../../lib/i18n/index.svelte';
 
 /** How many ways there are to read a part ("Try again" goes to the next, then back to the first). */
 export const READ_TRIES = 3;
@@ -13,9 +14,9 @@ export async function regionPng(image: CanvasImageSource, r: PxRect): Promise<Bl
   c.width = Math.max(1, Math.round(r.w));
   c.height = Math.max(1, Math.round(r.h));
   const ctx = c.getContext('2d');
-  if (!ctx) throw new Error('the picture could not be cut');
+  if (!ctx) throw new Error(t('the picture could not be cut'));
   ctx.drawImage(image, r.x, r.y, r.w, r.h, 0, 0, c.width, c.height);
-  return new Promise((ok, fail) => c.toBlob((b) => (b ? ok(b) : fail(new Error('the picture could not be cut'))), 'image/png'));
+  return new Promise((ok, fail) => c.toBlob((b) => (b ? ok(b) : fail(new Error(t('the picture could not be cut')))), 'image/png'));
 }
 
 /** Each line found, placed on the whole picture (it was found in the part at `r`). */

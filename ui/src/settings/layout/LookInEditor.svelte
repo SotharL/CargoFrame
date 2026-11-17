@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import Field from '../../lib/components/Field.svelte';
   import { getApi } from '../../lib/ipc';
   import type { Block, FilesPreview, LookFolder, LookIn } from '../../lib/types';
@@ -7,11 +8,11 @@
   let { block }: { block: FilesBlock } = $props();
 
   const CHOICES: { value: LookFolder; label: string }[] = [
-    { value: 'project', label: 'The project folder' },
-    { value: 'program', label: "The program's own folder" },
-    { value: 'above_1', label: 'One folder above that' },
-    { value: 'above_2', label: 'Two folders above' },
-    { value: 'above_3', label: 'Three folders above' },
+    { value: 'project', label: t('The project folder') },
+    { value: 'program', label: t("The program's own folder") },
+    { value: 'above_1', label: t('One folder above that') },
+    { value: 'above_2', label: t('Two folders above') },
+    { value: 'above_3', label: t('Three folders above') },
   ];
 
   const look = $derived<LookIn>(block.look_in ?? { folders: ['project'], subfolder: '' });
@@ -56,12 +57,11 @@
     return () => clearTimeout(timer);
   });
 
-  const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
 </script>
 
 <Field
-  label="Look in"
-  hint="Found from the program that had focus when you captured. Patterns above are matched inside each folder you tick."
+  label={t('Look in')}
+  hint={t('Found from the program that had focus when you captured. Patterns above are matched inside each folder you tick.')}
 >
   <div class="choices">
     {#each CHOICES as c (c.value)}
@@ -77,25 +77,25 @@
     {/each}
   </div>
 </Field>
-<Field label="Subfolders in each" hint="Optional. Folder names such as logs, crash, separated by commas: each is searched inside every folder ticked above.">
+<Field label={t('Subfolders in each')} hint={t('Optional. Folder names such as logs, crash, separated by commas: each is searched inside every folder ticked above.')}>
   <input
     type="text"
     value={look.subfolder}
-    placeholder="logs, crash"
+    placeholder={t('logs, crash')}
     oninput={(e) => (block.look_in = { ...current(), subfolder: e.currentTarget.value })}
   />
 </Field>
 <div class="count" aria-live="polite">
   {#if preview === null}
-    <span class="quiet">Counting…</span>
+    <span class="quiet">{t('Counting…')}</span>
   {:else if preview.problem && preview.places.length === 0}
     <span class="quiet">{preview.problem}</span>
   {:else}
-    <strong>{plural(preview.total, 'file')} found</strong>{#if preview.ticked}, {preview.ticked} ticked by default{/if}{#if preview.truncated}, more exist{/if}
+    <strong>{tn('{n} file found', t('{n} files found'), preview.total)}</strong>{#if preview.ticked}, {tn('{n} ticked by default', t('{n} ticked by default'), preview.ticked)}{/if}{#if preview.truncated}, {t('more exist')}{/if}
     <ul>
       {#each preview.places as p (p.folder)}
         <li class:gone={!p.exists} title={p.folder}>
-          {p.label}: {p.exists ? plural(p.found, 'file') : 'folder not found'}
+          {p.label}: {p.exists ? tn('{n} file', '{n} files', p.found) : t('folder not found')}
         </li>
       {/each}
       {#each preview.missing as m (m)}
@@ -104,9 +104,9 @@
     </ul>
     {#if preview.problem}<span class="quiet">{preview.problem}</span>{/if}
   {/if}
-  {#if waiting && preview !== null}<span class="quiet"> updating…</span>{/if}
+  {#if waiting && preview !== null}<span class="quiet"> {t('updating…')}</span>{/if}
 </div>
-<Field label="Try with" hint="Optional: the path of a program file to count against. Empty uses the program of your last capture.">
+<Field label={t('Try with')} hint={t('Optional: the path of a program file to count against. Empty uses the program of your last capture.')}>
   <input type="text" bind:value={tryWith} placeholder={preview?.program ?? 'C:\\Dev\\Foo\\bin\\Foo.exe'} />
 </Field>
 

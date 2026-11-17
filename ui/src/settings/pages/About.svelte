@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The program itself: its version and updates, then how it has been doing on this computer.
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
@@ -31,7 +32,7 @@
   {#if general}
     <UpdatesSection auto={general.check_updates} onauto={onAuto} />
   {/if}
-  {#if failed}<div role="alert"><Chip kind="err" label="Could not save" /> <span class="quiet">{failed}</span></div>{/if}
+  {#if failed}<div role="alert"><Chip kind="err" label={t('Could not save')} /> <span class="quiet">{failed}</span></div>{/if}
   <Diagnostics />
 </div>
 

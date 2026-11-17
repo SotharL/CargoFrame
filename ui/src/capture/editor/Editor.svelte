@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import { onMount, tick } from 'svelte';
   import {
     COLORS, THICKNESS, add, clearAll, clampPoint, emptyState, isEdited, rectOf, redo, resetCrop,
@@ -207,7 +208,7 @@
       await navigator.clipboard.writeText(toCopy(reading.result, reading.picked));
       reading = { ...reading, copied: true };
     } catch {
-      reading = { ...reading, error: 'The text could not be copied: select it below and press Ctrl+C' };
+      reading = { ...reading, error: t('The text could not be copied: select it below and press Ctrl+C') };
     }
   }
 
@@ -326,37 +327,37 @@
 <svelte:window onkeydown={onKey} />
 
 <div class="editor">
-  <div class="toolbar" role="toolbar" aria-label="Screenshot tools">
+  <div class="toolbar" role="toolbar" aria-label={t('Screenshot tools')}>
     <div class="group">
-      <button class="tool" class:on={tool === 'crop'} aria-pressed={tool === 'crop'} title="Crop" aria-label="Crop" onclick={() => pick('crop')}>
+      <button class="tool" class:on={tool === 'crop'} aria-pressed={tool === 'crop'} title={t('Crop')} aria-label={t('Crop')} onclick={() => pick('crop')}>
         <Icon name="crop" size={17} />
       </button>
-      <button class="tool" class:on={tool === 'pen'} aria-pressed={tool === 'pen'} title="Draw" aria-label="Draw" onclick={() => pick('pen')}>
+      <button class="tool" class:on={tool === 'pen'} aria-pressed={tool === 'pen'} title={t('Draw')} aria-label={t('Draw')} onclick={() => pick('pen')}>
         <Icon name="pen" size={17} />
       </button>
-      <button class="tool" class:on={tool === 'rect'} aria-pressed={tool === 'rect'} title="Square (hold Shift for equal sides)" aria-label="Square" onclick={() => pick('rect')}>
+      <button class="tool" class:on={tool === 'rect'} aria-pressed={tool === 'rect'} title={t('Square (hold Shift for equal sides)')} aria-label={t('Square')} onclick={() => pick('rect')}>
         <Icon name="rect" size={17} />
       </button>
-      <button class="tool" class:on={tool === 'ellipse'} aria-pressed={tool === 'ellipse'} title="Circle (hold Shift for a true circle)" aria-label="Circle" onclick={() => pick('ellipse')}>
+      <button class="tool" class:on={tool === 'ellipse'} aria-pressed={tool === 'ellipse'} title={t('Circle (hold Shift for a true circle)')} aria-label={t('Circle')} onclick={() => pick('ellipse')}>
         <Icon name="ellipse" size={17} />
       </button>
-      <button class="tool" class:on={tool === 'arrow'} aria-pressed={tool === 'arrow'} title="Arrow" aria-label="Arrow" onclick={() => pick('arrow')}>
+      <button class="tool" class:on={tool === 'arrow'} aria-pressed={tool === 'arrow'} title={t('Arrow')} aria-label={t('Arrow')} onclick={() => pick('arrow')}>
         <Icon name="arrow" size={17} />
       </button>
-      <button class="tool" class:on={tool === 'text'} aria-pressed={tool === 'text'} title="Text: click to write, click a text to change it" aria-label="Text" onclick={() => pick('text')}>
+      <button class="tool" class:on={tool === 'text'} aria-pressed={tool === 'text'} title={t('Text: click to write, click a text to change it')} aria-label={t('Text')} onclick={() => pick('text')}>
         <Icon name="text" size={17} />
       </button>
       {#if reader}
-        <button class="tool" class:on={tool === 'read'} aria-pressed={tool === 'read'} title="Read text: drag over the text to copy it" aria-label="Read text" onclick={() => pick('read')}>
+        <button class="tool" class:on={tool === 'read'} aria-pressed={tool === 'read'} title={t('Read text: drag over the text to copy it')} aria-label={t('Read text')} onclick={() => pick('read')}>
           <Icon name="read" size={17} />
         </button>
       {/if}
     </div>
     {#if tool === 'text'}
-      <div class="group" data-text-tools role="group" aria-label="Text style">
-        <button class="tool letter" class:on={textStyle.bold} aria-pressed={!!textStyle.bold} title="Bold (Ctrl+B)" aria-label="Bold" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.bold = !textStyle.bold)}><b>B</b></button>
-        <button class="tool letter" class:on={textStyle.italic} aria-pressed={!!textStyle.italic} title="Italic (Ctrl+I)" aria-label="Italic" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.italic = !textStyle.italic)}><i>I</i></button>
-        <button class="tool" class:on={textStyle.box} aria-pressed={!!textStyle.box} title="On a box: readable on any picture" aria-label="On a box" onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.box = !textStyle.box)}>
+      <div class="group" data-text-tools role="group" aria-label={t('Text style')}>
+        <button class="tool letter" class:on={textStyle.bold} aria-pressed={!!textStyle.bold} title={t('Bold (Ctrl+B)')} aria-label={t('Bold')} onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.bold = !textStyle.bold)}><b>B</b></button>
+        <button class="tool letter" class:on={textStyle.italic} aria-pressed={!!textStyle.italic} title={t('Italic (Ctrl+I)')} aria-label={t('Italic')} onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.italic = !textStyle.italic)}><i>I</i></button>
+        <button class="tool" class:on={textStyle.box} aria-pressed={!!textStyle.box} title={t('On a box: readable on any picture')} aria-label={t('On a box')} onmousedown={(e) => e.preventDefault()} onclick={() => (textStyle.box = !textStyle.box)}>
           <Icon name="onBox" size={17} />
         </button>
       </div>
@@ -369,16 +370,16 @@
     <span class="sep" aria-hidden="true"></span>
 
     <div class="group">
-      <button class="tool" title="Undo (Ctrl+Z)" aria-label="Undo" disabled={doc.annotations.length === 0} onclick={() => (doc = undo(doc))}>
+      <button class="tool" title={t('Undo (Ctrl+Z)')} aria-label={t('Undo')} disabled={doc.annotations.length === 0} onclick={() => (doc = undo(doc))}>
         <Icon name="undo" size={17} />
       </button>
-      <button class="tool" title="Redo (Ctrl+Y)" aria-label="Redo" disabled={doc.redo.length === 0} onclick={() => (doc = redo(doc))}>
+      <button class="tool" title={t('Redo (Ctrl+Y)')} aria-label={t('Redo')} disabled={doc.redo.length === 0} onclick={() => (doc = redo(doc))}>
         <Icon name="redo" size={17} />
       </button>
-      <button class="tool" title="Reset crop: show the whole picture again" aria-label="Reset crop" disabled={!doc.crop} onclick={() => (doc = resetCrop(doc))}>
+      <button class="tool" title={t('Reset crop: show the whole picture again')} aria-label={t('Reset crop')} disabled={!doc.crop} onclick={() => (doc = resetCrop(doc))}>
         <Icon name="wholePicture" size={17} />
       </button>
-      <button class="tool" title="Clear all: remove every mark and the crop" aria-label="Clear all" disabled={!edited} onclick={() => (doc = clearAll())}>
+      <button class="tool" title={t('Clear all: remove every mark and the crop')} aria-label={t('Clear all')} disabled={!edited} onclick={() => (doc = clearAll())}>
         <Icon name="trash" size={17} />
       </button>
     </div>
@@ -392,7 +393,7 @@
         style:width="{cssSize.w}px"
         style:height="{cssSize.h}px"
         style:cursor={cursor}
-        aria-label="Screenshot, {visible.w} by {visible.h} pixels"
+        aria-label={t('Screenshot, {w} by {h} pixels', { w: visible.w, h: visible.h })}
         onpointerdown={down}
         onpointermove={move}
         onpointerup={up}
@@ -411,7 +412,7 @@
           style:width="{l.w}px"
           style:height="{l.h}px"
           title={l.text}
-          aria-label="Line {l.i + 1}: {l.text}"
+          aria-label={t('Line {n}: {text}', { n: l.i + 1, text: l.text })}
           aria-pressed={reading?.picked.includes(l.i) ?? false}
           onclick={() => pickLine(l.i)}
         ></button>
@@ -429,44 +430,44 @@
           bind:value={textValue}
           onkeydown={onTextKey}
           onblur={onTextBlur}
-          aria-label="Text to add"
-          placeholder="Type, Enter to place"
+          aria-label={t('Text to add')}
+          placeholder={t('Type, Enter to place')}
         ></textarea>
       {/if}
     </div>
   </div>
   {#if reading}
-    <div class="reading" role="region" aria-label="Text read">
+    <div class="reading" role="region" aria-label={t('Text read')}>
       {#if reading.status === 'reading'}
-        <p class="quiet" role="status">Reading the text…</p>
+        <p class="quiet" role="status">{t('Reading the text…')}</p>
       {:else if reading.status === 'failed'}
         <p class="warn" role="alert">{reading.error}</p>
       {:else if reading.result && reading.result.lines.length === 0}
-        <p class="quiet" role="status">No text found here. Try again, or choose a slightly larger part.</p>
+        <p class="quiet" role="status">{t('No text found here. Try again, or choose a slightly larger part.')}</p>
       {:else if reading.result}
-        <textarea class="found selectable" readonly rows={Math.min(5, Math.max(1, readingText.split('\n').length))} aria-label="The text found" value={readingText}></textarea>
+        <textarea class="found selectable" readonly rows={Math.min(5, Math.max(1, readingText.split('\n').length))} aria-label={t('The text found')} value={readingText}></textarea>
         {#if reading.error}<p class="warn">{reading.error}</p>{/if}
       {/if}
       <div class="read-buttons">
         {#if reading.status === 'done' && reading.result?.lines.length}
           <button type="button" class="primary" onclick={copyReading}>
-            {reading.copied ? 'Copied' : reading.picked.length ? `Copy ${reading.picked.length} line${reading.picked.length === 1 ? '' : 's'}` : 'Copy'}
+            {reading.copied ? t('Copied') : reading.picked.length ? tn('Copy {n} line', 'Copy {n} lines', reading.picked.length) : t('Copy')}
           </button>
         {/if}
-        <button type="button" onclick={tryAgain} disabled={reading.status === 'reading'} title="Read it another way">Try again</button>
-        <button type="button" onclick={closeReading}>Close</button>
+        <button type="button" onclick={tryAgain} disabled={reading.status === 'reading'} title={t('Read it another way')}>{t('Try again')}</button>
+        <button type="button" onclick={closeReading}>{t('Close')}</button>
         {#if reading.result}
-          <span class="quiet small">Read on this computer ({reading.result.reader}), way {reading.attempt + 1} of {READ_TRIES}{reading.result.lines.length > 1 ? ' · click lines to copy only those' : ''}</span>
+          <span class="quiet small">{t('Read on this computer ({reader}), way {n} of {tries}', { reader: reading.result.reader, n: reading.attempt + 1, tries: READ_TRIES })}{#if reading.result.lines.length > 1}{' · '}{t('click lines to copy only those')}{/if}</span>
         {/if}
       </div>
     </div>
   {/if}
   <div class="status quiet">
-    {visible.w} × {visible.h} px{doc.crop ? ' (cropped)' : ''}
-    {#if doc.annotations.length}· {doc.annotations.length} mark{doc.annotations.length === 1 ? '' : 's'}{/if}
-    {#if tool === 'crop'}· drag to choose the part to keep{/if}
-    {#if tool === 'read'}· drag over the text to read it{/if}
-    {#if tool === 'text'}· click to write (Shift+Enter for a new line), click a text to change it{/if}
+    {visible.w} × {visible.h} px{doc.crop ? ` ${t('(cropped)')}` : ''}
+    {#if doc.annotations.length}· {tn('{n} mark', '{n} marks', doc.annotations.length)}{/if}
+    {#if tool === 'crop'}· {t('drag to choose the part to keep')}{/if}
+    {#if tool === 'read'}· {t('drag over the text to read it')}{/if}
+    {#if tool === 'text'}· {t('click to write (Shift+Enter for a new line), click a text to change it')}{/if}
   </div>
 </div>
 

@@ -28,6 +28,7 @@ instagram = ["png", "jpeg-encoder"]
 github = []
 
 [dependencies]
+cargoframe-i18n = { path = "../i18n" }
 cargoframe-net = { path = "../net" }
 cargoframe-safe = { path = "../safe" }
 cargoframe-context = { path = "../context" }

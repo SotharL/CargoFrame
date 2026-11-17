@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // How videos are recorded on this PC: where ffmpeg is, how it captures and compresses, and a
   // short test. Cutting, cropping and marking a clip happen in the CargoFrame window a video
   // trigger opens, so they are not repeated here.
@@ -11,20 +12,20 @@
   import type { RecordingSign, SignCorner, Video, VideoCapture, VideoEncoder, VideoTools, VideoTrial } from '../../lib/types';
 
   const CAPTURES: { id: VideoCapture; label: string }[] = [
-    { id: 'auto', label: 'Automatic' },
-    { id: 'gdigrab', label: 'GDI (Windows, works almost everywhere)' },
-    { id: 'ddagrab', label: 'Desktop Duplication (Windows, lighter on the processor)' },
+    { id: 'auto', label: t('Automatic') },
+    { id: 'gdigrab', label: t('GDI (Windows, works almost everywhere)') },
+    { id: 'ddagrab', label: t('Desktop Duplication (Windows, lighter on the processor)') },
     { id: 'x11', label: 'X11 (Linux)' },
-    { id: 'wayland', label: 'Wayland screen sharing (Linux, needs GStreamer)' },
+    { id: 'wayland', label: t('Wayland screen sharing (Linux, needs GStreamer)') },
   ];
   const ENCODERS: { id: VideoEncoder; label: string }[] = [
-    { id: 'auto', label: 'Automatic' },
-    { id: 'software', label: 'Software (x264, works everywhere)' },
-    { id: 'nvenc', label: 'NVIDIA graphics card (NVENC)' },
-    { id: 'qsv', label: 'Intel graphics (Quick Sync)' },
-    { id: 'amf', label: 'AMD graphics (AMF)' },
-    { id: 'media_foundation', label: 'Windows built-in' },
-    { id: 'vaapi', label: 'VAAPI (Linux)' },
+    { id: 'auto', label: t('Automatic') },
+    { id: 'software', label: t('Software (x264, works everywhere)') },
+    { id: 'nvenc', label: t('NVIDIA graphics card (NVENC)') },
+    { id: 'qsv', label: t('Intel graphics (Quick Sync)') },
+    { id: 'amf', label: t('AMD graphics (AMF)') },
+    { id: 'media_foundation', label: t('Windows built-in') },
+    { id: 'vaapi', label: t('VAAPI (Linux)') },
   ];
 
   let loaded = $state(false);
@@ -33,10 +34,10 @@
     sign: { outline: true, dot: true, corner: 'top_right' },
   });
   const CORNERS: { id: SignCorner; label: string }[] = [
-    { id: 'top_left', label: 'Top left' },
-    { id: 'top_right', label: 'Top right' },
-    { id: 'bottom_left', label: 'Bottom left' },
-    { id: 'bottom_right', label: 'Bottom right' },
+    { id: 'top_left', label: t('Top left') },
+    { id: 'top_right', label: t('Top right') },
+    { id: 'bottom_left', label: t('Bottom left') },
+    { id: 'bottom_right', label: t('Bottom right') },
   ];
   /** The sign's settings, filled in for a file saved before 0.3.0. */
   const sign = $derived<RecordingSign>(video.sign ?? { outline: true, dot: true, corner: 'top_right' });
@@ -64,16 +65,16 @@
   function whole(label: string, v: unknown): number | null {
     const n = Number(v);
     if (v === null || v === '' || !Number.isFinite(n)) {
-      status = { ok: false, text: `${label} must be a whole number` };
+      status = { ok: false, text: t('{label} must be a whole number', { label }) };
       return null;
     }
     return Math.round(n);
   }
 
   function current(): Video | null {
-    const fps = whole('Frames per second', video.fps);
-    const window_secs = whole('Length kept', video.window_secs);
-    const max_height = whole('Largest height', video.max_height);
+    const fps = whole(t('Frames per second'), video.fps);
+    const window_secs = whole(t('Length kept'), video.window_secs);
+    const max_height = whole(t('Largest height'), video.max_height);
     if (fps === null || window_secs === null || max_height === null) return null;
     return { ...video, ffmpeg: ffmpegText.trim() || null, fps, window_secs, max_height };
   }
@@ -84,7 +85,7 @@
     try {
       await (await getApi()).setVideo(v);
       video = v;
-      status = { ok: true, text: 'Saved' };
+      status = { ok: true, text: t('Saved') };
       return true;
     } catch (e) {
       status = { ok: false, text: String(e) };
@@ -111,7 +112,7 @@
   }
 
   async function choose() {
-    const p = await (await getApi()).pickFolder('Choose the folder that holds ffmpeg');
+    const p = await (await getApi()).pickFolder(t('Choose the folder that holds ffmpeg'));
     if (p) {
       ffmpegText = p;
       await savePlace();
@@ -163,8 +164,10 @@
 
   function playerFailed(e: Event) {
     const err = (e.currentTarget as HTMLVideoElement).error;
-    const why = err?.message ? ` (${err.message})` : err ? ` (error ${err.code})` : '';
-    playerError = `This window cannot play the clip${why}. The clip itself is fine: open it in your video player instead.`;
+    const why = err?.message ? err.message : err ? t('error {code}', { code: err.code }) : '';
+    playerError = why
+      ? t('This window cannot play the clip ({why}). The clip itself is fine: open it in your video player instead.', { why })
+      : t('This window cannot play the clip. The clip itself is fine: open it in your video player instead.');
     closePlayer();
   }
 
@@ -206,76 +209,76 @@
 {#if loaded}
   <Section
     title="ffmpeg"
-    hint="CargoFrame uses ffmpeg, a free program, to record and to write the video. Screenshots do not need it."
+    hint={t('CargoFrame uses ffmpeg, a free program, to record and to write the video. Screenshots do not need it.')}
   >
     <Field
-      label="Where ffmpeg is"
-      hint="A folder that holds ffmpeg and ffprobe, or the ffmpeg program itself. Leave it empty to look next to CargoFrame and then wherever your system looks for programs."
+      label={t('Where ffmpeg is')}
+      hint={t('A folder that holds ffmpeg and ffprobe, or the ffmpeg program itself. Leave it empty to look next to CargoFrame and then wherever your system looks for programs.')}
     >
       <div class="row">
-        <input type="text" bind:value={ffmpegText} onchange={savePlace} placeholder="Find it for me" />
-        <button type="button" onclick={choose}>Choose…</button>
-        <button type="button" onclick={detect} disabled={testing}>{testing ? 'Testing…' : 'Test ffmpeg'}</button>
+        <input type="text" bind:value={ffmpegText} onchange={savePlace} placeholder={t('Find it for me')} />
+        <button type="button" onclick={choose}>{t('Choose…')}</button>
+        <button type="button" onclick={detect} disabled={testing}>{testing ? t('Testing…') : t('Test ffmpeg')}</button>
       </div>
     </Field>
     {#if tools}
       {#if tools.found}
-        <div class="facts" aria-label="What was found">
-          <Chip kind="ok" label="ffmpeg found" />
+        <div class="facts" aria-label={t('What was found')}>
+          <Chip kind="ok" label={t('ffmpeg found')} />
           <dl>
-            <dt>Program</dt><dd><code>{tools.ffmpeg}</code></dd>
-            <dt>Version</dt><dd>{tools.version}</dd>
-            <dt>Captures</dt><dd>{listed(tools.captures.map((c) => name(CAPTURES, c)))}</dd>
-            <dt>Encoders</dt><dd>{listed(tools.encoders.map((e) => name(ENCODERS, e)))}</dd>
+            <dt>{t('Program')}</dt><dd><code>{tools.ffmpeg}</code></dd>
+            <dt>{t('Version')}</dt><dd>{tools.version}</dd>
+            <dt>{t('Captures')}</dt><dd>{listed(tools.captures.map((c) => name(CAPTURES, c)))}</dd>
+            <dt>{t('Encoders')}</dt><dd>{listed(tools.encoders.map((e) => name(ENCODERS, e)))}</dd>
             {#if tools.auto_capture && tools.auto_encoder}
-              <dt>Automatic uses</dt>
-              <dd>{name(CAPTURES, tools.auto_capture)} and {name(ENCODERS, tools.auto_encoder)}</dd>
+              <dt>{t('Automatic uses')}</dt>
+              <dd>{t('{name} and {name2}', { name: name(CAPTURES, tools.auto_capture), name2: name(ENCODERS, tools.auto_encoder) })}</dd>
             {/if}
           </dl>
           <p class="quiet note">
-            An encoder in the list is only in this ffmpeg. Whether this PC can use it (a graphics card, a driver) is what the test recording below tells you.
+            {t('An encoder in the list is only in this ffmpeg. Whether this PC can use it (a graphics card, a driver) is what the test recording below tells you.')}
           </p>
         </div>
       {:else}
         <div class="facts">
-          <Chip kind="err" label="ffmpeg not found" />
-          <p class="quiet note">The Setup page installs it for you (Windows) or gives the one command to run (Linux).</p>
-          <button type="button" class="primary" onclick={() => go('setup')}>Install it from Setup</button>
+          <Chip kind="err" label={t('ffmpeg not found')} />
+          <p class="quiet note">{t('The Setup page installs it for you (Windows) or gives the one command to run (Linux).')}</p>
+          <button type="button" class="primary" onclick={() => go('setup')}>{t('Install it from Setup')}</button>
         </div>
       {/if}
       {#if tools.problem}<p class="problem" role="alert">{tools.problem}</p>{/if}
     {/if}
   </Section>
 
-  <Section title="Capture and compression" hint="Automatic is a safe choice. Change these only to try what your PC does best.">
+  <Section title={t('Capture and compression')} hint={t('Automatic is a safe choice. Change these only to try what your PC does best.')}>
     <div class="two">
-      <Field label="Capture" hint="How the screen is read. GDI records all your screens together; Desktop Duplication records the first one Windows lists, usually your main screen.">
+      <Field label={t('Capture')} hint={t('How the screen is read. GDI records all your screens together; Desktop Duplication records the first one Windows lists, usually your main screen.')}>
         <select bind:value={video.capture} onchange={save}>
           {#each CAPTURES as c (c.id)}
             <option value={c.id} disabled={missing('capture', c.id)}>
-              {c.label}{missing('capture', c.id) ? ' (not in this ffmpeg)' : ''}
+              {c.label}{missing('capture', c.id) ? ` ${t('(not in this ffmpeg)')}` : ''}
             </option>
           {/each}
         </select>
       </Field>
-      <Field label="Compression" hint="Software uses the processor; a graphics card encoder is lighter if this PC has one.">
+      <Field label={t('Compression')} hint={t('Software uses the processor; a graphics card encoder is lighter if this PC has one.')}>
         <select bind:value={video.encoder} onchange={save}>
           {#each ENCODERS as e (e.id)}
             <option value={e.id} disabled={missing('encoder', e.id)}>
-              {e.label}{missing('encoder', e.id) ? ' (not in this ffmpeg)' : ''}
+              {e.label}{missing('encoder', e.id) ? ` ${t('(not in this ffmpeg)')}` : ''}
             </option>
           {/each}
         </select>
       </Field>
     </div>
     <div class="three">
-      <Field label="Frames per second" hint="5 to 60. Fewer is lighter.">
+      <Field label={t('Frames per second')} hint={t('5 to 60. Fewer is lighter.')}>
         <input type="number" min="5" max="60" bind:value={video.fps} onchange={save} />
       </Field>
-      <Field label="Length kept (seconds)" hint="1 to 30. Only the last seconds before you stop are kept.">
+      <Field label={t('Length kept (seconds)')} hint={t('1 to 30. Only the last seconds before you stop are kept.')}>
         <input type="number" min="1" max="30" bind:value={video.window_secs} onchange={save} />
       </Field>
-      <Field label="Largest height (pixels)" hint="Bigger screens are scaled down. 0 keeps the screen's own size.">
+      <Field label={t('Largest height (pixels)')} hint={t('Bigger screens are scaled down. 0 keeps the screen\'s own size.')}>
         <input type="number" min="0" max="4320" bind:value={video.max_height} onchange={save} />
       </Field>
     </div>
@@ -283,8 +286,8 @@
   </Section>
 
   <Section
-    title="Continuous recording"
-    hint="Record all the time, and keep only the last seconds: nothing is missed when something happens."
+    title={t('Continuous recording')}
+    hint={t('Record all the time, and keep only the last seconds: nothing is missed when something happens.')}
   >
     <label class="check" data-tour="video.continuous">
       <input
@@ -295,21 +298,21 @@
           void save();
         }}
       />
-      Hold a shortcut for 2 seconds to record continuously
+      {t('Hold a shortcut for 2 seconds to record continuously')}
     </label>
     {#if video.continuous}
       <ul class="quiet how">
-        <li>Holding a shortcut for 2 seconds asks to start; holding one again stops it. The tray menu does the same.</li>
-        <li>Each short press opens that shortcut's window with the last {video.window_secs} seconds, and recording goes on.</li>
-        <li>The whole screen is recorded. When the layout records the window in focus, the window opens cropped to the one in focus the longest, and the red outline follows the window in focus.</li>
-        <li>With this on, a shortcut acts when it is let go, not when it is pressed. On Wayland, use the tray menu to start and stop.</li>
+        <li>{t('Holding a shortcut for 2 seconds asks to start; holding one again stops it. The tray menu does the same.')}</li>
+        <li>{t('Each short press opens that shortcut\'s window with the last {window_secs} seconds, and recording goes on.', { window_secs: video.window_secs })}</li>
+        <li>{t('The whole screen is recorded. When the layout records the window in focus, the window opens cropped to the one in focus the longest, and the red outline follows the window in focus.')}</li>
+        <li>{t('With this on, a shortcut acts when it is let go, not when it is pressed. On Wayland, use the tray menu to start and stop.')}</li>
       </ul>
     {/if}
   </Section>
 
   <Section
-    title="A window that is moved"
-    hint="For layouts that record the window in focus."
+    title={t('A window that is moved')}
+    hint={t('For layouts that record the window in focus.')}
   >
     <label class="check" data-tour="video.follow-window">
       <input
@@ -320,27 +323,27 @@
           void save();
         }}
       />
-      Follow the window when it is moved
+      {t('Follow the window when it is moved')}
     </label>
     <p class="quiet said">
       {#if video.follow_window}
-        The whole screen is recorded, and the clip opens cropped to where the window is, moment by moment (“Follow window” under the recording turns it off). Recording the whole screen uses more of the computer than one window. Not on Wayland, where the desktop shares the window itself.
+        {t('The whole screen is recorded, and the clip opens cropped to where the window is, moment by moment (“Follow window” over the recording turns it off). Recording the whole screen uses more of the computer than one window. Not on Wayland, where the desktop shares the window itself.')}
       {:else}
-        Off, the recording keeps the place and size the window had when it started. On, it records the whole screen and follows the window, which uses more of the computer.
+        {t('Off, the recording keeps the place and size the window had when it started. On, it records the whole screen and follows the window, which uses more of the computer.')}
       {/if}
     </p>
   </Section>
 
   <Section
-    title="While recording"
-    hint="Besides the notification and the tray icon, so nobody forgets a recording is running. Clicks go through them, and they are not in the recording: Windows leaves them out; on Linux they sit just outside a recorded window, so only a whole-screen recording shows them. Wayland desktops show their own sign instead."
+    title={t('While recording')}
+    hint={t('Besides the notification and the tray icon, so nobody forgets a recording is running. Clicks go through them, and they are not in the recording: Windows leaves them out; on Linux they sit just outside a recorded window, so only a whole-screen recording shows them. Wayland desktops show their own sign instead.')}
   >
     <div class="row wrap" data-tour="video.sign">
-      <label class="check"><input type="checkbox" checked={sign.outline} onchange={(e) => setSign({ outline: e.currentTarget.checked })} /> A red outline around what is recorded</label>
-      <label class="check"><input type="checkbox" checked={sign.dot} onchange={(e) => setSign({ dot: e.currentTarget.checked })} /> A red dot blinking once a second</label>
+      <label class="check"><input type="checkbox" checked={sign.outline} onchange={(e) => setSign({ outline: e.currentTarget.checked })} /> {t('A red outline around what is recorded')}</label>
+      <label class="check"><input type="checkbox" checked={sign.dot} onchange={(e) => setSign({ dot: e.currentTarget.checked })} /> {t('A red dot blinking once a second')}</label>
     </div>
     {#if sign.dot}
-      <Field label="Dot in the corner">
+      <Field label={t('Dot in the corner')}>
         <select value={sign.corner} onchange={(e) => setSign({ corner: e.currentTarget.value as SignCorner })}>
           {#each CORNERS as c (c.id)}<option value={c.id}>{c.label}</option>{/each}
         </select>
@@ -349,38 +352,38 @@
   </Section>
 
   <Section
-    title="Try it on this PC"
-    hint="Records the screen for 5 seconds with the settings above so you can watch the result. Move something on the screen while it records. The sound and what is recorded are chosen in each layout's Video block."
+    title={t('Try it on this PC')}
+    hint={t('Records the screen for 5 seconds with the settings above so you can watch the result. Move something on the screen while it records. The sound and what is recorded are chosen in each layout\'s Video block.')}
   >
     <div class="row wrap">
       <button type="button" class="primary" onclick={tryRecording} disabled={trying || (tools !== null && !tools.found)}>
-        {trying ? 'Recording…' : 'Try a 5-second recording'}
+        {trying ? t('Recording…') : t('Try a 5-second recording')}
       </button>
     </div>
     {#if trying}
-      <p class="quiet" role="status">Recording for 5 seconds. Move something on the screen…</p>
+      <p class="quiet" role="status">{t('Recording for 5 seconds. Move something on the screen…')}</p>
     {/if}
     {#if trial}
-      <div class="facts" aria-label="Test result">
-        <Chip kind={trial.ok ? 'ok' : 'err'} label={trial.ok ? 'It works' : 'It did not work'} />
+      <div class="facts" aria-label={t('Test result')}>
+        <Chip kind={trial.ok ? 'ok' : 'err'} label={trial.ok ? t('It works') : t('It did not work')} />
         <p class={trial.ok ? '' : 'problem'} role={trial.ok ? 'status' : 'alert'}>{trial.message}</p>
         {#if trial.ok}
           <dl>
-            <dt>Clip</dt><dd>{(trial.clip_ms / 1000).toFixed(1)} s, {trial.width}×{trial.height}, {mb(trial.clip_bytes)} MB</dd>
-            <dt>Time taken</dt><dd>{(trial.took_ms / 1000).toFixed(1)} s</dd>
-            {#if trial.clip}<dt>File</dt><dd><code>{trial.clip}</code></dd>{/if}
+            <dt>{t('Clip')}</dt><dd>{(trial.clip_ms / 1000).toFixed(1)} s, {trial.width}×{trial.height}, {mb(trial.clip_bytes)} MB</dd>
+            <dt>{t('Time taken')}</dt><dd>{(trial.took_ms / 1000).toFixed(1)} s</dd>
+            {#if trial.clip}<dt>{t('File')}</dt><dd><code>{trial.clip}</code></dd>{/if}
           </dl>
           <div class="row">
-            <button type="button" onclick={openClip}>Open the clip</button>
+            <button type="button" onclick={openClip}>{t('Open the clip')}</button>
             <button type="button" onclick={watch} disabled={loadingPlayer}>
-              {loadingPlayer ? 'Loading…' : 'Watch it here'}
+              {loadingPlayer ? t('Loading…') : t('Watch it here')}
             </button>
           </div>
           {#if openError}<p class="problem" role="alert">{openError}</p>{/if}
           {#if playerError}<p class="problem" role="alert">{playerError}</p>{/if}
           {#if playerUrl}
             <!-- svelte-ignore a11y_media_has_caption -->
-            <video src={playerUrl} controls muted aria-label="Test clip" onerror={playerFailed}></video>
+            <video src={playerUrl} controls muted aria-label={t('Test clip')} onerror={playerFailed}></video>
           {/if}
         {/if}
       </div>

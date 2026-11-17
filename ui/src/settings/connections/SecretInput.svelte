@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import GetLink from '../../lib/components/GetLink.svelte';
   import type { GetLinkSpec } from '../../lib/connectorHelp';
@@ -44,9 +45,9 @@
   <span class="label">{label}</span>
   {#if stored && !replacing}
     <div class="row">
-      <Chip kind="ok" label="Stored in your system's password store" />
-      <button type="button" onclick={() => (replacing = true)}>Replace</button>
-      <button type="button" disabled={busy} onclick={() => run(onclear)}>Remove</button>
+      <Chip kind="ok" label={t('Stored in your system\'s password store')} />
+      <button type="button" onclick={() => (replacing = true)}>{t('Replace')}</button>
+      <button type="button" disabled={busy} onclick={() => run(onclear)}>{t('Remove')}</button>
     </div>
   {:else}
     <!-- Not a <form>: this sits inside the connection's own form, and forms must not nest. -->
@@ -57,7 +58,7 @@
         autocomplete="off"
         spellcheck="false"
         aria-label={label}
-        placeholder="Paste it here"
+        placeholder={t('Paste it here')}
         onkeydown={(e) => {
           if (e.key === 'Enter') {
             e.preventDefault();
@@ -65,8 +66,8 @@
           }
         }}
       />
-      <button class="primary" type="button" disabled={busy || !value} aria-label={`Save ${label}`} onclick={() => run(() => onsave(value))}>Save</button>
-      {#if replacing}<button type="button" onclick={() => (replacing = false)}>Cancel</button>{/if}
+      <button class="primary" type="button" disabled={busy || !value} aria-label={t('Save {label}', { label })} onclick={() => run(() => onsave(value))}>{t('Save')}</button>
+      {#if replacing}<button type="button" onclick={() => (replacing = false)}>{t('Cancel')}</button>{/if}
       <GetLink link={get} />
     </div>
   {/if}

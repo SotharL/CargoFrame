@@ -3,6 +3,7 @@
 // misspelt field cannot happen; a field already taken by another block cannot be taken twice.
 import type { Block, BlockReach, InfoMapping } from '../../lib/types';
 import { blockName } from './reach';
+import { t } from '../../lib/i18n/index.svelte';
 
 type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
 
@@ -47,8 +48,8 @@ export function routeOptions(
   fields: RouteField[],
   current: string,
 ): RouteOption[] {
-  const out: RouteOption[] = [{ value: NOT_SENT, label: 'Not sent', disabled: false }];
-  if (block.type === 'text' && block.role === 'prompt') out.push({ value: PROMPT, label: 'The prompt', disabled: false });
+  const out: RouteOption[] = [{ value: NOT_SENT, label: t('Not sent'), disabled: false }];
+  if (block.type === 'text' && block.role === 'prompt') out.push({ value: PROMPT, label: t('The prompt'), disabled: false });
   const known = new Set(fields.map((f) => f.key));
   const own = current !== NOT_SENT && current !== PROMPT && !known.has(current) ? [{ key: current, label: current }] : [];
   for (const f of [...fields, ...own]) {
@@ -56,7 +57,7 @@ export function routeOptions(
     const other = taker && taker.source.value !== block.id ? blocks.find((b) => b.id === taker.source.value) : undefined;
     out.push({
       value: f.key,
-      label: other ? `${f.label} (used by ${blockName(other)})` : f.label,
+      label: other ? t('{label} (used by {blockName})', { label: f.label, blockName: blockName(other) }) : f.label,
       disabled: other !== undefined,
     });
   }

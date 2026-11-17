@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // One small button in the toolbar that shows the current colour and opens a panel with the
   // colours and the line thickness, so the toolbar stays on one line. It closes on a click
   // elsewhere, on Escape, and once a colour is picked.
@@ -35,32 +36,32 @@
     class="dot"
     aria-haspopup="true"
     aria-expanded={open}
-    title="Colour and thickness"
-    aria-label="Colour and thickness"
+    title={t('Colour and thickness')}
+    aria-label={t('Colour and thickness')}
     onclick={() => (open = !open)}
   >
     <span class="chip" style:background={color}></span>
   </button>
   {#if open}
-    <div class="panel" role="group" aria-label="Colour and thickness">
-      <div class="row" role="group" aria-label="Colour">
+    <div class="panel" role="group" aria-label={t('Colour and thickness')}>
+      <div class="row" role="group" aria-label={t('Colour')}>
         {#each colors as c (c)}
           <button
             type="button"
             class="swatch"
             class:on={color === c}
             style:--sw={c}
-            aria-label="Colour {c}"
+            aria-label={t('Colour {colour}', { colour: c })}
             aria-pressed={color === c}
             onclick={() => { color = c; open = false; }}
           ></button>
         {/each}
       </div>
-      <div class="row" role="group" aria-label="Thickness">
-        {#each thicknesses as t (t)}
-          <button type="button" class="thick" class:on={thickness === t} aria-pressed={thickness === t} title={t} onclick={() => (thickness = t)}>
-            <span class="bar {t}"></span>
-            <span class="sr-only">{t}</span>
+      <div class="row" role="group" aria-label={t('Thickness')}>
+        {#each thicknesses as item (item)}
+          <button type="button" class="thick" class:on={thickness === item} aria-pressed={thickness === item} title={item} onclick={() => (thickness = item)}>
+            <span class="bar {item}"></span>
+            <span class="sr-only">{item}</span>
           </button>
         {/each}
       </div>

@@ -24,11 +24,17 @@ pub struct TimingView {
 
 /// (id, label) in the order they are listed.
 const METRICS: [(&str, &str); 5] = [
-    ("ready", "Shortcut to capture ready"),
-    ("window", "Shortcut to window shown"),
-    ("paint", "Shortcut to usable window"),
-    ("settings_paint", "Settings window open"),
-    ("share", "Last share, start to finish"),
+    ("ready", cargoframe_i18n::msg!("Shortcut to capture ready")),
+    ("window", cargoframe_i18n::msg!("Shortcut to window shown")),
+    ("paint", cargoframe_i18n::msg!("Shortcut to usable window")),
+    (
+        "settings_paint",
+        cargoframe_i18n::msg!("Settings window open"),
+    ),
+    (
+        "share",
+        cargoframe_i18n::msg!("Last share, start to finish"),
+    ),
 ];
 
 /// The plan's budgets, in milliseconds.
@@ -104,7 +110,7 @@ impl Timings {
                 let (ms, note) = i.last.get(*id)?.clone();
                 Some(TimingView {
                     id: (*id).to_string(),
-                    label: (*label).to_string(),
+                    label: cargoframe_i18n::t(label).to_string(),
                     ms,
                     budget_ms: budget_ms(id, note.as_deref()),
                     note,

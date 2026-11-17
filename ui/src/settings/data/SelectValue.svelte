@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   // New value: select it in a file. The selection suggests how to find it again (in the lines with
   // the label before it, up to what follows it); the person can change each part and sees at once
   // what each file gives. Saving adds the value to the rule of each ticked file (values.ts).
@@ -137,28 +138,28 @@
   // the choices, made from what the selection has around it
   const q = (t: string) => `“${t}”`;
   const startOptions = $derived([
-    { value: 'after', label: find?.lines_with ? `right after ${q(find.lines_with)}` : 'right after a text', disabled: !find?.lines_with },
-    { value: 'line', label: 'at the start of the line' },
+    { value: 'after', label: find?.lines_with ? t('right after {q}', { q: q(find.lines_with) }) : t('right after a text'), disabled: !find?.lines_with },
+    { value: 'line', label: t('at the start of the line') },
   ]);
   const stopOptions = $derived.by(() => {
     if (!sel) return [];
     const sign = signAfter(selLine, sel.e);
     const out: { value: string; label: string }[] = [];
-    if (sign) out.push({ value: sign, label: `at the next ${q(sign)}` });
-    if (after(selLine, sel.e) === 'space') out.push({ value: ' ', label: 'at the next space' });
-    out.push({ value: '', label: 'at the end of the line' });
+    if (sign) out.push({ value: sign, label: t('at the next {q}', { q: q(sign) }) });
+    if (after(selLine, sel.e) === 'space') out.push({ value: ' ', label: t('at the next space') });
+    out.push({ value: '', label: t('at the end of the line') });
     const stop = find?.stop ?? '';
     if (stop && !out.some((o) => o.value === stop)) out.push({ value: stop, label: `at ${q(stop)}` });
     return out;
   });
   const WHICH: { value: RuleWhich; label: string }[] = [
-    { value: 'last', label: 'the most recent line' },
-    { value: 'first', label: 'the first line' },
+    { value: 'last', label: t('the most recent line') },
+    { value: 'first', label: t('the first line') },
     { value: 'all', label: 'all' },
   ];
   const ACROSS: { value: RuleAcross; label: string }[] = [
-    { value: 'newest', label: 'the newest file' },
-    { value: 'all', label: 'all, when they differ' },
+    { value: 'newest', label: t('the newest file') },
+    { value: 'all', label: t('all, when they differ') },
   ];
 
   // the files it is read in, and what it gives
@@ -177,15 +178,21 @@
   const gives = $derived(!having.length ? '' : across === 'all' ? distinct.join(', ') : valueOf(having[0]!.got!));
   const why = $derived(
     !having.length
-      ? 'no ticked file has it'
+      ? t('no ticked file has it')
       : across === 'all'
-        ? distinct.length > 1 ? 'every different value, the newest file first' : 'the files agree'
-        : having.length > 1 ? `from ${having[0]!.f.name}, changed last` : `from ${having[0]!.f.name}`,
+        ? distinct.length > 1 ? t('every different value, the newest file first') : t('the files agree')
+        : having.length > 1 ? t('from {file}, changed last', { file: having[0]!.f.name }) : t('from {file}', { file: having[0]!.f.name }),
   );
   const summary = $derived(
     !shownFile || !find
       ? ''
-      : `In ${shownFile.name}: ${found.length === 0 ? 'nothing found' : found.length === 1 ? 'found on 1 line' : `found on ${found.length} lines`}${kept.length ? `, gives ${q(valueOf(kept))}` : ''}.`,
+      : kept.length
+        ? found.length === 0
+          ? t('In {file}: nothing found, gives {value}.', { file: shownFile.name, value: q(valueOf(kept)) })
+          : tn('In {file}: found on {n} line, gives {value}.', 'In {file}: found on {n} lines, gives {value}.', found.length, { file: shownFile.name, value: q(valueOf(kept)) })
+        : found.length === 0
+          ? t('In {file}: nothing found.', { file: shownFile.name })
+          : tn('In {file}: found on {n} line.', 'In {file}: found on {n} lines.', found.length, { file: shownFile.name }),
   );
 
   const key = $derived(fixedKey ?? keyOf(name));
@@ -195,8 +202,8 @@
 
   const editHint = $derived(
     !editing || !sel ? '' : editing === 'anchor'
-      ? `On line ${sel.line + 1}, select the text a line must have, before the value.`
-      : `On line ${sel.line + 1}, select the text the value stops at.`,
+      ? t('On line {n}, select the text a line must have, before the value.', { n: sel.line + 1 })
+      : t('On line {n}, select the text the value stops at.', { n: sel.line + 1 }),
   );
 
   function edit(what: 'anchor' | 'stop') {
@@ -237,9 +244,9 @@
 
 <div class="teach">
   <header>
-    <button type="button" class="back" onclick={oncancel}>← Values</button>
-    <h2>{fixed.kind === 'new' ? 'New value' : fixed.kind === 'add' ? `Read {${fixedKey}} in another file` : `Find {${fixedKey}} another way`}</h2>
-    <p class="quiet">Click a word in a file, or hold and drag over the text you want.</p>
+    <button type="button" class="back" onclick={oncancel}>{t('← Values')}</button>
+    <h2>{fixed.kind === 'new' ? t('New value') : fixed.kind === 'add' ? t('Read {token} in another file', { token: `{${fixedKey}}` }) : t('Find {token} another way', { token: `{${fixedKey}}` })}</h2>
+    <p class="quiet">{t('Click a word in a file, or hold and drag over the text you want.')}</p>
   </header>
 
   <div class="split">
@@ -255,28 +262,28 @@
         onopen={open}
       />
     {:else}
-      <p class="quiet viewer-wait">Reading the last capture's files…</p>
+      <p class="quiet viewer-wait">{t('Reading the last capture\'s files…')}</p>
     {/if}
 
-    <aside aria-label="The value">
+    <aside aria-label={t('The value')}>
       {#if !sel || !find}
         <section class="box empty">
-          <h3>Nothing selected yet</h3>
-          <p>A click takes the whole word: letters and numbers up to a space or a sign. Hold and drag to take more, like “Spawned 12 crew on Harbor_P”.</p>
-          {#if loaded && files.length === 0}<p class="quiet">The last capture has no text file: open or drop one.</p>{/if}
+          <h3>{t('Nothing selected yet')}</h3>
+          <p>{t('A click takes the whole word: letters and numbers up to a space or a sign. Hold and drag to take more, like “Spawned 12 crew on Harbor_P”.')}</p>
+          {#if loaded && files.length === 0}<p class="quiet">{t('The last capture has no text file: open or drop one.')}</p>{/if}
         </section>
       {:else}
         <section class="box">
           <div class="head">
-            <h3>Name</h3>
-            <span class="for" title={selText}>for “{selText}”</span>
-            <button type="button" class="small" onclick={clear}>Select again</button>
+            <h3>{t('Name')}</h3>
+            <span class="for" title={selText}>{t('for “{text}”', { text: selText })}</span>
+            <button type="button" class="small" onclick={clear}>{t('Select again')}</button>
           </div>
           {#if fixedKey}
             <code class="token">{`{${fixedKey}}`}</code>
           {:else}
             <div class="name">
-              <input type="text" bind:value={name} aria-label="Name of the value" aria-invalid={!!problem} class:bad={!!problem} placeholder="Map" />
+              <input type="text" bind:value={name} aria-label={t('Name of the value')} aria-invalid={!!problem} class:bad={!!problem} placeholder={t('Map')} />
               <code class="token">{`{${key || '…'}}`}</code>
             </div>
             <p class="problem" role={problem ? 'alert' : undefined}>{problem}</p>
@@ -284,54 +291,54 @@
         </section>
 
         <section class="box how">
-          <h3>How to find it</h3>
-          <span class="label">Look in</span>
+          <h3>{t('How to find it')}</h3>
+          <span class="label">{t('Look in')}</span>
           <span class="row">
-            <span>{find.lines_with ? `lines with ${q(find.lines_with)}` : 'every line'}</span>
-            <button type="button" class="small" onclick={() => edit('anchor')} aria-label="Change the lines it looks in: select a text in the file">✎ Change</button>
-            {#if find.lines_with}<button type="button" class="small" onclick={() => (find = { ...find!, lines_with: '', from_line_start: true })}>Every line</button>{/if}
+            <span>{find.lines_with ? t('lines with {q}', { q: q(find.lines_with) }) : t('every line')}</span>
+            <button type="button" class="small" onclick={() => edit('anchor')} aria-label={t('Change the lines it looks in: select a text in the file')}>{t('✎ Change')}</button>
+            {#if find.lines_with}<button type="button" class="small" onclick={() => (find = { ...find!, lines_with: '', from_line_start: true })}>{t('Every line')}</button>{/if}
           </span>
-          <span class="label">Starts</span>
-          <Choices label="Starts" value={find.from_line_start ? 'line' : 'after'} options={startOptions} onchange={(v) => (find = { ...find!, from_line_start: v === 'line' })} />
-          <span class="label">Stops</span>
+          <span class="label">{t('Starts')}</span>
+          <Choices label={t('Starts')} value={find.from_line_start ? 'line' : 'after'} options={startOptions} onchange={(v) => (find = { ...find!, from_line_start: v === 'line' })} />
+          <span class="label">{t('Stops')}</span>
           <span class="row">
-            <Choices label="Stops" value={find.stop ?? ''} options={stopOptions} onchange={(v) => (find = { ...find!, stop: v || null })} />
-            <button type="button" class="small" onclick={() => edit('stop')} aria-label="Stop at another text: select it in the file">✎ Other</button>
+            <Choices label={t('Stops')} value={find.stop ?? ''} options={stopOptions} onchange={(v) => (find = { ...find!, stop: v || null })} />
+            <button type="button" class="small" onclick={() => edit('stop')} aria-label={t('Stop at another text: select it in the file')}>{t('✎ Other')}</button>
           </span>
-          <span class="label">Several</span>
-          <Choices label="Several times in one file" value={which} options={WHICH} onchange={(v) => (which = v)} />
+          <span class="label">{t('Several')}</span>
+          <Choices label={t('Several times in one file')} value={which} options={WHICH} onchange={(v) => (which = v)} />
           <p class="summary">{summary}</p>
         </section>
 
         <section class="box">
-          <h3>Read it in these files</h3>
+          <h3>{t('Read it in these files')}</h3>
           <div class="reads">
             {#each reads as r (r.f.id)}
               <label class="read">
                 <input type="checkbox" checked={r.on} disabled={r.locked} onchange={() => (ticks = { ...ticks, [r.f.id]: !r.on })} />
-                <span class="file" title={r.f.id}><b>{r.f.name}</b> <span class="quiet">{r.f.modified_ms ? `changed ${changedAt(r.f.modified_ms)}` : ''}</span></span>
-                <span class="used" class:on={used(r)}>Used</span>
+                <span class="file" title={r.f.id}><b>{r.f.name}</b> <span class="quiet">{r.f.modified_ms ? t('changed {changedAt}', { changedAt: changedAt(r.f.modified_ms) }) : ''}</span></span>
+                <span class="used" class:on={used(r)}>{t('Used')}</span>
                 <span class="value" class:none={!r.got?.length} title={r.got?.length ? valueOf(r.got) : ''}>
-                  {r.got === null ? 'Not read yet' : r.got.length ? valueOf(r.got) : 'Not found in this file'}
+                  {r.got === null ? t('Not read yet') : r.got.length ? valueOf(r.got) : t('Not found in this file')}
                 </span>
               </label>
             {/each}
           </div>
           <div class="row across">
-            <span>When several have it, take</span>
-            <Choices label="When several files have it" value={across} options={ACROSS} onchange={(v) => (across = v)} />
+            <span>{t('When several have it, take')}</span>
+            <Choices label={t('When several files have it')} value={across} options={ACROSS} onchange={(v) => (across = v)} />
           </div>
           <div class="gives">
-            <span class="quiet">Gives</span>
-            <span class="what" class:none={!gives} title={gives}>{gives || 'Empty'}</span>
+            <span class="quiet">{t('Gives')}</span>
+            <span class="what" class:none={!gives} title={gives}>{gives || t('Empty')}</span>
             <span class="why quiet">{why}</span>
           </div>
         </section>
 
         {#if failure}<p class="problem" role="alert">{failure}</p>{/if}
         <div class="buttons">
-          <button type="button" onclick={oncancel}>Cancel</button>
-          <button type="button" class="primary" disabled={!canSave || busy} onclick={save}>Save {`{${key || '…'}}`}</button>
+          <button type="button" onclick={oncancel}>{t('Cancel')}</button>
+          <button type="button" class="primary" disabled={!canSave || busy} onclick={save}>{t('Save {token}', { token: `{${key || '…'}}` })}</button>
         </div>
       {/if}
     </aside>

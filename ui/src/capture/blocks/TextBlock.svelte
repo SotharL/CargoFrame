@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import { roleTag } from '../../lib/roles';
   import { token } from '../../lib/valueNames';
@@ -35,7 +36,7 @@
     <label id={`${id}-label`} for={buttons.length > 0 ? undefined : id}>{block.title}{#if tag}<span class="role">{tag}</span>{/if}</label>
   {/if}
   {#if buttons.length > 0}
-    <div class="tools" role="toolbar" aria-label={`Formatting for ${forWhom}`} title={`Written the way ${forWhom} shows it when sent`}>
+    <div class="tools" role="toolbar" aria-label={t('Formatting for {forWhom}', { forWhom })} title={t('Written the way {forWhom} shows it when sent', { forWhom })}>
       {#each buttons as b (b.mark)}
         <button
           type="button"
@@ -70,7 +71,7 @@
   {#if unresolved.length}
     <div class="chips">
       {#each unresolved as name (name)}
-        <Chip kind="dbg" label={`${token(name)} has no value`} />
+        <Chip kind="dbg" label={t('{token} has no value', { token: token(name) })} />
       {/each}
     </div>
   {/if}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Combobox from '../../lib/components/Combobox.svelte';
   import type { Block, DropdownState } from '../../lib/types';
@@ -110,7 +111,7 @@
     const within = scope(options, server, c);
     if (!within.some((o) => o.value === value)) value = optional ? value : (within[0]?.value ?? null);
   }
-  const categoryLabel = (c: string) => (c === NO_CATEGORY ? 'No category' : c);
+  const categoryLabel = (c: string) => (c === NO_CATEGORY ? t('No category') : c);
 </script>
 
 <div class="dd">
@@ -118,13 +119,13 @@
   {#if asCombo}
     <div class="row" data-content>
       {#if showServer}
-        <select class="step" aria-label="Server" value={server ?? ''} onchange={(e) => pickServer(e.currentTarget.value)}>
+        <select class="step" aria-label={t('Server')} value={server ?? ''} onchange={(e) => pickServer(e.currentTarget.value)}>
           {#each servers as s (s)}<option value={s}>{s}</option>{/each}
         </select>
       {/if}
       {#if showCategory}
-        <select class="step" aria-label="Category" value={category} onchange={(e) => pickCategory(e.currentTarget.value)}>
-          <option value={ALL}>All categories</option>
+        <select class="step" aria-label={t('Category')} value={category} onchange={(e) => pickCategory(e.currentTarget.value)}>
+          <option value={ALL}>{t('All categories')}</option>
           {#each categories as c (c)}<option value={c}>{c}</option>{/each}
           {#if scope(options, server, ALL).some((o) => !o.category)}<option value={NO_CATEGORY}>{categoryLabel(NO_CATEGORY)}</option>{/if}
         </select>
@@ -137,17 +138,17 @@
         free={optional}
         onchange={choose}
         placeholder={optional
-          ? empty ? 'Paste a link (optional)' : 'None: type to search, or paste a link'
-          : `Search ${options.length} choices…`}
-        emptyText={empty ? 'Nothing to choose from' : 'Nothing matches'}
+          ? empty ? t('Paste a link (optional)') : t('None: type to search, or paste a link')
+          : tn('Search {n} choice…', 'Search {n} choices…', options.length)}
+        emptyText={empty ? t('Nothing to choose from') : t('Nothing matches')}
       />
     </div>
   {:else}
     <select {id} bind:value disabled={info.status !== 'ready'} data-content>
       {#if info.status === 'loading'}
-        <option value={null}>Loading…</option>
+        <option value={null}>{t('Loading…')}</option>
       {:else if info.status === 'needs_connection'}
-        <option value={null}>Not connected</option>
+        <option value={null}>{t('Not connected')}</option>
       {:else}
         {#each groups as g, i (i)}
           {#if g.name}
@@ -174,17 +175,17 @@
   {:else if narrowText.trim() && !showAll && info.status === 'ready' && info.options.length > 0}
     <p class="quiet note">
       {#if narrowed.applied}
-        Showing the {options.length} with “{narrowText.trim()}” in the name.
-        <button type="button" class="link" onclick={() => (showAll = true)}>Show all</button>
+        {t('Showing the {n} with “{text}” in the name.', { n: options.length, text: narrowText.trim() })}
+        <button type="button" class="link" onclick={() => (showAll = true)}>{t('Show all')}</button>
       {:else if !narrowed.matched}
-        None has “{narrowText.trim()}” in the name, so all are shown.
+        {t('None has “{text}” in the name, so all are shown.', { text: narrowText.trim() })}
       {/if}
     </p>
   {/if}
   {#if info.status === 'needs_connection'}
-    <Chip kind="err" label={info.message ?? 'Not connected'} />
+    <Chip kind="err" label={info.message ?? t('Not connected')} />
   {:else if empty && !optional}
-    <Chip kind="warn" label="Nothing to post in yet. Save locally keeps it on this computer." />
+    <Chip kind="warn" label={t('Nothing to post in yet. Save locally keeps it on this computer.')} />
   {/if}
 </div>
 

@@ -2,10 +2,9 @@ import type { Block, BlockReach, ClipEdit, SessionView } from '../lib/types';
 import type { FormValues } from './values';
 import { formatSize } from './values';
 import { initialTicks, isTicked, type Ticks } from './ticks';
+import { t, tn } from '../lib/i18n/index.svelte';
 
 type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
-
-const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
 function titleOf(b: Block): string {
   if (b.type === 'text' || b.type === 'dropdown' || b.type === 'files' || b.type === 'tags' || b.type === 'log_view') return b.title || b.id;
@@ -52,19 +51,22 @@ export function willSend(
   for (const b of blocks) {
     const r = sent(b);
     if (b.type === 'screenshot' && r && (stillTaken || !pairedWithRecording(view))) {
-      parts.push(imageEdited ? 'Screenshot (edited)' : 'Screenshot');
+      parts.push(imageEdited ? t('Screenshot (edited)') : t('Screenshot'));
     }
     if (b.type === 'video' && r && view.video) {
       const whole = view.video.duration_ms / 1000;
       const from = (clipEdit?.start_ms ?? 0) / 1000;
       const to = (clipEdit?.end_ms ?? view.video.duration_ms) / 1000;
-      const done = [from > 0 || to < whole ? 'cut' : '', clipEdit?.crop ? 'cropped' : '', clipEdit?.mark ? 'marked' : '', clipEdit?.keys ? 'with the keys' : '', clipEdit?.clock ? 'with the time' : ''].filter(Boolean);
+      const cut = from > 0 || to < whole;
+      const done = [cut ? t('cut') : '', clipEdit?.crop ? t('cropped') : '', clipEdit?.mark ? t('marked') : '', clipEdit?.keys ? t('with the keys') : '', clipEdit?.clock ? t('with the time') : ''].filter(Boolean);
       if (done.length === 0) {
-        parts.push(`Video (${whole.toFixed(1)} s, ${formatSize(view.video.bytes)})`);
+        parts.push(t('Video ({seconds} s, {size})', { seconds: whole.toFixed(1), size: formatSize(view.video.bytes) }));
       } else {
-        const said = done.length > 1 ? `${done.slice(0, -1).join(', ')} and ${done[done.length - 1]}` : done[0];
-        const length = done[0] === 'cut' ? `${(to - from).toFixed(1)} s of ${whole.toFixed(1)} s` : `${whole.toFixed(1)} s`;
-        parts.push(`Video (${length}, ${said})`);
+        const said = done.length > 1 ? t('{list} and {last}', { list: done.slice(0, -1).join(', '), last: done[done.length - 1]! }) : done[0]!;
+        const length = cut
+          ? t('{seconds} s of {whole} s', { seconds: (to - from).toFixed(1), whole: whole.toFixed(1) })
+          : t('{seconds} s', { seconds: whole.toFixed(1) });
+        parts.push(t('Video ({length}, {what})', { length, what: said }));
       }
     }
   }
@@ -76,11 +78,15 @@ export function willSend(
     if (entries.length === 0) continue;
     const size = entries.reduce((sum, e) => sum + e.size, 0);
     const asText = kind === 'claude' && button.send?.files === 'inline';
-    parts.push(`${plural(entries.length, 'file', 'files')} (${formatSize(size)})${asText ? ', text ones as text' : ''}`);
+    parts.push(
+      asText
+        ? tn('{n} file ({size}), text ones as text', '{n} files ({size}), text ones as text', entries.length, { size: formatSize(size) })
+        : tn('{n} file ({size})', '{n} files ({size})', entries.length, { size: formatSize(size) }),
+    );
   }
   for (const b of blocks) {
     const r = sent(b);
-    if (b.type === 'text' && r?.state === 'sent' && r.role === 'prompt') parts.push('Prompt');
+    if (b.type === 'text' && r?.state === 'sent' && r.role === 'prompt') parts.push(t('Prompt'));
   }
   for (const b of blocks) {
     const r = sent(b);
@@ -101,9 +107,9 @@ export function chatToOpen(view: SessionView, button: SharingBlock, values: Form
     const r = reachOf(view, button, b.id);
     return b.type === 'dropdown' && r?.state === 'sent' && r.role === 'field' && r.field === 'chat';
   });
-  if (!chat) return 'a new chat';
+  if (!chat) return t('a new chat');
   const value = values.dropdowns[chat.id];
   const option = view.dropdowns[chat.id]?.options.find((o) => o.value === value);
-  if (!value || value === 'new') return 'a new chat';
-  return option?.label ?? 'the chat you picked';
+  if (!value || value === 'new') return t('a new chat');
+  return option?.label ?? t('the chat you picked');
 }

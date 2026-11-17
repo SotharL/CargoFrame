@@ -10,6 +10,7 @@
 //! ids. Only a layout with *Other programs can fill this* accepts them, and nothing is sent
 //! until the person presses a button.
 
+use cargoframe_i18n::{t, tf};
 /// Most values one `open` can carry, and the longest one.
 pub const MAX_VALUES: usize = 50;
 pub const MAX_VALUE_CHARS: usize = 20_000;
@@ -68,36 +69,43 @@ pub fn parse_open<S: AsRef<str>>(args: &[S]) -> Result<OpenRequest, String> {
             i += 1;
             args.get(i)
                 .map(|a| a.as_ref().to_string())
-                .ok_or_else(|| format!("{name} needs a value"))
+                .ok_or_else(|| tf("{name} needs a value", &[("name", &name)]))
         };
         match name {
             "--trigger" => trigger = Some(next()?),
             "--set" => {
                 let pair = next()?;
-                let (block, value) = pair
-                    .split_once('=')
-                    .ok_or_else(|| format!("--set {pair}: write it as block=value"))?;
+                let (block, value) = pair.split_once('=').ok_or_else(|| {
+                    tf("--set {pair}: write it as block=value", &[("pair", &pair)])
+                })?;
                 if !is_id(block) {
-                    return Err(format!("\"{block}\" is not a block id"));
+                    return Err(tf("\"{block}\" is not a block id", &[("block", &block)]));
                 }
                 if value.chars().count() > MAX_VALUE_CHARS {
-                    return Err(format!(
-                        "The value for {block} is longer than {MAX_VALUE_CHARS} characters"
+                    return Err(tf(
+                        "The value for {block} is longer than {MAX_VALUE_CHARS} characters",
+                        &[("block", &block), ("MAX_VALUE_CHARS", &MAX_VALUE_CHARS)],
                     ));
                 }
                 values.retain(|(b, _)| b != block);
                 values.push((block.to_string(), value.to_string()));
                 if values.len() > MAX_VALUES {
-                    return Err(format!("At most {MAX_VALUES} values can be sent at once"));
+                    return Err(tf(
+                        "At most {MAX_VALUES} values can be sent at once",
+                        &[("MAX_VALUES", &MAX_VALUES)],
+                    ));
                 }
             }
-            other => return Err(format!("Unknown option for open: {other}")),
+            other => return Err(tf("Unknown option for open: {other}", &[("other", &other)])),
         }
         i += 1;
     }
-    let trigger = trigger.ok_or("open needs --trigger and the id of a trigger")?;
+    let trigger = trigger.ok_or(t("open needs --trigger and the id of a trigger"))?;
     if !is_id(&trigger) {
-        return Err(format!("\"{trigger}\" is not a trigger id"));
+        return Err(tf(
+            "\"{trigger}\" is not a trigger id",
+            &[("trigger", &trigger)],
+        ));
     }
     Ok(OpenRequest { trigger, values })
 }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // Every value, with where it is read, how, what it gave in the last capture and where it is used.
   import type { ItemEntry, Layout, ValuesPreview } from '../../lib/types';
   import { token } from '../../lib/valueNames';
@@ -34,13 +35,13 @@
   function how(v: ValueEntry): string {
     if (v.combined) return v.sources.map((s) => howOne(s)).join('; ');
     const all = [...new Set(v.sources.map(howOne))];
-    return all.length === 1 ? all[0]! : 'A different way in each file';
+    return all.length === 1 ? all[0]! : t('A different way in each file');
   }
   function from(v: ValueEntry): { main: string; note: string } {
-    if (v.combined) return { main: 'Other values', note: 'no file read' };
+    if (v.combined) return { main: t('Other values'), note: t('no file read') };
     const files = filesOf(v);
-    const main = files.length > 3 ? `${files.slice(0, 3).join(', ')} and ${files.length - 3} more` : files.join(', ');
-    const note = files.length > 1 ? (v.across === 'all' ? `${files.length} files · every different value` : `${files.length} files · the newest wins`) : '';
+    const main = files.length > 3 ? t('{files} and {n} more', { files: files.slice(0, 3).join(', '), n: files.length - 3 }) : files.join(', ');
+    const note = files.length > 1 ? (v.across === 'all' ? t('{n} files · every different value', { n: files.length }) : t('{n} files · the newest wins', { n: files.length })) : '';
     return { main, note };
   }
   function last(v: ValueEntry): { value: string; note: string } | null {
@@ -50,11 +51,11 @@
       return why ? { value: '', note: why } : null;
     }
     const src = preview?.sources[v.key];
-    return { value, note: src ? baseName(src) : v.combined ? 'made from other values' : '' };
+    return { value, note: src ? baseName(src) : v.combined ? t('made from other values') : '' };
   }
   const used = (v: ValueEntry) => {
     const n = layoutsUsingRule(layouts, v.key, [v.key]);
-    return n.length ? n.join(', ') : 'not used yet';
+    return n.length ? n.join(', ') : t('not used yet');
   };
 </script>
 
@@ -62,7 +63,7 @@
   <div class="table">
     <table>
       <thead>
-        <tr><th>Value</th><th>Read from</th><th>How</th><th>Last capture</th><th>Used in</th></tr>
+        <tr><th>{t('Value')}</th><th>{t('Read from')}</th><th>{t('How')}</th><th>{t('Last capture')}</th><th>{t('Used in')}</th></tr>
       </thead>
       <tbody>
         {#each shown as v (v.key)}
@@ -70,7 +71,7 @@
           {@const l = last(v)}
           <tr>
             <td>
-              <button type="button" class="open" onclick={() => onopen(v)} aria-label={`Open ${v.name}`}>
+              <button type="button" class="open" onclick={() => onopen(v)} aria-label={t('Open {name}', { name: v.name })}>
                 <code>{token(v.key)}</code>
                 <span class="name">{v.name}</span>
               </button>
@@ -82,14 +83,14 @@
                 <div class="mono cut" title={l.value}>{l.value}</div>
                 {#if l.note}<div class="note cut">{l.note}</div>{/if}
               {:else}
-                <div class="empty"><span class="dot" aria-hidden="true"></span>Empty</div>
+                <div class="empty"><span class="dot" aria-hidden="true"></span>{t('Empty')}</div>
                 {#if l?.note}<div class="note cut" title={l.note}>{l.note}</div>{/if}
               {/if}
             </td>
             <td class="used">{used(v)}</td>
           </tr>
         {:else}
-          <tr><td colspan="5" class="none">No value is called that.</td></tr>
+          <tr><td colspan="5" class="none">{t('No value is called that.')}</td></tr>
         {/each}
       </tbody>
     </table>

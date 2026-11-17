@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi, type Api } from '../lib/ipc';
@@ -66,7 +67,7 @@
 
   /** Read the text in a part of the screenshot, on this computer. */
   const readText = (png: Blob, attempt: number) => {
-    if (!api) return Promise.reject(new Error('CargoFrame is not ready yet'));
+    if (!api) return Promise.reject(new Error(t('CargoFrame is not ready yet')));
     return api.readText(png, attempt);
   };
   /** With a recording and a screenshot block: the picture taken from it, or `null` while there is none. */
@@ -216,7 +217,7 @@
     result = null;
     opened = null;
     if (promptIsEmpty(request)) {
-      notice = 'Write the prompt first.';
+      notice = t('Write the prompt first.');
       return;
     }
     notice = null;
@@ -264,7 +265,7 @@
   }
 
   const subjectLabel = $derived(
-    view?.subject === 'window' ? 'Window' : view?.subject === 'display' ? 'Display' : 'All displays',
+    view?.subject === 'window' ? t('Window') : view?.subject === 'display' ? t('Display') : t('All displays'),
   );
 </script>
 
@@ -273,12 +274,12 @@
 <div class="frame">
   {#if failure}
     <main class="center">
-      <h1>CargoFrame could not open this capture</h1>
+      <h1>{t('CargoFrame could not open this capture')}</h1>
       <p class="quiet selectable">{failure}</p>
-      <button onclick={() => api?.closeCapture()}>Close</button>
+      <button onclick={() => api?.closeCapture()}>{t('Close')}</button>
     </main>
   {:else if !view}
-    <main class="center"><p class="quiet">Loading…</p></main>
+    <main class="center"><p class="quiet">{t('Loading…')}</p></main>
   {:else}
     <header>
       <div class="title">
@@ -286,7 +287,7 @@
         <span class="chips">
           <Chip kind="ok" label={subjectLabel} />
           {#if view.app}<span class="meta selectable">{view.app.exe_name ?? view.app.title}</span>{/if}
-          {#if view.project}<span class="meta selectable" title={view.project.how}>Project: {view.project.name}</span>{/if}
+          {#if view.project}<span class="meta selectable" title={view.project.how}>{t('Project: {name}', { name: view.project.name })}</span>{/if}
         </span>
       </div>
       <div class="status">
@@ -301,9 +302,9 @@
 
     {#if empty}
       <main class="center">
-        <h2>This window is empty</h2>
-        <p class="quiet">Add blocks to the layout for “{view.trigger_name}” to choose what appears here.</p>
-        <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>Edit layout</button>
+        <h2>{t('This window is empty')}</h2>
+        <p class="quiet">{t('Add blocks to the layout for “{trigger_name}” to choose what appears here.', { trigger_name: view.trigger_name })}</p>
+        <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>{t('Edit layout')}</button>
       </main>
     {:else}
       <main class="grid" style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={gridRows(rowHeights)} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
@@ -341,8 +342,8 @@
           lit={b.tabs.map((t) => hovered !== null && (t.blocks ?? []).some((id) => isTicked(ticks, hovered!, id)))}
         >
           <div class="grid inner" style:grid-template-columns={`repeat(${b.rect.w}, minmax(0, 1fr))`} style:grid-template-rows={gridRows(tabRows(b, blocks, hasToolbar))}>
-            {#each b.tabs as t, i (i)}
-              {#each t.blocks ?? [] as id (id)}
+            {#each b.tabs as item, i (i)}
+              {#each item.blocks ?? [] as id (id)}
                 {@const child = blocks.find((x) => x.id === id)}
                 {#if child}{@render slot(child, b.rect, i !== open)}{/if}
               {/each}
@@ -356,7 +357,7 @@
             {#if still}
               {#key stillKey}<ScreenshotBlock bind:this={screenshot} original={still} size={stillSize} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />{/key}
             {:else}
-              <p class="quiet videonote">No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.</p>
+              <p class="quiet videonote">{t('No screenshot yet. Press “Take screenshot” under the recording to keep the picture on screen.')}</p>
             {/if}
           {:else if b.type === 'screenshot' && image}
             <ScreenshotBlock bind:this={screenshot} original={image} size={view.image} bind:edited={imageEdited} onpainted={reportPainted} reader={readText} />
@@ -364,7 +365,7 @@
             {#if view.video}
               {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} clockShown={b.clock === true} onshot={paired ? takeShot : undefined} />{/key}
             {:else}
-              <p class="quiet videonote">The recording of a video trigger appears here. This capture is a screenshot.</p>
+              <p class="quiet videonote">{t('The recording of a video trigger appears here. This capture is a screenshot.')}</p>
             {/if}
           {:else if b.type === 'text'}
             {@const formats = marksFor(view, b)}

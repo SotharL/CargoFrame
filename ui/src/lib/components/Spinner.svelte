@@ -1,7 +1,8 @@
 <script lang="ts">
+  import { t } from '../i18n/index.svelte';
   // A small turning ring for "this is being looked at". It stands still for people who ask their
   // computer for less motion, and says what it is waiting for to a screen reader.
-  let { label = 'Working' }: { label?: string } = $props();
+  let { label = t('Working') }: { label?: string } = $props();
 </script>
 
 <span class="spinner" role="img" aria-label={label}></span>

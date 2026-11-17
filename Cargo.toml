@@ -19,11 +19,12 @@ members = [
     "core/indicator",
     "core/ocr",
     "core/keys",
+    "core/i18n",
     "app",
 ]
 
 [workspace.package]
-version = "0.5.1"
+version = "0.6.0"
 edition = "2021"
 rust-version = "1.80"
 publish = false

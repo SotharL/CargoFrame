@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import type { Block, FilesState } from '../../lib/types';
   import { formatSize, toggleFile } from '../values';
@@ -39,24 +40,24 @@
 <div class="files">
   <div class="head">
     <span class="title">{block.title}</span>
-    <span class="quiet count">{selected.length} of {info.entries.length} selected{filter.trim() ? ` · ${visible.length} shown` : ''}</span>
+    <span class="quiet count">{t('{n} of {total} selected', { n: selected.length, total: info.entries.length })}{#if filter.trim()}{' · '}{t('{n} shown', { n: visible.length })}{/if}</span>
     <!-- Next to the title, so the right corner is left to the dots of the sharing buttons. -->
-    <button class="small" onclick={selectAll} disabled={!visible.length}>All</button>
-    <button class="small" onclick={selectNone} disabled={!selected.length}>None</button>
+    <button class="small" onclick={selectAll} disabled={!visible.length}>{t('All')}</button>
+    <button class="small" onclick={selectNone} disabled={!selected.length}>{t('None')}</button>
     {#if onadd}
-      <button class="small add" onclick={add} disabled={adding} title="Add files that were not found: they are copied now and ticked" aria-label="Add files by hand">＋</button>
+      <button class="small add" onclick={add} disabled={adding} title={t('Add files that were not found: they are copied now and ticked')} aria-label={t('Add files by hand')}>＋</button>
     {/if}
   </div>
   {#if addProblem}<p class="quiet from" role="alert">{addProblem}</p>{/if}
   {#if info.entries.length > 6}
-    <input type="text" class="filter" bind:value={filter} placeholder="Filter files…" aria-label="Filter files" />
+    <input type="text" class="filter" bind:value={filter} placeholder={t('Filter files…')} aria-label={t('Filter files')} />
   {/if}
   {#if info.problem}
     <Chip kind="dbg" label={info.problem} />
   {/if}
   {#if info.places.length > 1}
     <p class="quiet from" title={info.places.map((p) => p.folder).join('\n')}>
-      Looked in: {info.places.map((p) => `${p.label} (${p.exists ? p.found : 'not found'})`).join(', ')}
+      {t('Looked in: {places}', { places: info.places.map((p) => `${p.label} (${p.exists ? p.found : t('not found')})`).join(', ') })}
     </p>
   {/if}
   <ul data-content>
@@ -73,11 +74,11 @@
         </label>
       </li>
     {:else}
-      {#if !info.problem}<li class="quiet empty">{filter.trim() ? 'No file matches the filter.' : 'No files match.'}</li>{/if}
+      {#if !info.problem}<li class="quiet empty">{filter.trim() ? t('No file matches the filter.') : t('No files match.')}</li>{/if}
     {/each}
   </ul>
   {#if info.truncated}
-    <Chip kind="warn" label="More files exist than are listed" />
+    <Chip kind="warn" label={t('More files exist than are listed')} />
   {/if}
 </div>
 

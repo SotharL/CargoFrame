@@ -34,6 +34,9 @@ jobs:
       - name: File names that clash on Windows
         working-directory: .
         run: node scripts/ci/check-names.mjs
+      - name: Language packs (every text of the code in every pack, with the same {names})
+        working-directory: .
+        run: node scripts/i18n/check.mjs
       - run: npm ci
       - run: npm run check
       - run: npm test

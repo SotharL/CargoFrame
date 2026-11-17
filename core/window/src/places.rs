@@ -29,11 +29,11 @@ pub struct Places {
 
 pub fn label(which: LookFolder) -> &'static str {
     match which {
-        LookFolder::Project => "Project folder",
-        LookFolder::Program => "Program folder",
-        LookFolder::Above1 => "One folder above the program",
-        LookFolder::Above2 => "Two folders above the program",
-        LookFolder::Above3 => "Three folders above the program",
+        LookFolder::Project => cargoframe_i18n::t("Project folder"),
+        LookFolder::Program => cargoframe_i18n::t("Program folder"),
+        LookFolder::Above1 => cargoframe_i18n::t("One folder above the program"),
+        LookFolder::Above2 => cargoframe_i18n::t("Two folders above the program"),
+        LookFolder::Above3 => cargoframe_i18n::t("Three folders above the program"),
     }
 }
 
@@ -62,9 +62,11 @@ pub fn places_for(look: &LookIn, project: Option<&str>, program: Option<&str>) -
         };
         let Some(base) = base else {
             let why = match which {
-                LookFolder::Project => "no project folder was found for this capture",
-                _ if program.is_none() => "no program was in focus",
-                _ => "the program is not that deep in its folders",
+                LookFolder::Project => {
+                    cargoframe_i18n::t("no project folder was found for this capture")
+                }
+                _ if program.is_none() => cargoframe_i18n::t("no program was in focus"),
+                _ => cargoframe_i18n::t("the program is not that deep in its folders"),
             };
             out.missing.push((which, why.to_string()));
             continue;

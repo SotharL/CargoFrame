@@ -6,7 +6,7 @@ import { memoryApi } from './ipc';
 // The ready-made layouts the in-memory stand-in lists (demos, tests, screenshots) are the
 // program's own: same keys, names and sentences, in the same order.
 const rs = readFileSync(new URL('../../../core/layout/src/templates.rs', import.meta.url), 'utf8');
-const program = [...rs.matchAll(/key: "([^"]+)",\s*name: "([^"]+)",\s*description: "((?:[^"\\]|\\.)*)"/g)].map((m) => ({
+const program = [...rs.matchAll(/key: "([^"]+)",\s*name: msg!\("([^"]+)"\),\s*description: msg!\(\s*"((?:[^"\\]|\\.)*)",?\s*\)/g)].map((m) => ({
   key: m[1],
   name: m[2],
   description: m[3]!.replace(/\\"/g, '"'),

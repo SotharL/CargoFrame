@@ -42,6 +42,9 @@ pub struct General {
     pub accent: String,
     /// Which notices CargoFrame may show (a Windows toast, a Linux notification).
     pub notifications: Notifications,
+    /// The language of the windows and of what CargoFrame says: `system` (the computer's, when
+    /// CargoFrame speaks it, else English) or a code (`fr`). See `cargoframe_i18n::LANGUAGES`.
+    pub language: String,
 }
 
 /// What CargoFrame may say in a notification. A notice can show up inside a recording of the
@@ -104,6 +107,7 @@ impl Default for General {
             check_updates: false,
             accent: DEFAULT_ACCENT.to_string(),
             notifications: Notifications::default(),
+            language: "system".to_string(),
         }
     }
 }
