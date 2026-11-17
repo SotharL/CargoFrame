@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The settings of a video block: what is recorded (the screen, or the window that has the focus
   // when the recording starts) and which sounds go in. The devices come from the computer, asked
   // once when the block is opened.
@@ -18,7 +19,7 @@
     try {
       devices = await (await getApi()).listAudioDevices();
     } catch (e) {
-      failed = typeof e === 'string' ? e : 'The sound devices could not be listed.';
+      failed = typeof e === 'string' ? e : t('The sound devices could not be listed.');
     }
   });
 
@@ -42,68 +43,66 @@
   const canPickProgram = $derived(devices?.os === 'windows' && audio.desktop === 'default');
 </script>
 
-<Field label="Record" hint={subject === 'focused_window' ? 'The window that has the focus when you press the shortcut, as it is placed and sized then. If it cannot be found, the whole screen is recorded.' : ''}>
+<Field label={t('Record')} hint={subject === 'focused_window' ? t('The window that has the focus when you press the shortcut, as it is placed and sized then. If it cannot be found, the whole screen is recorded.') : ''}>
   <select value={subject} onchange={(e) => (block.subject = e.currentTarget.value as VideoSubject)}>
-    <option value="screen">The whole screen</option>
-    <option value="focused_window">The window in focus</option>
+    <option value="screen">{t('The whole screen')}</option>
+    <option value="focused_window">{t('The window in focus')}</option>
   </select>
 </Field>
 
-<Field label="Sound of the computer">
+<Field label={t('Sound of the computer')}>
   <select value={toValue(audio.desktop)} onchange={(e) => setAudio('desktop', e.currentTarget.value)}>
-    <option value="default">On: what this computer plays</option>
-    <option value="off">Off</option>
+    <option value="default">{t('On: what this computer plays')}</option>
+    <option value="off">{t('Off')}</option>
     {#each devices?.desktop ?? [] as d (d.name)}
       <option value={`device:${d.name}`}>{d.label}</option>
     {/each}
     {#if unknown(audio.desktop, devices?.desktop ?? [])}
       {@const name = unknown(audio.desktop, devices?.desktop ?? [])}
-      <option value={`device:${name}`}>{name} (not found on this computer)</option>
+      <option value={`device:${name}`}>{t('{name} (not found on this computer)', { name: name ?? '' })}</option>
     {/if}
   </select>
 </Field>
 
 {#if canPickProgram}
-  <Field label="Sound from" hint={from === 'focused_program' ? 'The program that has the focus when you press the shortcut. If it cannot be found, everything the computer plays is recorded.' : ''}>
+  <Field label={t('Sound from')} hint={from === 'focused_program' ? t('The program that has the focus when you press the shortcut. If it cannot be found, everything the computer plays is recorded.') : ''}>
     <select value={from} onchange={(e) => (block.audio = { ...audio, desktop_from: e.currentTarget.value as DesktopSound })}>
-      <option value="everything">Everything the computer plays</option>
-      <option value="focused_program">Only the program in focus</option>
+      <option value="everything">{t('Everything the computer plays')}</option>
+      <option value="focused_program">{t('Only the program in focus')}</option>
     </select>
   </Field>
 {/if}
 
-<Field label="Microphone">
+<Field label={t('Microphone')}>
   <select value={toValue(audio.microphone)} onchange={(e) => setAudio('microphone', e.currentTarget.value)}>
-    <option value="off">Off</option>
-    <option value="default">On: the default microphone</option>
+    <option value="off">{t('Off')}</option>
+    <option value="default">{t('On: the default microphone')}</option>
     {#each devices?.microphone ?? [] as d (d.name)}
       <option value={`device:${d.name}`}>{d.label}</option>
     {/each}
     {#if unknown(audio.microphone, devices?.microphone ?? [])}
       {@const name = unknown(audio.microphone, devices?.microphone ?? [])}
-      <option value={`device:${name}`}>{name} (not found on this computer)</option>
+      <option value={`device:${name}`}>{t('{name} (not found on this computer)', { name: name ?? '' })}</option>
     {/if}
   </select>
 </Field>
 
 <div class="end">
-  <Toggle label="Take a screenshot when the recording stops" checked={block.screenshot_at_end === true} onchange={(v) => (block.screenshot_at_end = v)} />
-  <p class="quiet small">For a layout with a screenshot block too. Off, that block starts empty, and “Take screenshot” under the recording keeps the frame on screen.</p>
+  <Toggle label={t('Take a screenshot when the recording stops')} checked={block.screenshot_at_end === true} onchange={(v) => (block.screenshot_at_end = v)} />
+  <p class="quiet small">{t('For a layout with a screenshot block too. Off, that block starts empty, and “Take screenshot” under the recording keeps the frame on screen.')}</p>
 </div>
 
 <div class="end" data-tour="layout.video-keys">
-  <Toggle label="Show the keys pressed on the recording" checked={block.keys === true} onchange={(v) => (block.keys = v || undefined)} />
+  <Toggle label={t('Show the keys pressed on the recording')} checked={block.keys === true} onchange={(v) => (block.keys = v || undefined)} />
   <p class="quiet small">
-    Each key shows over the clip when it was pressed (“Ctrl+S”, “hello ⏎”), in black letters with a white outline; move it or take it off before sending.
-    Every key typed while it records shows, passwords too. Reading the keyboard costs a little, so it is off unless asked for. Wayland does not let a program see the keys.
+    {t('Each key shows over the clip when it was pressed (“Ctrl+S”, “hello ⏎”), in black letters with a white outline; move it or take it off before sending. Every key typed while it records shows, passwords too. Reading the keyboard costs a little, so it is off unless asked for. Wayland does not let a program see the keys.')}
   </p>
 </div>
 
 <div class="end" data-tour="layout.video-clock">
-  <Toggle label="Show the time on the recording" checked={block.clock === true} onchange={(v) => (block.clock = v || undefined)} />
+  <Toggle label={t('Show the time on the recording')} checked={block.clock === true} onchange={(v) => (block.clock = v || undefined)} />
   <p class="quiet small">
-    The time of each moment, on this computer's clock (2026-11-12 14:03:27), over the clip from the start. Off, the
-    person can still show it with Time under the recording. Either way it can be moved, or taken off before sending.
+    {t('The time of each moment, on this computer\'s clock (2026-11-12 14:03:27), over the clip from the start. Off, the person can still show it with Time under the recording. Either way it can be moved, or taken off before sending.')}
   </p>
 </div>
 

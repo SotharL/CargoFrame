@@ -79,7 +79,7 @@ describe('what the list shows', () => {
     const recent = recentIn(two, [{ value: '6', label: 'x' }, { value: 'gone', label: 'y' }, { value: '2', label: 'z' }]);
     expect(recent.map((x) => x.value)).toEqual(['6', '2']);
     const list = comboOptions(scope(two, 'Acme', ALL), recent, true);
-    expect(list.map((x) => `${x.group}:${x.value}`)).toEqual(['Recent:6', 'Recent:2', 'Others:1', 'Others:3', 'Others:4']);
+    expect(list.map((x) => `${x.group}:${x.value}`)).toEqual(['Recently used:6', 'Recently used:2', 'Others:1', 'Others:3', 'Others:4']);
     expect(list[0]!.note).toBe('Friends');
     expect(list[1]!.note).toBe('Acme · Support');
   });

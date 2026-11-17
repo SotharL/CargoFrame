@@ -1,6 +1,7 @@
 //! The connectors' view of the desktop: opening a link.
 
 use cargoframe_connectors::Browser;
+use cargoframe_i18n::t;
 use tauri::AppHandle;
 use tauri_plugin_opener::OpenerExt as _;
 
@@ -18,7 +19,7 @@ pub struct TauriBrowser(pub AppHandle);
 impl Browser for TauriBrowser {
     fn open(&self, url: &str) -> Result<(), String> {
         if !openable(url) {
-            return Err("only web links and Claude links can be opened".into());
+            return Err(t("only web links and Claude links can be opened").into());
         }
         self.0
             .opener()

@@ -3,10 +3,11 @@
 //! a recording of the screen.
 
 use cargoframe_config::{General, Notifications};
+use cargoframe_i18n::{t, tf};
 use tauri::{AppHandle, Manager};
 
-const TITLE: &str = "CargoFrame is running";
-const BODY: &str = "Click here to edit settings.";
+const TITLE: &str = cargoframe_i18n::msg!("CargoFrame is running");
+const BODY: &str = cargoframe_i18n::msg!("Click here to edit settings.");
 
 #[cfg(windows)]
 fn show_launched(app: &AppHandle) {
@@ -21,8 +22,8 @@ fn show_launched(app: &AppHandle) {
     };
     let handle = app.clone();
     let shown = Toast::new(&app_id)
-        .title(TITLE)
-        .text1(BODY)
+        .title(t(TITLE))
+        .text1(t(BODY))
         .duration(Duration::Short)
         .on_activated(move |_| {
             crate::windowing::open_settings(&handle);
@@ -43,10 +44,10 @@ fn show_launched(app: &AppHandle) {
     std::thread::spawn(move || {
         let result = Notification::new()
             .appname("CargoFrame")
-            .summary(TITLE)
-            .body(BODY)
+            .summary(t(TITLE))
+            .body(t(BODY))
             .icon("cargoframe")
-            .action("default", "Open settings")
+            .action("default", t("Open settings"))
             .timeout(Timeout::Milliseconds(10_000))
             .show();
         match result {
@@ -158,10 +159,13 @@ pub fn update_available(app: &AppHandle, version: &str) {
         app.config().identifier.clone()
     };
     let handle = app.clone();
-    let title = format!("CargoFrame {version} is available");
+    let title = tf(
+        "CargoFrame {version} is available",
+        &[("version", &version)],
+    );
     let shown = Toast::new(&app_id)
         .title(&title)
-        .text1("Click here to update.")
+        .text1(cargoframe_i18n::t("Click here to update."))
         .duration(Duration::Long)
         .on_activated(move |_| {
             crate::windowing::open_settings_at(&handle, "about");
@@ -178,14 +182,17 @@ pub fn update_available(app: &AppHandle, version: &str) {
     use notify_rust::{Notification, Timeout};
 
     let handle = app.clone();
-    let title = format!("CargoFrame {version} is available");
+    let title = tf(
+        "CargoFrame {version} is available",
+        &[("version", &version)],
+    );
     std::thread::spawn(move || {
         let result = Notification::new()
             .appname("CargoFrame")
             .summary(&title)
-            .body("Click here to update.")
+            .body(t("Click here to update."))
             .icon("cargoframe")
-            .action("default", "Open settings")
+            .action("default", t("Open settings"))
             .timeout(Timeout::Milliseconds(15_000))
             .show();
         match result {

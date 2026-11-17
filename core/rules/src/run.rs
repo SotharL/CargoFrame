@@ -5,6 +5,7 @@ use crate::extract::{extract, RuleError};
 use crate::find;
 use crate::model::{Across, Format, ReadMode, Rule, Several, Which};
 use cargoframe_context::glob;
+use cargoframe_i18n::t;
 use std::collections::BTreeMap;
 use std::fs;
 use std::io::{Read, Seek, SeekFrom};
@@ -44,7 +45,7 @@ pub trait ProjectFiles {
     /// Facts about the file `pattern` means. The file's content is only read when `what` needs it.
     fn details(&self, _root: &Path, _pattern: &str, _what: What) -> Result<FileDetails, RuleError> {
         Err(RuleError::Unreadable(
-            "this source cannot report file details".into(),
+            t("this source cannot report file details").into(),
         ))
     }
 }
@@ -165,7 +166,7 @@ fn find_all(root: &Path, pattern: &str) -> Result<Vec<String>, RuleError> {
     let pattern = pattern.trim();
     if !pattern_ok(pattern) {
         return Err(RuleError::BadQuery(
-            "the file must be a name or a path inside the project folder (no .., no drive letter)"
+            t("the file must be a name or a path inside the project folder (no .., no drive letter)")
                 .into(),
         ));
     }
@@ -284,12 +285,12 @@ fn resolve_inside(root: &Path, file: &Path) -> Result<(PathBuf, fs::Metadata), R
     let real = file.canonicalize().map_err(unreadable)?;
     if !real.starts_with(&root) {
         return Err(RuleError::Unreadable(
-            "the file is a link that leads outside the project folder".into(),
+            t("the file is a link that leads outside the project folder").into(),
         ));
     }
     let meta = fs::metadata(&real).map_err(unreadable)?;
     if !meta.is_file() {
-        return Err(RuleError::Unreadable("not a regular file".into()));
+        return Err(RuleError::Unreadable(t("not a regular file").into()));
     }
     Ok((real, meta))
 }
@@ -333,7 +334,9 @@ fn read_inside(root: &Path, file: &Path, limit: u64, mode: ReadMode) -> Result<S
         }
     }
     if bytes.contains(&0) {
-        return Err(RuleError::Unreadable("it looks like a binary file".into()));
+        return Err(RuleError::Unreadable(
+            t("it looks like a binary file").into(),
+        ));
     }
     let text = String::from_utf8_lossy(&bytes);
     Ok(text.strip_prefix('\u{feff}').unwrap_or(&text).to_string())

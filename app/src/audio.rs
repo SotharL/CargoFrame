@@ -11,6 +11,7 @@
 //! Nothing here starts a recording; [`plan`] only turns the layout's words into inputs.
 
 use crate::video::Os;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{AudioChoice, DesktopSound, VideoAudio};
 use cargoframe_video::recorder::{AudioBackend, AudioSource};
 use serde::Serialize;
@@ -197,7 +198,7 @@ pub fn list(ffmpeg: &Path, os: Os) -> Devices {
         Os::Other => {
             return Devices {
                 os: "other".into(),
-                note: Some("Recording sound is not supported on this system yet.".into()),
+                note: Some(t("Recording sound is not supported on this system yet.").into()),
                 ..Devices::default()
             }
         }
@@ -223,7 +224,7 @@ pub fn list(ffmpeg: &Path, os: Os) -> Devices {
                 _ => Devices {
                     os: "linux".into(),
                     note: Some(
-                        "No sound system answered (PulseAudio or PipeWire). Recordings will have no sound."
+                        t("No sound system answered (PulseAudio or PipeWire). Recordings will have no sound.")
                             .into(),
                     ),
                     ..Devices::default()
@@ -237,7 +238,7 @@ pub fn list(ffmpeg: &Path, os: Os) -> Devices {
                 "linux"
             }
             .into(),
-            note: Some(format!("ffmpeg would not start: {e}")),
+            note: Some(tf("ffmpeg would not start: {e}", &[("e", &e)])),
             ..Devices::default()
         },
     };
@@ -245,8 +246,9 @@ pub fn list(ffmpeg: &Path, os: Os) -> Devices {
 }
 
 /// Said when Linux has no PulseAudio or PipeWire to record from.
-pub const NO_SOUND_SYSTEM: &str =
-    "No sound system (PulseAudio or PipeWire) is running, so this recording has no sound.";
+pub const NO_SOUND_SYSTEM: &str = cargoframe_i18n::msg!(
+    "No sound system (PulseAudio or PipeWire) is running, so this recording has no sound."
+);
 
 /// Is a PulseAudio server (or PipeWire speaking its language) there to talk to? Looked for as
 /// the files and variables it leaves, because asking ffmpeg takes seconds when it is not.
@@ -300,7 +302,7 @@ pub fn plan(
         Os::Other => {
             if audio.desktop != AudioChoice::Off || audio.microphone != AudioChoice::Off {
                 plan.notes
-                    .push("Recording sound is not supported on this system yet.".into());
+                    .push(t("Recording sound is not supported on this system yet.").into());
             }
             return plan;
         }
@@ -309,7 +311,7 @@ pub fn plan(
         && !sound_system
         && (audio.desktop != AudioChoice::Off || audio.microphone != AudioChoice::Off)
     {
-        plan.notes.push(NO_SOUND_SYSTEM.into());
+        plan.notes.push(cargoframe_i18n::t(NO_SOUND_SYSTEM).into());
         return plan;
     }
     // only the microphone has to be looked up, and only on Windows (Linux names its defaults)
@@ -328,7 +330,8 @@ pub fn plan(
         AudioChoice::Default => match os {
             Os::Linux => {
                 if audio.desktop_from == DesktopSound::FocusedProgram {
-                    plan.notes.push(ONE_PROGRAM_ONLY_ON_WINDOWS.into());
+                    plan.notes
+                        .push(cargoframe_i18n::t(ONE_PROGRAM_ONLY_ON_WINDOWS).into());
                 }
                 push(&mut plan, named(DEFAULT_MONITOR.into()));
             }
@@ -337,7 +340,8 @@ pub fn plan(
                     (DesktopSound::Everything, _) => None,
                     (DesktopSound::FocusedProgram, Some(pid)) => Some(pid),
                     (DesktopSound::FocusedProgram, None) => {
-                        plan.notes.push(PROGRAM_NOT_FOUND.into());
+                        plan.notes
+                            .push(cargoframe_i18n::t(PROGRAM_NOT_FOUND).into());
                         None
                     }
                 };
@@ -352,7 +356,7 @@ pub fn plan(
             Os::Linux => push(&mut plan, named(DEFAULT_SOURCE.into())),
             _ => match listing.as_ref().and_then(|l| l.microphone.first()) {
                 Some(d) => push(&mut plan, named(d.name.clone())),
-                None => plan.notes.push("No microphone was found.".into()),
+                None => plan.notes.push(t("No microphone was found.").into()),
             },
         },
     }
@@ -361,11 +365,11 @@ pub fn plan(
 
 /// Said when the layout asks for one program's sound and the system cannot say which has the focus.
 pub const PROGRAM_NOT_FOUND: &str =
-    "CargoFrame could not tell which program has the focus, so the sound of the whole computer is recorded.";
+    cargoframe_i18n::msg!("CargoFrame could not tell which program has the focus, so the sound of the whole computer is recorded.");
 
 /// Said on Linux, which can only record the sound of the whole computer.
 pub const ONE_PROGRAM_ONLY_ON_WINDOWS: &str =
-    "The sound of one program can only be recorded on Windows for now, so the sound of the whole computer is recorded.";
+    cargoframe_i18n::msg!("The sound of one program can only be recorded on Windows for now, so the sound of the whole computer is recorded.");
 
 #[cfg(test)]
 #[path = "audio_tests.rs"]

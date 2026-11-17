@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import { getApi } from '../../lib/ipc';
@@ -30,10 +31,9 @@
 </script>
 
 <div class="chats">
-  <h3>Claude chats</h3>
+  <h3>{t('Claude chats')}</h3>
   <p class="quiet">
-    Claude cannot list your chats, so add the ones you share to often: open the chat, copy its
-    address, and paste it here. They appear in the chat dropdown.
+    {t('Claude cannot list your chats, so add the ones you share to often: open the chat, copy its address, and paste it here. They appear in the chat dropdown.')}
   </p>
   <form
     class="add"
@@ -46,21 +46,21 @@
       });
     }}
   >
-    <input type="text" aria-label="Chat address" placeholder="https://claude.ai/chat/…" bind:value={link} />
-    <input type="text" aria-label="Chat name" placeholder="A name for it" bind:value={title} />
-    <button class="primary" type="submit" disabled={!link.trim()}>Pin chat</button>
+    <input type="text" aria-label={t('Chat address')} placeholder="https://claude.ai/chat/…" bind:value={link} />
+    <input type="text" aria-label={t('Chat name')} placeholder={t('A name for it')} bind:value={title} />
+    <button class="primary" type="submit" disabled={!link.trim()}>{t('Pin chat')}</button>
   </form>
   {#if error}<Chip kind="err" label={error} />{/if}
   {#if chats.length === 0}
-    <p class="quiet">No chats yet. “New chat” is always offered.</p>
+    <p class="quiet">{t('No chats yet. “New chat” is always offered.')}</p>
   {/if}
   <ul>
     {#each chats as c (c.id)}
       <li>
         <span class="name">{c.title}</span>
-        <span class="quiet">{c.pinned ? 'Pinned' : 'Recent'}</span>
-        <button onclick={() => act((api) => api.setChatPinned(c.id, !c.pinned))}>{c.pinned ? 'Unpin' : 'Pin'}</button>
-        <button onclick={() => act((api) => api.removeChat(c.id))}>Remove</button>
+        <span class="quiet">{c.pinned ? t('Pinned') : t('Recent')}</span>
+        <button onclick={() => act((api) => api.setChatPinned(c.id, !c.pinned))}>{c.pinned ? t('Unpin') : t('Pin')}</button>
+        <button onclick={() => act((api) => api.removeChat(c.id))}>{t('Remove')}</button>
       </li>
     {/each}
   </ul>

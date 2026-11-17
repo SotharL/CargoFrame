@@ -14,6 +14,7 @@ use crate::payload::{InlineFile, OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
 use cargoframe_deliver::{DeliverError, Delivery, Target, Timing};
 use cargoframe_handoff::{open_url, ChatId, Destination, Scheme};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_safe::{FailureKind, SendError};
 use std::path::PathBuf;
 use std::time::Duration;
@@ -83,7 +84,7 @@ pub fn compose_message(
 ) -> String {
     let mut out = String::new();
     if let Some(title) = title.map(str::trim).filter(|t| !t.is_empty()) {
-        out.push_str("Title: ");
+        out.push_str(t("Title: "));
         out.push_str(title);
         out.push_str("\n\n");
     }
@@ -93,10 +94,16 @@ pub fn compose_message(
         facts.push(format!("{}: {}", label.trim(), value.trim()));
     }
     if !window.trim().is_empty() {
-        facts.push(format!("Captured window: {}", window.trim()));
+        facts.push(tf(
+            "Captured window: {window}",
+            &[("window", &window.trim())],
+        ));
     }
     if !attached.is_empty() {
-        facts.push(format!("Attached files: {}", attached.join(", ")));
+        facts.push(tf(
+            "Attached files: {files}",
+            &[("files", &attached.join(", "))],
+        ));
     }
     if !facts.is_empty() {
         out.push_str("\n\n");
@@ -105,10 +112,9 @@ pub fn compose_message(
     for file in inline {
         let body = file.text.trim_end_matches(['\n', '\r']);
         let fence = fence_for(body);
-        out.push_str(&format!(
-            "\n\nFile {}:\n{fence}\n{body}\n{fence}",
-            file.name
-        ));
+        out.push_str("\n\n");
+        out.push_str(&tf("File {name}:", &[("name", &file.name)]));
+        out.push_str(&format!("\n{fence}\n{body}\n{fence}"));
     }
     out
 }
@@ -123,19 +129,19 @@ impl Connector for ClaudeConnector {
             fields: vec![
                 FieldSpec {
                     key: "chat",
-                    label: "Chat",
-                    hint: "A chat id, or \"new\". Use the Claude chats dropdown",
+                    label: msg!("Chat"),
+                    hint: msg!("A chat id, or \"new\". Use the Claude chats dropdown"),
                     list: None,
                 },
                 FieldSpec {
                     key: "title",
-                    label: "Title",
-                    hint: "Goes at the top of the message. Any other field you add is written under the prompt as \"Name: value\"",
+                    label: msg!("Title"),
+                    hint: msg!("Goes at the top of the message. Any other field you add is written under the prompt as \"Name: value\""),
                     list: None,
                 },
             ],
             lists: vec![],
-            summary: "Opens the chat, then pastes the screenshot, the files and the message into it and presses Enter. Leave Claude in front for a few seconds while it works. The prompt is required.".into(),
+            summary: msg!("Opens the chat, then pastes the screenshot, the files and the message into it and presses Enter. Leave Claude in front for a few seconds while it works. The prompt is required.").into(),
         }
     }
 
@@ -147,30 +153,31 @@ impl Connector for ClaudeConnector {
 
     fn test(&self, _ctx: &Ctx) -> Result<String, SendError> {
         Ok(match self.scheme() {
-            Scheme::App => "Shares open the Claude app and paste into it. Nothing is sent over the network by CargoFrame.",
-            Scheme::Web => "Shares open claude.ai in your browser and paste into it. Nothing is sent over the network by CargoFrame.",
+            Scheme::App => t("Shares open the Claude app and paste into it. Nothing is sent over the network by CargoFrame."),
+            Scheme::Web => t("Shares open claude.ai in your browser and paste into it. Nothing is sent over the network by CargoFrame."),
         }
         .into())
     }
 
     fn options(&self, _ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
-        Err(invalid(format!(
-            "Claude has no list called \"{list}\": use the Claude chats dropdown source"
+        Err(invalid(tf(
+            "Claude has no list called \"{list}\": use the Claude chats dropdown source",
+            &[("list", &list)],
         )))
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
         let prompt = payload.prompt.as_deref().map(str::trim).unwrap_or("");
         if prompt.is_empty() {
-            return Err(invalid(
+            return Err(invalid(t(
                 "Write a prompt first: Claude needs to know what to do with the screenshot",
-            ));
+            )));
         }
         let destination = match payload.value("chat") {
             None | Some("new") => Destination::NewChat,
             Some(id) => Destination::ExistingChat(
                 ChatId::parse(id)
-                    .ok_or_else(|| invalid("That chat id is not valid: pin the chat again"))?,
+                    .ok_or_else(|| invalid(t("That chat id is not valid: pin the chat again")))?,
             ),
         };
         let scheme = self.scheme();
@@ -189,7 +196,7 @@ impl Connector for ClaudeConnector {
             Some(shot) => files.push(shot),
             // Left out on purpose (the button's rules) is not a problem; losing it is.
             None if payload.image.is_some() => {
-                notes.push("There was no screenshot to attach".to_string())
+                notes.push(t("There was no screenshot to attach").to_string())
             }
             None => {}
         }
@@ -231,35 +238,37 @@ impl Connector for ClaudeConnector {
 
         if !payload.inline_files.is_empty() {
             let n = payload.inline_files.len();
-            notes.push(format!(
-                "{n} file{} written into the message as text",
-                if n == 1 { " was" } else { "s were" }
-            ));
+            notes.push(if n == 1 {
+                t("1 file was written into the message as text").to_string()
+            } else {
+                tf(
+                    "{n} files were written into the message as text",
+                    &[("n", &n)],
+                )
+            });
         }
         if done.skipped_files > 0 {
-            notes.push(format!(
-                "This system cannot attach files from CargoFrame yet, so {} file{} not attached",
-                done.skipped_files,
-                if done.skipped_files == 1 {
-                    " was"
-                } else {
-                    "s were"
-                }
-            ));
+            notes.push(if done.skipped_files == 1 {
+                t("This system cannot attach files from CargoFrame yet, so 1 file was not attached").to_string()
+            } else {
+                tf("This system cannot attach files from CargoFrame yet, so {n} files were not attached", &[("n", &done.skipped_files)])
+            });
         }
         let what = match (done.files, done.text) {
-            (0, _) => "the message".to_string(),
-            (n, true) => format!("{n} file{} and the message", if n == 1 { "" } else { "s" }),
-            (n, false) => format!("{n} file{}", if n == 1 { "" } else { "s" }),
+            (0, _) => t("the message").to_string(),
+            (1, true) => t("1 file and the message").to_string(),
+            (n, true) => tf("{n} files and the message", &[("n", &n)]),
+            (1, false) => t("1 file").to_string(),
+            (n, false) => tf("{n} files", &[("n", &n)]),
         };
         if done.handed_over {
             let summary = if done.text {
-                "Opened Claude and copied the message: paste it there with Ctrl+V"
+                t("Opened Claude and copied the message: paste it there with Ctrl+V")
             } else {
-                "Opened Claude"
+                t("Opened Claude")
             };
             notes.push(
-                "This desktop does not let CargoFrame paste into another window, so the message is on the clipboard".to_string(),
+                t("This desktop does not let CargoFrame paste into another window, so the message is on the clipboard").to_string(),
             );
             return Ok(SendOutcome {
                 summary: summary.into(),
@@ -269,13 +278,16 @@ impl Connector for ClaudeConnector {
             });
         }
         let summary = if done.submitted {
-            format!("Sent {what} to Claude")
+            tf("Sent {what} to Claude", &[("what", &what)])
         } else {
-            format!("Pasted {what} into Claude: press Enter there to send")
+            tf(
+                "Pasted {what} into Claude: press Enter there to send",
+                &[("what", &what)],
+            )
         };
         if done.submitted {
             notes.push(
-                "CargoFrame cannot see inside Claude: check the chat that the message went through"
+                t("CargoFrame cannot see inside Claude: check the chat that the message went through")
                     .to_string(),
             );
         }

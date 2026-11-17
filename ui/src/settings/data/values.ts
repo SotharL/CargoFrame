@@ -6,6 +6,7 @@
 import type { ItemEntry, Rule, RuleAcross, RuleValue } from '../../lib/types';
 import { shortNameOk } from '../../lib/valueNames';
 import { blankRule, slug, valuesOf } from '../ruleValues';
+import { t } from '../../lib/i18n/index.svelte';
 
 /** One place a value is read: a step of a rule. */
 export interface Source {
@@ -52,10 +53,10 @@ export const filesOf = (v: ValueEntry) => [...new Set(v.sources.map((s) => s.rul
 
 /** Why `name` cannot name a new value, or '' when it can. */
 export function nameProblem(name: string, taken: readonly string[]): string {
-  if (!name.trim()) return 'Give it a name.';
+  if (!name.trim()) return t('Give it a name.');
   const key = keyOf(name);
-  if (!shortNameOk(key)) return `{${key}} is kept for Jira's formatting, pick another name.`;
-  if (taken.some((k) => k.toLowerCase() === key)) return `{${key}} already exists.`;
+  if (!shortNameOk(key)) return t("{token} is kept for Jira's formatting, pick another name.", { token: `{${key}}` });
+  if (taken.some((k) => k.toLowerCase() === key)) return t('{token} already exists.', { token: `{${key}}` });
   return '';
 }
 

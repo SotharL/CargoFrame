@@ -1,5 +1,6 @@
 // Data from files: the values a rule reads, their variable names, and rules made before 0.3.0.
 import type { Rule, RuleFind, RuleValue } from '../lib/types';
+import { t } from '../lib/i18n/index.svelte';
 
 /** A variable name from what a person calls the value: "OS Name" → `os_name`. */
 export function slug(name: string): string {
@@ -63,19 +64,21 @@ export function newValue(taken: string[]): RuleValue {
 export function describe(find: RuleFind, r: Rule): string {
   switch (find.type) {
     case 'value_of':
-      return `after “${find.name}”`;
+      return t('after “{text}”', { text: find.name });
     case 'between':
-      return find.end ? `between “${find.start}” and “${find.end}”` : `after “${find.start}”, to the end of the line`;
+      return find.end
+        ? t('between “{start}” and “{end}”', { start: find.start, end: find.end })
+        : t('after “{text}”, to the end of the line', { text: find.start });
     case 'line_with':
-      return `the line with “${find.text}”`;
+      return t('the line with “{text}”', { text: find.text });
     case 'pick':
-      return find.lines_with ? `after “${find.lines_with}”` : 'from the start of a line';
+      return find.lines_with ? t('after “{text}”', { text: find.lines_with }) : t('from the start of a line');
     case 'advanced':
       return `${r.format.toUpperCase()}: ${r.query ?? ''}`;
     case 'combine':
       return find.choices.length === 1
-        ? `made of ${find.choices[0]!.text}`
-        : `made of ${find.choices.map((c) => c.text).join(', or ')}`;
+        ? t('made of {text}', { text: find.choices[0]!.text })
+        : t('made of {text}', { text: find.choices.map((c) => c.text).join(t(', or ')) });
   }
 }
 

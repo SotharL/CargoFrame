@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // A Claude connection that opens the desktop app needs it installed. On Windows this says so and
   // offers to install it (the same button as Setup, through winget); the download page is always
   // one click away.
@@ -58,15 +59,15 @@
 {#if report?.os === 'windows'}
   <div class="note">
     {#if app?.status === 'ok'}
-      <Chip kind="ok" label="Claude desktop app found" />
+      <Chip kind="ok" label={t('Claude desktop app found')} />
     {:else if running}
-      <Chip kind="warn" label="Installing…" />
+      <Chip kind="warn" label={t('Installing…')} />
     {:else}
-      <span class="quiet">The chat opens in the Claude desktop app{app ? ', which is not installed yet' : ''}.</span>
+      <span class="quiet">{app ? t('The chat opens in the Claude desktop app, which is not installed yet.') : t('The chat opens in the Claude desktop app.')}</span>
       {#if app?.status === 'missing' && report.install.type === 'run'}
-        <button type="button" class="primary" onclick={install}>Install it</button>
+        <button type="button" class="primary" onclick={install}>{t('Install it')}</button>
       {/if}
-      <button type="button" onclick={download}>Get it from claude.ai <span aria-hidden="true">↗</span></button>
+      <button type="button" onclick={download}>{t('Get it from claude.ai')} <span aria-hidden="true">↗</span></button>
     {/if}
     {#if error}<span class="error" role="alert">{error}</span>{/if}
   </div>

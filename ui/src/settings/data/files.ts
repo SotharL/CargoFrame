@@ -2,6 +2,7 @@
 // folder) and files opened or dropped here (read in the window, never sent anywhere).
 import { getApi } from '../../lib/ipc';
 import { linesOf } from './pick';
+import { t } from '../../lib/i18n/index.svelte';
 
 export interface ViewFile {
   /** The path in the capture's folder, or "dropped:<name>". */
@@ -59,7 +60,7 @@ export async function readDropped(file: File): Promise<ViewFile> {
     // a cut start is half a line
     const lines = linesOf(text);
     if (cut) lines.shift();
-    if (text.includes('\u0000')) return { ...base, lines: [], problem: `${file.name} is not a text file` };
+    if (text.includes('\u0000')) return { ...base, lines: [], problem: t('{name} is not a text file', { name: file.name }) };
     return { ...base, lines };
   } catch (e) {
     return { ...base, lines: [], problem: String(e) };

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // Data & fields: values read from the files of a capture (`{map}`, `{gpu}`), and the files they
   // are read in. A value is made by selecting it in a file; it can be read in several files, the
   // newest winning. Layouts write the values in titles, descriptions, tags and fields (Fill fields
@@ -89,7 +91,7 @@
 
 <div class="page">
   {#if rules.failure}<Chip kind="err" label={rules.failure} />{/if}
-  {#each rules.problems as p (p)}<Chip kind="warn" label={`Could not read a data file: ${p}`} />{/each}
+  {#each rules.problems as p (p)}<Chip kind="warn" label={t('Could not read a data file: {problem}', { problem: p })} />{/each}
 
   {#if view.kind === 'select'}
     <SelectValue
@@ -123,39 +125,37 @@
     />
   {:else}
     <PageTabs
-      label="Data & fields"
+      label={t('Data & fields')}
       bind:value={tab}
       tabs={[
-        { id: 'values', label: 'Values', count: entries.length, tour: 'data.values' },
-        { id: 'files', label: 'Files', count: fileCount, tour: 'data.files' },
+        { id: 'values', label: t('Values'), count: entries.length, tour: 'data.values' },
+        { id: 'files', label: t('Files'), count: fileCount, tour: 'data.files' },
       ]}
     />
     <div id="panel-{tab}" role="tabpanel" aria-labelledby="tab-{tab}" class="panel">
       {#if tab === 'values'}
         <p class="tried quiet">
-          {#if preview?.folder}Results are from the last capture, in <span class="mono">{preview.folder}</span>.{:else}Results show after the first capture.{/if}
-          A value with nothing found stays empty.
+          {#if preview?.folder}<Tr text={t('Results are from the last capture, in {folder}.')}>{#snippet folder()}<span class="mono">{preview!.folder}</span>{/snippet}</Tr>{:else}{t('Results show after the first capture.')}{/if}
+          {t('A value with nothing found stays empty.')}
         </p>
         <div class="buttons">
-          <button type="button" class="primary" data-tour="data.new" onclick={() => select({ kind: 'new' })}>＋ New value: select it in a file</button>
-          <button type="button" data-tour="data.combined" onclick={() => (view = { kind: 'combined', id: null })}>＋ Made from other values</button>
-          {#if entries.length > 0}<input type="search" class="find" bind:value={q} placeholder="Find a value" aria-label="Find a value" />{/if}
+          <button type="button" class="primary" data-tour="data.new" onclick={() => select({ kind: 'new' })}>{t('＋ New value: select it in a file')}</button>
+          <button type="button" data-tour="data.combined" onclick={() => (view = { kind: 'combined', id: null })}>{t('＋ Made from other values')}</button>
+          {#if entries.length > 0}<input type="search" class="find" bind:value={q} placeholder={t('Find a value')} aria-label={t('Find a value')} />{/if}
         </div>
         {#if rules.loaded && entries.length === 0}
           <div class="empty">
-            <h2>No values yet</h2>
+            <h2>{t('No values yet')}</h2>
             <p class="quiet">
-              Select a value in a file of a capture, like the map in a game's log or the version in package.json.
-              CargoFrame finds it again in each capture, and layouts write it as <code>{'{map}'}</code> in a title,
-              a description, a tag or a field.
+              <Tr text={t("Select a value in a file of a capture, like the map in a game's log or the version in package.json. CargoFrame finds it again in each capture, and layouts write it as {token} in a title, a description, a tag or a field.")}>{#snippet token()}<code>{'{map}'}</code>{/snippet}</Tr>
             </p>
           </div>
         {:else}
           <ValuesTab {entries} {preview} {q} layouts={layouts.items} onopen={open} />
-          <p class="quiet small">Names written the older way, like <code>{'{{rule.gpu}}'}</code>, keep working.</p>
+          <p class="quiet small"><Tr text={t('Names written the older way, like {old}, keep working.')}>{#snippet old()}<code>{'{{rule.gpu}}'}</code>{/snippet}</Tr></p>
         {/if}
       {:else}
-        <p class="tried quiet">Files looked for in a capture's project folder. Each can be added to the window's files, and values are read in it.</p>
+        <p class="tried quiet">{t('Files looked for in a capture\'s project folder. Each can be added to the window\'s files, and values are read in it.')}</p>
         <FilesTab
           rules={rules.items}
           onsave={async (id, rule) => { await rules.save(id, rule); await refresh(); }}

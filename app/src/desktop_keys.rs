@@ -151,7 +151,10 @@ pub fn apply(app: &AppHandle, wanted: Vec<Binding>, errors: BTreeMap<String, Str
                                             if !bound.contains_key(&b.id) {
                                                 s.errors.insert(
                                                     b.id.clone(),
-                                                    "The desktop did not take this shortcut".into(),
+                                                    cargoframe_i18n::t(
+                                                        "The desktop did not take this shortcut",
+                                                    )
+                                                    .into(),
                                                 );
                                             }
                                         }
@@ -160,7 +163,10 @@ pub fn apply(app: &AppHandle, wanted: Vec<Binding>, errors: BTreeMap<String, Str
                                         for b in &asked {
                                             s.errors.insert(
                                                 b.id.clone(),
-                                                format!("The desktop's shortcut service said: {e}"),
+                                                cargoframe_i18n::tf(
+                                                    "The desktop's shortcut service said: {e}",
+                                                    &[("e", &e)],
+                                                ),
                                             );
                                         }
                                     }
@@ -174,7 +180,7 @@ pub fn apply(app: &AppHandle, wanted: Vec<Binding>, errors: BTreeMap<String, Str
                         for b in &wanted {
                             status.errors.insert(
                                 b.id.clone(),
-                                "The desktop's shortcut service could not be reached: add the command to your desktop's shortcuts".into(),
+                                cargoframe_i18n::t("The desktop's shortcut service could not be reached: add the command to your desktop's shortcuts").into(),
                             );
                         }
                     }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The box drawn over the recording to crop it, as on a screenshot: drag over the picture to
   // draw the part to keep (the rest is dimmed), then apply. `crop` is in the recording's own
   // pixels, `null` until a box is drawn; the recording is shown "contained" in its space, so the
@@ -111,7 +112,7 @@
         class:active
         role="group"
         tabindex="0"
-        aria-label="Crop area: {crop.w}×{crop.h}, from {crop.x},{crop.y}. Arrow keys move it, Alt with an arrow resizes it."
+        aria-label={t('Crop area: {w}×{h}, from {x},{y}. Arrow keys move it, Alt with an arrow resizes it.', { w: crop.w, h: crop.h, x: crop.x, y: crop.y })}
         style:left="{(crop.x / width) * 100}%"
         style:top="{(crop.y / height) * 100}%"
         style:width="{(crop.w / width) * 100}%"
@@ -119,7 +120,7 @@
         onmousedown={(e) => begin(e, 'move')}
         onkeydown={key}
       >
-        <span class="grip" aria-label="Resize the crop area" role="presentation" onmousedown={(e) => begin(e, 'size')}></span>
+        <span class="grip" aria-label={t('Resize the crop area')} role="presentation" onmousedown={(e) => begin(e, 'size')}></span>
       </div>
     {/if}
   </div>

@@ -3,6 +3,7 @@
 
 use cargoframe_config::{Kind, Store};
 use cargoframe_context::climb;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{reach, BlockKind, FilesBlock, Layout, Reach, Registry};
 use cargoframe_rules::{FsFiles, Rule};
 use cargoframe_window::files::{self, PlaceFound};
@@ -152,7 +153,7 @@ pub fn preview_files(block: &FilesBlock, program: Option<&str>) -> FilesPreview 
             ticked: 0,
             truncated: false,
             problem: Some(
-                "Make a capture first, or type the path of a program file, to see what is found"
+                t("Make a capture first, or type the path of a program file, to see what is found")
                     .into(),
             ),
         };
@@ -177,7 +178,7 @@ pub fn preview_files(block: &FilesBlock, program: Option<&str>) -> FilesPreview 
             total: 0,
             ticked: 0,
             truncated: false,
-            problem: Some("There is no folder to look in".into()),
+            problem: Some(t("There is no folder to look in").into()),
         };
     };
     let look: Vec<files::Where> = found
@@ -210,10 +211,10 @@ pub fn preview_files(block: &FilesBlock, program: Option<&str>) -> FilesPreview 
 pub fn test_folder(path: &str) -> Result<(), String> {
     let dir = Path::new(path.trim());
     if path.trim().is_empty() {
-        return Err("Choose a folder".into());
+        return Err(t("Choose a folder").into());
     }
     if !dir.is_dir() {
-        return Err("That folder does not exist".into());
+        return Err(t("That folder does not exist").into());
     }
     let probe = dir.join(format!(".cargoframe-write-test-{}", std::process::id()));
     match std::fs::write(&probe, b"ok") {
@@ -222,9 +223,9 @@ pub fn test_folder(path: &str) -> Result<(), String> {
             Ok(())
         }
         Err(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-            Err("CargoFrame is not allowed to write there".into())
+            Err(t("CargoFrame is not allowed to write there").into())
         }
-        Err(e) => Err(format!("Cannot write there: {e}")),
+        Err(e) => Err(tf("Cannot write there: {e}", &[("e", &e)])),
     }
 }
 
@@ -262,10 +263,13 @@ pub fn variables(store: &Store) -> Vec<VariableInfo> {
             out.push(VariableInfo {
                 name: format!("rule.{key}"),
                 description: match (name.is_empty(), files.is_empty()) {
-                    (_, true) if name.is_empty() => "Made from other values".to_string(),
-                    (_, true) => format!("{name}, made from other values"),
-                    (true, false) => format!("From {}", files.join(", ")),
-                    (false, false) => format!("{name}, from {}", files.join(", ")),
+                    (_, true) if name.is_empty() => t("Made from other values").to_string(),
+                    (_, true) => tf("{name}, made from other values", &[("name", &name)]),
+                    (true, false) => tf("From {files}", &[("files", &files.join(", "))]),
+                    (false, false) => tf(
+                        "{name}, from {files}",
+                        &[("name", &name), ("files", &files.join(", "))],
+                    ),
                 },
             });
         }
@@ -411,12 +415,13 @@ pub struct SampleText {
 
 pub fn read_sample(folder: &str, path: &str) -> Result<SampleText, String> {
     if looks_binary(path) {
-        return Err("That file is not text".into());
+        return Err(t("That file is not text").into());
     }
     let real = cargoframe_bundle::inside(Path::new(folder), path).map_err(|e| e.to_string())?;
-    let meta = std::fs::metadata(&real).map_err(|e| format!("The file could not be read: {e}"))?;
+    let meta = std::fs::metadata(&real)
+        .map_err(|e| tf("The file could not be read: {e}", &[("e", &e)]))?;
     let read = crate::session::read_end(&real, crate::session::MAX_LOG_BYTES)
-        .map_err(|e| format!("The file could not be read: {e}"))?;
+        .map_err(|e| tf("The file could not be read: {e}", &[("e", &e)]))?;
     Ok(SampleText {
         text: read.text,
         cut: read.cut,

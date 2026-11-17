@@ -13,6 +13,7 @@ use crate::oauth::{self, ClientAuth, OAuthClient};
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, Body, Method, Multipart, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::Value;
@@ -93,8 +94,12 @@ impl RedditConnector {
         if !resp.is_success() {
             return Err(from_response(&resp, what));
         }
-        resp.json()
-            .ok_or_else(|| invalid(format!("Reddit answered {what} with something unreadable")))
+        resp.json().ok_or_else(|| {
+            invalid(tf(
+                "Reddit answered {what} with something unreadable",
+                &[("what", &t(what))],
+            ))
+        })
     }
 }
 
@@ -109,8 +114,9 @@ pub fn clean_subreddit(raw: &str) -> Result<String, String> {
     if (2..=21).contains(&s.len()) && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_') {
         Ok(s.to_string())
     } else {
-        Err(format!(
-            "\"{raw}\" is not a subreddit name (2 to 21 letters, digits or _)"
+        Err(tf(
+            "\"{raw}\" is not a subreddit name (2 to 21 letters, digits or _)",
+            &[("raw", &raw)],
         ))
     }
 }
@@ -142,7 +148,10 @@ fn body_errors(resp: &Response) -> Option<SendError> {
     let first = errors.first()?.as_array()?;
     let code = first.first().and_then(Value::as_str).unwrap_or("ERROR");
     let text = first.get(1).and_then(Value::as_str).unwrap_or("");
-    let message = format!("Reddit refused the post ({code}: {text})");
+    let message = tf(
+        "Reddit refused the post ({code}: {text})",
+        &[("code", &code), ("text", &text)],
+    );
     if code == "RATELIMIT" {
         let mut e = SendError::new(FailureKind::Throttled(429), message);
         if let Some(w) = parse_wait(text) {
@@ -163,19 +172,19 @@ impl Connector for RedditConnector {
         };
         Describe {
             fields: vec![
-                f("subreddit", "Subreddit", "Where to post, for example rust", Some("subscribed")),
-                f("title", "Title", "Defaults to the window title", None),
-                f("text", "Text", "The post body. Defaults to the prompt text", None),
-                f("url", "Link", "Makes it a link post instead of an image", None),
-                f("flair_id", "Flair", "", Some("flairs")),
-                f("nsfw", "NSFW", "true to mark it", None),
-                f("spoiler", "Spoiler", "true to mark it", None),
+                f("subreddit", msg!("Subreddit"), msg!("Where to post, for example rust"), Some("subscribed")),
+                f("title", msg!("Title"), msg!("Defaults to the window title"), None),
+                f("text", msg!("Text"), msg!("The post body. Defaults to the prompt text"), None),
+                f("url", msg!("Link"), msg!("Makes it a link post instead of an image"), None),
+                f("flair_id", msg!("Flair"), "", Some("flairs")),
+                f("nsfw", msg!("NSFW"), msg!("true to mark it"), None),
+                f("spoiler", msg!("Spoiler"), msg!("true to mark it"), None),
             ],
             lists: vec![
-                ListSpec { id: "subscribed".into(), label: "My subscribed subreddits".into(), param: None, inside: None },
-                ListSpec { id: "flairs".into(), label: "Flairs of a subreddit".into(), param: Some("subreddit"), inside: None },
+                ListSpec { id: "subscribed".into(), label: msg!("My subscribed subreddits").into(), param: None, inside: None },
+                ListSpec { id: "flairs".into(), label: msg!("Flairs of a subreddit").into(), param: Some("subreddit"), inside: None },
             ],
-            summary: "Posts the screenshot as an image post, or the text as a self post, or a link. Files cannot be attached on Reddit.".into(),
+            summary: msg!("Posts the screenshot as an image post, or the text as a self post, or a link. Files cannot be attached on Reddit.").into(),
         }
     }
 
@@ -197,12 +206,12 @@ impl Connector for RedditConnector {
     }
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
-        let me = self.get_json(ctx, "/api/v1/me", "check the sign-in")?;
+        let me = self.get_json(ctx, "/api/v1/me", msg!("check the sign-in"))?;
         let name = me
             .get("name")
             .and_then(Value::as_str)
-            .unwrap_or("your account");
-        Ok(format!("Signed in to Reddit as u/{name}"))
+            .unwrap_or(t("your account"));
+        Ok(tf("Signed in to Reddit as u/{name}", &[("name", &name)]))
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
@@ -215,7 +224,7 @@ impl Connector for RedditConnector {
                 let v = self.get_json(
                     ctx,
                     "/subreddits/mine/subscriber?limit=100",
-                    "list your subreddits",
+                    msg!("list your subreddits"),
                 )?;
                 let mut out: Vec<OptionItem> = v
                     .pointer("/data/children")
@@ -252,7 +261,7 @@ impl Connector for RedditConnector {
                     return Ok(Vec::new());
                 }
                 if !resp.is_success() {
-                    return Err(from_response(&resp, "list flairs"));
+                    return Err(from_response(&resp, msg!("list flairs")));
                 }
                 Ok(resp
                     .json()
@@ -262,19 +271,24 @@ impl Connector for RedditConnector {
                     .filter_map(|f| {
                         Some(OptionItem::new(
                             f.get("id")?.as_str()?,
-                            f.get("text").and_then(Value::as_str).unwrap_or("(no text)"),
+                            f.get("text")
+                                .and_then(Value::as_str)
+                                .unwrap_or(t("(no text)")),
                         ))
                     })
                     .collect())
             }
-            other => Err(invalid(format!("Reddit has no list called \"{other}\""))),
+            other => Err(invalid(tf(
+                "Reddit has no list called \"{other}\"",
+                &[("other", &other)],
+            ))),
         }
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
         let sub = clean_subreddit(payload.value("subreddit").unwrap_or(""))
             .map_err(|e| if payload.value("subreddit").is_none() {
-                "Reddit needs a subreddit: map one to the field \"subreddit\" on the sharing button".to_string()
+                t("Reddit needs a subreddit: map one to the field \"subreddit\" on the sharing button").to_string()
             } else {
                 e
             })
@@ -284,14 +298,16 @@ impl Connector for RedditConnector {
             .map(str::to_string)
             .or_else(|| Some(payload.title.trim().to_string()).filter(|t| !t.is_empty()))
             .ok_or_else(|| {
-                invalid("Reddit needs a title: map a text block to the field \"title\"")
+                invalid(t(
+                    "Reddit needs a title: map a text block to the field \"title\"",
+                ))
             })?;
         if title.chars().count() > 300 {
-            return Err(invalid("A Reddit title can have at most 300 characters"));
+            return Err(invalid(t("A Reddit title can have at most 300 characters")));
         }
         let link = payload.value("url").map(str::to_string);
         if let Some(l) = &link {
-            check_url(l).map_err(|e| invalid(format!("The link: {e}")))?;
+            check_url(l).map_err(|e| invalid(tf("The link: {e}", &[("e", &e)])))?;
         }
         let text = payload
             .value("text")
@@ -302,7 +318,8 @@ impl Connector for RedditConnector {
 
         let mut notes = Vec::new();
         if payload.files_zip.is_some() {
-            notes.push("Reddit cannot take files, so the ticked files were not sent".to_string());
+            notes
+                .push(t("Reddit cannot take files, so the ticked files were not sent").to_string());
         }
 
         // What kind of post: a link, an image (the screenshot), or text.
@@ -317,9 +334,9 @@ impl Connector for RedditConnector {
             (None, None) => Kind::SelfPost,
         };
         if matches!(kind, Kind::SelfPost) && text.is_none() {
-            return Err(invalid(
+            return Err(invalid(t(
                 "There is nothing to post: no screenshot, link or text",
-            ));
+            )));
         }
 
         // Step 1 (images): put the picture on Reddit's media storage, once.
@@ -336,22 +353,23 @@ impl Connector for RedditConnector {
             if !lease.is_success() {
                 return Err(from_response(
                     &lease,
-                    "ask Reddit where to upload the image",
+                    msg!("ask Reddit where to upload the image"),
                 ));
             }
             let lease_json = lease
                 .json()
-                .ok_or_else(|| invalid("Reddit's upload answer was unreadable"))?;
+                .ok_or_else(|| invalid(t("Reddit's upload answer was unreadable")))?;
             let action = lease_json
                 .pointer("/args/action")
                 .and_then(Value::as_str)
-                .ok_or_else(|| invalid("Reddit did not say where to upload the image"))?;
+                .ok_or_else(|| invalid(t("Reddit did not say where to upload the image")))?;
             let upload_url = if action.starts_with("//") {
                 format!("https:{action}")
             } else {
                 action.to_string()
             };
-            check_url(&upload_url).map_err(|e| invalid(format!("Reddit's upload address: {e}")))?;
+            check_url(&upload_url)
+                .map_err(|e| invalid(tf("Reddit's upload address: {e}", &[("e", &e)])))?;
             let mut form = Multipart::form_data();
             let mut key = None;
             for f in lease_json
@@ -369,7 +387,7 @@ impl Connector for RedditConnector {
                 }
                 form = form.field(n, v);
             }
-            let key = key.ok_or_else(|| invalid("Reddit's upload answer had no key"))?;
+            let key = key.ok_or_else(|| invalid(t("Reddit's upload answer had no key")))?;
             let up = Request::post(&upload_url)
                 .timeout(ctx.timeout)
                 .body(Body::multipart(form.file(
@@ -380,7 +398,7 @@ impl Connector for RedditConnector {
                 )));
             let up_resp = ctx.http.send(&up).map_err(|e| from_net(&e))?;
             if !up_resp.is_success() {
-                return Err(from_response(&up_resp, "upload the image"));
+                return Err(from_response(&up_resp, msg!("upload the image")));
             }
             let url = format!("{}/{}", upload_url.trim_end_matches('/'), key);
             ctx.progress.set("reddit.image", &url);
@@ -389,9 +407,7 @@ impl Connector for RedditConnector {
 
         // Step 2: the post. Never repeated when an earlier attempt may have gone through.
         if ctx.progress.done("reddit.submitted") {
-            return Err(invalid(
-                "An earlier attempt may already have posted this. Check your Reddit profile before trying again",
-            ));
+            return Err(invalid(t("An earlier attempt may already have posted this. Check your Reddit profile before trying again")));
         }
         let mut fields: Vec<(&str, String)> = vec![
             ("api_type", "json".into()),
@@ -417,7 +433,7 @@ impl Connector for RedditConnector {
         if !matches!(kind, Kind::SelfPost) && text.is_some() {
             // the API has no caption for image or link posts; say so rather than drop it quietly
             notes.push(
-                "The text was not posted: Reddit image and link posts have no body".to_string(),
+                t("The text was not posted: Reddit image and link posts have no body").to_string(),
             );
         }
         for key in ["flair_id", "flair_text"] {
@@ -444,15 +460,12 @@ impl Connector for RedditConnector {
                 // Sent, but no answer: it may have been posted.
                 let mut err = from_net(&e);
                 err.kind = FailureKind::Rejected(0);
-                err.message = format!(
-                    "{}. Reddit may or may not have posted it, so CargoFrame did not retry: check your profile",
-                    err.message
-                );
+                err.message = tf("{message}. Reddit may or may not have posted it, so CargoFrame did not retry: check your profile", &[("message", &err.message)]);
                 return Err(err);
             }
         };
         if !resp.is_success() {
-            let err = from_response(&resp, "post to Reddit");
+            let err = from_response(&resp, msg!("post to Reddit"));
             return Err(match err.kind {
                 // definitely not posted: allow the retry
                 FailureKind::Throttled(_) | FailureKind::AuthExpired | FailureKind::Rejected(_) => {
@@ -460,10 +473,7 @@ impl Connector for RedditConnector {
                     err
                 }
                 // a server failure: unknown
-                _ => SendError::new(
-                    FailureKind::Rejected(0),
-                    format!("{}. Reddit may or may not have posted it, so CargoFrame did not retry: check your profile", err.message),
-                ),
+                _ => SendError::new(FailureKind::Rejected(0), tf("{message}. Reddit may or may not have posted it, so CargoFrame did not retry: check your profile", &[("message", &err.message)])),
             });
         }
         if let Some(err) = body_errors(&resp) {
@@ -479,9 +489,12 @@ impl Connector for RedditConnector {
             .map(String::from)
             .filter(|u| check_url(u).is_ok());
         let summary = if json.pointer("/json/data/url").is_some() {
-            format!("Posted to r/{sub}")
+            tf("Posted to r/{sub}", &[("sub", &sub)])
         } else {
-            format!("Posted to r/{sub} (Reddit is still processing the image)")
+            tf(
+                "Posted to r/{sub} (Reddit is still processing the image)",
+                &[("sub", &sub)],
+            )
         };
         Ok(SendOutcome {
             summary,

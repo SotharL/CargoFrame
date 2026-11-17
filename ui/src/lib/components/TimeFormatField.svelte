@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../i18n/index.svelte';
+  import Tr from '../i18n/Tr.svelte';
   // A box to write how a log writes its time ([YYYY-MM-DD HH:mm]), with what a time looks like in
   // it as it is written, or what is wrong with it. Empty: the time is found by itself.
   import { COMMON_FORMATS, FORMAT_HELP, compile, example, isFormat } from '../../capture/blocks/logFormat';
@@ -18,16 +20,16 @@
 
 <div class="tf" data-tour={tour}>
   <label for={id}>{label}</label>
-  <input {id} type="text" class="mono" bind:value oninput={() => onchange?.(value)} placeholder="Found by itself" list={`${id}-common`} autocomplete="off" spellcheck="false" />
+  <input {id} type="text" class="mono" bind:value oninput={() => onchange?.(value)} placeholder={t('Found by itself')} list={`${id}-common`} autocomplete="off" spellcheck="false" />
   <datalist id={`${id}-common`}>
     {#each COMMON_FORMATS as f (f)}<option value={f}></option>{/each}
   </datalist>
   {#if problem}
     <p class="error" role="alert">{problem}</p>
   {:else if sample}
-    <p class="quiet hint">Lines start like <code class="selectable">{sample}</code></p>
+    <p class="quiet hint"><Tr text={t('Lines start like {example}')}>{#snippet example()}<code class="selectable">{sample}</code>{/snippet}</Tr></p>
   {:else}
-    <p class="quiet hint">Write it the way the log does: {FORMAT_HELP}. Empty, the time is found by itself.</p>
+    <p class="quiet hint">{t('Write it the way the log does: {codes}. Empty, the time is found by itself.', { codes: t(FORMAT_HELP) })}</p>
   {/if}
 </div>
 

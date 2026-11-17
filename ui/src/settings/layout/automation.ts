@@ -3,12 +3,14 @@
  * whose address can carry live data (`{build}`). Plain functions, so they are tested without a screen.
  */
 
+import { msg, t } from '../../lib/i18n/index.svelte';
+
 export type LinkStyle = 'markdown' | 'jira' | 'plain';
 
 export const LINK_STYLES: { value: LinkStyle; label: string; example: string }[] = [
-  { value: 'markdown', label: 'Markdown', example: '[word](https://…)  Reddit, Claude, Discord, Slack replies' },
-  { value: 'jira', label: 'Jira wiki', example: '[word|https://…]  Jira descriptions and comments' },
-  { value: 'plain', label: 'Plain text', example: 'word (https://…)  anywhere' },
+  { value: 'markdown', label: 'Markdown', example: msg('[word](https://…)  Reddit, Claude, Discord, Slack replies') },
+  { value: 'jira', label: 'Jira wiki', example: msg('[word|https://…]  Jira descriptions and comments') },
+  { value: 'plain', label: msg('Plain text'), example: msg('word (https://…)  anywhere') },
 ];
 
 /** Replace the selection with `snippet`; the caret goes right after it. */
@@ -45,17 +47,18 @@ export function looksLikeAddress(url: string): boolean {
 export const QUICK_VARIABLES = ['capture.date', 'capture.time', 'app.exe', 'project.name', 'app.title'];
 
 const LABELS: Record<string, string> = {
-  'capture.date': 'Date',
-  'capture.time': 'Time',
-  'app.exe': 'Program',
-  'app.path': 'Program path',
-  'app.title': 'Window title',
-  'project.name': 'Project',
-  'project.folder': 'Project folder',
-  'capture.screenshot': 'Screenshot',
-  'capture.recording': 'Recording',
+  'capture.date': msg('Date'),
+  'capture.time': msg('Time'),
+  'app.exe': msg('Program'),
+  'app.path': msg('Program path'),
+  'app.title': msg('Window title'),
+  'project.name': msg('Project'),
+  'project.folder': msg('Project folder'),
+  'capture.screenshot': msg('Screenshot'),
+  'capture.recording': msg('Recording'),
 };
-export const quickLabel = (name: string): string => LABELS[name] ?? name;
+/** The name of a value as the person reads it, in their language. */
+export const quickLabel = (name: string): string => (LABELS[name] ? t(LABELS[name]) : name);
 
 /** The pictures a text can show where it names them, and the services that do. */
 export const MEDIA_VARIABLES = ['capture.screenshot', 'capture.recording'];
@@ -64,18 +67,20 @@ export const MEDIA_SERVICES: Record<string, string[]> = {
   'capture.recording': ['jira', 'github'],
 };
 /** A table with the recording and the screenshot side by side, as a bug report shows them. */
-export const MEDIA_TABLE = '| Repro | Highlight |\n| --- | --- |\n| {capture.recording} | {capture.screenshot} |';
+export const MEDIA_TABLE = msg('| Repro | Highlight |\n| --- | --- |\n| {capture.recording} | {capture.screenshot} |');
 
-/** The group a value is listed under. */
+/** The group a value is listed under (in English: show it with t()). */
 export function groupOf(name: string): string {
-  if (MEDIA_VARIABLES.includes(name)) return 'In the text';
-  if (name.startsWith('app.')) return 'Program';
-  if (name.startsWith('project.')) return 'Project';
-  if (name.startsWith('capture.')) return 'Capture';
-  if (name.startsWith('rule.')) return 'From files';
-  return 'Other';
+  if (MEDIA_VARIABLES.includes(name)) return msg('In the text');
+  if (name.startsWith('app.')) return msg('Program');
+  if (name.startsWith('project.')) return msg('Project');
+  if (name.startsWith('capture.')) return msg('Capture');
+  if (name.startsWith('rule.')) return msg('From files');
+  return msg('Other');
 }
 export const GROUPS = ['Program', 'Project', 'Capture', 'From files', 'In the text', 'Other'];
+/** The values most texts use, as a group of the list. */
+export const MOST_USED = msg('Most used');
 
 /** Whether a value matches what was typed in the search: its name, its label or what it is. */
 export function matches(q: string, ...said: string[]): boolean {

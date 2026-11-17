@@ -17,6 +17,7 @@
 //! decides what happens when several lines match (first, last, or all joined).
 
 use crate::model::ReadMode;
+use cargoframe_i18n::{msg, t, tf};
 use regex::{Regex, RegexBuilder};
 
 /// Most values any query may ask for. The same limit as every other format.
@@ -38,36 +39,40 @@ pub enum Query {
     Level(Vec<String>),
 }
 
-const HELP: &str =
+const HELP: &str = msg!(
     "start with line:, lines:, head:, tail:, contains:, after:, between: or level:, \
-                    for example tail: 20 or after: Version:";
+                    for example tail: 20 or after: Version:"
+);
 
 pub fn parse(query: &str) -> Result<Query, String> {
     let query = query.trim();
     let Some((key, arg)) = query.split_once(':') else {
-        return Err(HELP.into());
+        return Err(t(HELP).into());
     };
     let arg = arg.trim();
     match key.trim().to_ascii_lowercase().as_str() {
         "line" => {
-            let n: i64 = arg
-                .parse()
-                .map_err(|_| "line: needs a number, such as line: 3 or line: -1".to_string())?;
+            let n: i64 = arg.parse().map_err(|_| {
+                cargoframe_i18n::t("line: needs a number, such as line: 3 or line: -1").to_string()
+            })?;
             if n == 0 || n.unsigned_abs() > 10_000_000 {
-                return Err("line numbers start at 1; use -1 for the last line".into());
+                return Err(t("line numbers start at 1; use -1 for the last line").into());
             }
             Ok(Query::Line(n))
         }
         "lines" => {
             let (a, b) = arg
                 .split_once('-')
-                .ok_or_else(|| "lines: needs a range, such as lines: 5-9".to_string())?;
+                .ok_or_else(|| t("lines: needs a range, such as lines: 5-9").to_string())?;
             let (a, b) = (count(a, "lines:")?, count(b, "lines:")?);
             if b < a {
-                return Err("the range must go upward, such as lines: 5-9".into());
+                return Err(t("the range must go upward, such as lines: 5-9").into());
             }
             if b - a + 1 > MAX_LINES {
-                return Err(format!("a range can hold at most {MAX_LINES} lines"));
+                return Err(tf(
+                    "a range can hold at most {MAX_LINES} lines",
+                    &[("MAX_LINES", &MAX_LINES)],
+                ));
             }
             Ok(Query::Lines(a, b))
         }
@@ -78,12 +83,12 @@ pub fn parse(query: &str) -> Result<Query, String> {
         "between" => {
             // The two texts are told apart by a bar: between: build= | ;
             let (start, end) = arg.split_once('|').ok_or_else(|| {
-                "between: needs two texts separated by a bar, such as between: build= | ;"
+                t("between: needs two texts separated by a bar, such as between: build= | ;")
                     .to_string()
             })?;
             Ok(Query::Between(
-                needle(start.trim(), "between: the first text")?,
-                needle(end.trim(), "between: the second text")?,
+                needle(start.trim(), t("between: the first text"))?,
+                needle(end.trim(), t("between: the second text"))?,
             ))
         }
         "level" => {
@@ -94,17 +99,17 @@ pub fn parse(query: &str) -> Result<Query, String> {
                 .map(str::to_string)
                 .collect();
             if words.is_empty() || words.len() > 10 {
-                return Err("level: needs one to ten words, such as level: error, warn".into());
+                return Err(t("level: needs one to ten words, such as level: error, warn").into());
             }
             if words.iter().any(|w| w.contains(char::is_whitespace)) {
-                return Err("each level is one word, separated by commas".into());
+                return Err(t("each level is one word, separated by commas").into());
             }
             for w in &words {
                 needle(w, "level:")?;
             }
             Ok(Query::Level(words))
         }
-        _ => Err(HELP.into()),
+        _ => Err(t(HELP).into()),
     }
 }
 
@@ -113,23 +118,29 @@ fn count(s: &str, what: &str) -> Result<usize, String> {
         .parse::<usize>()
         .ok()
         .filter(|n| *n >= 1)
-        .ok_or_else(|| format!("{what} needs whole numbers from 1"))
+        .ok_or_else(|| tf("{what} needs whole numbers from 1", &[("what", &what)]))
 }
 
 fn limited(s: &str, what: &str) -> Result<usize, String> {
     let n = count(s, what)?;
     if n > MAX_LINES {
-        return Err(format!("{what} can ask for at most {MAX_LINES} lines"));
+        return Err(tf(
+            "{what} can ask for at most {MAX_LINES} lines",
+            &[("what", &what), ("MAX_LINES", &MAX_LINES)],
+        ));
     }
     Ok(n)
 }
 
 fn needle(s: &str, what: &str) -> Result<String, String> {
     if s.is_empty() {
-        return Err(format!("{what} needs some text to look for"));
+        return Err(tf("{what} needs some text to look for", &[("what", &what)]));
     }
     if s.chars().count() > MAX_NEEDLE {
-        return Err(format!("{what} text is limited to {MAX_NEEDLE} characters"));
+        return Err(tf(
+            "{what} text is limited to {MAX_NEEDLE} characters",
+            &[("what", &what), ("MAX_NEEDLE", &MAX_NEEDLE)],
+        ));
     }
     Ok(s.to_string())
 }

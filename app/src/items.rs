@@ -4,6 +4,7 @@
 
 use cargoframe_config::{infotype, shortcut, InfoType, Kind, Store, Trigger};
 use cargoframe_connectors::Connection;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::Layout;
 use cargoframe_rules::Rule;
 use serde::{Deserialize, Serialize};
@@ -92,7 +93,7 @@ pub fn list(store: &Store, kind: ItemKind) -> Result<ItemList, String> {
 }
 
 fn parse<T: serde::de::DeserializeOwned>(item: Value) -> Result<T, String> {
-    serde_json::from_value(item).map_err(|e| format!("This item is not valid: {e}"))
+    serde_json::from_value(item).map_err(|e| tf("This item is not valid: {e}", &[("e", &e)]))
 }
 
 /// An item that passed its checks, ready to write.
@@ -108,20 +109,20 @@ enum Checked {
 /// their shortcut rewritten to the canonical form so it looks the same everywhere.
 fn check_item(kind: ItemKind, id: &str, item: Value) -> Result<Checked, String> {
     if !cargoframe_config::valid_id(id) {
-        return Err(format!("\"{id}\" cannot be used as a file name"));
+        return Err(tf("\"{id}\" cannot be used as a file name", &[("id", &id)]));
     }
     Ok(match kind {
         ItemKind::Trigger => {
             let mut t: Trigger = parse(item)?;
             if t.name.trim().is_empty() {
-                return Err("Give the trigger a name".into());
+                return Err(cargoframe_i18n::t("Give the trigger a name").into());
             }
             if !t.shortcut.trim().is_empty() {
                 t.shortcut = shortcut::normalize(&t.shortcut).map_err(|e| e.to_string())?;
             }
             if let Some(l) = &t.layout_id {
                 if !cargoframe_config::valid_id(l) {
-                    return Err("The layout id is not valid".into());
+                    return Err(cargoframe_i18n::t("The layout id is not valid").into());
                 }
             }
             Checked::Trigger(t)
@@ -130,7 +131,7 @@ fn check_item(kind: ItemKind, id: &str, item: Value) -> Result<Checked, String> 
             let mut l: Layout = parse(item)?;
             l.id = id.to_string();
             if l.name.trim().is_empty() {
-                return Err("Give the layout a name".into());
+                return Err(t("Give the layout a name").into());
             }
             Checked::Layout(l)
         }
@@ -174,9 +175,10 @@ pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), 
                 .map_err(e)?
             {
                 if old.settings.kind() != c.settings.kind() {
-                    return Err(
-                        "A connection cannot change service. Add a new connection instead".into(),
-                    );
+                    return Err(t(
+                        "A connection cannot change service. Add a new connection instead",
+                    )
+                    .into());
                 }
             }
             store.save_item(Kind::Connections, id, &c).map_err(e)
@@ -232,7 +234,7 @@ pub fn new_id(store: &Store, kind: ItemKind, name: &str) -> Result<String, Strin
     (2u32..)
         .map(|n| format!("{base}-{n}"))
         .find(|c| !taken.contains(c))
-        .ok_or_else(|| "no free name".to_string())
+        .ok_or_else(|| t("no free name").to_string())
 }
 
 #[cfg(test)]

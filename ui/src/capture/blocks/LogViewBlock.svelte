@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   // A log viewer: one of the files the window offers, line by line. The search row shows only the
   // lines with its words in them (case aside); Copy all copies those. When the lines say when
   // they were written, the button at the start of the row turns it from a text search (the
@@ -175,7 +176,7 @@
       copied = what;
       setTimeout(() => (copied = null), 1500);
     } catch {
-      problem = 'The text could not be copied: select it and press Ctrl+C';
+      problem = t('The text could not be copied: select it and press Ctrl+C');
     }
   }
 
@@ -185,6 +186,31 @@
       large = false;
     }
   }
+
+  /** The line under the lines: how many, which, and how their times were read. */
+  const foot = $derived.by(() => {
+    const words = query.trim();
+    let main = words || (timed && span) ? t('{n} of {total} lines', { n: lines.length, total }) : tn('{n} line', '{n} lines', total);
+    if (words) main += ' ' + t('with “{words}”', { words });
+    if (timed && span) main += ', ' + t('written {from} to {to}', { from: hms(span.from), to: hms(span.to) });
+    if (lines.length > SHOWN) main += ', ' + t('the last {n} shown', { n: SHOWN });
+    const notes = [main];
+    if (loaded?.cut) notes.push(t('the end of a {size} file', { size: formatSize(loaded.size) }));
+    if (!timed && (mode === 'time' || when !== 'all') && total > 0)
+      notes.push(
+        format
+          ? t('no line has a time written as {example}, so every line shows', { example: example(format, day, utc) })
+          : t('no times CargoFrame can read in this file, so every line shows'),
+      );
+    if (formatProblem && mode === 'time') notes.push(formatProblem);
+    if (format && timed && mode === 'time')
+      notes.push(
+        ruled
+          ? t('times read as {example} (data rule “{rule}”)', { example: example(format, day, utc), rule: ruled.rule })
+          : t('times read as {example}', { example: example(format, day, utc) }),
+      );
+    return notes.join(' · ');
+  });
 </script>
 
 <svelte:window onkeydown={onKey} />
@@ -193,11 +219,11 @@
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
   <div class="backdrop" onclick={() => (large = false)}></div>
 {/if}
-<div class="log" class:large data-content role="region" aria-label={block.title || 'Log'}>
+<div class="log" class:large data-content role="region" aria-label={block.title || t('Log')}>
   <div class="bar">
     <span class="title">{block.title}</span>
     {#if offered.length > 1}
-      <select bind:value={path} aria-label="File to show">
+      <select bind:value={path} aria-label={t('File to show')}>
         {#each offered as p (p)}<option value={p}>{p}</option>{/each}
       </select>
     {:else if offered.length === 1}
@@ -208,8 +234,8 @@
       class="small square"
       onclick={() => (large = !large)}
       aria-pressed={large}
-      aria-label={large ? 'Close the large view' : 'Open large'}
-      title={large ? 'Close (Escape)' : 'Open large'}
+      aria-label={large ? t('Close the large view') : t('Open large')}
+      title={large ? t('Close (Escape)') : t('Open large')}
     >
       {#if large}
         <Icon name="close" size={15} />
@@ -226,8 +252,8 @@
       class="mode"
       class:other={otherOn}
       onclick={switchMode}
-      aria-label={mode === 'text' ? 'Search by time' : 'Search by text'}
-      title={mode === 'text' ? 'Search by time' : 'Search by text'}
+      aria-label={mode === 'text' ? t('Search by time') : t('Search by text')}
+      title={mode === 'text' ? t('Search by time') : t('Search by text')}
     >
       {#if mode === 'text'}
         <Icon name="clock" size={15} />
@@ -236,19 +262,19 @@
       {/if}
     </button>
     {#if mode === 'text'}
-      <input type="search" class="search" bind:value={query} placeholder="Show only lines with…" aria-label="Show only the lines with these words" />
+      <input type="search" class="search" bind:value={query} placeholder={t('Show only lines with…')} aria-label={t('Show only the lines with these words')} />
     {:else}
-      <select class="when" bind:value={when} onchange={() => when === 'between' && pickBetween()} aria-label="Lines written">
-        <option value="all">Written any time</option>
+      <select class="when" bind:value={when} onchange={() => when === 'between' && pickBetween()} aria-label={t('Lines written')}>
+        <option value="all">{t('Written any time')}</option>
         {#if moment}
-          <option value="moment">{recorded ? 'During the recording' : 'Around the capture'} ({hms(moment.from)} to {hms(moment.to)})</option>
+          <option value="moment">{t('{when} ({from} to {to})', { when: recorded ? t('During the recording') : t('Around the capture'), from: hms(moment.from), to: hms(moment.to) })}</option>
         {/if}
-        <option value="between">Written between…</option>
+        <option value="between">{t('Written between…')}</option>
       </select>
       {#if when === 'between'}
-        <input type="time" step="1" class="time" bind:value={fromText} aria-label="From" />
-        <span class="quiet">to</span>
-        <input type="time" step="1" class="time" bind:value={toText} aria-label="To" />
+        <input type="time" step="1" class="time" bind:value={fromText} aria-label={t('From')} />
+        <span class="quiet">{t('to')}</span>
+        <input type="time" step="1" class="time" bind:value={toText} aria-label={t('To')} />
       {/if}
       <input
         type="text"
@@ -257,31 +283,31 @@
         bind:value={formatText}
         onchange={formatChosen}
         list={`formats-${block.id}`}
-        placeholder="Time format: found by itself"
-        aria-label="How the lines write their time"
-        title={`${ruled ? `Set by the data rule “${ruled.rule}”. ` : ''}Write it the way the log does, e.g. [YYYY-MM-DD HH:mm]: ${FORMAT_HELP}. Empty: found by itself.`}
+        placeholder={t('Time format: found by itself')}
+        aria-label={t('How the lines write their time')}
+        title={(ruled ? t('Set by the data rule “{rule}”.', { rule: ruled.rule }) + ' ' : '') + t('Write it the way the log does, e.g. [YYYY-MM-DD HH:mm]: {help}. Empty: found by itself.', { help: t(FORMAT_HELP) })}
         autocomplete="off"
         spellcheck="false"
       />
       <datalist id={`formats-${block.id}`}>
         {#each offeredFormats as f (f)}<option value={f}></option>{/each}
       </datalist>
-      <label class="utc quiet" title="The times written in this file are UTC, not this computer's time (Unreal Engine's logs are, by default)">
+      <label class="utc quiet" title={t('The times written in this file are UTC, not this computer\'s time (Unreal Engine\'s logs are, by default)')}>
         <input type="checkbox" bind:checked={utc} /> UTC
       </label>
     {/if}
     <button type="button" class="small" disabled={lines.length === 0} onclick={() => copy(lines.map((l) => l.text).join('\n'), 'all')}>
-      {copied === 'all' ? 'Copied' : query.trim() || (timed && span) ? `Copy ${lines.length} lines` : 'Copy all'}
+      {copied === 'all' ? t('Copied') : query.trim() || (timed && span) ? tn('Copy {n} line', 'Copy {n} lines', lines.length) : t('Copy all')}
     </button>
   </div>
   {#if offered.length === 0}
-    <p class="quiet note">No file to show: the Files blocks of this capture list none.</p>
+    <p class="quiet note">{t('No file to show: the Files blocks of this capture list none.')}</p>
   {:else if problem}
     <p class="quiet note" role="alert">{problem}</p>
   {:else if loading && !loaded}
-    <p class="quiet note">Reading the file…</p>
+    <p class="quiet note">{t('Reading the file…')}</p>
   {:else if loaded}
-    <ol class="lines mono" aria-label="Lines">
+    <ol class="lines mono" aria-label={t('Lines')}>
       {#each shown as l (l.n)}
         <li class:on={picked === l.n}>
           <button type="button" class="line" onclick={() => (picked = picked === l.n ? null : l.n)} aria-pressed={picked === l.n}>
@@ -290,16 +316,16 @@
           </button>
         </li>
       {:else}
-        <li class="quiet note">{query.trim() ? 'No line has these words.' : timed && span ? 'No line was written then.' : 'The file is empty.'}</li>
+        <li class="quiet note">{query.trim() ? t('No line has these words.') : timed && span ? t('No line was written then.') : t('The file is empty.')}</li>
       {/each}
     </ol>
     <p class="quiet foot">
-      {query.trim() || (timed && span) ? `${lines.length} of ${total} lines` : `${total} lines`}{query.trim() ? ` with “${query.trim()}”` : ''}{timed && span ? `, written ${hms(span.from)} to ${hms(span.to)}` : ''}{lines.length > SHOWN ? `, the last ${SHOWN} shown` : ''}{loaded.cut ? ` · the end of a ${formatSize(loaded.size)} file` : ''}{!timed && (mode === 'time' || when !== 'all') && total > 0 ? (format ? ` · no line has a time written as ${example(format, day, utc)}, so every line shows` : ' · no times CargoFrame can read in this file, so every line shows') : ''}{formatProblem && mode === 'time' ? ` · ${formatProblem}` : ''}{format && timed && mode === 'time' ? ` · times read as ${example(format, day, utc)}${ruled ? ` (data rule “${ruled.rule}”)` : ''}` : ''}
+      {foot}
     </p>
     {#if pickedLine}
-      <div class="picked" role="group" aria-label={`Line ${pickedLine.n}`}>
+      <div class="picked" role="group" aria-label={t('Line {n}', { n: pickedLine.n })}>
         <pre class="mono selectable">{pickedLine.text}</pre>
-        <button type="button" class="small" onclick={() => copy(pickedLine.text, 'line')}>{copied === 'line' ? 'Copied' : 'Copy line'}</button>
+        <button type="button" class="small" onclick={() => copy(pickedLine.text, 'line')}>{copied === 'line' ? t('Copied') : t('Copy line')}</button>
       </div>
     {/if}
   {/if}

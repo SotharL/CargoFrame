@@ -5,6 +5,7 @@ use crate::state::AppState;
 use crate::video::{self, Step};
 use crate::{notify, session, tray, windowing};
 use cargoframe_config::{shortcut, Kind, Trigger, Video};
+use cargoframe_i18n::{t, tf};
 use std::collections::BTreeMap;
 use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
@@ -46,7 +47,10 @@ pub fn reload(app: &AppHandle) {
         if let Some(other) = claimed.get(&canonical) {
             errors.insert(
                 id.clone(),
-                format!("{canonical} is already used by \"{other}\""),
+                tf(
+                    "{canonical} is already used by \"{other}\"",
+                    &[("canonical", &canonical), ("other", &other)],
+                ),
             );
             continue;
         }
@@ -65,7 +69,10 @@ pub fn reload(app: &AppHandle) {
             Err(e) => {
                 errors.insert(
                     id.clone(),
-                    format!("{canonical} is not supported here: {e}"),
+                    tf(
+                        "{canonical} is not supported here: {e}",
+                        &[("canonical", &canonical), ("e", &e)],
+                    ),
                 );
                 continue;
             }
@@ -159,8 +166,8 @@ pub fn held(app: &AppHandle, trigger_id: &str) {
     ) {
         notify::problem(
             app,
-            "CargoFrame is already recording",
-            "Press the shortcut to stop that recording first, then hold it to record continuously.",
+            cargoframe_i18n::t("CargoFrame is already recording"),
+            cargoframe_i18n::t("Press the shortcut to stop that recording first, then hold it to record continuously."),
         );
         return;
     }
@@ -172,13 +179,11 @@ pub fn held(app: &AppHandle, trigger_id: &str) {
         use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
         let yes = app2
             .dialog()
-            .message(format!(
-                "CargoFrame records your screen until you hold the shortcut again. Each press of a shortcut then opens its window with the last {keep} seconds, and the recording goes on."
-            ))
-            .title("Record continuously?")
+            .message(tf("CargoFrame records your screen until you hold the shortcut again. Each press of a shortcut then opens its window with the last {keep} seconds, and the recording goes on.", &[("keep", &keep)]))
+            .title(t("Record continuously?"))
             .buttons(MessageDialogButtons::OkCancelCustom(
-                "Start recording".into(),
-                "Not now".into(),
+                t("Start recording").into(),
+                t("Not now").into(),
             ))
             .blocking_show();
         if yes {
@@ -228,20 +233,21 @@ pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
             );
             notes.extend(watch.keys_problem().map(str::to_string));
             state.set_watch(watch);
-            let mut body = format!(
-                "Press a shortcut to open its window with the last {} seconds; the recording goes on. Hold it two seconds to stop.",
-                settings.window_secs
-            );
+            let mut body = tf("Press a shortcut to open its window with the last {window_secs} seconds; the recording goes on. Hold it two seconds to stop.", &[("window_secs", &settings.window_secs)]);
             for n in &notes {
                 body.push(' ');
                 body.push_str(n);
             }
-            notify::info(app, "CargoFrame is recording continuously", &body);
+            notify::info(app, t("CargoFrame is recording continuously"), &body);
             tray::refresh_menu(app);
         }
         Err(e) => {
             tracing::error!("continuous recording could not start: {e}");
-            notify::problem(app, "CargoFrame could not start recording", &e);
+            notify::problem(
+                app,
+                cargoframe_i18n::t("CargoFrame could not start recording"),
+                &e,
+            );
         }
     }
 }
@@ -254,8 +260,8 @@ pub fn stop_continuous(app: &AppHandle) {
     tray::refresh_menu(app);
     notify::info(
         app,
-        "Continuous recording stopped",
-        "Nothing more is recorded.",
+        t("Continuous recording stopped"),
+        t("Nothing more is recorded."),
     );
 }
 
@@ -346,8 +352,11 @@ fn no_room(app: &AppHandle, state: &AppState) -> bool {
     }
     notify::problem(
         app,
-        &format!("CargoFrame has {} windows open", session::MAX_WINDOWS),
-        "Close one of them, then press the shortcut again.",
+        &tf(
+            "CargoFrame has {MAX_WINDOWS} windows open",
+            &[("MAX_WINDOWS", &session::MAX_WINDOWS)],
+        ),
+        cargoframe_i18n::t("Close one of them, then press the shortcut again."),
     );
     true
 }
@@ -397,7 +406,7 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
             notify::problem(
                 app,
                 "CargoFrame",
-                "A layout that records cannot take values from another program yet; it records as usual.",
+                t("A layout that records cannot take values from another program yet; it records as usual."),
             );
         }
         press_video(app, trigger_id);
@@ -430,7 +439,11 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
             }
             Ok(Err(e)) => {
                 tracing::error!(trigger = %trigger_id, "capture failed: {e}");
-                notify::problem(&app, "CargoFrame could not capture", &e.to_string());
+                notify::problem(
+                    &app,
+                    cargoframe_i18n::t("CargoFrame could not capture"),
+                    &e.to_string(),
+                );
             }
             Err(e) => tracing::error!("capture task failed: {e}"),
         }
@@ -465,7 +478,7 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
             let _ = state.recording.stop();
             drop(state.take_watch());
             tray::refresh_menu(app);
-            notify::problem(app, "The recording stopped by itself", &why);
+            notify::problem(app, t("The recording stopped by itself"), &why);
         }
         // a recording is not started, or finished, when there would be no window to show it in
         Step::Start | Step::Stop | Step::Snapshot if no_room(app, &state) => {}
@@ -540,25 +553,34 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
             );
             notes.extend(watch.keys_problem().map(str::to_string));
             state.set_watch(watch);
-            let what = format!(
-                "your {}{}",
-                if window { "window" } else { "screen" },
-                if s.sound { ", with sound" } else { "" }
-            );
-            let mut body = format!(
-                "Press the shortcut again to stop. Only the last {} seconds are kept.",
-                settings.window_secs
+            let what = match (window, s.sound) {
+                (true, true) => t("your window, with sound"),
+                (true, false) => t("your window"),
+                (false, true) => t("your screen, with sound"),
+                (false, false) => t("your screen"),
+            };
+            let mut body = tf(
+                "Press the shortcut again to stop. Only the last {window_secs} seconds are kept.",
+                &[("window_secs", &settings.window_secs)],
             );
             for n in &notes {
                 body.push(' ');
                 body.push_str(n);
             }
-            notify::info(app, &format!("CargoFrame is recording {what}"), &body);
+            notify::info(
+                app,
+                &tf("CargoFrame is recording {what}", &[("what", &what)]),
+                &body,
+            );
             tray::refresh_menu(app);
         }
         Err(e) => {
             tracing::error!("recording could not start: {e}");
-            notify::problem(app, "CargoFrame could not start recording", &e);
+            notify::problem(
+                app,
+                cargoframe_i18n::t("CargoFrame could not start recording"),
+                &e,
+            );
         }
     }
 }
@@ -591,7 +613,11 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
         }
         Err(e) => {
             tracing::error!(trigger = %trigger_id, "video capture failed: {e}");
-            notify::problem(app, "CargoFrame could not finish the recording", &e);
+            notify::problem(
+                app,
+                cargoframe_i18n::t("CargoFrame could not finish the recording"),
+                &e,
+            );
         }
     }
 }
@@ -624,7 +650,11 @@ fn snapshot_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
         }
         Err(e) => {
             tracing::error!(trigger = %trigger_id, "the last seconds could not be handed out: {e}");
-            notify::problem(app, "CargoFrame could not open the recording", &e);
+            notify::problem(
+                app,
+                cargoframe_i18n::t("CargoFrame could not open the recording"),
+                &e,
+            );
         }
     }
 }
@@ -717,12 +747,17 @@ fn session_from_recording(
     let clip = trial
         .clip
         .map(std::path::PathBuf::from)
-        .ok_or("The recording left no clip")?;
+        .ok_or(t("The recording left no clip"))?;
     let trigger = state
         .store
         .load_item::<Trigger>(Kind::Triggers, trigger_id)
         .map_err(|e| e.to_string())?
-        .ok_or_else(|| format!("trigger \"{trigger_id}\" does not exist"))?;
+        .ok_or_else(|| {
+            tf(
+                "trigger \"{trigger_id}\" does not exist",
+                &[("trigger_id", &trigger_id)],
+            )
+        })?;
     let mut captured = session::capture_for_video(&trigger).map_err(|e| e.to_string())?;
     // the data comes from the program in focus the longest in the part kept, not from the one
     // the shortcut was pressed in
@@ -737,12 +772,9 @@ fn session_from_recording(
                 .map(|s| s.to_string_lossy().to_string())
                 .unwrap_or_else(|| app.title.clone());
             captured.notes.push(if others.is_empty() {
-                format!("The data is from {name}, in focus during the recording.")
+                tf("The data is from {name}, in focus during the recording.", &[("name", &name)])
             } else {
-                format!(
-                    "The recording also shows {}; the data is from {name}, in focus the longest.",
-                    others.join(", ")
-                )
+                tf("The recording also shows {value}; the data is from {name}, in focus the longest.", &[("value", &others.join(", ")), ("name", &name)])
             });
             captured.app = Some(app);
         }

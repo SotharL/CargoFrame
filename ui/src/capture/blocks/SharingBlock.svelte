@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import { kindStyle, KIND_NAME, kindKey } from '../../lib/connector';
   import type { Block, ServiceKind } from '../../lib/types';
@@ -38,11 +39,13 @@
     onhover?: (on: boolean) => void;
   } = $props();
 
-  const verb = $derived(mode === 'save_locally' ? 'Saves' : 'Sends');
   /** One short line: what goes, then the chat that opens. The whole of it is in the tooltip. */
-  const summary = $derived(
-    parts.length === 0 ? '' : `${verb}: ${parts.join(' · ')}${opening ? ` → ${opening}` : ''}`,
-  );
+  const summary = $derived.by(() => {
+    if (parts.length === 0) return '';
+    const what = parts.join(' · ');
+    const line = mode === 'save_locally' ? t('Saves: {what}', { what }) : t('Sends: {what}', { what });
+    return opening ? `${line} → ${opening}` : line;
+  });
   const full = $derived([summary, note].filter(Boolean).join('\n'));
 </script>
 
@@ -52,7 +55,7 @@
     class:lit
     disabled={!enabled}
     aria-busy={sending}
-    title={[mode === 'save_locally' ? '' : block.label, `Sends to ${KIND_NAME[kindKey(kind)]}`, full].filter(Boolean).join('\n')}
+    title={[mode === 'save_locally' ? '' : block.label, t('Sends to {service}', { service: KIND_NAME[kindKey(kind)] }), full].filter(Boolean).join('\n')}
     onclick={onshare}
     onmouseenter={() => onhover?.(true)}
     onmouseleave={() => onhover?.(false)}
@@ -61,9 +64,9 @@
   >
     <span class="label">
       {#if mode === 'save_locally'}
-        {sending ? 'Saving…' : 'Save locally'}
+        {sending ? t('Saving…') : t('Save locally')}
       {:else}
-        {sending ? 'Sending…' : block.label || 'Share'}
+        {sending ? t('Sending…') : block.label || t('Share')}
       {/if}
     </span>
   </button>

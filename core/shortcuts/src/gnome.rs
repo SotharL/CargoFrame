@@ -4,6 +4,7 @@
 
 use crate::Binding;
 use cargoframe_config::shortcut;
+use cargoframe_i18n::tf;
 use std::collections::BTreeMap;
 
 pub const MEDIA_KEYS: &str = "org.gnome.settings-daemon.plugins.media-keys";
@@ -26,7 +27,7 @@ impl Gsettings {
         let out = std::process::Command::new("gsettings")
             .args(args)
             .output()
-            .map_err(|e| format!("gsettings could not start: {e}"))?;
+            .map_err(|e| tf("gsettings could not start: {e}", &[("e", &e)]))?;
         if out.status.success() {
             Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
         } else {
@@ -141,7 +142,12 @@ pub fn sync(s: &dyn Settings, wanted: &[(Binding, String)]) -> BTreeMap<String, 
     };
     let current = match s.get(MEDIA_KEYS, "custom-keybindings") {
         Ok(t) => parse_list(&t),
-        Err(e) => return fail_all(format!("GNOME's keyboard settings could not be read: {e}")),
+        Err(e) => {
+            return fail_all(tf(
+                "GNOME's keyboard settings could not be read: {e}",
+                &[("e", &e)],
+            ))
+        }
     };
     let new_paths: Vec<String> = wanted.iter().map(|(b, _)| path_for(&b.id)).collect();
 
@@ -155,7 +161,11 @@ pub fn sync(s: &dyn Settings, wanted: &[(Binding, String)]) -> BTreeMap<String, 
     for ((b, command), path) in wanted.iter().zip(&new_paths) {
         let schema = format!("{CUSTOM}:{path}");
         let set = s
-            .set(&schema, "name", &quote(&format!("CargoFrame: {}", b.name)))
+            .set(
+                &schema,
+                "name",
+                &quote(&tf("CargoFrame: {name}", &[("name", &b.name)])),
+            )
             .and_then(|_| s.set(&schema, "command", &quote(command)))
             .and_then(|_| {
                 s.set(
@@ -167,7 +177,10 @@ pub fn sync(s: &dyn Settings, wanted: &[(Binding, String)]) -> BTreeMap<String, 
         if let Err(e) = set {
             errors.insert(
                 b.id.clone(),
-                format!("GNOME did not take {}: {e}", b.shortcut),
+                tf(
+                    "GNOME did not take {shortcut}: {e}",
+                    &[("shortcut", &b.shortcut), ("e", &e)],
+                ),
             );
         }
     }
@@ -181,8 +194,9 @@ pub fn sync(s: &dyn Settings, wanted: &[(Binding, String)]) -> BTreeMap<String, 
     );
     if next != current {
         if let Err(e) = s.set(MEDIA_KEYS, "custom-keybindings", &list(&next)) {
-            return fail_all(format!(
-                "GNOME's keyboard settings could not be changed: {e}"
+            return fail_all(tf(
+                "GNOME's keyboard settings could not be changed: {e}",
+                &[("e", &e)],
             ));
         }
     }

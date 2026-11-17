@@ -1,6 +1,7 @@
 //! `connections/<id>.json`: how to reach one service. Passwords, tokens and keys are not here;
 //! they live in the credential store under `<id>/<name>`.
 
+use cargoframe_i18n::{t, tf};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -99,7 +100,7 @@ impl Kind {
             Kind::Slack => "Slack",
             Kind::Discord => "Discord",
             Kind::Teams => "Teams",
-            Kind::Custom => "Custom API",
+            Kind::Custom => cargoframe_i18n::t("Custom API"),
             Kind::X => "X",
             Kind::Bluesky => "Bluesky",
             Kind::Instagram => "Instagram",
@@ -524,29 +525,30 @@ pub struct Custom {
 /// Check a connection as it is saved. Returns what to change, in words.
 pub fn check(c: &Connection) -> Result<(), String> {
     if c.name.trim().is_empty() {
-        return Err("Give the connection a name".into());
+        return Err(t("Give the connection a name").into());
     }
     match &c.settings {
         Settings::Jira(j) => {
-            cargoframe_net::check_url(&j.site_url).map_err(|e| format!("Jira address: {e}"))?;
+            cargoframe_net::check_url(&j.site_url)
+                .map_err(|e| tf("Jira address: {e}", &[("e", &e)]))?;
             if j.site_url.trim().to_lowercase().starts_with("http://") {
-                return Err("Jira address: it must start with https://".into());
+                return Err(cargoframe_i18n::t("Jira address: it must start with https://").into());
             }
             if j.auth == JiraAuth::ApiToken && !j.email.contains('@') {
-                return Err("Write the e-mail address of the Jira account".into());
+                return Err(t("Write the e-mail address of the Jira account").into());
             }
         }
         Settings::Reddit(r) => {
             if r.client_id.trim().is_empty() {
-                return Err("Write the client id of your Reddit app".into());
+                return Err(t("Write the client id of your Reddit app").into());
             }
             if r.redirect_port < 1024 {
-                return Err("Use a port of 1024 or more for the redirect address".into());
+                return Err(t("Use a port of 1024 or more for the redirect address").into());
             }
         }
         Settings::Google(g) => {
             if g.client_id.trim().is_empty() {
-                return Err("Write the client id of your Google OAuth client".into());
+                return Err(t("Write the client id of your Google OAuth client").into());
             }
         }
         Settings::Teams(t) => check_teams(t)?,
@@ -555,28 +557,30 @@ pub fn check(c: &Connection) -> Result<(), String> {
         Settings::Custom(cu) => check_custom(cu)?,
         Settings::X(x) => {
             if x.client_id.trim().is_empty() {
-                return Err("Write the Client ID of your X app".into());
+                return Err(t("Write the Client ID of your X app").into());
             }
             if x.redirect_port < 1024 {
-                return Err("Use a port of 1024 or more for the callback address".into());
+                return Err(t("Use a port of 1024 or more for the callback address").into());
             }
         }
         Settings::Bluesky(b) => {
             if !b.handle.contains('.') {
-                return Err("Write your Bluesky handle, like jane.bsky.social".into());
+                return Err(t("Write your Bluesky handle, like jane.bsky.social").into());
             }
             cargoframe_net::check_url(&b.service)
-                .map_err(|e| format!("Bluesky server address: {e}"))?;
+                .map_err(|e| tf("Bluesky server address: {e}", &[("e", &e)]))?;
         }
         Settings::Instagram(i) => check_instagram(i)?,
         Settings::Github(g) => {
             if !repository_ok(&g.repository) {
-                return Err("Write the repository as owner/name, like octo-org/app".into());
+                return Err(t("Write the repository as owner/name, like octo-org/app").into());
             }
             cargoframe_net::check_url(&g.api_url)
-                .map_err(|e| format!("GitHub API address: {e}"))?;
+                .map_err(|e| tf("GitHub API address: {e}", &[("e", &e)]))?;
             if g.api_url.trim().to_lowercase().starts_with("http://") {
-                return Err("GitHub API address: it must start with https://".into());
+                return Err(
+                    cargoframe_i18n::t("GitHub API address: it must start with https://").into(),
+                );
             }
             if g.files == GithubFiles::Branch {
                 let b = g.branch.trim();
@@ -586,9 +590,10 @@ pub fn check(c: &Connection) -> Result<(), String> {
                     || b.chars()
                         .any(|c| c.is_whitespace() || "~^:?*[\\".contains(c))
                 {
-                    return Err(
-                        "Write a branch name for the pictures, like cargoframe-attachments".into(),
-                    );
+                    return Err(t(
+                        "Write a branch name for the pictures, like cargoframe-attachments",
+                    )
+                    .into());
                 }
             }
         }
@@ -598,20 +603,21 @@ pub fn check(c: &Connection) -> Result<(), String> {
 
 fn check_instagram(i: &Instagram) -> Result<(), String> {
     for (what, url) in [
-        ("upload address", &i.upload_url),
-        ("public address", &i.public_url),
+        (t("upload address"), &i.upload_url),
+        (t("public address"), &i.public_url),
     ] {
         if !url.contains("{name}") {
-            return Err(format!(
-                "The {what} must contain {{name}}, where the file name goes"
+            return Err(tf(
+                "The {what} must contain {name}, where the file name goes",
+                &[("what", &t(what))],
             ));
         }
         cargoframe_net::check_url(&url.replace("{name}", "x.jpg"))
-            .map_err(|e| format!("The {what}: {e}"))?;
+            .map_err(|e| tf("The {what}: {e}", &[("what", &t(what)), ("e", &e)]))?;
     }
     let h = i.host_header.trim();
     if h.chars().any(|c| c.is_control() || c == ':' || c == ' ') {
-        return Err("The key header is a single word, like AccessKey".into());
+        return Err(t("The key header is a single word, like AccessKey").into());
     }
     Ok(())
 }
@@ -628,29 +634,36 @@ pub fn is_guid(s: &str) -> bool {
 
 fn check_discord(d: &Discord) -> Result<(), String> {
     if d.hooks.len() > MAX_HOOKS {
-        return Err(format!("A connection holds {MAX_HOOKS} webhooks at most"));
+        return Err(tf(
+            "A connection holds {MAX_HOOKS} webhooks at most",
+            &[("MAX_HOOKS", &MAX_HOOKS)],
+        ));
     }
     let mut seen = std::collections::BTreeSet::new();
     for h in &d.hooks {
         if hook_secret(h.slot).is_none() || !seen.insert(h.slot) {
-            return Err("Two channels share one webhook slot: remove one and add it again".into());
+            return Err(
+                t("Two channels share one webhook slot: remove one and add it again").into(),
+            );
         }
         if d.mode == DiscordMode::Webhook && h.name.trim().is_empty() {
-            return Err("Give each channel a name, so you can tell them apart in the list".into());
+            return Err(
+                t("Give each channel a name, so you can tell them apart in the list").into(),
+            );
         }
     }
     if d.shown_as.chars().count() > 80 {
-        return Err("The name shown on posts is 80 characters at most".into());
+        return Err(t("The name shown on posts is 80 characters at most").into());
     }
     Ok(())
 }
 
 fn check_teams(t: &Teams) -> Result<(), String> {
     if !is_guid(t.client_id.trim()) {
-        return Err(
-            "Write the Application (client) ID of your Microsoft app: it looks like 3f2a1b4c-…"
-                .into(),
-        );
+        return Err(cargoframe_i18n::t(
+            "Write the Application (client) ID of your Microsoft app: it looks like 3f2a1b4c-…",
+        )
+        .into());
     }
     let tenant = t.tenant.trim();
     let word_ok = tenant
@@ -662,51 +675,54 @@ fn check_teams(t: &Teams) -> Result<(), String> {
         || tenant.eq_ignore_ascii_case("consumers")
     {
         return Err(
-            "Write \"organizations\", or the Directory (tenant) ID or domain of your organisation. Personal Microsoft accounts cannot use Teams this way".into(),
+            cargoframe_i18n::t("Write \"organizations\", or the Directory (tenant) ID or domain of your organisation. Personal Microsoft accounts cannot use Teams this way").into(),
         );
     }
     Ok(())
 }
 
 fn check_custom(cu: &Custom) -> Result<(), String> {
-    cargoframe_net::check_url(&cu.base_url).map_err(|e| format!("Base address: {e}"))?;
+    cargoframe_net::check_url(&cu.base_url).map_err(|e| tf("Base address: {e}", &[("e", &e)]))?;
     let bad_name =
         |n: &str| n.trim().is_empty() || n.chars().any(|c| c.is_control() || c == ':' || c == ' ');
     match &cu.auth {
         CustomAuth::Header { name } if bad_name(name) => {
-            return Err("Write the header name that carries the key".into())
+            return Err(t("Write the header name that carries the key").into())
         }
         CustomAuth::Query { param } if param.trim().is_empty() => {
-            return Err("Write the query parameter that carries the key".into())
+            return Err(t("Write the query parameter that carries the key").into())
         }
         CustomAuth::Basic { user } if user.trim().is_empty() => {
-            return Err("Write the user name for basic sign-in".into())
+            return Err(t("Write the user name for basic sign-in").into())
         }
         _ => {}
     }
     for h in &cu.send.headers {
         if bad_name(&h.name) {
-            return Err(format!("\"{}\" cannot be used as a header name", h.name));
+            return Err(tf(
+                "\"{name}\" cannot be used as a header name",
+                &[("name", &h.name)],
+            ));
         }
         if h.name.eq_ignore_ascii_case("authorization") || h.name.eq_ignore_ascii_case("host") {
-            return Err(format!(
-                "Set \"{}\" with the sign-in option, not as a custom header",
-                h.name
+            return Err(tf(
+                "Set \"{name}\" with the sign-in option, not as a custom header",
+                &[("name", &h.name)],
             ));
         }
     }
     let mut seen = std::collections::BTreeSet::new();
     for l in &cu.lists {
         if l.id.trim().is_empty() {
-            return Err("Every list needs a name".into());
+            return Err(t("Every list needs a name").into());
         }
         if !seen.insert(l.id.as_str()) {
-            return Err(format!("The list \"{}\" appears twice", l.id));
+            return Err(tf("The list \"{id}\" appears twice", &[("id", &l.id)]));
         }
         if l.path.trim().is_empty() || l.value_path.trim().is_empty() {
-            return Err(format!(
-                "The list \"{}\" needs a path and where to find each value",
-                l.id
+            return Err(tf(
+                "The list \"{id}\" needs a path and where to find each value",
+                &[("id", &l.id)],
             ));
         }
     }

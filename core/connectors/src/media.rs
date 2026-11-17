@@ -6,6 +6,7 @@
 //! alone, gets a JPEG.
 
 use crate::payload::Attachment;
+use cargoframe_i18n::{t, tf};
 
 /// The smallest picture worth sending: below this, the picture is refused rather than shrunk.
 const MIN_SIDE: u32 = 240;
@@ -23,14 +24,14 @@ fn decode_png(data: &[u8]) -> Result<Pixels, String> {
     decoder.set_transformations(png::Transformations::normalize_to_color8());
     let mut reader = decoder
         .read_info()
-        .map_err(|e| format!("the picture could not be read ({e})"))?;
+        .map_err(|e| tf("the picture could not be read ({e})", &[("e", &e)]))?;
     let size = reader
         .output_buffer_size()
-        .ok_or("the picture is too large to read")?;
+        .ok_or(t("the picture is too large to read"))?;
     let mut buf = vec![0; size];
     let info = reader
         .next_frame(&mut buf)
-        .map_err(|e| format!("the picture could not be read ({e})"))?;
+        .map_err(|e| tf("the picture could not be read ({e})", &[("e", &e)]))?;
     buf.truncate(info.buffer_size());
     let rgba = match info.color_type {
         png::ColorType::Rgba => buf,
@@ -43,7 +44,7 @@ fn decode_png(data: &[u8]) -> Result<Pixels, String> {
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Grayscale => buf.iter().flat_map(|&g| [g, g, g, 255]).collect(),
-        png::ColorType::Indexed => return Err("the picture's colours could not be read".into()),
+        png::ColorType::Indexed => return Err(t("the picture's colours could not be read").into()),
     };
     Ok(Pixels {
         width: info.width,
@@ -61,10 +62,10 @@ fn encode_png(p: &Pixels) -> Result<Vec<u8>, String> {
         encoder.set_compression(png::Compression::High);
         let mut writer = encoder
             .write_header()
-            .map_err(|e| format!("the picture could not be written ({e})"))?;
+            .map_err(|e| tf("the picture could not be written ({e})", &[("e", &e)]))?;
         writer
             .write_image_data(&p.rgba)
-            .map_err(|e| format!("the picture could not be written ({e})"))?;
+            .map_err(|e| tf("the picture could not be written ({e})", &[("e", &e)]))?;
     }
     Ok(out)
 }
@@ -119,10 +120,13 @@ pub fn fit(picture: &Attachment, max_bytes: usize, service: &str) -> Result<Fitt
         });
     }
     if !is_png {
-        return Err(format!(
-            "The picture is {} and {service} takes at most {}",
-            size_text(picture.data.len()),
-            size_text(max_bytes)
+        return Err(tf(
+            "The picture is {size} and {service} takes at most {max}",
+            &[
+                ("size", &size_text(picture.data.len())),
+                ("service", &service),
+                ("max", &size_text(max_bytes)),
+            ],
         ));
     }
     if picture.data.len() <= max_bytes {
@@ -138,9 +142,9 @@ pub fn fit(picture: &Attachment, max_bytes: usize, service: &str) -> Result<Fitt
     let mut pixels = decode_png(&picture.data)?;
     loop {
         if pixels.width / 2 < MIN_SIDE && pixels.height / 2 < MIN_SIDE {
-            return Err(format!(
-                "The picture cannot be made small enough for {service} ({} at most)",
-                size_text(max_bytes)
+            return Err(tf(
+                "The picture cannot be made small enough for {service} ({max} at most)",
+                &[("service", &service), ("max", &size_text(max_bytes))],
             ));
         }
         pixels = half(&pixels);
@@ -188,11 +192,13 @@ pub fn to_jpeg(picture: &Attachment, max_bytes: usize) -> Result<Fitted, String>
             })
             .collect();
         let mut out = Vec::new();
-        let width = u16::try_from(pixels.width).map_err(|_| "the picture is too wide")?;
-        let height = u16::try_from(pixels.height).map_err(|_| "the picture is too tall")?;
+        let width = u16::try_from(pixels.width)
+            .map_err(|_| cargoframe_i18n::t("the picture is too wide"))?;
+        let height = u16::try_from(pixels.height)
+            .map_err(|_| cargoframe_i18n::t("the picture is too tall"))?;
         Encoder::new(&mut out, 90)
             .encode(&rgb, width, height, ColorType::Rgb)
-            .map_err(|e| format!("the picture could not be made a JPEG ({e})"))?;
+            .map_err(|e| tf("the picture could not be made a JPEG ({e})", &[("e", &e)]))?;
         if out.len() <= max_bytes {
             let stem = picture
                 .name
@@ -210,9 +216,9 @@ pub fn to_jpeg(picture: &Attachment, max_bytes: usize) -> Result<Fitted, String>
             });
         }
         if pixels.width / 2 < MIN_SIDE && pixels.height / 2 < MIN_SIDE {
-            return Err(format!(
-                "The picture cannot be made small enough ({} at most)",
-                size_text(max_bytes)
+            return Err(tf(
+                "The picture cannot be made small enough ({max} at most)",
+                &[("max", &size_text(max_bytes))],
             ));
         }
         pixels = half(&pixels);

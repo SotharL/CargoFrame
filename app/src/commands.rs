@@ -17,6 +17,7 @@ use crate::video;
 use crate::windowing;
 use cargoframe_config::{General, Safe, Video};
 use cargoframe_connectors::{Describe, OptionItem};
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{templates, validate, ConnectionKind, FilesBlock, Layout};
 use cargoframe_rules::Rule;
 use cargoframe_safe::ladder::PickedFolder;
@@ -71,6 +72,12 @@ pub fn get_general(state: State<'_, AppState>) -> Result<General, String> {
         .map_err(|e| e.to_string())
 }
 
+/// The language the windows speak (Settings, General, or the computer's).
+#[tauri::command]
+pub fn get_language() -> crate::language::LanguageInfo {
+    crate::language::info()
+}
+
 #[tauri::command]
 pub fn set_general(
     app: AppHandle,
@@ -78,11 +85,18 @@ pub fn set_general(
     general: General,
 ) -> Result<(), String> {
     let accent = cargoframe_config::normalize_accent(&general.accent)
-        .ok_or("The accent colour must look like #4f8ee0")?;
+        .ok_or(t("The accent colour must look like #4f8ee0"))?;
     let general = General { accent, ..general };
     state.store.save(&general).map_err(|e| e.to_string())?;
     // the arrow of the tray icon follows the accent
     crate::tray::refresh_icon(&app);
+    // the tray menu speaks the language chosen
+    let before = cargoframe_i18n::language();
+    if crate::language::apply(&general.language) != before {
+        crate::tray::refresh_menu(&app);
+        // a window kept ready was drawn in the old language: let the next capture build a new one
+        crate::windowing::release_hidden_captures(&app);
+    }
     Ok(())
 }
 
@@ -109,13 +123,13 @@ pub fn get_data_report(state: State<'_, AppState>) -> DataReport {
 /// Clearing data in use would break a window that is open or a recording that is running.
 fn busy(state: &AppState) -> Result<(), String> {
     if state.sessions.count() > 0 {
-        return Err("Close the capture windows first: they are using some of it.".into());
+        return Err(t("Close the capture windows first: they are using some of it.").into());
     }
     if !matches!(
         state.recording.view(),
         crate::video::RecordingView::Idle | crate::video::RecordingView::Failed { .. }
     ) {
-        return Err("A recording is running: stop it first.".into());
+        return Err(t("A recording is running: stop it first.").into());
     }
     Ok(())
 }
@@ -196,7 +210,7 @@ pub fn get_session(
         .sessions
         .for_label(window.label())
         .map(|s| s.view.clone())
-        .ok_or_else(|| "There is no capture to show".to_string())
+        .ok_or_else(|| t("There is no capture to show").to_string())
 }
 
 /// The screenshot as PNG bytes (sent raw, not as JSON numbers).
@@ -209,7 +223,7 @@ pub fn get_session_image(
         .sessions
         .for_label(window.label())
         .map(|s| Response::new(s.png.clone()))
-        .ok_or_else(|| "There is no capture to show".to_string())
+        .ok_or_else(|| t("There is no capture to show").to_string())
 }
 
 /// The recording of a video capture, as MP4 bytes (sent raw), for the window to play.
@@ -221,11 +235,11 @@ pub fn get_session_clip(
     let session = state
         .sessions
         .for_label(window.label())
-        .ok_or_else(|| "There is no capture to show".to_string())?;
+        .ok_or_else(|| t("There is no capture to show").to_string())?;
     let clip = session
         .clip
         .as_ref()
-        .ok_or_else(|| "This capture has no recording".to_string())?;
+        .ok_or_else(|| t("This capture has no recording").to_string())?;
     video::read_clip(&clip.path, video::PREVIEW_LIMIT).map(Response::new)
 }
 
@@ -375,8 +389,8 @@ pub fn list_layout_templates() -> Vec<TemplateView> {
         })
         .map(|t| TemplateView {
             key: t.key,
-            name: t.name,
-            description: t.description,
+            name: cargoframe_i18n::t(t.name),
+            description: cargoframe_i18n::t(t.description),
             service: t.service.map(ConnectionKind::key),
         })
         .collect()
@@ -390,7 +404,7 @@ pub fn layout_from_template(
     key: String,
     connection_id: Option<String>,
 ) -> Result<Layout, String> {
-    let info = templates::info(&key).ok_or("That template does not exist")?;
+    let info = templates::info(&key).ok_or(t("That template does not exist"))?;
     let connection_id = connection_id.filter(|c| !c.trim().is_empty());
     if let Some(c) = &connection_id {
         let known = cargoframe_config::valid_id(c)
@@ -400,17 +414,17 @@ pub fn layout_from_template(
                 .map_err(|e| e.to_string())?
                 .contains(c);
         if !known {
-            return Err("That connection does not exist".into());
+            return Err(t("That connection does not exist").into());
         }
     }
     if info.service.is_some() && connection_id.is_none() {
-        return Err(format!(
-            "\u{201c}{}\u{201d} needs a connection to be built for",
-            info.name
+        return Err(tf(
+            "\u{201c}{name}\u{201d} needs a connection to be built for",
+            &[("name", &info.name)],
         ));
     }
     templates::build(&key, connection_id.as_deref())
-        .ok_or_else(|| "That template could not be built".into())
+        .ok_or_else(|| t("That template could not be built").into())
 }
 
 // ----- export and import of settings -----
@@ -433,18 +447,19 @@ pub async fn export_settings(
         let Some(path) = app
             .dialog()
             .file()
-            .set_title("Export settings")
+            .set_title(t("Export settings"))
             .set_file_name(format!(
                 "cargoframe-settings-{:04}-{:02}-{:02}.json",
                 m.year, m.month, m.day
             ))
-            .add_filter("CargoFrame settings", &["json"])
+            .add_filter(t("CargoFrame settings"), &["json"])
             .blocking_save_file()
             .and_then(|p| p.into_path().ok())
         else {
             return Ok(None);
         };
-        std::fs::write(&path, text).map_err(|e| format!("The file could not be written: {e}"))?;
+        std::fs::write(&path, text)
+            .map_err(|e| tf("The file could not be written: {e}", &[("e", &e)]))?;
         Ok(Some(path.display().to_string()))
     })
     .await?
@@ -466,21 +481,21 @@ pub async fn open_import(app: AppHandle) -> Result<Option<ImportPreview>, String
         let Some(path) = app
             .dialog()
             .file()
-            .set_title("Import settings")
-            .add_filter("CargoFrame settings", &["json"])
+            .set_title(t("Import settings"))
+            .add_filter(t("CargoFrame settings"), &["json"])
             .blocking_pick_file()
             .and_then(|p| p.into_path().ok())
         else {
             return Ok(None);
         };
         let size = std::fs::metadata(&path)
-            .map_err(|e| format!("The file could not be read: {e}"))?
+            .map_err(|e| tf("The file could not be read: {e}", &[("e", &e)]))?
             .len();
         if size > transfer::MAX_FILE_BYTES {
-            return Err("This file is too large to be a CargoFrame settings file".to_string());
+            return Err(t("This file is too large to be a CargoFrame settings file").to_string());
         }
         let text = std::fs::read_to_string(&path)
-            .map_err(|_| "The file could not be read as text".to_string())?;
+            .map_err(|_| t("The file could not be read as text").to_string())?;
         let entries = transfer::parse(&text)?;
         let items = transfer::preview(&state.store, &entries);
         state.set_pending_import(Some(entries));
@@ -504,7 +519,7 @@ pub async fn apply_import(
         let state = app.state::<AppState>();
         let entries = state
             .take_pending_import()
-            .ok_or("Open a settings file first")?;
+            .ok_or(t("Open a settings file first"))?;
         Ok(transfer::apply(&state.store, &entries, &picks))
     })
     .await?
@@ -607,7 +622,7 @@ pub async fn read_sample_file(
     state: State<'_, AppState>,
     path: String,
 ) -> Result<SampleText, String> {
-    let folder = last_folder(&state).ok_or("There is no capture to read files from yet")?;
+    let folder = last_folder(&state).ok_or(t("There is no capture to read files from yet"))?;
     blocking(move || tools::read_sample(&folder, &path)).await?
 }
 
@@ -638,10 +653,10 @@ pub fn get_safe(state: State<'_, AppState>) -> Result<Safe, String> {
 #[tauri::command]
 pub fn set_safe(state: State<'_, AppState>, mut safe: Safe) -> Result<(), String> {
     if !(5..=300).contains(&safe.timeout_secs) {
-        return Err("The timeout must be between 5 and 300 seconds".into());
+        return Err(t("The timeout must be between 5 and 300 seconds").into());
     }
     if safe.max_retries > 10 {
-        return Err("At most 10 retries".into());
+        return Err(t("At most 10 retries").into());
     }
     safe.folder = safe
         .folder
@@ -732,7 +747,7 @@ pub async fn get_setup(app: AppHandle) -> Result<crate::setup::Report, String> {
 pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, String> {
     blocking(move || {
         if video::Os::current() != video::Os::Windows {
-            return Err("CargoFrame installs apps itself on Windows only. Run the command shown instead.".to_string());
+            return Err(t("CargoFrame installs apps itself on Windows only. Run the command shown instead.").to_string());
         }
         let report = current_setup(&app);
         if !matches!(report.install, crate::setup::Install::Run { .. }) {
@@ -762,8 +777,9 @@ pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, Str
                 if let Err(why) = video::find(&video, video::program_beside_app().as_deref()) {
                     problems.push(match ran {
                         Err(said) => said,
-                        Ok(()) => format!(
-                            "winget finished, but ffmpeg was not found afterwards. {why} Sign out and in again, or choose its folder under Video."
+                        Ok(()) => tf(
+                            "winget finished, but ffmpeg was not found afterwards. {why} Sign out and in again, or choose its folder under Recording.",
+                            &[("why", &why)],
                         ),
                     });
                 }
@@ -773,7 +789,7 @@ pub async fn install_missing(app: AppHandle) -> Result<crate::setup::Report, Str
                 if crate::setup::claude_app_installed() != Some(true) {
                     problems.push(match ran {
                         Err(said) => said,
-                        Ok(()) => "winget finished, but the Claude app was not found afterwards. Open it once from the Start menu, then check again.".to_string(),
+                        Ok(()) => t("winget finished, but the Claude app was not found afterwards. Open it once from the Start menu, then check again.").to_string(),
                     });
                 }
             }
@@ -851,7 +867,7 @@ fn video_test_file(state: &AppState) -> std::path::PathBuf {
 pub fn open_video_test(app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
     let clip = video_test_file(&state);
     if !clip.is_file() {
-        return Err("There is no test clip yet: run a test recording first".into());
+        return Err(t("There is no test clip yet: run a test recording first").into());
     }
     app.opener()
         .open_path(clip.display().to_string(), None::<&str>)
@@ -877,7 +893,7 @@ pub async fn pick_folder(app: AppHandle, title: Option<String>) -> Option<String
 async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> Result<T, String> {
     tauri::async_runtime::spawn_blocking(f)
         .await
-        .map_err(|e| format!("The task stopped unexpectedly: {e}"))
+        .map_err(|e| tf("The task stopped unexpectedly: {e}", &[("e", &e)]))
 }
 
 /// Every connection with its state, what it can fill, and whether its secrets are stored.
@@ -1027,7 +1043,7 @@ pub async fn fetch_options(
     };
     let Some((connection_id, options_id)) = asked else {
         return Err(OptionsError {
-            message: "That dropdown has no list to load".into(),
+            message: t("That dropdown has no list to load").into(),
             reconnect: false,
         });
     };
@@ -1047,7 +1063,7 @@ pub async fn add_files(
         blocking(move || {
             app.dialog()
                 .file()
-                .set_title("Add files to send")
+                .set_title(t("Add files to send"))
                 .blocking_pick_files()
                 .unwrap_or_default()
                 .into_iter()
@@ -1064,7 +1080,7 @@ pub async fn add_files(
         let session = state
             .sessions
             .by_id(session_id)
-            .ok_or("This capture is no longer open")?;
+            .ok_or(t("This capture is no longer open"))?;
         let mut added = Vec::new();
         let mut problems = Vec::new();
         for path in picked {
@@ -1093,7 +1109,7 @@ pub async fn read_offered_file(
         let session = state
             .sessions
             .by_id(session_id)
-            .ok_or("This capture is no longer open")?;
+            .ok_or(t("This capture is no longer open"))?;
         session.read_offered(&path)
     })
     .await?
@@ -1105,20 +1121,20 @@ pub async fn read_offered_file(
 #[tauri::command]
 pub fn set_clip_mark(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
     let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected a picture".into());
+        return Err(t("Expected a picture").into());
     };
     let id: u64 = request
         .headers()
         .get("x-session-id")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse().ok())
-        .ok_or("The capture is not named")?;
+        .ok_or(t("The capture is not named"))?;
     let session = state
         .sessions
         .by_id(id)
-        .ok_or("This capture is no longer open")?;
+        .ok_or(t("This capture is no longer open"))?;
     if session.clip.is_none() {
-        return Err("This capture has no recording".into());
+        return Err(t("This capture has no recording").into());
     }
     if bytes.is_empty() {
         session.set_clip_mark(None);
@@ -1142,7 +1158,7 @@ pub const CLIP_LAYERS: [&str; 2] = ["keys", "clock"];
 #[tauri::command]
 pub fn set_clip_layer(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
     let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected pictures".into());
+        return Err(t("Expected pictures").into());
     };
     let header = |name: &str| {
         request
@@ -1153,26 +1169,26 @@ pub fn set_clip_layer(state: State<'_, AppState>, request: Request<'_>) -> Resul
     };
     let id: u64 = header("x-session-id")
         .and_then(|v| v.parse().ok())
-        .ok_or("The capture is not named")?;
+        .ok_or(t("The capture is not named"))?;
     let name = header("x-layer")
         .filter(|n| CLIP_LAYERS.contains(&n.as_str()))
-        .ok_or("Not a text that goes over a recording")?;
+        .ok_or(t("Not a text that goes over a recording"))?;
     let session = state
         .sessions
         .by_id(id)
-        .ok_or("This capture is no longer open")?;
+        .ok_or(t("This capture is no longer open"))?;
     let duration = session
         .view
         .video
         .as_ref()
         .map(|v| v.duration_ms)
-        .ok_or("This capture has no recording")?;
+        .ok_or(t("This capture has no recording"))?;
     if bytes.is_empty() {
         session.set_clip_layer(&name, None);
         return Ok(());
     }
     if bytes.len() > MAX_LAYER_BYTES {
-        return Err("The pictures of the text are too large".into());
+        return Err(t("The pictures of the text are too large").into());
     }
     let layer = read_layer(bytes, duration)?;
     session.set_clip_layer(&name, Some(layer));
@@ -1186,23 +1202,23 @@ pub fn read_layer(bytes: &[u8], duration_ms: u64) -> Result<crate::session::Clip
     let times: Vec<(u64, u64)> = pieces
         .next()
         .and_then(|j| serde_json::from_slice(&j).ok())
-        .ok_or("The times of the text are missing")?;
+        .ok_or(t("The times of the text are missing"))?;
     let blank = pieces
         .next()
-        .ok_or("The pictures of the text are missing")?;
+        .ok_or(t("The pictures of the text are missing"))?;
     let pictures: Vec<Vec<u8>> = pieces.collect();
     if pictures.len() != times.len() {
-        return Err("The pictures of the text do not match its times".into());
+        return Err(t("The pictures of the text do not match its times").into());
     }
     if times.len() > cargoframe_keys::MAX_CAPTIONS {
-        return Err("The text has too many lines".into());
+        return Err(t("The text has too many lines").into());
     }
     let ordered = times
         .iter()
         .all(|(a, b)| a < b && *b <= duration_ms + 1_000)
         && times.windows(2).all(|w| w[0].1 <= w[1].0);
     if !ordered {
-        return Err("The times of the text are out of order".into());
+        return Err(t("The times of the text are out of order").into());
     }
     check_png(&blank)?;
     for p in &pictures {
@@ -1220,10 +1236,10 @@ pub fn split_frames(mut bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
     while !bytes.is_empty() {
         let (len, rest) = bytes
             .split_first_chunk::<4>()
-            .ok_or("The pictures of the keys are cut short")?;
+            .ok_or(t("The pictures of the keys are cut short"))?;
         let len = u32::from_be_bytes(*len) as usize;
         if rest.len() < len {
-            return Err("The pictures of the keys are cut short".into());
+            return Err(t("The pictures of the keys are cut short").into());
         }
         out.push(rest[..len].to_vec());
         bytes = &rest[len..];
@@ -1236,18 +1252,18 @@ pub fn split_frames(mut bytes: &[u8]) -> Result<Vec<Vec<u8>>, String> {
 #[tauri::command]
 pub fn set_edited_image(state: State<'_, AppState>, request: Request<'_>) -> Result<(), String> {
     let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected a picture".into());
+        return Err(t("Expected a picture").into());
     };
     let id: u64 = request
         .headers()
         .get("x-session-id")
         .and_then(|v| v.to_str().ok())
         .and_then(|v| v.parse().ok())
-        .ok_or("The capture is not named")?;
+        .ok_or(t("The capture is not named"))?;
     let session = state
         .sessions
         .by_id(id)
-        .ok_or("This capture is no longer open")?;
+        .ok_or(t("This capture is no longer open"))?;
     if bytes.is_empty() {
         session.set_edited(None);
         return Ok(());
@@ -1265,10 +1281,10 @@ const MAX_READ_PNG: usize = 40 * 1024 * 1024;
 #[tauri::command]
 pub async fn read_text(request: Request<'_>) -> Result<cargoframe_ocr::Reading, String> {
     let InvokeBody::Raw(bytes) = request.body() else {
-        return Err("Expected a picture".into());
+        return Err(t("Expected a picture").into());
     };
     if bytes.len() > MAX_READ_PNG {
-        return Err("The part to read is too large".into());
+        return Err(t("The part to read is too large").into());
     }
     let attempt: u32 = request
         .headers()
@@ -1286,9 +1302,9 @@ pub async fn read_text(request: Request<'_>) -> Result<cargoframe_ocr::Reading, 
 /// Ask where to keep a copy when a share could not be delivered.
 fn pick_fallback_folder(app: &AppHandle, attempt: u32) -> Option<PickedFolder> {
     let title = if attempt <= 1 {
-        "CargoFrame could not send. Choose a folder to keep a copy in"
+        t("CargoFrame could not send. Choose a folder to keep a copy in")
     } else {
-        "That folder did not work. Choose another folder for the copy"
+        t("That folder did not work. Choose another folder for the copy")
     };
     let dir = app
         .dialog()
@@ -1301,7 +1317,7 @@ fn pick_fallback_folder(app: &AppHandle, attempt: u32) -> Option<PickedFolder> {
         .to_string();
     let remember = app
         .dialog()
-        .message("Use this folder for future copies too?")
+        .message(t("Use this folder for future copies too?"))
         .title("CargoFrame")
         .kind(MessageDialogKind::Info)
         .buttons(MessageDialogButtons::YesNo)
@@ -1343,12 +1359,15 @@ pub fn get_memory_status(
     // Settings, the first CargoFrame window, and any further CargoFrame window that exists
     let mut labels = vec![
         (windowing::SETTINGS.to_string(), "Settings".to_string()),
-        (windowing::CAPTURE.to_string(), "Capture window".to_string()),
+        (
+            windowing::CAPTURE.to_string(),
+            t("Capture window").to_string(),
+        ),
     ];
     for n in 2..=session::MAX_WINDOWS {
         let label = session::window_label(n);
         if app.get_webview_window(&label).is_some() {
-            labels.push((label, format!("Capture window {n}")));
+            labels.push((label, tf("Capture window {n}", &[("n", &n)])));
         }
     }
     let windows = labels
@@ -1376,7 +1395,7 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
         let state = app.state::<AppState>();
         if !state.try_begin_share(request.session_id) {
             return Ok(ShareResult::Blocked {
-                reasons: vec!["A share is already being sent".into()],
+                reasons: vec![t("A share is already being sent").into()],
             });
         }
     }
@@ -1388,7 +1407,7 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
         let state = app.state::<AppState>();
         let Some(session) = state.sessions.by_id(session_id) else {
             return ShareResult::Blocked {
-                reasons: vec!["This capture is no longer open".into()],
+                reasons: vec![cargoframe_i18n::t("This capture is no longer open").into()],
             };
         };
         let cancelled = || state.share_cancelled(session_id);
@@ -1422,18 +1441,24 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
     // The window was closed while sending: nobody is watching, so say how it ended.
     if cancelled_while_sending {
         match &result {
-            ShareResult::Sent { summary, .. } => crate::notify::info(&app, "Shared", summary),
+            ShareResult::Sent { summary, .. } => {
+                crate::notify::info(&app, cargoframe_i18n::t("Shared"), summary)
+            }
             ShareResult::SavedLocally { path, .. } => {
-                crate::notify::info(&app, "Saved locally", &format!("A zip is in {path}"));
+                crate::notify::info(
+                    &app,
+                    t("Saved locally"),
+                    &tf("A zip is in {path}", &[("path", &path)]),
+                );
             }
             ShareResult::Failed { label, saved, .. } => {
                 let kept = saved
                     .as_ref()
-                    .map(|s| format!(" A copy is in {}", s.path))
+                    .map(|s| tf(" A copy is in {path}", &[("path", &s.path)]))
                     .unwrap_or_default();
                 crate::notify::problem(
                     &app,
-                    "CargoFrame could not share",
+                    t("CargoFrame could not share"),
                     &format!("{label}.{kept}"),
                 );
             }
@@ -1447,7 +1472,7 @@ pub async fn share(app: AppHandle, request: share::Request) -> Result<ShareResul
 #[tauri::command]
 pub fn open_link(app: AppHandle, url: String) -> Result<(), String> {
     if !openable(&url) {
-        return Err("Only web links can be opened".into());
+        return Err(t("Only web links can be opened").into());
     }
     app.opener()
         .open_url(url, None::<&str>)

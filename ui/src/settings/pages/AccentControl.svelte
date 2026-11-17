@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Logo from '../../lib/components/Logo.svelte';
   import { ACCENT_PRESETS, DEFAULT_ACCENT, accentIsVisible, normalizeAccent } from '../../lib/theme';
@@ -40,11 +41,11 @@
 
 <div class="accent">
   <div class="row">
-    <Logo size={48} label="The logo in your accent colour" />
+    <Logo size={48} label={t('The logo in your accent colour')} />
     <input
       class="picker"
       type="color"
-      aria-label="Accent colour"
+      aria-label={t('Accent colour')}
       value={shown}
       oninput={(e) => onpreview((e.currentTarget as HTMLInputElement).value)}
       onchange={(e) => choose((e.currentTarget as HTMLInputElement).value)}
@@ -52,7 +53,7 @@
     <input
       class="hex mono"
       type="text"
-      aria-label="Accent colour as a code, like #4f8ee0"
+      aria-label={t('Accent colour as a code, like #4f8ee0')}
       spellcheck="false"
       autocomplete="off"
       maxlength="7"
@@ -62,18 +63,18 @@
       onkeydown={(e) => e.key === 'Enter' && commitText()}
     />
     <button type="button" onclick={() => choose(DEFAULT_ACCENT)} disabled={shown === DEFAULT_ACCENT}>
-      Reset to blue
+      {t('Reset to blue')}
     </button>
   </div>
 
-  <div class="swatches" role="group" aria-label="Suggested accent colours">
+  <div class="swatches" role="group" aria-label={t('Suggested accent colours')}>
     {#each ACCENT_PRESETS as p (p.hex)}
       <button
         type="button"
         class="swatch"
         style:--c={p.hex}
-        title={p.name}
-        aria-label={p.name}
+        title={t(p.name)}
+        aria-label={t(p.name)}
         aria-pressed={shown === p.hex}
         onclick={() => choose(p.hex)}
       ></button>
@@ -81,19 +82,19 @@
   </div>
 
   {#if typing && !typed}
-    <p class="error" role="alert">Type a colour like #4f8ee0.</p>
+    <p class="error" role="alert">{t('Type a colour like #4f8ee0.')}</p>
   {:else if !visible.light || !visible.dark}
     <Chip
       kind="warn"
       label={!visible.light && !visible.dark
-        ? 'Hard to see on both the light and the dark theme'
+        ? t('Hard to see on both the light and the dark theme')
         : !visible.light
-          ? 'Hard to see on the light theme'
-          : 'Hard to see on the dark theme'}
+          ? t('Hard to see on the light theme')
+          : t('Hard to see on the dark theme')}
     />
   {/if}
   <p class="quiet hint">
-    Used for buttons, focus rings, links, the selected block and the arrow of the logo.
+    {t('Used for buttons, focus rings, links, the selected block and the arrow of the logo.')}
   </p>
 </div>
 

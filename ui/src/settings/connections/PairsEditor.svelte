@@ -1,12 +1,13 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import type { Pair } from '../../lib/types';
 
   let {
     pairs = $bindable(),
     label,
-    nameLabel = 'Name',
-    valueLabel = 'Value',
-    addLabel = 'Add',
+    nameLabel = t('Name'),
+    valueLabel = t('Value'),
+    addLabel = t('Add'),
   }: {
     pairs: Pair[];
     label: string;
@@ -20,9 +21,9 @@
   <span class="label">{label}</span>
   {#each pairs as p, i (i)}
     <div class="row">
-      <input type="text" aria-label="{label}: {nameLabel} {i + 1}" placeholder={nameLabel} bind:value={p.name} />
-      <input type="text" aria-label="{label}: {valueLabel} {i + 1}" placeholder={valueLabel} bind:value={p.value} />
-      <button type="button" aria-label="Remove {label} {i + 1}" onclick={() => pairs.splice(i, 1)}>Remove</button>
+      <input type="text" aria-label={`${label}: ${nameLabel} ${i + 1}`} placeholder={nameLabel} bind:value={p.name} />
+      <input type="text" aria-label={`${label}: ${valueLabel} ${i + 1}`} placeholder={valueLabel} bind:value={p.value} />
+      <button type="button" aria-label={t('Remove {label} {n}', { label, n: i + 1 })} onclick={() => pairs.splice(i, 1)}>{t('Remove')}</button>
     </div>
   {/each}
   <div><button type="button" onclick={() => pairs.push({ name: '', value: '' })}>{addLabel}</button></div>

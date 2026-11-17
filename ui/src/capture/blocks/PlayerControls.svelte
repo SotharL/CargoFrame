@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The playback buttons laid over the top of the recording. They are see-through and only
   // show while the pointer is over the picture or a button has keyboard focus, so the picture
   // keeps all its room. Each button is a plain, well-known sign with a name for screen readers.
@@ -47,26 +48,26 @@
   const silent = $derived(muted || volume === 0);
 </script>
 
-<div class="controls" role="toolbar" aria-label="Playback">
-  <button type="button" class="b" title={playing ? 'Pause (Space)' : 'Play (Space)'} aria-label={playing ? 'Pause' : 'Play'} onclick={onplaypause}>
+<div class="controls" role="toolbar" aria-label={t('Playback')}>
+  <button type="button" class="b" title={playing ? t('Pause (Space)') : t('Play (Space)')} aria-label={playing ? t('Pause') : t('Play')} onclick={onplaypause}>
     <svg viewBox="0 0 24 24" aria-hidden="true">
       {#if playing}<path d="M7 5h3.5v14H7zM13.5 5H17v14h-3.5z" />{:else}<path d="M8 5v14l11-7z" />{/if}
     </svg>
   </button>
-  <button type="button" class="b" title="Stop: back to the start" aria-label="Stop" onclick={onstop}>
+  <button type="button" class="b" title={t('Stop: back to the start')} aria-label={t('Stop')} onclick={onstop}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 7h10v10H7z" /></svg>
   </button>
-  <button type="button" class="b" title="Slower" aria-label="Slower" disabled={slowest} onclick={onslower}>
+  <button type="button" class="b" title={t('Slower')} aria-label={t('Slower')} disabled={slowest} onclick={onslower}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 6v12l-8.5-6zM21.5 6v12L13 12z" /></svg>
   </button>
-  <span class="rate" aria-live="polite" title="Playback speed">{rate}×</span>
-  <button type="button" class="b" title="Faster" aria-label="Faster" disabled={fastest} onclick={onfaster}>
+  <span class="rate" aria-live="polite" title={t('Playback speed')}>{rate}×</span>
+  <button type="button" class="b" title={t('Faster')} aria-label={t('Faster')} disabled={fastest} onclick={onfaster}>
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13 6v12l8.5-6zM2.5 6v12L11 12z" /></svg>
   </button>
-  <span class="time" aria-label="Position">{now.toFixed(1)} / {total.toFixed(1)} s</span>
+  <span class="time" aria-label={t('Position')}>{now.toFixed(1)} / {total.toFixed(1)} s</span>
   <span class="gap"></span>
   {#if audio}
-  <button type="button" class="b" title={silent ? 'Unmute (M)' : 'Mute (M)'} aria-label={silent ? 'Unmute' : 'Mute'} onclick={onmute}>
+  <button type="button" class="b" title={silent ? t('Unmute (M)') : t('Mute (M)')} aria-label={silent ? t('Unmute') : t('Mute')} onclick={onmute}>
     <svg viewBox="0 0 24 24" aria-hidden="true">
       <path d="M4 9.5v5h3.5L12 18.5v-13L7.5 9.5z" />
       {#if silent}
@@ -82,14 +83,14 @@
     min="0"
     max="1"
     step="0.05"
-    aria-label="Volume"
+    aria-label={t('Volume')}
     value={muted ? 0 : volume}
     oninput={(e) => onvolume(Number(e.currentTarget.value))}
   />
   {:else}
-    <span class="nosound" title="This recording has no sound">No sound</span>
+    <span class="nosound" title={t('This recording has no sound')}>{t('No sound')}</span>
   {/if}
-  <button type="button" class="b" title={fullscreen ? 'Leave full screen (F)' : 'Full screen (F)'} aria-label={fullscreen ? 'Leave full screen' : 'Full screen'} onclick={onfullscreen}>
+  <button type="button" class="b" title={fullscreen ? t('Leave full screen (F)') : t('Full screen (F)')} aria-label={fullscreen ? t('Leave full screen') : t('Full screen')} onclick={onfullscreen}>
     <svg viewBox="0 0 24 24" aria-hidden="true">
       {#if fullscreen}
         <path class="line" d="M9 4v5H4M15 4v5h5M9 20v-5H4M15 20v-5h5" />

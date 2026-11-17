@@ -1,5 +1,6 @@
 //! Key presses on Windows. This is the only unsafe code in the crate.
 #![allow(unsafe_code)]
+use cargoframe_i18n::t;
 
 use crate::Key;
 use windows::Win32::UI::Input::KeyboardAndMouse::{
@@ -41,6 +42,6 @@ pub fn press(key: Key) -> Result<(), String> {
     if sent as usize == events.len() {
         Ok(())
     } else {
-        Err("Windows did not accept the key presses (is the other program running as administrator?)".into())
+        Err(t("Windows did not accept the key presses (is the other program running as administrator?)").into())
     }
 }

@@ -6,6 +6,7 @@
  */
 import type { Block, BlockContent, Layout, Rect } from '../../lib/types';
 import { MIN_TABS_SIZE, childIds, openTab, tabOf, type OpenTabs, type TabsBlock } from '../../lib/tabs';
+import { msg, t, translated } from '../../lib/i18n/index.svelte';
 
 /** The columns of a layout that does not say, and the fewest and most a layout can have. */
 export const COLUMNS = 12;
@@ -26,17 +27,17 @@ export const MAX_SHARING_BUTTONS = 5;
 
 export type BlockType = BlockContent['type'];
 
-export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: [number, number] }[] = [
-  { type: 'screenshot', label: 'Screenshot', hint: 'The capture, with crop, draw, shapes and text', size: [8, 8] },
-  { type: 'video', label: 'Video', hint: 'A recording of the screen: a shortcut that opens this layout records, and the window plays, trims, crops and marks it', size: [8, 8] },
-  { type: 'text', label: 'Text', hint: 'A text box with a title, for notes or a prompt', size: [4, 3] },
-  { type: 'dropdown', label: 'Dropdown', hint: 'Choices from a service or from your Claude chats', size: [4, 2] },
-  { type: 'files', label: 'Files', hint: 'Files from the project folder (or folders above the program) to tick and zip together', size: [6, 3] },
-  { type: 'tags', label: 'Tags', hint: 'Tags like Jira labels: started from the capture’s values, up to 25, sent in a field', size: [4, 1] },
-  { type: 'log_view', label: 'Log viewer', hint: 'Shows a file of the Files block line by line, with a filter, to copy lines from', size: [6, 4] },
-  { type: 'tabs', label: 'Tabs', hint: 'Tabs like a binder: drop blocks inside, one tab shows at a time', size: [6, 4] },
-  { type: 'sharing_button', label: 'Sharing button', hint: 'Sends everything to a connection', size: [4, 2] },
-];
+export const BLOCK_TYPES: { type: BlockType; label: string; hint: string; size: [number, number] }[] = translated([
+  { type: 'screenshot', label: msg('Screenshot'), hint: msg('The capture, with crop, draw, shapes and text'), size: [8, 8] },
+  { type: 'video', label: msg('Video'), hint: msg('A recording of the screen: a shortcut that opens this layout records, and the window plays, trims, crops and marks it'), size: [8, 8] },
+  { type: 'text', label: msg('Text'), hint: msg('A text box with a title, for notes or a prompt'), size: [4, 3] },
+  { type: 'dropdown', label: msg('Dropdown'), hint: msg('Choices from a service or from your Claude chats'), size: [4, 2] },
+  { type: 'files', label: msg('Files'), hint: msg('Files from the project folder (or folders above the program) to tick and zip together'), size: [6, 3] },
+  { type: 'tags', label: msg('Tags'), hint: msg('Tags like Jira labels: started from the capture’s values, up to 25, sent in a field'), size: [4, 1] },
+  { type: 'log_view', label: msg('Log viewer'), hint: msg('Shows a file of the Files block line by line, with a filter, to copy lines from'), size: [6, 4] },
+  { type: 'tabs', label: msg('Tabs'), hint: msg('Tabs like a binder: drop blocks inside, one tab shows at a time'), size: [6, 4] },
+  { type: 'sharing_button', label: msg('Sharing button'), hint: msg('Sends everything to a connection'), size: [4, 2] },
+]);
 
 export const typeLabel = (t: BlockType) => BLOCK_TYPES.find((b) => b.type === t)?.label ?? t;
 
@@ -146,22 +147,22 @@ function content(type: BlockType): BlockContent {
     case 'video':
       return { type };
     case 'text':
-      return { type, title: 'Notes', placement: 'above', role: 'plain', default_text: '' };
+      return { type, title: t('Notes'), placement: 'above', role: 'plain', default_text: '' };
     case 'dropdown':
-      return { type, title: 'Choose', source: { type: 'claude_chats' } };
+      return { type, title: t('Choose'), source: { type: 'claude_chats' } };
     case 'files':
       return {
-        type, title: 'Files', include: ['**/*.log'], preselect: [], look_in: { folders: ['project'], subfolder: '' },
+        type, title: t('Files'), include: ['**/*.log'], preselect: [], look_in: { folders: ['project'], subfolder: '' },
       };
     case 'tags':
-      return { type, title: 'Tags', tags: [] };
+      return { type, title: t('Tags'), tags: [] };
     case 'log_view':
-      return { type, title: 'Log' };
+      return { type, title: t('Log') };
     case 'tabs':
-      return { type, tabs: [{ name: 'Tab 1' }, { name: 'Tab 2' }] };
+      return { type, tabs: [{ name: t('Tab {n}', { n: 1 }) }, { name: t('Tab {n}', { n: 2 }) }] };
     case 'sharing_button':
       return {
-        type, label: 'Share', connection_id: null, prompt_block_id: null, mappings: [], on_success: 'close_window',
+        type, label: t('Share'), connection_id: null, prompt_block_id: null, mappings: [], on_success: 'close_window',
       };
   }
 }

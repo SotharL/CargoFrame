@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
   import Chip from '../lib/components/Chip.svelte';
   import type { ShareResult } from '../lib/types';
 
@@ -18,32 +19,32 @@
   } = $props();
 
   const placeText: Record<string, string> = {
-    safe_folder: 'A copy was saved in your safe folder',
-    picked_folder: 'A copy was saved in the folder you chose',
-    kept_locally: 'A copy was kept in CargoFrame’s own folder',
-    not_saved: 'The copy could not be saved. It is still here',
+    safe_folder: t('A copy was saved in your safe folder'),
+    picked_folder: t('A copy was saved in the folder you chose'),
+    kept_locally: t('A copy was kept in CargoFrame’s own folder'),
+    not_saved: t('The copy could not be saved. It is still here'),
   };
 </script>
 
 <div class="panel" role="status" aria-live="polite">
   {#if result.status === 'sent'}
     <Chip kind="ok" label={result.summary} />
-    {#if opened}<Chip kind="ok" label={`Opened: ${opened}`} />{/if}
+    {#if opened}<Chip kind="ok" label={t('Opened: {opened}', { opened })} />{/if}
     {#each result.notes as n (n)}<Chip kind="warn" label={n} />{/each}
     {#if result.url}
-      <button onclick={() => onopenlink(result.url!)}>Open</button>
+      <button onclick={() => onopenlink(result.url!)}>{t('Open')}</button>
     {/if}
-    {#if !result.close}<button onclick={onclose}>Close</button>{/if}
+    {#if !result.close}<button onclick={onclose}>{t('Close')}</button>{/if}
   {:else if result.status === 'saved_locally'}
-    <Chip kind="ok" label="Saved locally" />
+    <Chip kind="ok" label={t('Saved locally')} />
     <span class="selectable path">{result.path}</span>
     {#each result.notes as n (n)}<Chip kind="warn" label={n} />{/each}
-    {#if !result.close}<button onclick={onclose}>Close</button>{/if}
+    {#if !result.close}<button onclick={onclose}>{t('Close')}</button>{/if}
   {:else if result.status === 'blocked'}
     {#each result.reasons as r (r)}<Chip kind="warn" label={r} />{/each}
   {:else}
     <Chip kind="err" label={`${result.label}: ${result.message}`} />
-    {#if result.reconnect}<button onclick={onreconnect}>Reconnect…</button>{/if}
+    {#if result.reconnect}<button onclick={onreconnect}>{t('Reconnect…')}</button>{/if}
     {#if result.saved}
       <Chip
         kind={result.saved.place === 'not_saved' ? 'err' : 'ok'}
@@ -51,7 +52,7 @@
       />
       {#if result.saved.note}<span class="quiet note">{result.saved.note}</span>{/if}
     {:else}
-      <Chip kind="err" label="No copy could be made" />
+      <Chip kind="err" label={t('No copy could be made')} />
     {/if}
   {/if}
 </div>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import Editor from '../editor/Editor.svelte';
   import { afterPaint } from '../../lib/paint';
   import type { TextReading } from '../../lib/types';
@@ -48,9 +49,9 @@
   {#if bitmap}
     <Editor bind:this={editor} image={bitmap} {original} {size} bind:edited {reader} />
   {:else if failed}
-    <p class="quiet">The screenshot could not be shown: {failed}</p>
+    <p class="quiet">{t('The screenshot could not be shown: {failed}', { failed })}</p>
   {:else}
-    <p class="quiet">Loading the screenshot…</p>
+    <p class="quiet">{t('Loading the screenshot…')}</p>
   {/if}
 </div>
 

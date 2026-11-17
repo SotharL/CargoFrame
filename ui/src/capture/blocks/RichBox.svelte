@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t as tr } from '../../lib/i18n/index.svelte';
   // The text box with formatting: it shows bold as bold, a quote as a quote, a list as a list, and
   // keeps the text as the marks the code that sends it reads (see richtext.ts). Buttons and their
   // shortcuts work on the selection; Enter goes on with a list; a paste comes in as plain text;
@@ -184,7 +185,7 @@
         focus = [t.rows.length, 0];
         break;
       case 'addcol':
-        t.head.push(`Column ${t.head.length + 1}`);
+        t.head.push(tr('Column {n}', { n: t.head.length + 1 }));
         for (const r of t.rows) r.push('');
         focus = [0, t.head.length - 1];
         break;

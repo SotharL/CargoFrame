@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   import { onMount, untrack } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
@@ -70,7 +71,7 @@
   }
 
   async function create() {
-    const name = 'New layout';
+    const name = t('New layout');
     const api = await getApi();
     const id = await api.newItemId('layout', name);
     const fresh: Layout = { id, name, blocks: [] };
@@ -116,7 +117,7 @@
       await layouts.reload();
       go('layouts', id);
       open(id);
-      message = { kind: 'ok', text: wasTemplate ? 'Saved as your own layout' : 'Saved as a copy' };
+      message = { kind: 'ok', text: wasTemplate ? t('Saved as your own layout') : t('Saved as a copy') };
     } catch (e) {
       message = { kind: 'err', text: String(e) };
     }
@@ -135,7 +136,7 @@
       await (await getApi()).saveItem('layout', currentId, out);
       saved = JSON.stringify(out);
       await layouts.reload();
-      message = { kind: 'ok', text: 'Saved' };
+      message = { kind: 'ok', text: t('Saved') };
     } catch (e) {
       message = { kind: 'err', text: String(e) };
     }
@@ -220,31 +221,30 @@
 
 <div class="page">
   {#if layouts.failure}<Chip kind="err" label={layouts.failure} />{/if}
-  {#each layouts.problems as p (p)}<Chip kind="warn" label={`Could not read a layout file: ${p}`} />{/each}
+  {#each layouts.problems as p (p)}<Chip kind="warn" label={t('Could not read a layout file: {problem}', { problem: p })} />{/each}
 
   <div class="bar">
     <label class="pick">
-      <span class="quiet">Layout</span>
+      <span class="quiet">{t('Layout')}</span>
       <select
         value={currentId ?? ''}
         onchange={(e) => { const v = e.currentTarget.value; if (v) { go('layouts', v); open(v); } }}
-        aria-label="Layout to edit"
+        aria-label={t('Layout to edit')}
       >
-        <option value="" disabled>{layouts.items.length ? 'Choose a layout…' : 'No layouts yet'}</option>
+        <option value="" disabled>{layouts.items.length ? t('Choose a layout…') : t('No layouts yet')}</option>
         {#each layouts.items as l (l.id)}<option value={l.id}>{l.item.name}</option>{/each}
       </select>
     </label>
-    <button onclick={create}>New layout</button>
+    <button onclick={create}>{t('New layout')}</button>
     <button data-tour="layouts.templates" onclick={() => (picking = !picking)} aria-expanded={picking}>
-      {picking ? 'Hide templates' : 'Start from a template'}
+      {picking ? t('Hide templates') : t('Start from a template')}
     </button>
   </div>
 
   {#if picking}
-    <section class="templates" aria-label="Templates">
+    <section class="templates" aria-label={t('Templates')}>
       <p class="quiet">
-        Ready-made windows for the connections you have. A template opens here as an unsaved layout:
-        change anything, then save, and your own copy is made. The template itself never changes.
+        {t('Ready-made windows for the connections you have. A template opens here as an unsaved layout: change anything, then save, and your own copy is made. The template itself never changes.')}
       </p>
       {#each groups as g (g.id)}
         <div class="group">
@@ -258,15 +258,15 @@
                 <strong>{o.name}</strong>
                 <p class="quiet small">{o.description}</p>
               </div>
-              <button data-tour={`template-${o.key}`} onclick={() => useTemplate(o)} aria-label={`Use ${o.name}${o.connectionId ? ` for ${g.title}` : ''}`}>Use</button>
+              <button data-tour={`template-${o.key}`} onclick={() => useTemplate(o)} aria-label={o.connectionId ? t('Use {name} for {connection}', { name: o.name, connection: g.title }) : t('Use {name}', { name: o.name })}>{t('Use')}</button>
             </div>
           {/each}
         </div>
       {/each}
       {#if !connections.length}
         <p class="quiet small">
-          Add a connection to see the layouts made for it.
-          <button class="link" onclick={() => go('setup', 'connections')}>Go to Connections</button>
+          {t('Add a connection to see the layouts made for it.')}
+          <button class="link" onclick={() => go('setup', 'connections')}>{t('Go to Connections')}</button>
         </p>
       {/if}
     </section>
@@ -274,62 +274,61 @@
 
   {#if layouts.loaded && layouts.items.length === 0 && !draft}
     <div class="empty">
-      <h2>No layouts yet</h2>
-      <p class="quiet">A layout is the window a trigger opens. Start from a template made for your connections, or from an empty one and add the screenshot, text boxes, files, dropdowns and a sharing button you want.</p>
+      <h2>{t('No layouts yet')}</h2>
+      <p class="quiet">{t('A layout is the window a trigger opens. Start from a template made for your connections, or from an empty one and add the screenshot, text boxes, files, dropdowns and a sharing button you want.')}</p>
       <div class="buttons">
-        <button class="primary" onclick={() => (picking = true)}>Start from a template</button>
-        <button onclick={create}>Create an empty layout</button>
+        <button class="primary" onclick={() => (picking = true)}>{t('Start from a template')}</button>
+        <button onclick={create}>{t('Create an empty layout')}</button>
       </div>
     </div>
   {/if}
 
   {#if draft}
     <div class="titlebar">
-      <input class="name" type="text" bind:value={draft.name} aria-label="Layout name" />
+      <input class="name" type="text" bind:value={draft.name} aria-label={t('Layout name')} />
       <div class="chips">
-        {#if counts.error}<Chip kind="err" label={`${counts.error} to fix`} />{/if}
-        {#if counts.warning}<Chip kind="warn" label={`${counts.warning} to check`} />{/if}
-        {#if counts.debug}<Chip kind="dbg" label={`${counts.debug} unknown`} />{/if}
-        {#if !issues.length}<Chip kind="ok" label="No problems" />{/if}
+        {#if counts.error}<Chip kind="err" label={t('{n} to fix', { n: counts.error })} />{/if}
+        {#if counts.warning}<Chip kind="warn" label={t('{n} to check', { n: counts.warning })} />{/if}
+        {#if counts.debug}<Chip kind="dbg" label={t('{n} unknown', { n: counts.debug })} />{/if}
+        {#if !issues.length}<Chip kind="ok" label={t('No problems')} />{/if}
         {#if fromTemplate}
           <span class="quiet used">
-            Template “{fromTemplate.name}”: saving makes your own copy, the template stays as it is
+            {t('Template “{name}”: saving makes your own copy, the template stays as it is', { name: fromTemplate.name })}
           </span>
         {:else if usedBy.length}
-          <span class="quiet used">Used by {usedBy.map((t) => t.item.name).join(', ')}</span>
+          <span class="quiet used">{t('Used by {names}', { names: usedBy.map((u) => u.item.name).join(', ') })}</span>
         {:else}
-          <span class="quiet used">Not used by any trigger yet</span>
+          <span class="quiet used">{t('Not used by any trigger yet')}</span>
         {/if}
       </div>
       <div class="actions">
         {#if fromTemplate}
-          <Chip kind="dbg" label="Not saved yet" />
-          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy}>Save as my layout</button>
-          <button onclick={discardTemplate}>Discard</button>
+          <Chip kind="dbg" label={t('Not saved yet')} />
+          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy}>{t('Save as my layout')}</button>
+          <button onclick={discardTemplate}>{t('Discard')}</button>
         {:else}
-          {#if dirty}<Chip kind="warn" label="Unsaved changes" />{/if}
-          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy || !dirty}>Save</button>
-          <button onclick={saveAsCopy} disabled={busy}>Save as copy</button>
-          <button onclick={revert} disabled={!dirty}>Revert</button>
+          {#if dirty}<Chip kind="warn" label={t('Unsaved changes')} />{/if}
+          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy || !dirty}>{t('Save')}</button>
+          <button onclick={saveAsCopy} disabled={busy}>{t('Save as copy')}</button>
+          <button onclick={revert} disabled={!dirty}>{t('Revert')}</button>
           {#if confirmingDelete}
-            <button class="danger" onclick={remove}>Delete for good</button>
-            <button onclick={() => (confirmingDelete = false)}>Keep</button>
+            <button class="danger" onclick={remove}>{t('Delete for good')}</button>
+            <button onclick={() => (confirmingDelete = false)}>{t('Keep')}</button>
           {:else}
-            <button onclick={() => (confirmingDelete = true)}>Delete</button>
+            <button onclick={() => (confirmingDelete = true)}>{t('Delete')}</button>
           {/if}
         {/if}
       </div>
     </div>
     {#if message}<Chip kind={message.kind} label={message.text} />{/if}
     <details class="others">
-      <summary>Other programs{draft.accepts_input ? ': can fill this layout' : ''}</summary>
+      <summary>{draft.accepts_input ? t('Other programs: can fill this layout') : t('Other programs')}</summary>
       <Toggle
-        label="Other programs can fill this layout"
+        label={t('Other programs can fill this layout')}
         bind:checked={() => draft?.accepts_input === true, (on) => { if (draft) draft.accepts_input = on; }}
       />
       <p class="quiet">
-        A program on this computer can then open the window with values in its text boxes and
-        dropdowns. Nothing is sent until you press a button.
+        {t('A program on this computer can then open the window with values in its text boxes and dropdowns. Nothing is sent until you press a button.')}
       </p>
       {#if draft.accepts_input}
         <code class="example selectable">cargoframe open --trigger {usedBy[0]?.id ?? 'TRIGGER'} --set {draft.blocks.find((b) => b.type === 'text')?.id ?? 'BLOCK'}="text"</code>
@@ -338,7 +337,7 @@
 
     <div class="workspace">
       <Canvas bind:blocks={draft.blocks} bind:selected bind:columns={draft.columns} {issues} {reach} {connections} />
-      <aside class="side" aria-label="Block settings">
+      <aside class="side" aria-label={t('Block settings')}>
         {#if block}
           {#key block.id}
             <Properties
@@ -359,10 +358,10 @@
           {/key}
         {:else}
           <div class="hint">
-            <h2>Nothing selected</h2>
-            <p class="quiet">Add blocks from the strip above the grid, drag them where you want them, and drag the corner to resize. Select a block to change what it does.</p>
+            <h2>{t('Nothing selected')}</h2>
+            <p class="quiet">{t('Add blocks from the strip above the grid, drag them where you want them, and drag the corner to resize. Select a block to change what it does.')}</p>
             {#if issues.length}
-              <h3>To look at</h3>
+              <h3>{t('To look at')}</h3>
               {#each issues as i, n (n)}
                 <p class="issue {i.severity}"><span aria-hidden="true">{i.severity === 'error' ? '✕' : i.severity === 'warning' ? '!' : '?'}</span> {i.message}</p>
               {/each}

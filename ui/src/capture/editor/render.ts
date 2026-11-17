@@ -1,5 +1,6 @@
 import type { Annotation, EditorState, PxRect } from './model';
 import { textBounds, visibleRect } from './model';
+import { t } from '../../lib/i18n/index.svelte';
 
 /** The canvas font of a text mark. */
 export function fontOf(a: Extract<Annotation, { kind: 'text' }>): string {
@@ -187,9 +188,9 @@ export function exportPng(
   canvas.width = v.w;
   canvas.height = v.h;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return Promise.reject(new Error('This view cannot draw pictures'));
+  if (!ctx) return Promise.reject(new Error(t('This view cannot draw pictures')));
   paint(ctx, image, size, state, canvas);
   return new Promise((resolve, reject) =>
-    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not encode the picture'))), 'image/png'),
+    canvas.toBlob((b) => (b ? resolve(b) : reject(new Error(t('Could not encode the picture')))), 'image/png'),
   );
 }

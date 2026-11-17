@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
   // Marks drawn over the recording: lines, squares, circles, arrows and text, in any colour and
   // thickness, as on a screenshot. They are in the recording's own pixels, on a see-through
   // canvas laid over the picture; `exportMarks` draws them on a see-through picture the size of
@@ -176,7 +177,7 @@
     <canvas
       bind:this={canvas}
       class:text={tool === 'text'}
-      aria-label="Picture to mark, {doc.annotations.length} {doc.annotations.length === 1 ? 'mark' : 'marks'}"
+      aria-label={tn('Picture to mark, {n} mark', t('Picture to mark, {n} marks'), doc.annotations.length)}
       onpointerdown={down}
       onpointermove={move}
       onpointerup={up}
@@ -195,8 +196,8 @@
         bind:value={textValue}
         onkeydown={onTextKey}
         onblur={onTextBlur}
-        aria-label="Text to add on the recording"
-        placeholder="Type, Enter to place"
+        aria-label={t('Text to add on the recording')}
+        placeholder={t('Type, Enter to place')}
       ></textarea>
     {/if}
   </div>

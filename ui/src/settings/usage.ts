@@ -4,6 +4,7 @@
  */
 import type { ItemEntry, Layout } from '../lib/types';
 import { usesKey } from '../lib/valueNames';
+import { t } from '../lib/i18n/index.svelte';
 
 type Layouts = readonly ItemEntry<Layout>[];
 
@@ -34,8 +35,9 @@ export function layoutsUsingField(layouts: Layouts, fieldId: string): string[] {
 
 /** "Used in Bug report, Daily note" or "Not used by any layout yet". */
 export function usedIn(layoutNames: readonly string[]): string {
-  if (layoutNames.length === 0) return 'Not used by any layout yet';
+  if (layoutNames.length === 0) return t('Not used by any layout yet');
   const shown = layoutNames.slice(0, 3).join(', ');
-  const more = layoutNames.length > 3 ? ` and ${layoutNames.length - 3} more` : '';
-  return `Used in ${shown}${more}`;
+  return layoutNames.length > 3
+    ? t('Used in {layouts} and {n} more', { layouts: shown, n: layoutNames.length - 3 })
+    : t('Used in {layouts}', { layouts: shown });
 }

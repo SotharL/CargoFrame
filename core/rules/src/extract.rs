@@ -2,30 +2,31 @@
 
 use crate::model::{Format, Multiple, Rule};
 use crate::path;
+use cargoframe_i18n::{t, tf};
 use serde_json::Value;
 
 /// Why a rule gave no value. The messages are shown to the person as they are, so they say what
 /// to change.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum RuleError {
-    #[error("no file matches \"{0}\" in the project folder")]
+    #[error("{}", cargoframe_i18n::tf("no file matches \"{value}\" in the project folder", &[("value", &.0)]))]
     FileNotFound(String),
-    #[error("the file is larger than the {0} byte limit for this rule")]
+    #[error("{}", cargoframe_i18n::tf("the file is larger than the {value} byte limit for this rule", &[("value", &.0)]))]
     TooLarge(u64),
-    #[error("the file could not be read: {0}")]
+    #[error("{}", cargoframe_i18n::tf("the file could not be read: {value}", &[("value", &.0)]))]
     Unreadable(String),
-    #[error("the file is not valid {format}: {detail}")]
+    #[error("{}", cargoframe_i18n::tf("the file is not valid {format}: {detail}", &[("format", &.format), ("detail", &.detail)]))]
     Parse {
         format: &'static str,
         detail: String,
     },
-    #[error("the query is not valid: {0}")]
+    #[error("{}", cargoframe_i18n::tf("the query is not valid: {value}", &[("value", &.0)]))]
     BadQuery(String),
-    #[error("the query found no value")]
+    #[error("{}", cargoframe_i18n::t("the query found no value"))]
     NoValue,
-    #[error("the query found {found} value(s), so there is no number {wanted}")]
+    #[error("{}", cargoframe_i18n::tf("the query found {found} value(s), so there is no number {wanted}", &[("found", &.found), ("wanted", &.wanted)]))]
     NoNth { wanted: i64, found: usize },
-    #[error("there is no project folder to read from")]
+    #[error("{}", cargoframe_i18n::t("there is no project folder to read from"))]
     NoProject,
 }
 
@@ -57,7 +58,7 @@ pub fn all_values(rule: &Rule, text: &str) -> Result<Vec<String>, RuleError> {
         // The details of a file are read from the file, not from its text (see `run`).
         Format::File => {
             return Err(RuleError::BadQuery(
-                "file details are read from the file itself, not from its text".into(),
+                t("file details are read from the file itself, not from its text").into(),
             ))
         }
     };
@@ -98,7 +99,7 @@ pub fn key_ok(key: &str) -> bool {
 fn check_steps(rule: &Rule) -> Result<(), String> {
     if rule.values.is_empty() && !rule.add_to_files && rule.log_time.trim().is_empty() {
         return Err(
-            "Add a value to read, tick \u{201c}Add it to the files\u{201d}, or say how its lines write their time"
+            t("Add a value to read, tick \u{201c}Add it to the files\u{201d}, or say how its lines write their time")
                 .into(),
         );
     }
@@ -110,22 +111,26 @@ fn check_steps(rule: &Rule) -> Result<(), String> {
             step.name.trim()
         };
         if step.name.trim().is_empty() {
-            return Err("Give each value a name".into());
+            return Err(t("Give each value a name").into());
         }
         if !key_ok(&step.key) {
-            return Err(format!(
-                "\u{201c}{name}\u{201d}: its variable name may only have letters, digits, _ and -"
+            return Err(tf(
+                "\u{201c}{name}\u{201d}: its variable name may only have letters, digits, _ and -",
+                &[("name", &name)],
             ));
         }
         // `{key}` must read as a value in a text: not Jira's own `{code}`, not a number
         if !cargoframe_context::template::short_name_ok(&step.key) {
-            return Err(format!(
-                "\u{201c}{name}\u{201d}: pick another name, {{{}}} is kept for Jira's formatting or is only digits",
-                step.key
+            return Err(tf(
+                "\u{201c}{name}\u{201d}: pick another name, {var} is kept for Jira's formatting or is only digits",
+                &[("name", &name), ("var", &format!("{{{}}}", step.key))],
             ));
         }
         if !keys.insert(step.key.as_str()) {
-            return Err(format!("Two values are called {{{}}}", step.key));
+            return Err(tf(
+                "Two values are called {var}",
+                &[("var", &format!("{{{}}}", step.key))],
+            ));
         }
         crate::find::check(&step.find).map_err(|e| format!("\u{201c}{name}\u{201d}: {e}"))?;
     }
@@ -181,7 +186,9 @@ fn by_path(root: &Value, query: &str) -> Result<Vec<String>, RuleError> {
 fn ini(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
     let query = query.trim();
     if query.is_empty() {
-        return Err(RuleError::BadQuery("write section.key, or just key".into()));
+        return Err(RuleError::BadQuery(
+            t("write section.key, or just key").into(),
+        ));
     }
     let (want_section, want_key) = match query.rsplit_once('.') {
         Some((s, k)) => (s.trim().to_lowercase(), k.trim().to_lowercase()),
@@ -221,7 +228,7 @@ fn csv_column(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
     let query = query.trim();
     if query.is_empty() {
         return Err(RuleError::BadQuery(
-            "write a column name from the header row, or a column number".into(),
+            t("write a column name from the header row, or a column number").into(),
         ));
     }
     let mut reader = csv::ReaderBuilder::new()
@@ -237,8 +244,9 @@ fn csv_column(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
         None => match query.parse::<usize>() {
             Ok(n) if n >= 1 => n - 1,
             _ => {
-                return Err(RuleError::BadQuery(format!(
-                    "the header row has no column \"{query}\""
+                return Err(RuleError::BadQuery(tf(
+                    "the header row has no column \"{query}\"",
+                    &[("query", &query)],
                 )))
             }
         },
@@ -263,7 +271,7 @@ fn xml(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
     let query = query.trim();
     if query.is_empty() {
         return Err(RuleError::BadQuery(
-            "write element names such as a/b/c".into(),
+            t("write element names such as a/b/c").into(),
         ));
     }
     let doc = roxmltree::Document::parse(text).map_err(|e| parse_err("XML", e))?;
@@ -277,7 +285,7 @@ fn xml(text: &str, query: &str) -> Result<Vec<String>, RuleError> {
         _ => None,
     };
     if names.is_empty() {
-        return Err(RuleError::BadQuery("name at least one element".into()));
+        return Err(RuleError::BadQuery(t("name at least one element").into()));
     }
     let root = doc.root();
     // Without `//` the first name must be the root element itself; with it, any element.
@@ -320,7 +328,7 @@ fn matches_name(n: &roxmltree::Node, name: &str) -> bool {
 
 fn regex_values(text: &str, query: &str, output: &str) -> Result<Vec<String>, RuleError> {
     if query.trim().is_empty() {
-        return Err(RuleError::BadQuery("write a regular expression".into()));
+        return Err(RuleError::BadQuery(t("write a regular expression").into()));
     }
     let re = regex::RegexBuilder::new(query)
         .multi_line(true)
@@ -403,11 +411,17 @@ fn check_output(re: &regex::Regex, output: &str) -> Result<(), RuleError> {
         };
         if !exists {
             let have = re.captures_len() - 1;
-            return Err(RuleError::BadQuery(format!(
-                "the output uses ${name}, but the pattern has {} group{}",
-                have,
-                if have == 1 { "" } else { "s" }
-            )));
+            return Err(RuleError::BadQuery(if have == 1 {
+                tf(
+                    "the output uses ${name}, but the pattern has 1 group",
+                    &[("name", &name)],
+                )
+            } else {
+                tf(
+                    "the output uses ${name}, but the pattern has {have} groups",
+                    &[("name", &name), ("have", &have)],
+                )
+            }));
         }
     }
     Ok(())
@@ -417,16 +431,16 @@ fn check_output(re: &regex::Regex, output: &str) -> Result<(), RuleError> {
 /// query is valid for the format. Returns what to change, in words.
 pub fn check(rule: &Rule) -> Result<(), String> {
     if rule.name.trim().is_empty() {
-        return Err("Give it a name".into());
+        return Err(t("Give it a name").into());
     }
     if rule.log_time.chars().count() > 120 {
-        return Err("The time format of its lines is too long".into());
+        return Err(t("The time format of its lines is too long").into());
     }
     // a rule whose values are all made from other values reads no file
     if !(rule.only_combines() && rule.file.trim().is_empty()) && !crate::run::pattern_ok(&rule.file)
     {
         return Err(
-            "Write the file's name or part of it (system_info, .log), or a path inside the project folder (config/*.toml)"
+            t("Write the file's name or part of it (system_info, .log), or a path inside the project folder (config/*.toml)")
                 .into(),
         );
     }
@@ -435,10 +449,10 @@ pub fn check(rule: &Rule) -> Result<(), String> {
     }
     let q = rule.query.trim();
     if q.is_empty() && !matches!(rule.format, Format::Json | Format::Yaml | Format::Toml) {
-        return Err("Write what to look for in the file".into());
+        return Err(cargoframe_i18n::t("Write what to look for in the file").into());
     }
     if rule.multiple == Multiple::Nth && rule.nth == 0 {
-        return Err("Numbering starts at 1; use -1 for the last one".into());
+        return Err(cargoframe_i18n::t("Numbering starts at 1; use -1 for the last one").into());
     }
     match rule.format {
         Format::Json | Format::Yaml | Format::Toml => path::parse(&rule.query).map(|_| ()),
@@ -450,7 +464,7 @@ pub fn check(rule: &Rule) -> Result<(), String> {
                     e.to_string()
                         .lines()
                         .last()
-                        .unwrap_or("invalid pattern")
+                        .unwrap_or(t("invalid pattern"))
                         .to_string()
                 })?;
             match rule.output.trim() {

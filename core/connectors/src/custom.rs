@@ -10,6 +10,7 @@ use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
 use cargoframe_context::template;
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, encode_component, Body, Method, Multipart, Request};
 use cargoframe_safe::SendError;
 use serde_json::Value;
@@ -24,7 +25,8 @@ impl CustomConnector {
     }
 
     fn base(&self) -> Result<String, SendError> {
-        check_url(&self.settings.base_url).map_err(|e| invalid(format!("Base address: {e}")))?;
+        check_url(&self.settings.base_url)
+            .map_err(|e| invalid(tf("Base address: {e}", &[("e", &e)])))?;
         Ok(self
             .settings
             .base_url
@@ -41,9 +43,9 @@ impl CustomConnector {
             .filter(|s| !s.is_empty())
             .map(Some)
             .ok_or_else(|| {
-                not_set_up(
+                not_set_up(t(
                     "This connection has no key yet: open Connections, paste it and press Save",
-                )
+                ))
             })
     }
 
@@ -138,19 +140,25 @@ fn fill(text: &str, payload: &Payload, into: Escape) -> Result<String, SendError
     if r.unresolved.is_empty() {
         Ok(r.text)
     } else {
-        Err(invalid(format!(
-            "The request uses {} but nothing fills {}",
-            r.unresolved
+        Err(invalid({
+            let names = r
+                .unresolved
                 .iter()
                 .map(|n| format!("{{{{{n}}}}}"))
                 .collect::<Vec<_>>()
-                .join(", "),
+                .join(", ");
             if r.unresolved.len() == 1 {
-                "it"
+                tf(
+                    "The request uses {names} but nothing fills it",
+                    &[("names", &names)],
+                )
             } else {
-                "them"
+                tf(
+                    "The request uses {names} but nothing fills them",
+                    &[("names", &names)],
+                )
             }
-        )))
+        }))
     }
 }
 
@@ -180,10 +188,10 @@ impl Connector for CustomConnector {
             .collect();
         Describe {
             fields: vec![
-                FieldSpec { key: "title", label: "Title", hint: "Placeholder {{title}}: the window title", list: None },
+                FieldSpec { key: "title", label: msg!("Title"), hint: msg!("Placeholder {{title}}: the window title"), list: None },
             ],
             lists,
-            summary: "Sends one request that you describe. Use {{field}} placeholders for what the sharing button maps, plus {{prompt}} and {{title}}.".into(),
+            summary: msg!("Sends one request that you describe. Use {{field}} placeholders for what the sharing button maps, plus {{prompt}} and {{title}}.").into(),
         }
     }
 
@@ -206,7 +214,7 @@ impl Connector for CustomConnector {
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
         let path = self.settings.test_path.trim();
         if path.is_empty() {
-            return Ok("Nothing to test: this connection has no test address".into());
+            return Ok(t("Nothing to test: this connection has no test address").to_string());
         }
         let secret = self.secret(ctx)?;
         let req = self
@@ -217,9 +225,12 @@ impl Connector for CustomConnector {
             .no_redirects();
         let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
         if resp.is_success() {
-            Ok(format!("The server answered {}", resp.status))
+            Ok(tf(
+                "The server answered {status}",
+                &[("status", &resp.status)],
+            ))
         } else {
-            Err(from_response(&resp, "reach the test address"))
+            Err(from_response(&resp, msg!("reach the test address")))
         }
     }
 
@@ -229,7 +240,12 @@ impl Connector for CustomConnector {
             .lists
             .iter()
             .find(|l| l.id == list)
-            .ok_or_else(|| invalid(format!("This connection has no list called \"{list}\"")))?;
+            .ok_or_else(|| {
+                invalid(tf(
+                    "This connection has no list called \"{list}\"",
+                    &[("list", &list)],
+                ))
+            })?;
         let secret = self.secret(ctx)?;
         let req = self
             .sign(
@@ -241,17 +257,23 @@ impl Connector for CustomConnector {
             .no_redirects();
         let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
         if !resp.is_success() {
-            return Err(from_response(&resp, &format!("load the list \"{list}\"")));
+            return Err(from_response(
+                &resp,
+                &tf("load the list \"{list}\"", &[("list", &list)]),
+            ));
         }
-        let json = resp
-            .json()
-            .ok_or_else(|| invalid(format!("The list \"{list}\" did not answer with JSON")))?;
+        let json = resp.json().ok_or_else(|| {
+            invalid(tf(
+                "The list \"{list}\" did not answer with JSON",
+                &[("list", &list)],
+            ))
+        })?;
         let items = json_path(&json, &spec.items_path)
             .and_then(Value::as_array)
             .ok_or_else(|| {
-                invalid(format!(
-                    "No list of items was found at \"{}\" in the answer",
-                    spec.items_path
+                invalid(tf(
+                    "No list of items was found at \"{items_path}\" in the answer",
+                    &[("items_path", &spec.items_path)],
                 ))
             })?;
         Ok(items
@@ -291,9 +313,9 @@ impl Connector for CustomConnector {
             CustomBody::Json { template } => {
                 let text = fill(template, payload, Escape::Json)?;
                 if serde_json::from_str::<Value>(&text).is_err() {
-                    return Err(invalid(
+                    return Err(invalid(t(
                         "The JSON body is not valid once the placeholders are filled in",
-                    ));
+                    )));
                 }
                 Body::text("application/json", text)
             }
@@ -317,7 +339,7 @@ impl Connector for CustomConnector {
                 if !image_field.trim().is_empty() {
                     match &payload.image {
                         Some(a) => m = m.file(image_field, &a.name, &a.mime, a.data.clone()),
-                        None => notes.push("There was no screenshot to send".to_string()),
+                        None => notes.push(t("There was no screenshot to send").to_string()),
                     }
                 }
                 if !files_field.trim().is_empty() {
@@ -331,7 +353,7 @@ impl Connector for CustomConnector {
         let req = self.sign(req, secret.as_deref()).no_redirects();
         let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
         if !resp.is_success() {
-            return Err(from_response(&resp, "send the share"));
+            return Err(from_response(&resp, msg!("send the share")));
         }
         let url = resp
             .json()
@@ -339,7 +361,10 @@ impl Connector for CustomConnector {
             .filter(|_| !self.settings.result_url_path.trim().is_empty())
             .filter(|u| check_url(u).is_ok());
         Ok(SendOutcome {
-            summary: format!("Sent (the server answered {})", resp.status),
+            summary: tf(
+                "Sent (the server answered {status})",
+                &[("status", &resp.status)],
+            ),
             url,
             notes,
             place: None,

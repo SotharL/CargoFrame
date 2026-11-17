@@ -24,6 +24,7 @@ use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, encode_component, Body, Method, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -133,8 +134,9 @@ impl TeamsConnector {
             return Err(graph_error(&resp, what));
         }
         resp.json().ok_or_else(|| {
-            invalid(format!(
-                "Microsoft answered {what} with something unreadable"
+            invalid(tf(
+                "Microsoft answered {what} with something unreadable",
+                &[("what", &t(what))],
             ))
         })
     }
@@ -153,7 +155,7 @@ impl TeamsConnector {
         self.get(
             ctx,
             self.graph("/me?$select=id,displayName,userPrincipalName"),
-            "check the sign-in",
+            msg!("check the sign-in"),
         )
     }
 
@@ -169,7 +171,7 @@ impl TeamsConnector {
         let mut next = Some(self.graph("/me/chats?$expand=members&$top=50"));
         for _ in 0..MAX_CHAT_PAGES {
             let Some(url) = next.take() else { break };
-            let v = self.get(ctx, url, "list the chats")?;
+            let v = self.get(ctx, url, msg!("list the chats"))?;
             for chat in v
                 .get("value")
                 .and_then(Value::as_array)
@@ -180,10 +182,10 @@ impl TeamsConnector {
                     continue;
                 };
                 let (group, fallback) = match chat.get("chatType").and_then(Value::as_str) {
-                    Some("oneOnOne") => ("Direct chats", "Chat"),
-                    Some("group") => ("Group chats", "Group chat"),
-                    Some("meeting") => ("Meeting chats", "Meeting chat"),
-                    _ => ("Other chats", "Chat"),
+                    Some("oneOnOne") => (t("Direct chats"), t("Chat")),
+                    Some("group") => (t("Group chats"), t("Group chat")),
+                    Some("meeting") => (t("Meeting chats"), t("Meeting chat")),
+                    _ => (t("Other chats"), t("Chat")),
                 };
                 let topic = chat
                     .get("topic")
@@ -217,7 +219,7 @@ impl TeamsConnector {
 
     /// The channels of every team the person has joined.
     fn channels(&self, ctx: &Ctx) -> Result<Vec<OptionItem>, SendError> {
-        let teams = self.get(ctx, self.graph("/me/joinedTeams"), "list the teams")?;
+        let teams = self.get(ctx, self.graph("/me/joinedTeams"), msg!("list the teams"))?;
         let mut teams: Vec<(String, String)> = teams
             .get("value")
             .and_then(Value::as_array)
@@ -238,7 +240,7 @@ impl TeamsConnector {
             let v = match self.get(
                 ctx,
                 self.graph(&format!("/teams/{}/channels", encode_component(team_id))),
-                "list the channels",
+                msg!("list the channels"),
             ) {
                 Ok(v) => v,
                 Err(e) => {
@@ -266,12 +268,12 @@ impl TeamsConnector {
             channels.sort_by(|a, b| a.1.cmp(&b.1));
             for (id, name, kind) in channels {
                 let label = if kind == "private" {
-                    format!("#{name} (private)")
+                    tf("#{name} (private)", &[("name", &name)])
                 } else {
                     format!("#{name}")
                 };
                 let mut item = OptionItem::new(format!("channel:{team_id}/{id}"), label);
-                item.group = Some(format!("Team: {team_name}"));
+                item.group = Some(tf("Team: {team_name}", &[("team_name", &team_name)]));
                 out.push(item);
             }
         }
@@ -288,17 +290,14 @@ impl TeamsConnector {
             .body(Body::json(body));
         let maybe = |mut e: SendError| {
             e.kind = FailureKind::Rejected(0);
-            e.message = format!(
-                "{}. Teams may or may not have posted the message, so CargoFrame did not try again: look in Teams",
-                e.message.trim_end_matches('.')
-            );
+            e.message = tf("{problem}. Teams may or may not have posted the message, so CargoFrame did not try again: look in Teams", &[("problem", &e.message.trim_end_matches('.'))]);
             e
         };
         let resp = ctx.http.send(&req).map_err(|e| maybe(from_net(&e)))?;
         if resp.is_success() {
             return Ok(resp.json().unwrap_or(Value::Null));
         }
-        let err = graph_error(&resp, "post the message");
+        let err = graph_error(&resp, msg!("post the message"));
         Err(match err.kind {
             FailureKind::Server(_) | FailureKind::Timeout | FailureKind::NoNetwork => maybe(err),
             _ => err,
@@ -321,7 +320,10 @@ fn member_names(chat: &Value, my_id: &str) -> String {
     match names.len() {
         0 => String::new(),
         1..=4 => names.join(", "),
-        n => format!("{}, +{} more", names[..3].join(", "), n - 3),
+        n => tf(
+            "{names}, +{n} more",
+            &[("names", &names[..3].join(", ")), ("n", &(n - 3))],
+        ),
     }
 }
 
@@ -330,17 +332,15 @@ fn graph_error(resp: &Response, what: &str) -> SendError {
     let mut e = from_response(resp, what);
     let hint = match resp.status {
         401 => {
-            e.message = format!(
-                "Could not {what}: the Microsoft sign-in is not valid any more. Open Connections and press Sign in"
-            );
+            e.message = tf("Could not {what}: the Microsoft sign-in is not valid any more. Open Connections and press Sign in", &[("what", &t(what))]);
             return e;
         }
-        403 => " Either you are not a member of that chat or channel, your organisation does not allow this app, or a permission is missing: press Sign in again and accept every permission it asks for",
-        404 => " Teams cannot find that chat or channel: choose it again from the list",
-        413 => " The screenshot may be too large for Teams",
+        403 => t("Either you are not a member of that chat or channel, your organisation does not allow this app, or a permission is missing: press Sign in again and accept every permission it asks for"),
+        404 => t("Teams cannot find that chat or channel: choose it again from the list"),
+        413 => t("The screenshot may be too large for Teams"),
         _ => return e,
     };
-    e.message = format!("{}.{hint}", e.message.trim_end_matches('.'));
+    e.message = format!("{}. {hint}", e.message.trim_end_matches('.'));
     e
 }
 
@@ -367,9 +367,7 @@ fn is_channel_id(s: &str) -> bool {
 pub fn parse_target(raw: &str) -> Result<Target, String> {
     let raw = raw.trim();
     let bad = || {
-        format!(
-            "\"{raw}\" is not a Teams chat or channel. Choose one from the list on the sharing button"
-        )
+        tf("\"{raw}\" is not a Teams chat or channel. Choose one from the list on the sharing button", &[("raw", &raw)])
     };
     if let Some(id) = raw.strip_prefix("chat:") {
         return if is_chat_id(id) {
@@ -406,33 +404,30 @@ pub struct ThreadRef {
 
 pub fn parse_thread(raw: &str) -> Result<ThreadRef, String> {
     let bad = |why: &str| {
-        format!(
-            "\"{}\" is not a link to a message in a Teams channel ({why}). In Teams, open the \"…\" menu of the first message of the thread and choose Copy link",
-            raw.trim()
-        )
+        tf("\"{raw}\" is not a link to a message in a Teams channel ({why}). In Teams, open the \"…\" menu of the first message of the thread and choose Copy link", &[("raw", &raw.trim()), ("why", &why)])
     };
     let rest = raw
         .trim()
         .strip_prefix("https://")
-        .ok_or_else(|| bad("it must start with https://"))?;
+        .ok_or_else(|| bad(cargoframe_i18n::t("it must start with https://")))?;
     let (host, after) = rest
         .split_once('/')
-        .ok_or_else(|| bad("there is no path"))?;
+        .ok_or_else(|| bad(t("there is no path")))?;
     if !matches!(
         host.to_ascii_lowercase().as_str(),
         "teams.microsoft.com" | "teams.cloud.microsoft"
     ) {
-        return Err(bad("it is not a Teams address"));
+        return Err(bad(t("it is not a Teams address")));
     }
     let (path, query) = after.split_once('?').unwrap_or((after, ""));
     let query = query.split('#').next().unwrap_or("");
     let segments: Vec<&str> = path.split('/').collect();
     if segments.len() < 4 || segments[0] != "l" || segments[1] != "message" {
-        return Err(bad("it is not a message link"));
+        return Err(bad(t("it is not a message link")));
     }
     let channel = oauth::decode(segments[2]);
     if !is_channel_id(&channel) {
-        return Err(bad("it is a chat, not a channel"));
+        return Err(bad(t("it is a chat, not a channel")));
     }
     let pairs = oauth::query_pairs(query);
     let get = |k: &str| {
@@ -443,12 +438,12 @@ pub fn parse_thread(raw: &str) -> Result<ThreadRef, String> {
     };
     let team = get("groupId")
         .filter(|g| model::is_guid(g))
-        .ok_or_else(|| bad("it names no team"))?;
+        .ok_or_else(|| bad(t("it names no team")))?;
     let message = get("parentMessageId")
         .filter(|m| !m.is_empty())
         .unwrap_or(segments[3]);
     if message.is_empty() || !message.chars().all(|c| c.is_ascii_digit()) {
-        return Err(bad("it names no message"));
+        return Err(bad(t("it names no message")));
     }
     Ok(ThreadRef {
         team: team.to_string(),
@@ -535,19 +530,19 @@ impl Connector for TeamsConnector {
         };
         Describe {
             fields: vec![
-                f("target", "Chat or channel", "Where to post. You must be a member of it", Some("targets")),
-                f("thread", "Reply in a channel thread", "A message link (Copy link in Teams) in a channel. Empty: a new message", None),
-                f("message", "Message", "Defaults to the prompt text, then the window title", None),
-                f("title", "Headline", "Empty: none. The headline of a new channel post, or a bold first line in a chat or a reply", None),
-                f("tags", "Tags", "Added as a last line. Separate several with commas", None),
+                f("target", msg!("Chat or channel"), msg!("Where to post. You must be a member of it"), Some("targets")),
+                f("thread", msg!("Reply in a channel thread"), msg!("A message link (Copy link in Teams) in a channel. Empty: a new message"), None),
+                f("message", msg!("Message"), msg!("Defaults to the prompt text, then the window title"), None),
+                f("title", msg!("Headline"), msg!("Empty: none. The headline of a new channel post, or a bold first line in a chat or a reply"), None),
+                f("tags", msg!("Tags"), msg!("Added as a last line. Separate several with commas"), None),
             ],
             lists: vec![ListSpec {
                 id: "targets".into(),
-                label: "Your chats and the channels of your teams".into(),
+                label: msg!("Your chats and the channels of your teams").into(),
                 param: None,
                 inside: None,
             }],
-            summary: "Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The ticked files cannot be sent yet: Teams needs them in OneDrive.".into(),
+            summary: msg!("Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The ticked files cannot be sent yet: Teams needs them in OneDrive.").into(),
         }
     }
 
@@ -561,9 +556,7 @@ impl Connector for TeamsConnector {
 
     fn connect(&self, ctx: &Ctx) -> Result<String, SendError> {
         if self.settings.client_id.trim().is_empty() {
-            return Err(not_set_up(
-                "Teams needs the Application (client) ID of your Microsoft app: open Connections, paste it and press Save",
-            ));
+            return Err(not_set_up(t("Teams needs the Application (client) ID of your Microsoft app: open Connections, paste it and press Save")));
         }
         oauth::authorize(&self.client(), ctx)?;
         self.test(ctx)
@@ -577,15 +570,23 @@ impl Connector for TeamsConnector {
         let v = self.me(ctx)?;
         let text = |k: &str| v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty());
         Ok(match (text("displayName"), text("userPrincipalName")) {
-            (Some(name), Some(upn)) => format!("Signed in to Microsoft as {name} ({upn})"),
-            (Some(who), None) | (None, Some(who)) => format!("Signed in to Microsoft as {who}"),
-            _ => "Signed in to Microsoft".to_string(),
+            (Some(name), Some(upn)) => tf(
+                "Signed in to Microsoft as {name} ({upn})",
+                &[("name", &name), ("upn", &upn)],
+            ),
+            (Some(who), None) | (None, Some(who)) => {
+                tf("Signed in to Microsoft as {who}", &[("who", &who)])
+            }
+            _ => t("Signed in to Microsoft").to_string(),
         })
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
         if list != "targets" {
-            return Err(invalid(format!("Teams has no list called \"{list}\"")));
+            return Err(invalid(tf(
+                "Teams has no list called \"{list}\"",
+                &[("list", &list)],
+            )));
         }
         let channels = self.channels(ctx);
         let chats = self.chats(ctx);
@@ -621,14 +622,10 @@ impl Connector for TeamsConnector {
                 Some(Target::Channel { team, channel }),
             ) if *team == t.team && *channel == t.channel => (reply_path(t), false, true),
             (Some(_), Some(Target::Channel { .. })) => {
-                return Err(invalid(
-                    "The thread link is in a different channel than the one chosen",
-                ))
+                return Err(invalid(t("The thread link is in a different channel than the one chosen")))
             }
             (Some(_), Some(Target::Chat(_))) => {
-                return Err(invalid(
-                    "A thread link works in a channel; a chat has no threads. Clear one of the two",
-                ))
+                return Err(invalid(t("A thread link works in a channel; a chat has no threads. Clear one of the two")))
             }
             (None, Some(Target::Chat(id))) => {
                 (format!("/chats/{}/messages", encode_component(id)), false, false)
@@ -643,17 +640,15 @@ impl Connector for TeamsConnector {
                 false,
             ),
             (None, None) => {
-                return Err(invalid(
-                    "Teams needs a chat or a channel: map one to the field \"target\" on the sharing button",
-                ))
+                return Err(invalid(t("Teams needs a chat or a channel: map one to the field \"target\" on the sharing button")))
             }
         };
 
         let composed = compose(payload, payload.image.is_some(), new_channel_post);
         if composed.html.is_empty() {
-            return Err(invalid(
+            return Err(invalid(t(
                 "There is nothing to send to Teams: no text and no screenshot",
-            ));
+            )));
         }
         let mut body = json!({
             "body": { "contentType": "html", "content": composed.html },
@@ -679,18 +674,18 @@ impl Connector for TeamsConnector {
         let mut notes = Vec::new();
         if payload.files_zip.is_some() {
             notes.push(
-                "The ticked files were not sent: Teams needs them in OneDrive, which CargoFrame does not use yet"
+                t("The ticked files were not sent: Teams needs them in OneDrive, which CargoFrame does not use yet")
                     .to_string(),
             );
         }
         if composed.shortened {
-            notes.push("The message was shortened to fit Teams' size limit".to_string());
+            notes.push(t("The message was shortened to fit Teams' size limit").to_string());
         }
         Ok(SendOutcome {
             summary: if reply {
-                "Posted in the Teams thread".to_string()
+                t("Posted in the Teams thread").to_string()
             } else {
-                "Posted to Teams".to_string()
+                t("Posted to Teams").to_string()
             },
             url,
             notes,

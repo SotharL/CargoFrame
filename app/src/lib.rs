@@ -13,6 +13,7 @@ mod desktop;
 mod desktop_keys;
 mod hold;
 mod items;
+mod language;
 mod logging;
 mod notify;
 mod registry;
@@ -48,7 +49,11 @@ fn open_from_another_program(app: &tauri::AppHandle, open: Result<cli::OpenReque
             tracing::info!(trigger = %req.trigger, values = req.values.len(), "asked to open by another program");
             triggers::run_with(app, req.trigger, req.values);
         }
-        Err(why) => notify::problem(app, "CargoFrame could not open that", &why),
+        Err(why) => notify::problem(
+            app,
+            cargoframe_i18n::t("CargoFrame could not open that"),
+            &why,
+        ),
     }
 }
 
@@ -67,6 +72,15 @@ pub fn run() {
         tracing::info!("NVIDIA on Wayland: WebKit draws without DMA-BUF");
         std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
     }
+    // the language of the tray, the notifications and the connectors' texts, before any is made
+    let store = Store::new(dirs);
+    let lang = language::apply(
+        &store
+            .load_or_default::<cargoframe_config::General>()
+            .map(|g| g.language)
+            .unwrap_or_default(),
+    );
+    tracing::info!(lang, "language");
     let tray_available = tray_host::available();
     let startup = cli::startup(&cli, tray_available);
 
@@ -92,7 +106,7 @@ pub fn run() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .manage(setup::Installer::default())
         .manage(AppState::new(
-            Store::new(dirs),
+            store,
             tray_available,
             Connections::new(
                 std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
@@ -102,6 +116,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             commands::app_info,
             commands::get_general,
+            commands::get_language,
             commands::set_general,
             commands::get_autostart,
             commands::set_autostart,
@@ -519,6 +534,7 @@ mod shipped_config_tests {
             "allow-edit-layout",
             "allow-fetch-options",
             "allow-get-general",
+            "allow-get-language",
             "allow-get-session",
             "allow-get-session-clip",
             "allow-get-session-image",

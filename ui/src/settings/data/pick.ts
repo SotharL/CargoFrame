@@ -2,6 +2,7 @@
 // (`Find::Pick`), and that way run on a file's text, as core/rules/src/find.rs runs it. The two
 // must agree, so what the editor shows is what a capture finds: the cases are tested on both sides.
 import type { RuleFind, RuleWhich } from '../../lib/types';
+import { t } from '../../lib/i18n/index.svelte';
 
 export type Pick = Extract<RuleFind, { type: 'pick' }>;
 
@@ -116,12 +117,12 @@ const q = (t: string) => `“${t}”`;
 /** How a pick finds its value, in a few words: "After “LogAI:”, up to “ ”, the most recent line". */
 export function describePick(find: Pick, which: RuleWhich): string {
   const start = !find.lines_with
-    ? 'Every line, from its start'
+    ? t('Every line, from its start')
     : find.from_line_start
-      ? `Lines with ${q(find.lines_with)}, from their start`
-      : `After ${q(find.lines_with)}`;
-  const stop = !find.stop ? 'to the end of the line' : find.stop === ' ' ? 'up to a space' : `up to ${q(find.stop)}`;
-  const kept = which === 'first' ? 'the first line' : which === 'all' ? 'every line' : 'the most recent line';
+      ? t('Lines with {q}, from their start', { q: q(find.lines_with) })
+      : t('After {q}', { q: q(find.lines_with) });
+  const stop = !find.stop ? t('to the end of the line') : find.stop === ' ' ? t('up to a space') : t('up to {text}', { text: q(find.stop) });
+  const kept = which === 'first' ? t('the first line') : which === 'all' ? t('every line') : t('the most recent line');
   return `${start}, ${stop}, ${kept}`;
 }
 

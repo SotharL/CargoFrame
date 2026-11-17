@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The strip under the recording: the part that is kept is shaded, its two ends have handles,
   // a thin line follows the playing position, and a click on the strip moves the picture there.
   // All times are in seconds, in tenths; at least half a second is always kept.
@@ -68,10 +69,10 @@
 <svelte:window onmousemove={onMove} onmouseup={release} />
 
 <!-- svelte-ignore a11y_click_events_have_key_events -->
-<div class="strip" role="presentation" aria-label="Timeline" bind:this={strip} onclick={seek}>
+<div class="strip" role="presentation" aria-label={t('Timeline')} bind:this={strip} onclick={seek}>
   <div class="kept" style:left="{pct(start)}%" style:width="{Math.max(0, pct(end) - pct(start))}%"></div>
   <span class="playhead" aria-hidden="true" style:left="{pct(now)}%"></span>
-  {#each [{ which: 'start' as const, label: 'Start of the part to keep', value: start }, { which: 'end' as const, label: 'End of the part to keep', value: end }] as edge (edge.which)}
+  {#each [{ which: 'start' as const, label: t('Start of the part to keep'), value: start }, { which: 'end' as const, label: t('End of the part to keep'), value: end }] as edge (edge.which)}
     <span
       class="edge"
       class:active={dragging === edge.which}

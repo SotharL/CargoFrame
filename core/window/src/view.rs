@@ -3,6 +3,7 @@
 use crate::files::{FileEntry, PlaceFound, Scan};
 use cargoframe_context::template;
 use cargoframe_handoff::ChatList;
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{
     reach, sharing_mode, sharing_state, validate, Block, BlockKind, Code, DropdownSource, Layout,
     Reach, Registry, Severity, SharingMode, SharingState,
@@ -162,8 +163,9 @@ pub struct SharingView {
 }
 
 /// Why "Save locally" is disabled. The same words are used when the share is refused.
-pub const NEEDS_SAVE_FOLDER: &str =
-    "Set a \u{201c}Folder for saved zips\u{201d} in Settings, General, Safety to save locally";
+pub const NEEDS_SAVE_FOLDER: &str = cargoframe_i18n::msg!(
+    "Set a \u{201c}Folder for saved zips\u{201d} in Settings, General, When sharing fails to save locally"
+);
 
 #[derive(Debug, Clone, Serialize)]
 pub struct SessionView {
@@ -280,9 +282,14 @@ fn code_name(c: Code) -> String {
 
 fn problem_text(p: &LayoutProblem) -> String {
     match p {
-        LayoutProblem::NotSet => "This trigger has no layout yet.".into(),
-        LayoutProblem::Missing(id) => format!("The layout \"{id}\" no longer exists."),
-        LayoutProblem::Unreadable(why) => format!("The layout could not be read: {why}"),
+        LayoutProblem::NotSet => cargoframe_i18n::t("This trigger has no layout yet.").into(),
+        LayoutProblem::Missing(id) => cargoframe_i18n::tf(
+            "The layout \u{201c}{id}\u{201d} no longer exists.",
+            &[("id", id)],
+        ),
+        LayoutProblem::Unreadable(why) => {
+            cargoframe_i18n::tf("The layout could not be read: {why}", &[("why", why)])
+        }
     }
 }
 
@@ -298,7 +305,7 @@ fn claude_options(chats: &ChatList) -> Vec<DropdownOption> {
         .collect();
     out.push(DropdownOption {
         value: "new".into(),
-        label: "New chat".into(),
+        label: t("New chat").into(),
         group: None,
     });
     out
@@ -334,8 +341,9 @@ fn dropdown_state(block: &Block, inputs: &Inputs<'_>) -> Option<DropdownState> {
                 status: DropdownStatus::NeedsConnection,
                 options: Vec::new(),
                 selected: None,
-                message: Some(format!(
-                    "Connect \"{connection_id}\" in Settings to load these options"
+                message: Some(tf(
+                    "Connect \"{connection_id}\" in Settings to load these options",
+                    &[("connection_id", &connection_id)],
                 )),
             },
         },
@@ -438,15 +446,16 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                                 enabled: true,
                                 reasons: Vec::new(),
                                 mode: "save_locally",
-                                note: Some(format!(
-                                    "No active connection: a zip is saved in {folder}"
+                                note: Some(tf(
+                                    "No active connection: a zip is saved in {folder}",
+                                    &[("folder", &folder)],
                                 )),
                                 kind,
                                 reach,
                             },
                             None => SharingView {
                                 enabled: false,
-                                reasons: vec![NEEDS_SAVE_FOLDER.to_string()],
+                                reasons: vec![t(NEEDS_SAVE_FOLDER).to_string()],
                                 mode: "save_locally",
                                 note: None,
                                 kind,

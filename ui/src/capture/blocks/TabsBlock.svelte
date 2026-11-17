@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // Tabs, like a binder: the names on one side, and the page of the open tab. The window draws
   // the page (the blocks of every tab, the closed ones hidden so what is typed in them stays).
   import type { Snippet } from 'svelte';
@@ -36,8 +37,8 @@
 </script>
 
 <div class="tabs {side}">
-  <div class="names" role="tablist" aria-label="Tabs" aria-orientation={across ? 'horizontal' : 'vertical'}>
-    {#each block.tabs as t, i (i)}
+  <div class="names" role="tablist" aria-label={t('Tabs')} aria-orientation={across ? 'horizontal' : 'vertical'}>
+    {#each block.tabs as item, i (i)}
       <button
         bind:this={names[i]}
         type="button"
@@ -47,10 +48,10 @@
         aria-controls="{block.id}-page"
         tabindex={open === i ? 0 : -1}
         class:lit={lit[i]}
-        title={t.name || `Tab ${i + 1}`}
+        title={item.name || t('Tab {n}', { n: i + 1 })}
         onclick={() => (open = i)}
         onkeydown={(e) => onKey(e, i)}
-      >{t.name || `Tab ${i + 1}`}</button>
+      >{item.name || t('Tab {n}', { n: i + 1 })}</button>
     {/each}
   </div>
   <div class="page" id="{block.id}-page" role="tabpanel" aria-labelledby="{block.id}-tab-{open}">

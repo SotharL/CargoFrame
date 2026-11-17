@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // The editor for a text block's starting text. Instead of typing {names} from memory, type { or
   // click what you want in the list on the right: a value to fill in, a value read from a file, a picture
   // shown in the text, a link, or a custom link where a word becomes the link and part of the
@@ -23,6 +25,7 @@
     MEDIA_TABLE,
     QUICK_VARIABLES,
     groupOf,
+    MOST_USED,
     insertAt,
     looksLikeAddress,
     makeLink,
@@ -58,7 +61,7 @@
     const fromFiles: Value[] = valueList(rules).map((v) => ({
       name: `rule.${v.key}`,
       label: v.name || v.key,
-      about: v.combined ? 'Made from other values' : `Read from ${filesOf(v).join(', ') || 'a file'}`,
+      about: v.combined ? t('Made from other values') : t('Read from {files}', { files: filesOf(v).join(', ') || t('a file') }),
       group: 'From files',
     }));
     const out: Value[] = [];
@@ -85,13 +88,13 @@
   );
 
   let search = $state('');
-  const found = $derived(all.filter((v) => matches(search, v.name, v.label, v.about, v.group)));
+  const found = $derived(all.filter((v) => matches(search, v.name, v.label, v.about, v.group, t(v.group))));
   /** The values most texts use first (unless searching), then each group. */
   const groups = $derived.by(() => {
     const out: { name: string; values: Value[] }[] = [];
     if (!search.trim()) {
       const most = quick.map((n) => all.find((v) => v.name === n)).filter((v): v is Value => !!v);
-      if (most.length) out.push({ name: 'Most used', values: most });
+      if (most.length) out.push({ name: MOST_USED, values: most });
     }
     for (const g of GROUPS) {
       const values = found.filter((v) => v.group === g);
@@ -215,30 +218,30 @@
   <div class="editor">
     <div class="bar">
       {#if buttons.length > 0}
-        <div class="tools" role="toolbar" aria-label={`Formatting for ${forWhom}`} title={`Written the way ${forWhom} shows it when sent`}>
+        <div class="tools" role="toolbar" aria-label={t('Formatting for {forWhom}', { forWhom })} title={t('Written the way {forWhom} shows it when sent', { forWhom })}>
           {#each buttons as b (b.mark)}
             <button type="button" class={b.mark} aria-label={b.label} title={b.hint} disabled={show === 'values'} onmousedown={(e) => e.preventDefault()} onclick={() => rich?.format(b.mark)}>{b.text}</button>
           {/each}
         </div>
       {/if}
-      <button type="button" class="pick" title={'Put a value in the text (or type {)'} disabled={show === 'values'} onmousedown={(e) => e.preventDefault()} onclick={openPicker}>{'{ }'} Value</button>
-      <span class="show" role="radiogroup" aria-label="Show">
-        <button type="button" role="radio" aria-checked={show === 'names'} class:on={show === 'names'} onclick={() => (show = 'names')}>Names</button>
-        <button type="button" role="radio" aria-checked={show === 'values'} class:on={show === 'values'} onclick={() => (show = 'values')} title="As the last capture fills it in">Values</button>
+      <button type="button" class="pick" title={t('Put a value in the text (or type {brace})', { brace: '{' })} disabled={show === 'values'} onmousedown={(e) => e.preventDefault()} onclick={openPicker}>{'{ }'} {t('Value')}</button>
+      <span class="show" role="radiogroup" aria-label={t('Show')}>
+        <button type="button" role="radio" aria-checked={show === 'names'} class:on={show === 'names'} onclick={() => (show = 'names')}>{t('Names')}</button>
+        <button type="button" role="radio" aria-checked={show === 'values'} class:on={show === 'values'} onclick={() => (show = 'values')} title={t('As the last capture fills it in')}>{t('Values')}</button>
       </span>
     </div>
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="box" onkeydowncapture={onEditorKey}>
       {#if show === 'values'}
-        <div class="filled" aria-label="The text with the last capture's values" role="region">{#each filled as p, i (i)}{#if p.value}<mark class:empty={p.empty}>{p.t}</mark>{:else}{p.t}{/if}{/each}{#if !value}<span class="quiet">Empty</span>{/if}</div>
-        {#if !lastValues}<p class="quiet help">No capture yet: values show after the first capture.</p>{/if}
+        <div class="filled" aria-label={t('The text with the last capture\'s values')} role="region">{#each filled as p, i (i)}{#if p.value}<mark class:empty={p.empty}>{p.t}</mark>{:else}{p.t}{/if}{/each}{#if !value}<span class="quiet">{t('Empty')}</span>{/if}</div>
+        {#if !lastValues}<p class="quiet help">{t('No capture yet: values show after the first capture.')}</p>{/if}
       {:else if buttons.length > 0}
-        <div class="richwrap"><RichBox bind:this={rich} bind:value id="text-automation" {marks} label="Text automation" /></div>
+        <div class="richwrap"><RichBox bind:this={rich} bind:value id="text-automation" {marks} label={t('Text automation')} /></div>
       {:else}
-        <textarea rows="8" bind:value bind:this={area} aria-label="Text automation" spellcheck="true"></textarea>
+        <textarea rows="8" bind:value bind:this={area} aria-label={t('Text automation')} spellcheck="true"></textarea>
       {/if}
       {#if picking}
-        <div class="picker" role="dialog" aria-label="Put a value in the text">
+        <div class="picker" role="dialog" aria-label={t('Put a value in the text')}>
           <input
             bind:this={pickInput}
             type="search"
@@ -246,69 +249,71 @@
             oninput={() => (pi = 0)}
             onkeydown={onPickKey}
             onblur={() => setTimeout(() => { if (picking) picking = false; }, 150)}
-            placeholder="A value…"
-            aria-label="Find a value"
+            placeholder={t('A value…')}
+            aria-label={t('Find a value')}
           />
-          <div class="picks" role="listbox" aria-label="Values">
+          <div class="picks" role="listbox" aria-label={t('Values')}>
             {#each picks as v, i (v.name)}
               <button type="button" role="option" aria-selected={i === pi} class:on={i === pi} onmousedown={(e) => e.preventDefault()} onclick={() => closePicker(token(v.name))}>
                 <span>{v.label}</span><code>{token(v.name)}</code>
               </button>
             {:else}
-              <p class="quiet note">No value matches.</p>
+              <p class="quiet note">{t('No value matches.')}</p>
             {/each}
           </div>
-          <p class="quiet note">Enter puts it in · Esc writes a {'{'}</p>
+          <p class="quiet note">{t('Enter puts it in · Esc writes a {brace}', { brace: '{' })}</p>
         </div>
       {/if}
     </div>
 
     {#if linkOpen}
-      <div class="link" role="group" aria-label="Custom link">
+      <div class="link" role="group" aria-label={t('Custom link')}>
         <label>
-          <span>Word that becomes the link</span>
-          <input type="text" bind:value={word} placeholder="the build" />
+          <span>{t('Word that becomes the link')}</span>
+          <input type="text" bind:value={word} placeholder={t('the build')} />
         </label>
         <label>
-          <span>Web address</span>
+          <span>{t('Web address')}</span>
           <input type="text" bind:value={url} bind:this={urlInput} placeholder="https://ci.example.com/builds/" />
         </label>
         <div class="live">
-          <span class="quiet">Put live data in the address:</span>
+          <span class="quiet">{t('Put live data in the address:')}</span>
           {#each quick as n (n)}<button type="button" class="chip" onclick={() => addToAddress(token(n))}>{quickLabel(n)}</button>{/each}
           {#if fileValues.length}
-            <select aria-label="A value from a file, in the address" onchange={(e) => { addToAddress(token(e.currentTarget.value)); e.currentTarget.value = ''; }}>
-              <option value="">A value from a file…</option>
+            <select aria-label={t('A value from a file, in the address')} onchange={(e) => { addToAddress(token(e.currentTarget.value)); e.currentTarget.value = ''; }}>
+              <option value="">{t('A value from a file…')}</option>
               {#each fileValues as v (v.name)}<option value={v.name}>{v.label}</option>{/each}
             </select>
           {/if}
         </div>
         <label>
-          <span>Link style</span>
+          <span>{t('Link style')}</span>
           <select bind:value={style}>
-            {#each LINK_STYLES as s (s.value)}<option value={s.value}>{s.label} – {s.example}</option>{/each}
+            {#each LINK_STYLES as s (s.value)}<option value={s.value}>{t(s.label)} – {t(s.example)}</option>{/each}
           </select>
         </label>
-        <p class="preview">Result: <code class="selectable">{preview}</code></p>
-        {#if !addressOk}<p class="warn" role="note">The address should start with https:// or with a value in curly braces.</p>{/if}
+        <p class="preview"><Tr text={t('Result: {address}')}>{#snippet address()}<code class="selectable">{preview}</code>{/snippet}</Tr></p>
+        {#if !addressOk}<p class="warn" role="note">{t('The address should start with https:// or with a value in curly braces.')}</p>{/if}
         <div class="buttons">
-          <button type="button" class="primary" onclick={insertLink} disabled={!url.trim() || url.trim() === 'https://'}>Insert link</button>
-          <button type="button" onclick={() => (linkOpen = false)}>Cancel</button>
+          <button type="button" class="primary" onclick={insertLink} disabled={!url.trim() || url.trim() === 'https://'}>{t('Insert link')}</button>
+          <button type="button" onclick={() => (linkOpen = false)}>{t('Cancel')}</button>
         </div>
       </div>
     {/if}
     <p class="quiet help">
-      Filled in for you on every capture; you can still edit it before sharing. Values in
-      <code>{'{curly braces}'}</code> are replaced, and left visibly empty when CargoFrame cannot find them. Type <code>{'{'}</code> to pick one.
+      <Tr text={t('Filled in for you on every capture; you can still edit it before sharing. Values in {braces} are replaced, and left visibly empty when CargoFrame cannot find them. Type {brace} to pick one.')}>
+        {#snippet braces()}<code>{t('{curly braces}')}</code>{/snippet}
+        {#snippet brace()}<code>{'{'}</code>{/snippet}
+      </Tr>
     </p>
   </div>
 
-  <div class="values" role="region" aria-label="Values to put in the text">
-    <input type="search" class="search" bind:value={search} placeholder="Search values…" aria-label="Search values" />
+  <div class="values" role="region" aria-label={t('Values to put in the text')}>
+    <input type="search" class="search" bind:value={search} placeholder={t('Search values…')} aria-label={t('Search values')} />
     <div class="list">
       {#each groups as g (g.name)}
-        <div class="group" role="group" aria-label={g.name}>
-          <div class="head">{g.name}</div>
+        <div class="group" role="group" aria-label={t(g.name)}>
+          <div class="head">{t(g.name)}</div>
           {#each g.values as v (v.name)}
             <button type="button" class="value" title={`${v.about}\n${token(v.name)}`} onmousedown={(e) => e.preventDefault()} onclick={() => variable(v.name)}>
               <span class="label">{v.label}</span>
@@ -316,23 +321,23 @@
           {/each}
           {#if g.name === 'In the text'}
             {#if showTable}
-              <button type="button" class="value" title="A table with the recording and the screenshot side by side" onmousedown={(e) => e.preventDefault()} onclick={() => putLines(MEDIA_TABLE)}>
-                <span class="label">Repro | Highlight table</span>
+              <button type="button" class="value" title={t('A table with the recording and the screenshot side by side')} onmousedown={(e) => e.preventDefault()} onclick={() => putLines(t(MEDIA_TABLE))}>
+                <span class="label">{t('Repro | Highlight table')}</span>
               </button>
             {/if}
-            <p class="quiet note">Shown in the text by {mediaFor}, instead of as an attachment at the end.</p>
+            <p class="quiet note">{t('Shown in the text by {services}, instead of as an attachment at the end.', { services: mediaFor })}</p>
           {/if}
         </div>
       {/each}
       {#if showLinks}
-        <div class="group" role="group" aria-label="Links">
-          <div class="head">Links</div>
-          <button type="button" class="value" onmousedown={(e) => e.preventDefault()} onclick={() => put('https://')}><span class="label">🔗 Link</span></button>
-          <button type="button" class="value" aria-expanded={linkOpen} onclick={() => (linkOpen ? (linkOpen = false) : openLink())}><span class="label">🔗 Custom link…</span></button>
+        <div class="group" role="group" aria-label={t('Links')}>
+          <div class="head">{t('Links')}</div>
+          <button type="button" class="value" onmousedown={(e) => e.preventDefault()} onclick={() => put('https://')}><span class="label">{t('🔗 Link')}</span></button>
+          <button type="button" class="value" aria-expanded={linkOpen} onclick={() => (linkOpen ? (linkOpen = false) : openLink())}><span class="label">{t('🔗 Custom link…')}</span></button>
         </div>
       {/if}
       {#if groups.length === 0 && !showLinks}
-        <p class="quiet note">No value matches “{search}”.</p>
+        <p class="quiet note">{t('No value matches “{search}”.', { search })}</p>
       {/if}
     </div>
   </div>

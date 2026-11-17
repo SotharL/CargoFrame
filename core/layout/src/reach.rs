@@ -101,7 +101,7 @@ fn usable(cap: Capability) -> Result<(), &'static str> {
     if cap.works() {
         Ok(())
     } else {
-        Err(cap.note)
+        Err(cargoframe_i18n::t(cap.note))
     }
 }
 
@@ -189,10 +189,14 @@ pub fn select(
     ticked: Option<&[String]>,
 ) -> Result<Selection, Vec<String>> {
     let Some(BlockKind::SharingButton(own)) = layout.block(button_id).map(|b| &b.kind) else {
-        return Err(vec!["That sharing button is not in this layout".to_string()]);
+        return Err(vec![cargoframe_i18n::t(cargoframe_i18n::t(
+            "That sharing button is not in this layout",
+        ))
+        .to_string()]);
     };
-    let reach = reach(layout, button_id, reg)
-        .ok_or_else(|| vec!["That sharing button is not in this layout".to_string()])?;
+    let reach = reach(layout, button_id, reg).ok_or_else(|| {
+        vec![cargoframe_i18n::t("That sharing button is not in this layout").to_string()]
+    })?;
     let mode = sharing_mode(layout, button_id, reg);
     let kind = match mode {
         SharingMode::Send => own
@@ -223,8 +227,9 @@ pub fn select(
     };
     let ticked: BTreeSet<&str> = ticked.iter().map(String::as_str).collect();
     if let Some(unknown) = ticked.iter().find(|id| layout.block(id).is_none()) {
-        return Err(vec![format!(
-            "\u{201c}{unknown}\u{201d} is not a block of this layout"
+        return Err(vec![cargoframe_i18n::tf(
+            "\u{201c}{unknown}\u{201d} is not a block of this layout",
+            &[("unknown", unknown)],
         )]);
     }
 
@@ -241,13 +246,22 @@ pub fn select(
         let on = ticked.contains(r.block_id.as_str());
         match (&r.verdict, on) {
             (Verdict::CannotSend { why }, true) => {
-                reasons.push(format!("{name} cannot be sent: {why}"));
+                reasons.push(cargoframe_i18n::tf(
+                    "{name} cannot be sent: {why}",
+                    &[("name", &name), ("why", why)],
+                ));
             }
             (Verdict::NotUsed, true) => {
-                reasons.push(format!("This button has no field for {name}"));
+                reasons.push(cargoframe_i18n::tf(
+                    "This button has no field for {name}",
+                    &[("name", &name)],
+                ));
             }
             (Verdict::Sent { .. }, false) if r.required => {
-                reasons.push(format!("{name} is needed by this button"));
+                reasons.push(cargoframe_i18n::tf(
+                    "{name} is needed by this button",
+                    &[("name", &name)],
+                ));
             }
             _ => {}
         }
@@ -311,8 +325,8 @@ fn block_name(b: &Block) -> String {
         }
     };
     match &b.kind {
-        BlockKind::Screenshot => "The screenshot".into(),
-        BlockKind::Video(_) => "The video".into(),
+        BlockKind::Screenshot => cargoframe_i18n::t("The screenshot").into(),
+        BlockKind::Video(_) => cargoframe_i18n::t("The video").into(),
         BlockKind::Text(t) => format!("\u{201c}{}\u{201d}", titled(&t.title)),
         BlockKind::Dropdown(d) => format!("\u{201c}{}\u{201d}", titled(&d.title)),
         BlockKind::Files(f) => format!("\u{201c}{}\u{201d}", titled(&f.title)),

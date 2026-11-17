@@ -1,7 +1,10 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // How fast CargoFrame has been on this computer, and which windows hold memory right now.
   // Only shown, never changed here: the setting that decides it is in General.
   import { onMount } from 'svelte';
+  /** A window measured "warm" was already open or kept ready; "cold" had to be built. */
+  const noteOf = (n: string) => (n === 'warm' ? t('warm') : n === 'cold' ? t('cold') : n);
   import Section from '../../lib/components/Section.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import { getApi } from '../../lib/ipc';
@@ -13,9 +16,9 @@
   let refreshedAt = $state('');
 
   const windowText = {
-    open: 'Open now',
-    kept: 'Hidden, kept ready (holds memory)',
-    closed: 'Closed (no memory held)',
+    open: t('Open now'),
+    kept: t('Hidden, kept ready (holds memory)'),
+    closed: t('Closed (no memory held)'),
   } as const;
 
   async function read() {
@@ -43,11 +46,11 @@
 </script>
 
 <Section
-  title="Speed and memory"
-  hint="How long the last captures and shares took against the targets CargoFrame aims for, and which windows hold memory now. Useful when something feels slow."
+  title={t('Speed and memory')}
+  hint={t('How long the last captures and shares took against the targets CargoFrame aims for, and which windows hold memory now. Useful when something feels slow.')}
 >
   <div class="sub" aria-busy={refreshing}>
-    <h3>Windows right now</h3>
+    <h3>{t('Windows right now')}</h3>
     {#if memory}
       <ul class="timings">
         {#each memory.windows as w (w.label)}
@@ -58,20 +61,20 @@
         {/each}
       </ul>
     {:else}
-      <p class="quiet">Could not read the window state.</p>
+      <p class="quiet">{t('Could not read the window state.')}</p>
     {/if}
 
-    <h3>Last measured</h3>
+    <h3>{t('Last measured')}</h3>
     {#if timings.length === 0}
-      <p class="quiet">Nothing measured yet. Use a trigger or share something, then press Refresh.</p>
+      <p class="quiet">{t('Nothing measured yet. Use a trigger or share something, then press Refresh.')}</p>
     {:else}
       <ul class="timings">
-        {#each timings as t (t.id)}
+        {#each timings as item (item.id)}
           <li>
-            <span>{t.label}{t.note ? ` (${t.note})` : ''}</span>
+            <span>{item.label}{item.note ? ` (${noteOf(item.note)})` : ''}</span>
             <Chip
-              kind={t.budget_ms !== null && t.ms > t.budget_ms ? 'warn' : 'dbg'}
-              label={t.budget_ms !== null ? `${t.ms} ms of ${t.budget_ms}` : `${t.ms} ms`}
+              kind={item.budget_ms !== null && item.ms > item.budget_ms ? 'warn' : 'dbg'}
+              label={item.budget_ms !== null ? t('{ms} ms of {budget}', { ms: item.ms, budget: item.budget_ms }) : t('{ms} ms', { ms: item.ms })}
             />
           </li>
         {/each}
@@ -79,11 +82,11 @@
     {/if}
     <div class="refresh">
       <button type="button" onclick={refresh} disabled={refreshing}>
-        {refreshing ? 'Refreshing…' : 'Refresh'}
+        {refreshing ? t('Refreshing…') : t('Refresh')}
       </button>
       {#if refreshing}<span class="spinner" aria-hidden="true"></span>{/if}
       <span class="quiet" role="status" aria-live="polite">
-        {#if refreshing}Reading the current state…{:else if refreshedAt}Refreshed at {refreshedAt}{/if}
+        {#if refreshing}{t('Reading the current state…')}{:else if refreshedAt}{t('Refreshed at {time}', { time: refreshedAt })}{/if}
       </span>
     </div>
   </div>

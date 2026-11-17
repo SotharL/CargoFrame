@@ -1,4 +1,5 @@
 import type { ClipPlace, KeyLine } from '../../lib/types';
+import { t } from '../../lib/i18n/index.svelte';
 
 /**
  * The keys pressed over a recording, and a crop that follows a window as it moved. The window
@@ -77,13 +78,13 @@ export async function drawKeys(lines: readonly KeyLine[], height: number): Promi
   const outline = Math.max(2, Math.round(px * 0.18));
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('This window cannot draw the keys pressed');
+  if (!ctx) throw new Error(t('This window cannot draw the keys pressed'));
   ctx.font = font(px);
   const widest = Math.max(1, ...lines.map((l) => ctx.measureText(l.text).width));
   canvas.width = Math.ceil(widest + outline * 2 + 4);
   canvas.height = Math.ceil(px * 1.4 + outline * 2);
   const picture = () =>
-    new Promise<Blob>((done, fail) => canvas.toBlob((b) => (b ? done(b) : fail(new Error('The keys could not be made into a picture'))), 'image/png'));
+    new Promise<Blob>((done, fail) => canvas.toBlob((b) => (b ? done(b) : fail(new Error(t('The keys could not be made into a picture')))), 'image/png'));
   const out: Blob[] = [];
   ctx.clearRect(0, 0, canvas.width, canvas.height);
   out.push(await picture());

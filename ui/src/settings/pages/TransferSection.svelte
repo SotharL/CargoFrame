@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Section from '../../lib/components/Section.svelte';
@@ -9,9 +11,9 @@
   } from '../../lib/types';
 
   const GROUPS: { group: TransferGroup; label: string; kind: 'layout' | 'rule' | 'infotype' }[] = [
-    { group: 'layouts', label: 'Layouts', kind: 'layout' },
-    { group: 'rules', label: 'Data from files', kind: 'rule' },
-    { group: 'infotypes', label: 'Field fills', kind: 'infotype' },
+    { group: 'layouts', label: t('Layouts'), kind: 'layout' },
+    { group: 'rules', label: t('Data from files'), kind: 'rule' },
+    { group: 'infotypes', label: t('Field fills'), kind: 'infotype' },
   ];
 
   type Row = { id: string; name: string; on: boolean };
@@ -61,7 +63,7 @@
         ids: rows[g.group].filter((r) => r.on).map((r) => r.id),
       })).filter((s) => s.ids.length > 0);
       const path = await (await getApi()).exportSettings(selection);
-      if (path) exported = { kind: 'ok', text: 'Exported', path };
+      if (path) exported = { kind: 'ok', text: t('Exported'), path };
     } catch (e) {
       exported = { kind: 'err', text: String(e) };
     }
@@ -119,13 +121,13 @@
 </script>
 
 <Section
-  title="Export and import"
-  hint="Back up layouts, data from files and field fills, or move them to another computer. Connections, passwords, keys and shortcuts are never included."
+  title={t('Export and import')}
+  hint={t('Back up layouts, data from files and field fills, or move them to another computer. Connections, passwords, keys and shortcuts are never included.')}
 >
   <div class="panel">
-    <h3>Export</h3>
+    <h3>{t('Export')}</h3>
     {#if total === 0}
-      <p class="quiet">Nothing to export yet. Layouts, data from files and field fills you create show up here.</p>
+      <p class="quiet">{t('Nothing to export yet. Layouts, data from files and field fills you create show up here.')}</p>
     {:else}
       {#each GROUPS as g (g.group)}
         {#if rows[g.group].length > 0}
@@ -133,14 +135,14 @@
             <summary>
               <input
                 type="checkbox"
-                aria-label={`All ${g.label.toLowerCase()}`}
+                aria-label={t('All {kind}', { kind: g.label.toLowerCase() })}
                 checked={rows[g.group].every((r) => r.on)}
                 indeterminate={rows[g.group].some((r) => r.on) && !rows[g.group].every((r) => r.on)}
                 onclick={(e) => e.stopPropagation()}
                 onchange={(e) => setGroup(g.group, e.currentTarget.checked)}
               />
               <span>{g.label}</span>
-              <span class="quiet">{rows[g.group].filter((r) => r.on).length} of {rows[g.group].length}</span>
+              <span class="quiet">{t('{n} of {total}', { n: rows[g.group].filter((r) => r.on).length, total: rows[g.group].length })}</span>
             </summary>
             <ul>
               {#each rows[g.group] as r (r.id)}
@@ -152,7 +154,7 @@
       {/each}
       <div class="line">
         <button type="button" onclick={doExport} disabled={busy || selectedCount === 0}>
-          Export {selectedCount} {selectedCount === 1 ? 'item' : 'items'}…
+          {tn('Export {n} item…', t('Export {n} items…'), selectedCount)}
         </button>
         {#if exported}
           <Chip kind={exported.kind} label={exported.text} />
@@ -163,17 +165,17 @@
   </div>
 
   <div class="panel">
-    <h3>Import</h3>
+    <h3>{t('Import')}</h3>
     {#if !preview}
       <p class="quiet">
-        Choose a file made by Export. You see what is in it, and what is already here, before anything changes.
+        {t('Choose a file made by Export. You see what is in it, and what is already here, before anything changes.')}
       </p>
       <div class="line">
-        <button type="button" onclick={chooseFile} disabled={busy}>Choose a file…</button>
+        <button type="button" onclick={chooseFile} disabled={busy}>{t('Choose a file…')}</button>
         {#if importError}<Chip kind="err" label={importError} />{/if}
       </div>
     {:else}
-      <p>From <span class="mono selectable">{preview.file_name}</span></p>
+      <p><Tr text={t('From {file}')}>{#snippet file()}<span class="mono selectable">{preview!.file_name}</span>{/snippet}</Tr></p>
       <ul class="items">
         {#each preview.items as i (keyOf(i))}
           <li>
@@ -181,23 +183,23 @@
               <strong>{i.name}</strong>
               <span class="quiet">{groupLabel(i.group)}</span>
               {#if i.error}
-                <Chip kind="err" label={`Cannot be imported: ${i.error}`} />
+                <Chip kind="err" label={t('Cannot be imported: {error}', { error: i.error })} />
               {:else if i.exists}
-                <Chip kind="warn" label={`Already here${i.existing_name ? ` as “${i.existing_name}”` : ''}`} />
+                <Chip kind="warn" label={i.existing_name ? t('Already here as “{name}”', { name: i.existing_name }) : t('Already here')} />
               {:else}
-                <Chip kind="ok" label="New" />
+                <Chip kind="ok" label={t('New')} />
               {/if}
               {#each i.notes as n (n)}<p class="quiet note">{n}</p>{/each}
             </div>
             {#if !i.error}
-              <select bind:value={actions[keyOf(i)]} aria-label={`What to do with ${i.name}`}>
+              <select bind:value={actions[keyOf(i)]} aria-label={t('What to do with {name}', { name: i.name })}>
                 {#if i.exists}
-                  <option value="skip">Leave mine</option>
-                  <option value="replace">Replace mine</option>
-                  {#if i.can_copy}<option value="copy">Import as a copy</option>{/if}
+                  <option value="skip">{t('Leave mine')}</option>
+                  <option value="replace">{t('Replace mine')}</option>
+                  {#if i.can_copy}<option value="copy">{t('Import as a copy')}</option>{/if}
                 {:else}
-                  <option value="replace">Import</option>
-                  <option value="skip">Skip</option>
+                  <option value="replace">{t('Import')}</option>
+                  <option value="skip">{t('Skip')}</option>
                 {/if}
               </select>
             {/if}
@@ -206,9 +208,9 @@
       </ul>
       <div class="line">
         <button class="primary" type="button" onclick={doImport} disabled={busy || toImport === 0}>
-          Import {toImport} {toImport === 1 ? 'item' : 'items'}
+          {tn('Import {n} item', t('Import {n} items'), toImport)}
         </button>
-        <button type="button" onclick={cancelImport} disabled={busy}>Cancel</button>
+        <button type="button" onclick={cancelImport} disabled={busy}>{t('Cancel')}</button>
         {#if importError}<Chip kind="err" label={importError} />{/if}
       </div>
     {/if}
@@ -216,7 +218,7 @@
       <div class="report" role="status">
         <Chip
           kind={report.imported.length ? 'ok' : 'warn'}
-          label={`Imported ${report.imported.length}${report.skipped ? `, left ${report.skipped} as they were` : ''}`}
+          label={report.skipped ? t('Imported {n}, left {skipped} as they were', { n: report.imported.length, skipped: report.skipped }) : t('Imported {n}', { n: report.imported.length })}
         />
         {#each report.failed as f (f)}<Chip kind="err" label={f} />{/each}
       </div>

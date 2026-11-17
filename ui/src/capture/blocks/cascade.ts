@@ -2,6 +2,7 @@
 // only the logic; DropdownBlock draws it. A list whose options carry no `server` is a plain list.
 import type { ComboOption, DropdownOption } from '../../lib/types';
 import type { Recent } from '../../lib/recent';
+import { t } from '../../lib/i18n/index.svelte';
 
 /** The "choice outside any category" entry of the category list. */
 export const NO_CATEGORY = '\u0000none';
@@ -88,7 +89,7 @@ export function comboOptions(
   if (recent.length === 0) return options.map((o) => plain(o, null));
   const seen = new Set(recent.map((o) => o.value));
   return [
-    ...recent.map((o) => row(o, 'Recent', placeOf(o) || null)),
-    ...options.filter((o) => !seen.has(o.value)).map((o) => plain(o, 'Others')),
+    ...recent.map((o) => row(o, t('Recently used'), placeOf(o) || null)),
+    ...options.filter((o) => !seen.has(o.value)).map((o) => plain(o, t('Others'))),
   ];
 }

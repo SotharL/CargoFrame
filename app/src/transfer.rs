@@ -12,6 +12,7 @@
 
 use crate::items::{self, ItemKind};
 use cargoframe_config::{valid_id, InfoType, Kind, Store};
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{BlockKind, DropdownSource, Layout, ValueSource};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -43,9 +44,9 @@ impl Group {
 
     fn label(self) -> &'static str {
         match self {
-            Group::Layouts => "layout",
-            Group::Rules => "data rule",
-            Group::Infotypes => "info type",
+            Group::Layouts => cargoframe_i18n::t("layout"),
+            Group::Rules => cargoframe_i18n::t("data rule"),
+            Group::Infotypes => cargoframe_i18n::t("info type"),
         }
     }
 }
@@ -85,9 +86,9 @@ pub fn export(store: &Store, selection: &[Selection], exported: &str) -> Result<
         let out = groups.entry(pick.group).or_default();
         for id in &pick.ids {
             let Some(item) = have.get(id.as_str()) else {
-                return Err(format!(
-                    "The {} \u{201c}{id}\u{201d} does not exist any more",
-                    pick.group.label()
+                return Err(tf(
+                    "The {group} \u{201c}{id}\u{201d} does not exist any more",
+                    &[("group", &pick.group.label()), ("id", &id)],
                 ));
             };
             out.insert(id.clone(), (*item).clone());
@@ -95,7 +96,7 @@ pub fn export(store: &Store, selection: &[Selection], exported: &str) -> Result<
     }
     groups.retain(|_, items| !items.is_empty());
     if groups.is_empty() {
-        return Err("Choose something to export".into());
+        return Err(t("Choose something to export").into());
     }
     let file = SettingsFile {
         format: FORMAT.to_string(),
@@ -132,27 +133,29 @@ impl Entry {
 /// is kept with its reason so the preview can show it.
 pub fn parse(text: &str) -> Result<Vec<Entry>, String> {
     if text.len() as u64 > MAX_FILE_BYTES {
-        return Err("This file is too large to be a CargoFrame settings file".into());
+        return Err(t("This file is too large to be a CargoFrame settings file").into());
     }
     let value: Value = serde_json::from_str(text.strip_prefix('\u{feff}').unwrap_or(text))
-        .map_err(|_| "This is not a CargoFrame settings file (it is not valid JSON)".to_string())?;
+        .map_err(|_| {
+            t("This is not a CargoFrame settings file (it is not valid JSON)").to_string()
+        })?;
     match value.get("format").and_then(Value::as_str) {
         Some(FORMAT) => {}
-        _ => return Err("This is not a CargoFrame settings file".into()),
+        _ => return Err(t("This is not a CargoFrame settings file").into()),
     }
     match value.get("version").and_then(Value::as_u64) {
         Some(v) if v == u64::from(VERSION) => {}
         Some(v) if v > u64::from(VERSION) => {
             return Err(
-                "This file was made by a newer CargoFrame. Update CargoFrame to read it".into(),
+                t("This file was made by a newer CargoFrame. Update CargoFrame to read it").into(),
             )
         }
-        _ => return Err("This settings file has no readable version".into()),
+        _ => return Err(t("This settings file has no readable version").into()),
     }
     let groups = value
         .get("groups")
         .and_then(Value::as_object)
-        .ok_or("This settings file holds no groups")?;
+        .ok_or(t("This settings file holds no groups"))?;
     let mut out = Vec::new();
     for (name, items) in groups {
         // A group this CargoFrame does not know is left alone, not an error: a newer one may
@@ -160,12 +163,19 @@ pub fn parse(text: &str) -> Result<Vec<Entry>, String> {
         let Ok(group) = serde_json::from_value::<Group>(Value::String(name.clone())) else {
             continue;
         };
-        let items = items
-            .as_object()
-            .ok_or_else(|| format!("The group \u{201c}{name}\u{201d} is not a list of items"))?;
+        let items = items.as_object().ok_or_else(|| {
+            tf(
+                "The group \u{201c}{name}\u{201d} is not a list of items",
+                &[("name", &name)],
+            )
+        })?;
         if items.len() > MAX_ITEMS_PER_GROUP {
-            return Err(format!(
-                "The group \u{201c}{name}\u{201d} holds more than {MAX_ITEMS_PER_GROUP} items"
+            return Err(tf(
+                "The group \u{201c}{name}\u{201d} holds more than {MAX_ITEMS_PER_GROUP} items",
+                &[
+                    ("name", &name),
+                    ("MAX_ITEMS_PER_GROUP", &MAX_ITEMS_PER_GROUP),
+                ],
             ));
         }
         for (id, item) in items {
@@ -179,7 +189,7 @@ pub fn parse(text: &str) -> Result<Vec<Entry>, String> {
         }
     }
     if out.is_empty() {
-        return Err("This settings file holds no layouts, data rules or info types".into());
+        return Err(t("This settings file holds no layouts, data rules or info types").into());
     }
     out.sort_by(|a, b| (a.group, &a.id).cmp(&(b.group, &b.id)));
     Ok(out)
@@ -233,16 +243,12 @@ pub fn preview(store: &Store, entries: &[Entry]) -> Vec<PreviewItem> {
                         if let Ok(layout) = serde_json::from_value::<Layout>(e.item.clone()) {
                             let (connections, rules) = layout_references(&layout);
                             for c in connections.difference(&local_connections) {
-                                notes.push(format!(
-                                    "Uses the connection \u{201c}{c}\u{201d}, which is not on this computer: its button reads \u{201c}Save locally\u{201d} until you add one with that name"
-                                ));
+                                notes.push(tf("Uses the connection \u{201c}{c}\u{201d}, which is not on this computer: its button reads \u{201c}Save locally\u{201d} until you add one with that name", &[("c", &c)]));
                             }
                             for r in rules {
                                 if !local_rules.contains(&r) && !incoming_rules.contains(r.as_str())
                                 {
-                                    notes.push(format!(
-                                        "Reads the data rule \u{201c}{r}\u{201d}, which does not exist here"
-                                    ));
+                                    notes.push(tf("Reads the data rule \u{201c}{r}\u{201d}, which does not exist here", &[("r", &r)]));
                                 }
                             }
                         }
@@ -250,10 +256,7 @@ pub fn preview(store: &Store, entries: &[Entry]) -> Vec<PreviewItem> {
                     Group::Infotypes => {
                         if let Ok(t) = serde_json::from_value::<InfoType>(e.item.clone()) {
                             if !local_connections.contains(&t.connection_id) {
-                                notes.push(format!(
-                                    "Belongs to the connection \u{201c}{}\u{201d}, which is not on this computer",
-                                    t.connection_id
-                                ));
+                                notes.push(tf("Belongs to the connection \u{201c}{connection_id}\u{201d}, which is not on this computer", &[("connection_id", &t.connection_id)]));
                             }
                         }
                     }
@@ -358,9 +361,10 @@ pub fn apply(store: &Store, entries: &[Entry], picks: &[Pick]) -> Report {
             .iter()
             .find(|e| e.group == pick.group && e.id == pick.id)
         else {
-            report
-                .failed
-                .push(format!("\u{201c}{}\u{201d} is not in the file", pick.id));
+            report.failed.push(tf(
+                "\u{201c}{id}\u{201d} is not in the file",
+                &[("id", &pick.id)],
+            ));
             continue;
         };
         if let Some(why) = &entry.error {
@@ -374,10 +378,7 @@ pub fn apply(store: &Store, entries: &[Entry], picks: &[Pick]) -> Report {
             Action::Replace => (entry.id.clone(), entry.item.clone(), false),
             Action::Copy => {
                 if entry.group == Group::Rules {
-                    report.failed.push(format!(
-                        "\u{201c}{}\u{201d}: a data rule cannot be imported as a copy, because layouts refer to it by its id",
-                        entry.name()
-                    ));
+                    report.failed.push(tf("\u{201c}{entry}\u{201d}: a data rule cannot be imported as a copy, because layouts refer to it by its id", &[("entry", &entry.name())]));
                     continue;
                 }
                 let id = match items::new_id(store, kind, &entry.name()) {
@@ -399,9 +400,9 @@ pub fn apply(store: &Store, entries: &[Entry], picks: &[Pick]) -> Report {
             Action::Skip => unreachable!("handled above"),
         };
         if !valid_id(&id) {
-            report.failed.push(format!(
-                "\u{201c}{}\u{201d}: the id is not usable",
-                entry.name()
+            report.failed.push(tf(
+                "\u{201c}{entry}\u{201d}: the id is not usable",
+                &[("entry", &entry.name())],
             ));
             continue;
         }

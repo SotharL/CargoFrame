@@ -14,6 +14,7 @@
     "allow-edit-layout",
     "allow-app-info",
     "allow-get-general",
+    "allow-get-language",
     "allow-fetch-options",
     "allow-set-edited-image",
     "allow-read-text",

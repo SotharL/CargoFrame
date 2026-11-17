@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t, tn } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // What CargoFrame keeps on this computer, with a way to clear each kind, and a way back to a new
   // install. Nothing here touches the program itself or anything outside CargoFrame's own folders.
   import { onMount } from 'svelte';
@@ -31,10 +33,10 @@
   function said(done: Cleaned): { kind: 'ok' | 'warn'; text: string } {
     const text =
       done.files === 0 && done.left === 0
-        ? 'Nothing to remove.'
-        : `Removed ${done.files} ${done.files === 1 ? 'file' : 'files'} (${formatSize(done.bytes)}).`;
+        ? t('Nothing to remove.')
+        : tn('Removed {n} file ({size}).', 'Removed {n} files ({size}).', done.files, { size: formatSize(done.bytes) });
     return done.left > 0
-      ? { kind: 'warn', text: `${text} ${done.left} in use ${done.left === 1 ? 'was' : 'were'} left.` }
+      ? { kind: 'warn', text: `${text} ${tn('{n} in use was left.', '{n} in use were left.', done.left)}` }
       : { kind: 'ok', text };
   }
 
@@ -52,7 +54,7 @@
 
   function forget() {
     const n = forgetRecent() + forgetFormats();
-    message = { kind: 'ok', text: n === 0 ? 'Nothing was remembered.' : 'The last choices of every dropdown, and the log time formats used, are forgotten.' };
+    message = { kind: 'ok', text: n === 0 ? t('Nothing was remembered.') : t('The last choices of every dropdown, and the log time formats used, are forgotten.') };
     remembering = remembered() + formatsKept();
   }
 
@@ -64,7 +66,7 @@
       forgetRecent();
       forgetFormats();
       confirming = false;
-      message = { kind: 'ok', text: 'CargoFrame is back to a new install.' };
+      message = { kind: 'ok', text: t('CargoFrame is back to a new install.') };
       reload();
     } catch (e) {
       confirming = false;
@@ -75,12 +77,12 @@
   }
 </script>
 
-<Section title="Your data" hint="Everything CargoFrame keeps stays in these two folders on this computer.">
+<Section title={t('Your data')} hint={t('Everything CargoFrame keeps stays in these two folders on this computer.')}>
   {#if report}
-    <p class="quiet">Settings: <span class="mono selectable">{report.config_dir}</span></p>
-    <p class="quiet">Logs, kept zips and work in progress: <span class="mono selectable">{report.data_dir}</span></p>
+    <p class="quiet"><Tr text={t('Settings: {path}')}>{#snippet path()}<span class="mono selectable">{report!.config_dir}</span>{/snippet}</Tr></p>
+    <p class="quiet"><Tr text={t('Logs, kept zips and work in progress: {path}')}>{#snippet path()}<span class="mono selectable">{report!.data_dir}</span>{/snippet}</Tr></p>
     <div>
-      <button type="button" onclick={async () => (await getApi()).openConfigFolder()}>Open settings folder</button>
+      <button type="button" onclick={async () => (await getApi()).openConfigFolder()}>{t('Open settings folder')}</button>
     </div>
 
     <ul class="areas">
@@ -90,38 +92,37 @@
             <strong>{a.label}</strong>
             <span class="quiet">{a.what}</span>
           </div>
-          <span class="size">{a.files === 0 ? 'Empty' : `${a.files} ${a.files === 1 ? 'file' : 'files'}, ${formatSize(a.bytes)}`}</span>
-          <button type="button" onclick={() => clear([a.id])} disabled={busy || a.files === 0} aria-label={`Clear ${a.label}`}>Clear</button>
+          <span class="size">{a.files === 0 ? t('Empty') : tn('{n} file, {size}', '{n} files, {size}', a.files, { size: formatSize(a.bytes) })}</span>
+          <button type="button" onclick={() => clear([a.id])} disabled={busy || a.files === 0} aria-label={t('Clear {label}', { label: a.label })}>{t('Clear')}</button>
         </li>
       {/each}
       <li>
         <div class="what">
-          <strong>Remembered choices</strong>
-          <span class="quiet">The last choices of your dropdowns (a channel, a project), so the next capture starts on them.</span>
+          <strong>{t('Remembered choices')}</strong>
+          <span class="quiet">{t('The last choices of your dropdowns (a channel, a project), so the next capture starts on them.')}</span>
         </div>
-        <span class="size">{remembering === 0 ? 'None' : remembering === 1 ? '1 dropdown' : `${remembering} dropdowns`}</span>
-        <button type="button" onclick={forget} disabled={busy || remembering === 0} aria-label="Forget the remembered choices">Forget</button>
+        <span class="size">{remembering === 0 ? t('None') : tn('{n} dropdown', '{n} dropdowns', remembering)}</span>
+        <button type="button" onclick={forget} disabled={busy || remembering === 0} aria-label={t('Forget the remembered choices')}>{t('Forget')}</button>
       </li>
     </ul>
 
     <div class="reset">
-      <h3>Start again</h3>
+      <h3>{t('Start again')}</h3>
       <p class="quiet">
-        Removes every trigger, layout, value from a file, field fill and connection, forgets the sign-ins and tokens kept for
-        them, and clears all of the above. CargoFrame itself stays installed, and so do the files you saved zips to.
+        {t('Removes every trigger, layout, value from a file, field fill and connection, forgets the sign-ins and tokens kept for them, and clears all of the above. CargoFrame itself stays installed, and so do the files you saved zips to.')}
       </p>
       {#if confirming}
         <div class="sure" role="alert">
-          <span>This cannot be undone. Export your settings first if you may want them back.</span>
-          <button type="button" class="danger" onclick={reset} disabled={busy}>Yes, reset CargoFrame</button>
-          <button type="button" onclick={() => (confirming = false)}>Keep everything</button>
+          <span>{t('This cannot be undone. Export your settings first if you may want them back.')}</span>
+          <button type="button" class="danger" onclick={reset} disabled={busy}>{t('Yes, reset CargoFrame')}</button>
+          <button type="button" onclick={() => (confirming = false)}>{t('Keep everything')}</button>
         </div>
       {:else}
-        <div><button type="button" class="danger-outline" onclick={() => (confirming = true)} disabled={busy}>Reset CargoFrame…</button></div>
+        <div><button type="button" class="danger-outline" onclick={() => (confirming = true)} disabled={busy}>{t('Reset CargoFrame…')}</button></div>
       {/if}
     </div>
   {:else if !message}
-    <p class="quiet" role="status">Looking at what is kept…</p>
+    <p class="quiet" role="status">{t('Looking at what is kept…')}</p>
   {/if}
   {#if message}
     <div role="status" aria-live="polite"><Chip kind={message.kind} label={message.text} /></div>

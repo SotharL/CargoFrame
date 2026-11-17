@@ -494,7 +494,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-bundle",
  "cargoframe-capture",
@@ -503,6 +503,7 @@ dependencies = [
  "cargoframe-context",
  "cargoframe-deliver",
  "cargoframe-handoff",
+ "cargoframe-i18n",
  "cargoframe-indicator",
  "cargoframe-keys",
  "cargoframe-layout",
@@ -538,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-bundle"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-safe",
  "serde",
@@ -551,7 +552,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-capture"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "png",
  "serde_json",
@@ -566,10 +567,11 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-config"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-connectors",
  "cargoframe-handoff",
+ "cargoframe-i18n",
  "cargoframe-layout",
  "cargoframe-rules",
  "dirs 7.0.0",
@@ -581,12 +583,13 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-connectors"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "base64 0.23.1",
  "cargoframe-context",
  "cargoframe-deliver",
  "cargoframe-handoff",
+ "cargoframe-i18n",
  "cargoframe-net",
  "cargoframe-safe",
  "getrandom 0.4.3",
@@ -600,15 +603,16 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-context"
-version = "0.5.1"
+version = "0.6.0"
 
 [[package]]
 name = "cargoframe-deliver"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "arboard",
  "cargoframe-capture",
  "cargoframe-handoff",
+ "cargoframe-i18n",
  "png",
  "tempfile",
  "thiserror 2.0.21",
@@ -617,15 +621,23 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-handoff"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
 ]
 
 [[package]]
+name = "cargoframe-i18n"
+version = "0.6.0"
+dependencies = [
+ "serde_json",
+ "sys-locale",
+]
+
+[[package]]
 name = "cargoframe-indicator"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "tracing",
  "windows",
@@ -634,7 +646,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-keys"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -645,16 +657,17 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-layout"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-context",
+ "cargoframe-i18n",
  "serde",
  "serde_json",
 ]
 
 [[package]]
 name = "cargoframe-net"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-net",
  "getrandom 0.4.3",
@@ -665,7 +678,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-ocr"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "png",
  "serde",
@@ -676,9 +689,10 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-rules"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-context",
+ "cargoframe-i18n",
  "chrono",
  "csv",
  "regex",
@@ -694,14 +708,18 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-safe"
-version = "0.5.1"
+version = "0.6.0"
+dependencies = [
+ "cargoframe-i18n",
+]
 
 [[package]]
 name = "cargoframe-shortcuts"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-capture",
  "cargoframe-config",
+ "cargoframe-i18n",
  "serde",
  "serde_json",
  "tempfile",
@@ -711,7 +729,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-update"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-net",
  "semver",
@@ -724,7 +742,7 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-video"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -735,10 +753,11 @@ dependencies = [
 
 [[package]]
 name = "cargoframe-window"
-version = "0.5.1"
+version = "0.6.0"
 dependencies = [
  "cargoframe-context",
  "cargoframe-handoff",
+ "cargoframe-i18n",
  "cargoframe-layout",
  "serde",
  "serde_json",
@@ -4484,6 +4503,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "sys-locale"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8eab9a99a024a169fe8a903cf9d4a3b3601109bcc13bd9e3c6fff259138626c4"
+dependencies = [
+ "libc",
 ]
 
 [[package]]

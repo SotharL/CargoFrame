@@ -14,6 +14,7 @@
 
 use crate::extract::{extract, RuleError};
 use crate::model::{Find, Format, Multiple, Rule, Which};
+use cargoframe_i18n::t;
 
 /// The kind of a file, from its name, for the formats that hold named values.
 pub fn kind_of(path: &str) -> Option<Format> {
@@ -232,19 +233,19 @@ pub fn pick(mut found: Vec<String>, which: Which, find: &Find) -> Result<String,
 pub fn check(find: &Find) -> Result<(), String> {
     match find {
         Find::ValueOf { name } if name.trim().is_empty() => {
-            Err("Write the name written before the value, like GPU or version".into())
+            Err(t("Write the name written before the value, like GPU or version").into())
         }
         Find::Between { start, .. } if start.is_empty() => {
-            Err("Write the text that comes just before the value".into())
+            Err(t("Write the text that comes just before the value").into())
         }
         Find::LineWith { text } if text.trim().is_empty() => {
-            Err("Write a piece of text the line holds".into())
+            Err(t("Write a piece of text the line holds").into())
         }
         Find::Pick {
             lines_with,
             from_line_start: false,
             ..
-        } if lines_with.is_empty() => Err("Choose the text it comes right after".into()),
+        } if lines_with.is_empty() => Err(t("Choose the text it comes right after").into()),
         Find::Combine { choices } => crate::combine::check(choices),
         _ => Ok(()),
     }

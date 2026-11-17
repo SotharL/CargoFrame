@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The part of a sharing button's settings that says what it can send and what it does send:
   // the destination's capability table, one line per block, and the rules for the picture and
   // the files. The answers come from the same Rust code that does the sharing.
@@ -35,7 +36,7 @@
   const verdicts = $derived(
     others.map((b) => ({ b, line: reach ? (reach.blocks.find((r) => r.block_id === b.id) ?? null) : null })),
   );
-  const heading = $derived(kind ? `${KIND_NAME[kindKey(kind)]} can take` : 'Saving a zip on this computer keeps');
+  const heading = $derived(kind ? t('{service} can take', { service: KIND_NAME[kindKey(kind)] }) : t('Saving a zip on this computer keeps'));
 
   /** Send `blockId` as `route` (not sent, the prompt, or a field) by changing the button itself. */
   function route(blockId: string, to: string) {
@@ -55,7 +56,7 @@
   const limit = $derived(Math.min(MAX_INLINE_KB, Math.max(1, rules.inline_limit_kb)));
 </script>
 
-<section class="panel" style={kindStyle(kind)} aria-label="What this button sends">
+<section class="panel" style={kindStyle(kind)} aria-label={t('What this button sends')}>
   {#if caps}
     <h3>{heading}</h3>
     <ul class="caps">
@@ -71,7 +72,7 @@
   {/if}
 
   {#if reach && verdicts.length > 0}
-    <h3>What this button does with each block</h3>
+    <h3>{t('What this button does with each block')}</h3>
     <ul class="sends">
       {#each verdicts as v (v.b.id)}
         {#if v.line}
@@ -86,7 +87,7 @@
                 <label>
                   <strong>{blockName(v.b)}</strong>
                   <select
-                    aria-label="{blockName(v.b)}: what this button does with it"
+                    aria-label={t('{blockName}: what this button does with it', { blockName: blockName(v.b) })}
                     value={current}
                     disabled={v.line.state === 'cannot_send' || automatic}
                     onchange={(e) => route(v.b.id, e.currentTarget.value)}
@@ -99,7 +100,7 @@
                 {#if v.line.state === 'cannot_send'}
                   <span class="quiet note">{l.text}</span>
                 {:else if automatic}
-                  <span class="quiet note">Always picks the chat to open</span>
+                  <span class="quiet note">{t('Always picks the chat to open')}</span>
                 {/if}
               </span>
             {:else}
@@ -111,48 +112,48 @@
     </ul>
   {/if}
 
-  <h3>Send rules</h3>
+  <h3>{t('Send rules')}</h3>
   <Field
-    label={isVideo ? 'Video' : 'Screenshot'}
-    hint={pictureOff ? pictureCap?.note : isVideo ? 'Turn off to leave the video out of what this button sends.' : 'Turn off to leave the picture out of what this button sends.'}
+    label={isVideo ? t('Video') : t('Screenshot')}
+    hint={pictureOff ? pictureCap?.note : isVideo ? t('Turn off to leave the video out of what this button sends.') : t('Turn off to leave the picture out of what this button sends.')}
   >
     <span class="check">
       <input
         type="checkbox"
-        aria-label={isVideo ? 'Send the video' : 'Send the screenshot'}
+        aria-label={isVideo ? t('Send the video') : t('Send the screenshot')}
         checked={rules.screenshot && !pictureOff}
         disabled={pictureOff}
         onchange={(e) => setRules({ screenshot: e.currentTarget.checked })}
       />
-      {isVideo ? 'Send the video' : 'Send the screenshot'}
+      {isVideo ? t('Send the video') : t('Send the screenshot')}
     </span>
   </Field>
   <Field
-    label="Ticked files"
+    label={t('Ticked files')}
     hint={filesOff
       ? caps?.files.note
       : kind === 'claude'
-        ? 'Text files can go inside the message, so Claude reads them without opening attachments. Others stay attached.'
-        : 'Attach sends them as a zip.'}
+        ? t('Text files can go inside the message, so Claude reads them without opening attachments. Others stay attached.')
+        : t('Attach sends them as a zip.')}
   >
     <select
-      aria-label="Ticked files"
+      aria-label={t('Ticked files')}
       value={filesOff ? 'none' : rules.files}
       disabled={filesOff}
       onchange={(e) => setRules({ files: e.currentTarget.value as typeof rules.files })}
     >
-      <option value="attach">Attach them</option>
-      {#if kind === 'claude'}<option value="inline">Write text files into the message</option>{/if}
-      <option value="none">Leave them out</option>
+      <option value="attach">{t('Attach them')}</option>
+      {#if kind === 'claude'}<option value="inline">{t('Write text files into the message')}</option>{/if}
+      <option value="none">{t('Leave them out')}</option>
     </select>
   </Field>
   {#if kind === 'claude' && rules.files === 'inline'}
-    <Field label="Largest text file to write in" hint={`Bigger ones stay attached. 1 to ${MAX_INLINE_KB} KB.`}>
+    <Field label={t('Largest text file to write in')} hint={t('Bigger ones stay attached. 1 to {MAX_INLINE_KB} KB.', { MAX_INLINE_KB })}>
       <input
         type="number"
         min="1"
         max={MAX_INLINE_KB}
-        aria-label="Largest text file to write in (KB)"
+        aria-label={t('Largest text file to write in (KB)')}
         value={limit}
         onchange={(e) => setRules({ inline_limit_kb: Math.min(MAX_INLINE_KB, Math.max(1, Math.round(Number(e.currentTarget.value) || DEFAULT_SEND_RULES.inline_limit_kb))) })}
       />

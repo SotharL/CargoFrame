@@ -28,6 +28,7 @@
 //! computer is [`probe`]; installing is [`Installer`].
 
 use crate::video::Os;
+use cargoframe_i18n::{t, tf};
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
@@ -165,10 +166,10 @@ impl Packages {
     pub fn command(self, packages: &[&str]) -> Option<String> {
         let list = packages.join(" ");
         match self {
-            Self::Apt => Some(format!("sudo apt install {list}")),
-            Self::Dnf => Some(format!("sudo dnf install {list}")),
-            Self::Pacman => Some(format!("sudo pacman -S {list}")),
-            Self::Zypper => Some(format!("sudo zypper install {list}")),
+            Self::Apt => Some(tf("sudo apt install {list}", &[("list", &list)])),
+            Self::Dnf => Some(tf("sudo dnf install {list}", &[("list", &list)])),
+            Self::Pacman => Some(tf("sudo pacman -S {list}", &[("list", &list)])),
+            Self::Zypper => Some(tf("sudo zypper install {list}", &[("list", &list)])),
             Self::Unknown => None,
         }
     }
@@ -249,25 +250,30 @@ fn wayland_items(w: &WaylandProbe) -> Vec<Item> {
     let mut items = vec![
         Item {
             id: "wayland_screenshot",
-            name: "Screenshot service",
-            what_for: "Wayland lets programs see the screen only through the desktop. Without it, no capture works.",
+            name: t("Screenshot service"),
+            what_for: t("Wayland lets programs see the screen only through the desktop. Without it, no capture works."),
             status: found_or_missing(w.portal_screenshot || (w.wlroots && w.grim)),
             detail: match (w.portal_screenshot, w.wlroots && w.grim) {
-                (_, true) => "grim takes the screenshots.".into(),
-                (true, false) => format!("{}'s screenshot portal takes them.", w.desktop),
-                (false, false) => "Neither the desktop portal's screenshot service nor grim was found.".into(),
+                (_, true) => t("grim takes the screenshots.").into(),
+                (true, false) => tf(
+                    "{desktop}'s screenshot portal takes them.",
+                    &[("desktop", &w.desktop)],
+                ),
+                (false, false) => {
+                    t("Neither the desktop portal's screenshot service nor grim was found.").into()
+                }
             },
             action: None,
         },
         Item {
             id: "wayland_recording",
-            name: "GStreamer (PipeWire)",
-            what_for: "Recording video on Wayland: it reads the screen the desktop shares. Screenshots do not need it.",
+            name: t("GStreamer (PipeWire)"),
+            what_for: t("Recording video on Wayland: it reads the screen the desktop shares. Screenshots do not need it."),
             status: found_or_missing(w.gstreamer),
             detail: if w.gstreamer {
-                "Installed, with its PipeWire plugin.".into()
+                t("Installed, with its PipeWire plugin.").into()
             } else {
-                "gst-launch-1.0 or its PipeWire plugin (pipewiresrc) is missing.".into()
+                t("gst-launch-1.0 or its PipeWire plugin (pipewiresrc) is missing.").into()
             },
             action: None,
         },
@@ -276,12 +282,12 @@ fn wayland_items(w: &WaylandProbe) -> Vec<Item> {
         items.push(Item {
             id: "wtype",
             name: "wtype",
-            what_for: "Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you. Without it, the message is left on the clipboard.",
+            what_for: t("Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you. Without it, the message is left on the clipboard."),
             status: found_or_missing(w.wtype),
             detail: if w.wtype {
                 "Installed.".into()
             } else {
-                "Not installed.".into()
+                t("Not installed.").into()
             },
             action: None,
         });
@@ -297,14 +303,15 @@ fn first_sentence(text: &str) -> String {
     }
 }
 
-const SOUND_WHAT_FOR: &str =
-    "The speakers or headphones this computer plays on. A video records what it plays.";
+const SOUND_WHAT_FOR: &str = cargoframe_i18n::msg!(
+    "The speakers or headphones this computer plays on. A video records what it plays."
+);
 
 /// The line about the sound output: which device is the default, and what that means for videos.
 fn sound_output_item(os: Os, p: &Probes) -> Item {
     let line = |status, detail: String, action| Item {
         id: "sound_output",
-        name: "Sound output",
+        name: t("Sound output"),
         what_for: SOUND_WHAT_FOR,
         status,
         detail,
@@ -313,7 +320,7 @@ fn sound_output_item(os: Os, p: &Probes) -> Item {
     match &p.output {
         Output::Found(name) => line(
             Status::Ok,
-            format!("{name}. Videos record this sound."),
+            tf("{name}. Videos record this sound.", &[("name", &name)]),
             // Windows keeps the choice of output in its own settings
             (os == Os::Windows).then_some("sound_settings"),
         ),
@@ -324,7 +331,7 @@ fn sound_output_item(os: Os, p: &Probes) -> Item {
         ),
         Output::Unknown => line(
             Status::Unknown,
-            "This computer could not be asked. Press Check again.".into(),
+            t("This computer could not be asked. Press Check again.").into(),
             None,
         ),
     }
@@ -338,17 +345,22 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
         Ok((path, version)) => Item {
             id: "ffmpeg",
             name: "ffmpeg",
-            what_for:
+            what_for: t(
                 "Recording video, and the sound in it. Screenshots and sharing do not need it.",
+            ),
             status: Status::Ok,
-            detail: format!("Version {version}, {}", path.display()),
+            detail: tf(
+                "Version {version}, {path}",
+                &[("version", &version), ("path", &path.display())],
+            ),
             action: None,
         },
         Err(why) => Item {
             id: "ffmpeg",
             name: "ffmpeg",
-            what_for:
+            what_for: t(
                 "Recording video, and the sound in it. Screenshots and sharing do not need it.",
+            ),
             status: Status::Missing,
             detail: first_sentence(why),
             action: None,
@@ -364,7 +376,9 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
         items.push(Item {
             id: "xdotool",
             name: "xdotool",
-            what_for: "Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).",
+            what_for: t(
+                "Lets CargoFrame press Ctrl+V and Enter in a Claude chat for you (X11 only).",
+            ),
             status: if p.xdotool {
                 Status::Ok
             } else {
@@ -373,7 +387,7 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
             detail: if p.xdotool {
                 "Installed.".into()
             } else {
-                "Not installed.".into()
+                t("Not installed.").into()
             },
             action: None,
         });
@@ -382,13 +396,13 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
     if let (Os::Windows, Some(found)) = (os, p.claude_app) {
         items.push(Item {
             id: "claude_app",
-            name: "Claude desktop app",
-            what_for: "Where a Claude connection opens your chat. Without it, set that connection to open in the browser.",
+            name: t("Claude desktop app"),
+            what_for: t("Where a Claude connection opens your chat. Without it, set that connection to open in the browser."),
             status: if found { Status::Ok } else { Status::Missing },
             detail: if found {
                 "Installed.".into()
             } else {
-                "Not installed.".into()
+                t("Not installed.").into()
             },
             action: None,
         });
@@ -417,26 +431,22 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
         match os {
             Os::Windows if windows_wants && p.winget => Install::Run {
                 label: match (ffmpeg_missing, claude_missing) {
-                    (true, true) => "Install what is missing",
-                    (true, false) => "Install ffmpeg",
-                    _ => "Install the Claude app",
+                    (true, true) => cargoframe_i18n::t("Install what is missing"),
+                    (true, false) => cargoframe_i18n::t("Install ffmpeg"),
+                    _ => cargoframe_i18n::t("Install the Claude app"),
                 }
                 .into(),
             },
             Os::Windows if windows_wants => Install::Manual {
-                text: format!(
-                    "Windows' package manager (winget) was not found. Install \"App Installer\" from the Microsoft Store, then come back{}{}",
-                    if ffmpeg_missing {
-                        "; or download ffmpeg yourself and choose its folder under Video"
+                text: tf("Windows' package manager (winget) was not found. Install \"App Installer\" from the Microsoft Store, then come back{value}{value2}", &[("value", &if ffmpeg_missing {
+                        t("; or download ffmpeg yourself and choose its folder under Recording")
                     } else {
                         ""
-                    },
-                    if claude_missing {
-                        "; or get the Claude app at claude.ai/download"
+                    }), ("value2", &if claude_missing {
+                        t("; or get the Claude app at claude.ai/download")
                     } else {
                         ""
-                    },
-                ) + ".",
+                    })]) + ".",
             },
             Os::Linux => {
                 let mut wanted: Vec<&str> = Vec::new();
@@ -451,9 +461,9 @@ pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Rep
                     (true, _) => Install::None,
                     (false, Some(command)) => Install::Copy { command },
                     (false, None) => Install::Manual {
-                        text: format!(
-                            "Install {} with your package manager.",
-                            wanted.join(" and ")
+                        text: tf(
+                            "Install {programs} with your package manager.",
+                            &[("programs", &list_of(&wanted))],
                         ),
                     },
                 }
@@ -522,7 +532,7 @@ pub fn parse_windows_output(text: &str) -> Output {
     }
     if line == "NONE" {
         return Output::None(
-            "Windows has no default playback device: no speakers or headphones are set, or none is plugged in. Plug one in, or choose one in the Windows sound settings (the button).".into(),
+            t("Windows has no default playback device: no speakers or headphones are set, or none is plugged in. Plug one in, or choose one in the Windows sound settings (the button).").into(),
         );
     }
     Output::Unknown
@@ -538,7 +548,7 @@ pub fn parse_pactl_output(info: &str, sinks: &str) -> Output {
         .unwrap_or("");
     if default.is_empty() || default == "auto_null" {
         return Output::None(
-            "The sound system has no output: no speakers or headphones are set, or none is plugged in. Choose one in your system's sound settings.".into(),
+            t("The sound system has no output: no speakers or headphones are set, or none is plugged in. Choose one in your system's sound settings.").into(),
         );
     }
     // the description of that sink, if the listing has one
@@ -618,7 +628,7 @@ fn sound_output(os: Os) -> Output {
         Os::Linux => {
             if !crate::audio::pulse_running() {
                 return Output::None(
-                    "No sound system is running. Install PipeWire (with its PulseAudio layer) or PulseAudio with your package manager, and sign in again.".into(),
+                    t("No sound system is running. Install PipeWire (with its PulseAudio layer) or PulseAudio with your package manager, and sign in again.").into(),
                 );
             }
             let Some(pactl) = cargoframe_video::locate("pactl", &[]) else {
@@ -695,14 +705,14 @@ fn wayland_probe() -> Option<WaylandProbe> {
 /// chosen.
 pub fn open_sound_settings() -> Result<(), String> {
     if !cfg!(windows) {
-        return Err("This is a Windows setting.".into());
+        return Err(cargoframe_i18n::t("This is a Windows setting.").into());
     }
     let mut command = Command::new("control.exe");
     command.args(["mmsys.cpl,,0"]);
     command
         .spawn()
         .map(|_| ())
-        .map_err(|e| format!("Could not open the sound settings: {e}"))
+        .map_err(|e| tf("Could not open the sound settings: {e}", &[("e", &e)]))
 }
 
 // ----- installing -----
@@ -754,7 +764,7 @@ impl Installer {
         {
             let mut phase = self.lock();
             if *phase == Phase::Running {
-                return Err("An install is already running.".into());
+                return Err(t("An install is already running.").into());
             }
             *phase = Phase::Running;
         }
@@ -793,11 +803,12 @@ pub fn winget_failure(output: &str, code: Option<i32>) -> String {
         .join(" ");
     let said: String = said.chars().take(300).collect();
     match (said.is_empty(), code) {
-        (true, Some(c)) => {
-            format!("winget stopped with code {c}. Try again, or install the app by hand.")
-        }
-        (true, None) => "winget stopped before it finished.".into(),
-        (false, _) => format!("winget said: {said}"),
+        (true, Some(c)) => tf(
+            "winget stopped with code {c}. Try again, or install the app by hand.",
+            &[("c", &c)],
+        ),
+        (true, None) => cargoframe_i18n::t("winget stopped before it finished.").into(),
+        (false, _) => tf("winget said: {said}", &[("said", &said)]),
     }
 }
 
@@ -812,7 +823,7 @@ pub fn install_with_winget(package: &'static str) -> Result<(), String> {
         .stderr(Stdio::piped());
     let mut child = cargoframe_video::quiet(&mut command)
         .spawn()
-        .map_err(|e| format!("winget could not be started: {e}"))?;
+        .map_err(|e| tf("winget could not be started: {e}", &[("e", &e)]))?;
     let drain = |pipe: Option<Box<dyn std::io::Read + Send>>| {
         std::thread::spawn(move || {
             let mut bytes = Vec::new();
@@ -834,7 +845,7 @@ pub fn install_with_winget(package: &'static str) -> Result<(), String> {
         if started.elapsed() > INSTALL_TIMEOUT {
             let _ = child.kill();
             let _ = child.wait();
-            return Err("winget took more than 15 minutes and was stopped.".into());
+            return Err(t("winget took more than 15 minutes and was stopped.").into());
         }
         std::thread::sleep(Duration::from_millis(100));
     };
@@ -867,3 +878,15 @@ pub fn first_run(config: &Path) -> bool {
 #[cfg(test)]
 #[path = "setup_tests.rs"]
 mod tests;
+
+/// "a", "a and b", "a, b and c", in the language in use.
+fn list_of(items: &[&str]) -> String {
+    match items {
+        [] => String::new(),
+        [one] => (*one).to_string(),
+        [rest @ .., last] => tf(
+            "{list} and {last}",
+            &[("list", &rest.join(", ")), ("last", last)],
+        ),
+    }
+}

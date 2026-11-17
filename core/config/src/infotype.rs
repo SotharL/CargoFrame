@@ -6,6 +6,7 @@
 //! described the field); the layout builder also offers the field when a block is sent in it, and
 //! the connector knows how to shape the value (its kind, its list).
 
+use cargoframe_i18n::tf;
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeSet;
 
@@ -195,50 +196,58 @@ pub fn act(current: &str, action: Act, text: &str, list: bool, lines: bool) -> S
 /// Check an info type as it is saved. Returns what to change, in words.
 pub fn check(t: &InfoType) -> Result<(), String> {
     if t.name.trim().is_empty() {
-        return Err("Give the field a name".into());
+        return Err(cargoframe_i18n::t("Give the field a name").into());
     }
     if t.connection_id.trim().is_empty() {
-        return Err("Choose the connection this field belongs to".into());
+        return Err(cargoframe_i18n::t("Choose the connection this field belongs to").into());
     }
     let field = t.field.trim();
     if field.is_empty() {
-        return Err("Write the field's key in the service's API".into());
+        return Err(cargoframe_i18n::t("Write the field's key in the service's API").into());
     }
     if field.chars().any(char::is_control) {
-        return Err("The field key contains characters that are not allowed".into());
+        return Err(
+            cargoframe_i18n::t("The field key contains characters that are not allowed").into(),
+        );
     }
     let wants_list = matches!(t.kind, InfoKind::Choice | InfoKind::MultiChoice);
     match (&t.options, wants_list) {
         (InfoOptions::None, true) => {
-            return Err("A choice needs a list: type the options or pick an API list".into())
+            return Err(cargoframe_i18n::t(
+                "A choice needs a list: type the options or pick an API list",
+            )
+            .into())
         }
         (InfoOptions::Fixed { options }, _) => {
             if options.is_empty() {
-                return Err("Add at least one option".into());
+                return Err(cargoframe_i18n::t("Add at least one option").into());
             }
             let mut seen = BTreeSet::new();
             for o in options {
                 if o.value.trim().is_empty() {
-                    return Err("Every option needs a value".into());
+                    return Err(cargoframe_i18n::t("Every option needs a value").into());
                 }
                 if !seen.insert(o.value.as_str()) {
-                    return Err(format!("The value \"{}\" appears twice", o.value));
+                    return Err(tf(
+                        "The value \"{value}\" appears twice",
+                        &[("value", &o.value)],
+                    ));
                 }
             }
         }
         (InfoOptions::Api { options_id }, _) if options_id.trim().is_empty() => {
-            return Err("Name the API list to use".into())
+            return Err(cargoframe_i18n::t("Name the API list to use").into())
         }
         _ => {}
     }
     for s in &t.steps {
         if s.then.is_empty() {
-            return Err("Each step needs something to add or set".into());
+            return Err(cargoframe_i18n::t("Each step needs something to add or set").into());
         }
         if let Some(w) = &s.when {
             if matches!(w.test, Test::Is | Test::IsNot | Test::Contains) && w.text.trim().is_empty()
             {
-                return Err("Write the text the step looks for".into());
+                return Err(cargoframe_i18n::t("Write the text the step looks for").into());
             }
         }
     }

@@ -1,5 +1,6 @@
 import type { Annotation } from '../editor/model';
 import { drawAnnotations } from '../editor/render';
+import { t } from '../../lib/i18n/index.svelte';
 
 /**
  * The marks drawn over a recording (lines, squares, circles, arrows, text) on a see-through
@@ -11,9 +12,9 @@ export function drawMarks(width: number, height: number, marks: readonly Annotat
   canvas.width = width;
   canvas.height = height;
   const ctx = canvas.getContext('2d');
-  if (!ctx) return Promise.reject('This window cannot draw the marks');
+  if (!ctx) return Promise.reject(t('This window cannot draw the marks'));
   drawAnnotations(ctx, marks);
   return new Promise((resolve, reject) => {
-    canvas.toBlob((b) => (b ? resolve(b) : reject('The marks could not be made into a picture')), 'image/png');
+    canvas.toBlob((b) => (b ? resolve(b) : reject(t('The marks could not be made into a picture'))), 'image/png');
   });
 }

@@ -68,7 +68,7 @@ fn without_winget_the_button_says_what_to_do_instead() {
         panic!("expected a manual step");
     };
     assert!(
-        text.contains("App Installer") && text.contains("Video"),
+        text.contains("App Installer") && text.contains("Recording"),
         "{text}"
     );
 }

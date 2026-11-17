@@ -7,6 +7,7 @@
 use crate::Binding;
 use cargoframe_capture::portal::request_path;
 use cargoframe_config::shortcut;
+use cargoframe_i18n::{t, tf};
 use std::collections::{BTreeMap, HashMap};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Duration;
@@ -114,11 +115,11 @@ impl Portal {
         let (code, results) = rx
             .recv_timeout(wait)
             .map_err(|_| "the desktop did not answer".to_string())?
-            .ok_or("the request ended without an answer")??;
+            .ok_or(t("the request ended without an answer"))??;
         match code {
             0 => Ok(results),
-            1 => Err("you did not confirm the shortcuts".into()),
-            _ => Err("the desktop refused the shortcuts".into()),
+            1 => Err(t("you did not confirm the shortcuts").into()),
+            _ => Err(t("the desktop refused the shortcuts").into()),
         }
     }
 
@@ -160,7 +161,7 @@ impl Portal {
                     .and_then(|s| OwnedObjectPath::try_from(s).ok())
                     .or_else(|| OwnedObjectPath::try_from(v.try_clone().ok()?).ok())
             })
-            .ok_or("the desktop did not open a shortcut session")?;
+            .ok_or(t("the desktop did not open a shortcut session"))?;
 
         let shortcuts: Vec<(String, HashMap<&str, Value<'_>>)> = wanted
             .iter()
@@ -168,7 +169,7 @@ impl Portal {
                 let mut o: HashMap<&str, Value<'_>> = HashMap::new();
                 o.insert(
                     "description",
-                    Value::from(format!("CargoFrame: {}", b.name)),
+                    Value::from(tf("CargoFrame: {name}", &[("name", &b.name)])),
                 );
                 o.insert(
                     "preferred_trigger",

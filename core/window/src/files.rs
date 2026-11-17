@@ -2,6 +2,7 @@
 //! `/` as separator, `*` within a folder, `**` across folders. Read-only; nothing is opened.
 
 use cargoframe_context::glob;
+use cargoframe_i18n::{t, tf};
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
@@ -101,7 +102,7 @@ pub fn scan(root: &Path, include: &[String], preselect: &[String], limits: Limit
         return out;
     }
     if !root.is_dir() {
-        out.problem = Some(format!("{} is not a folder", root.display()));
+        out.problem = Some(tf("{root} is not a folder", &[("root", &root.display())]));
         return out;
     }
     let ignore_case = cfg!(windows);
@@ -213,7 +214,7 @@ pub fn scan_places(
         }
     }
     if places.len() > 1 && out.places.iter().all(|p| !p.exists) {
-        out.problem = Some("None of the folders to look in exist".into());
+        out.problem = Some(t("None of the folders to look in exist").into());
     }
     out.entries = merged.into_values().collect();
     if out.entries.len() > limits.max_results {

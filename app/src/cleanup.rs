@@ -20,26 +20,30 @@ struct Kind {
 const KINDS: &[Kind] = &[
     Kind {
         id: "work",
-        label: "Captures and recordings in progress",
-        what: "Kept for a little while so a window can use them, then removed by themselves.",
+        label: cargoframe_i18n::msg!("Captures and recordings in progress"),
+        what: cargoframe_i18n::msg!(
+            "Kept for a little while so a window can use them, then removed by themselves."
+        ),
         folders: &["captures", "video-recording", "video-test", "tmp"],
     },
     Kind {
         id: "kept",
-        label: "Zips kept here",
-        what: "Saved here when the folder for saved zips could not be used.",
+        label: cargoframe_i18n::msg!("Zips kept here"),
+        what: cargoframe_i18n::msg!("Saved here when the folder for saved zips could not be used."),
         folders: &["kept"],
     },
     Kind {
         id: "logs",
-        label: "Log files",
-        what: "What CargoFrame wrote about itself, for finding a problem.",
+        label: cargoframe_i18n::msg!("Log files"),
+        what: cargoframe_i18n::msg!("What CargoFrame wrote about itself, for finding a problem."),
         folders: &["logs"],
     },
     Kind {
         id: "updates",
-        label: "Downloaded updates",
-        what: "Installers downloaded by an update, removed after the install.",
+        label: cargoframe_i18n::msg!("Downloaded updates"),
+        what: cargoframe_i18n::msg!(
+            "Installers downloaded by an update, removed after the install."
+        ),
         folders: &["updates"],
     },
 ];
@@ -92,8 +96,8 @@ pub fn report(data: &Path) -> Vec<Area> {
                 .fold((0, 0), |(a, b), (c, d)| (a + c, b + d));
             Area {
                 id: k.id,
-                label: k.label,
-                what: k.what,
+                label: cargoframe_i18n::t(k.label),
+                what: cargoframe_i18n::t(k.what),
                 files,
                 bytes,
             }

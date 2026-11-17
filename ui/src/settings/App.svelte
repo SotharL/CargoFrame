@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../lib/i18n/index.svelte';
   import { onMount, tick } from 'svelte';
   import { GROUP_TITLES, PAGES, type PageGroup } from './nav';
   import { go, parseTarget, restore, route } from './route.svelte';
@@ -146,16 +147,16 @@
 <svelte:window onkeydown={onWindowKey} />
 
 <div class="shell">
-  <nav aria-label="Settings sections">
+  <nav aria-label={t('Settings sections')}>
     <div class="brand"><Logo variant="wordmark" size={26} /></div>
     <div class="search" role="search">
       <input
         bind:this={searchBox}
         bind:value={query}
         type="text"
-        placeholder="Search settings"
-        aria-label="Search settings"
-        title="Search settings (Ctrl+F)"
+        placeholder={t('Search settings')}
+        aria-label={t('Search settings')}
+        title={t('Search settings (Ctrl+F)')}
         autocomplete="off"
         spellcheck="false"
         onkeydown={(e) => {
@@ -169,7 +170,7 @@
         }}
       />
       {#if query}
-        <button type="button" class="clear" aria-label="Clear the search" title="Clear the search" onclick={clearSearch}>×</button>
+        <button type="button" class="clear" aria-label={t('Clear the search')} title={t('Clear the search')} onclick={clearSearch}>×</button>
       {/if}
     </div>
     {#if words.length > 0}
@@ -180,7 +181,7 @@
             <button type="button" class="found" onclick={() => show(f)}>{f.title}</button>
           {/each}
         {:else}
-          <p class="quiet none">No setting has these words.</p>
+          <p class="quiet none">{t('No setting has these words.')}</p>
         {/each}
       </div>
     {:else}
@@ -196,7 +197,7 @@
             tabindex={page === p.id ? 0 : -1}
             onkeydown={onNavKey}
             onclick={() => go(p.id)}
-            >{p.title}{#if p.id === 'setup' && setupState.missing > 0}<span class="count" aria-label="{setupState.missing} missing">{setupState.missing}</span>{/if}</button
+            >{p.title}{#if p.id === 'setup' && setupState.missing > 0}<span class="count" aria-label={t('{missing} missing', { missing: setupState.missing })}>{setupState.missing}</span>{/if}</button
           >
         {/each}
       </div>
@@ -208,10 +209,9 @@
   <main class:wide={page === 'layouts' || page === 'rules'} bind:this={mainEl}>
     {#if !trayAvailable}
       <div class="banner" role="status">
-        <Chip kind="warn" label="No tray icon" />
+        <Chip kind="warn" label={t('No tray icon')} />
         <span>
-          This desktop shows no tray icons. On GNOME, install the AppIndicator extension. Until
-          then, run CargoFrame again to open this window.
+          {t('This desktop shows no tray icons. On GNOME, install the AppIndicator extension. Until then, run CargoFrame again to open this window.')}
         </span>
       </div>
     {/if}
@@ -230,8 +230,8 @@
     {:else if page === 'setup'}
       <Setup />
       <section id="connections" class="connections" aria-labelledby="connections-title">
-        <h2 id="connections-title">Connections</h2>
-        <p class="quiet">Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, GitHub, X, Bluesky, Instagram, or your own API.</p>
+        <h2 id="connections-title">{t('Connections')}</h2>
+        <p class="quiet">{t('Services you share to: Jira, Google, Reddit, Claude, Slack, Discord, Teams, GitHub, X, Bluesky, Instagram, or your own API.')}</p>
         <Connections />
       </section>
     {:else if page === 'video'}

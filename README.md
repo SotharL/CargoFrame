@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.5.1 (beta)</p>
+Windows 11 and Linux · version 0.6.0 (beta) · English, Français, Español, Italiano, Deutsch</p>
 
 <p align="center">
   <picture>
@@ -127,6 +127,9 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 
 > **Looking for a setting?** Type in the search box at the top of the Settings menu (Ctrl+F): the menu lists only
 > what has your words, and the rest of the page shown is greyed out. The × clears it.
+
+> **Another language?** CargoFrame follows your computer's language (English, French, Spanish, Italian or German).
+> To choose another, open **General, Language**. Texts you write yourself stay as you wrote them.
 
 > **Stuck?** **Guides**, at the bottom of the Settings menu, walks you through any setup: it opens the right page,
 > outlines the field and says in one sentence what goes in it.
@@ -341,5 +344,6 @@ data, run `npm run dev` in `ui/` and open `settings.html` or `capture.html`.
 | [Development plan](docs/development-plan.md) | How to make the app: stack, architecture, modules, build order, quality gates |
 | [Connectors](docs/connectors.md) | How each service flows, and what to improve next |
 | [Decisions](docs/decisions.md) | What was decided, and why |
+| [Languages](docs/i18n.md) | How texts are translated, the glossary, and keeping the packs in step on each push |
 | [Status](docs/status.md) · [Security](docs/security.md) · [Performance](docs/performance.md) | What is verified; the security review; budgets and measures |
 | [Spikes](docs/spikes.md) · [Signing](docs/signing.md) · [Installers](installers/README.md) | Real-machine checks; certificates; what the packages do |

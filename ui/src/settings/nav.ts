@@ -1,3 +1,4 @@
+import { msg, translated } from '../lib/i18n/index.svelte';
 export type PageId =
   | 'setup'
   | 'layouts'
@@ -18,23 +19,23 @@ export interface PageMeta {
   group: PageGroup;
 }
 
-export const GROUP_TITLES: Record<PageGroup, string> = {
-  start: 'Get started',
-  capture: 'Captures',
-  app: 'CargoFrame',
-};
+export const GROUP_TITLES: Record<PageGroup, string> = translated({
+  start: msg('Get started'),
+  capture: msg('Captures'),
+  app: msg('CargoFrame'),
+}, 'all');
 
 /** Order matches the settings window's sidebar: the order a new person sets things up in. */
-export const PAGES: PageMeta[] = [
-  { id: 'setup', group: 'start', title: 'Setup', blurb: 'What CargoFrame uses on this computer, then the services you share to.' },
-  { id: 'layouts', group: 'capture', title: 'Layouts', blurb: 'Build the window each trigger opens, block by block, and what fills the fields of a service.' },
-  { id: 'triggers', group: 'capture', title: 'Triggers', blurb: 'Shortcuts that capture your screen and open a layout.' },
-  { id: 'rules', group: 'capture', title: 'Data & fields', blurb: 'Values read from the files of a capture, like the map in a log or a version, for layouts to write in titles, tags and fields.' },
-  { id: 'video', group: 'capture', title: 'Recording', blurb: 'How videos are recorded on this PC: where ffmpeg is, how it captures and compresses, and a short test.' },
-  { id: 'general', group: 'app', title: 'General', blurb: 'How CargoFrame looks, starts, tells you things, keeps windows ready, and what it does when a share fails.' },
-  { id: 'data', group: 'app', title: 'Your data', blurb: 'What CargoFrame keeps on this computer, a backup of your layouts, and a way to start again.' },
-  { id: 'about', group: 'app', title: 'About', blurb: 'The version, updates, and how fast CargoFrame has been on this computer.' },
-];
+export const PAGES: PageMeta[] = translated([
+  { id: 'setup', group: 'start', title: msg('Setup'), blurb: msg('What CargoFrame uses on this computer, then the services you share to.') },
+  { id: 'layouts', group: 'capture', title: msg('Layouts'), blurb: msg('Build the window each trigger opens, block by block, and what fills the fields of a service.') },
+  { id: 'triggers', group: 'capture', title: msg('Triggers'), blurb: msg('Shortcuts that capture your screen and open a layout.') },
+  { id: 'rules', group: 'capture', title: msg('Data & fields'), blurb: msg('Values read from the files of a capture, like the map in a log or a version, for layouts to write in titles, tags and fields.') },
+  { id: 'video', group: 'capture', title: msg('Recording'), blurb: msg('How videos are recorded on this PC: where ffmpeg is, how it captures and compresses, and a short test.') },
+  { id: 'general', group: 'app', title: msg('General'), blurb: msg('How CargoFrame looks, starts, tells you things, keeps windows ready, and what it does when a share fails.') },
+  { id: 'data', group: 'app', title: msg('Your data'), blurb: msg('What CargoFrame keeps on this computer, a backup of your layouts, and a way to start again.') },
+  { id: 'about', group: 'app', title: msg('About'), blurb: msg('The version, updates, and how fast CargoFrame has been on this computer.') },
+]);
 
 /** The page a new window starts on when nothing was chosen before. */
 export const FIRST_PAGE: PageId = 'setup';

@@ -13,6 +13,7 @@
 //! | `sha256` / `sha256: short` | the file's SHA-256 fingerprint, or its first 12 characters |
 
 use crate::extract::RuleError;
+use cargoframe_i18n::{msg, t, tf};
 use chrono::{DateTime, Local, Utc};
 use sha2::{Digest, Sha256};
 use std::io::Read;
@@ -41,7 +42,7 @@ pub enum What {
 }
 
 const HELP: &str =
-    "write name, size, modified, lines or sha256, for example size or modified: date";
+    msg!("write name, size, modified, lines or sha256, for example size or modified: date");
 
 pub fn parse(query: &str) -> Result<What, String> {
     let query = query.trim();
@@ -59,7 +60,10 @@ pub fn parse(query: &str) -> Result<What, String> {
             .map(|(_, s)| *s)
             .ok_or_else(|| {
                 let names: Vec<&str> = allowed.iter().map(|(n, _)| *n).collect();
-                format!("{key}: can be followed by {}", names.join(", "))
+                tf(
+                    "{key}: can be followed by {value}",
+                    &[("key", &key), ("value", &names.join(", "))],
+                )
             })
     };
     match key.to_ascii_lowercase().as_str() {
@@ -73,7 +77,7 @@ pub fn parse(query: &str) -> Result<What, String> {
         .map(What::Modified),
         "lines" => style_of(&[]).map(|_| What::Lines),
         "sha256" | "hash" => style_of(&[("short", Style::Short)]).map(What::Sha256),
-        _ => Err(HELP.into()),
+        _ => Err(t(HELP).into()),
     }
 }
 
@@ -130,7 +134,7 @@ pub fn read_content(
         if count {
             if chunk.contains(&0) {
                 return Err(RuleError::Unreadable(
-                    "it looks like a binary file, which has no lines".into(),
+                    t("it looks like a binary file, which has no lines").into(),
                 ));
             }
             newlines += chunk.iter().filter(|b| **b == b'\n').count() as u64;
@@ -152,9 +156,9 @@ pub fn human_size(bytes: u64) -> String {
     const UNITS: [&str; 4] = ["KB", "MB", "GB", "TB"];
     if bytes < 1024 {
         return if bytes == 1 {
-            "1 byte".to_string()
+            t("1 byte").to_string()
         } else {
-            format!("{bytes} bytes")
+            tf("{bytes} bytes", &[("bytes", &bytes)])
         };
     }
     let mut value = bytes as f64 / 1024.0;
@@ -168,13 +172,16 @@ pub fn human_size(bytes: u64) -> String {
 
 /// The value the query asks for.
 pub fn value(d: &FileDetails, what: What) -> Result<String, RuleError> {
-    let missing = |what: &str| RuleError::Unreadable(format!("the {what} could not be read"));
+    // whole sentences, so each language can say them its own way
+    let missing = |text: &str| RuleError::Unreadable(text.to_string());
     Ok(match what {
         What::Name => d.name.clone(),
         What::Size(Style::Human) => human_size(d.size),
         What::Size(_) => d.size.to_string(),
         What::Modified(style) => {
-            let t = d.modified.ok_or_else(|| missing("modified time"))?;
+            let t = d
+                .modified
+                .ok_or_else(|| missing(t("the modified time could not be read")))?;
             match style {
                 Style::Date => DateTime::<Local>::from(t).format("%Y-%m-%d").to_string(),
                 Style::Utc => DateTime::<Utc>::from(t)
@@ -188,9 +195,15 @@ pub fn value(d: &FileDetails, what: What) -> Result<String, RuleError> {
                     .to_string(),
             }
         }
-        What::Lines => d.lines.ok_or_else(|| missing("line count"))?.to_string(),
+        What::Lines => d
+            .lines
+            .ok_or_else(|| missing(t("the line count could not be read")))?
+            .to_string(),
         What::Sha256(style) => {
-            let full = d.sha256.clone().ok_or_else(|| missing("fingerprint"))?;
+            let full = d
+                .sha256
+                .clone()
+                .ok_or_else(|| missing(t("the fingerprint could not be read")))?;
             if style == Style::Short {
                 full.chars().take(12).collect()
             } else {

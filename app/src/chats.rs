@@ -3,6 +3,7 @@
 
 use cargoframe_config::Store;
 use cargoframe_handoff::{parse_chat_link, ChatId, ChatList};
+use cargoframe_i18n::t;
 use serde::Serialize;
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -24,7 +25,7 @@ fn save(store: &Store, list: &ChatList) -> Result<(), String> {
 }
 
 fn chat_id(id: &str) -> Result<ChatId, String> {
-    ChatId::parse(id).ok_or_else(|| "That is not a chat id".to_string())
+    ChatId::parse(id).ok_or_else(|| t("That is not a chat id").to_string())
 }
 
 /// Pinned chats first, then recent ones, newest first.
@@ -43,9 +44,11 @@ pub fn list(store: &Store) -> Result<Vec<ChatView>, String> {
 /// Pin the chat a pasted link points to.
 pub fn pin_link(store: &Store, link: &str, title: &str, now: u64) -> Result<(), String> {
     let id = parse_chat_link(link).ok_or_else(|| {
-        "That does not look like a Claude chat link. Open the chat and copy its address \
-         (https://claude.ai/chat/...)"
-            .to_string()
+        t(
+            "That does not look like a Claude chat link. Open the chat and copy its address \
+         (https://claude.ai/chat/...)",
+        )
+        .to_string()
     })?;
     let mut list = load(store)?;
     list.add(id, title, true, now);
@@ -56,7 +59,7 @@ pub fn set_pinned(store: &Store, id: &str, pinned: bool) -> Result<(), String> {
     let id = chat_id(id)?;
     let mut list = load(store)?;
     if !list.set_pinned(&id, pinned) {
-        return Err("That chat is not in the list".into());
+        return Err(t("That chat is not in the list").into());
     }
     save(store, &list)
 }

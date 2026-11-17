@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // The Layouts page: the builder, and Fill fields (what fills a field of a service on each share
   // from the values of Data & fields). Fill fields was a tab of Data & fields before 0.5.0.
   import { untrack } from 'svelte';
@@ -21,11 +22,11 @@
 </script>
 
 <PageTabs
-  label="Layouts"
+  label={t('Layouts')}
   bind:value={tab}
   tabs={[
-    { id: 'layouts', label: 'Layouts', tour: 'layouts.tab' },
-    { id: 'fields', label: 'Fill fields', tour: 'layouts.fields' },
+    { id: 'layouts', label: t('Layouts'), tour: 'layouts.tab' },
+    { id: 'fields', label: t('Fill fields'), tour: 'layouts.fields' },
   ]}
 />
 <div id="panel-{tab}" role="tabpanel" aria-labelledby="tab-{tab}">

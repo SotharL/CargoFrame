@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   import { token } from '../../lib/valueNames';
   import Field from '../../lib/components/Field.svelte';
   import TimeFormatField from '../../lib/components/TimeFormatField.svelte';
@@ -59,7 +61,7 @@
 
   function setRect(patch: Partial<Rect>) {
     const next = { ...block.rect, ...patch };
-    rectError = onrect(next) ? '' : 'That does not fit: it would overlap another block or leave the grid.';
+    rectError = onrect(next) ? '' : t('That does not fit: it would overlap another block or leave the grid.');
   }
 
   const lines = (v: string) => v.split('\n').map((l) => l.trim()).filter(Boolean);
@@ -157,41 +159,40 @@
   {/each}
 
   {#if block.type === 'text'}
-    <Field label="Title"><input type="text" bind:value={block.title} /></Field>
-    <Field label="Title position">
+    <Field label={t('Title')}><input type="text" bind:value={block.title} /></Field>
+    <Field label={t('Title position')}>
       <select bind:value={block.placement}>
-        <option value="above">Above the box</option>
-        <option value="inside">Inside the box</option>
+        <option value="above">{t('Above the box')}</option>
+        <option value="inside">{t('Inside the box')}</option>
       </select>
     </Field>
-    <Field label="Role" hint={roleHint(block.role)}>
+    <Field label={t('Role')} hint={roleHint(block.role)}>
       <select bind:value={block.role}>
-        <option value="plain">Plain text</option>
-        <option value="prompt">Prompt</option>
-        <option value="zip_name">Zip name</option>
+        <option value="plain">{t('Plain text')}</option>
+        <option value="prompt">{t('Prompt')}</option>
+        <option value="zip_name">{t('Zip name')}</option>
       </select>
     </Field>
     {#if block.role === 'plain'}
       {@render sentIn(block.id, false)}
       <div class="toggles">
-        <Toggle label="Formatting buttons" checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
+        <Toggle label={t('Formatting buttons')} checked={block.formatting !== false} onchange={(v) => (block.formatting = v)} />
         <p class="quiet hint">
-          Bold, italic, underline, code, quotes, lists and tables above the box, and shown in it, when it is sent in a
-          service's message (marked “formatted”): only the ones that service can show, written the way it wants them.
+          {t('Bold, italic, underline, code, quotes, lists and tables above the box, and shown in it, when it is sent in a service\'s message (marked “formatted”): only the ones that service can show, written the way it wants them.')}
         </p>
       </div>
     {/if}
     <div class="toggles">
-      <Toggle label="One line high" checked={block.one_line === true} onchange={(v) => (block.one_line = v || undefined)} />
-      <p class="quiet hint">The box keeps the height of one line of text, however tall the block is or the window gets. A longer text scrolls in it.</p>
+      <Toggle label={t('One line high')} checked={block.one_line === true} onchange={(v) => (block.one_line = v || undefined)} />
+      <p class="quiet hint">{t('The box keeps the height of one line of text, however tall the block is or the window gets. A longer text scrolls in it.')}</p>
     </div>
     <div class="auto-field">
-      <span class="auto-title">Text automation</span>
+      <span class="auto-title">{t('Text automation')}</span>
       <TextAutomation bind:value={block.default_text} {variables} {rules} marks={textFormat.marks} services={textFormat.services} />
     </div>
   {:else if block.type === 'dropdown'}
-    <Field label="Title"><input type="text" bind:value={block.title} /></Field>
-    <Field label="Choices come from">
+    <Field label={t('Title')}><input type="text" bind:value={block.title} /></Field>
+    <Field label={t('Choices come from')}>
       <select
         value={block.source.type}
         onchange={(e) => {
@@ -200,8 +201,8 @@
             : { type: 'web_api', connection_id: '', options_id: '' };
         }}
       >
-        <option value="claude_chats">Your pinned and recent Claude chats</option>
-        <option value="web_api">A service's API</option>
+        <option value="claude_chats">{t('Your pinned and recent Claude chats')}</option>
+        <option value="web_api">{t('A service\'s API')}</option>
       </select>
     </Field>
     {#if block.source.type === 'web_api'}
@@ -209,26 +210,26 @@
       {@const conn = connectionOf(src.connection_id)}
       {@const [listId, listParam] = splitList(src.options_id)}
       {@const spec = conn?.describe.lists.find((l) => l.id === listId)}
-      <Field label="Connection" hint={connections.length === 0 ? 'Add a connection on the Connections page first.' : ''}>
+      <Field label={t('Connection')} hint={connections.length === 0 ? t('Add a connection on the Connections page first.') : ''}>
         <select bind:value={src.connection_id} onchange={() => { src.options_id = ''; block.deeper = null; }}>
-          <option value="">Choose…</option>
-          {#if src.connection_id && !conn}<option value={src.connection_id}>{src.connection_id} (missing)</option>{/if}
+          <option value="">{t('Choose…')}</option>
+          {#if src.connection_id && !conn}<option value={src.connection_id}>{t('{connection_id} (missing)', { connection_id: src.connection_id })}</option>{/if}
           {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
         </select>
       </Field>
       {#if conn}
-        <Field label="List" hint={conn.describe.lists.length === 0 ? 'This connection offers no lists.' : ''}>
+        <Field label={t('List')} hint={conn.describe.lists.length === 0 ? t('This connection offers no lists.') : ''}>
           <select
             value={listId}
             onchange={(e) => { src.options_id = e.currentTarget.value; block.deeper = null; }}
           >
-            <option value="">Choose…</option>
+            <option value="">{t('Choose…')}</option>
             {#if listId && !spec}<option value={listId}>{listId}</option>{/if}
             {#each conn.describe.lists as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
           </select>
         </Field>
         {#if spec?.param}
-          <Field label={spec.param[0]!.toUpperCase() + spec.param.slice(1)} hint="The list is read for this value.">
+          <Field label={spec.param[0]!.toUpperCase() + spec.param.slice(1)} hint={t('The list is read for this value.')}>
             <input
               type="text"
               value={listParam}
@@ -241,52 +242,54 @@
         {@const inside = spec.inside}
         <div class="toggles">
           <Toggle
-            label={`Go on to the ${inside.label.toLowerCase()}`}
+            label={t('Go on to the {list}', { list: inside.label.toLowerCase() })}
             checked={!!block.deeper}
             onchange={(v) => (block.deeper = v ? { list: inside.list, field: inside.field } : null)}
           />
           <p class="quiet hint">
-            A second box lists what is inside the choice, with “New message or post” first. This is the one place to choose
-            where to post: give the block two rows of height, and no other box is needed for it.
+            {t('A second box lists what is inside the choice, with “New message or post” first. This is the one place to choose where to post: give the block two rows of height, and no other box is needed for it.')}
           </p>
         </div>
       {/if}
       <div class="toggles">
-        <Toggle label="Remember the last choices" checked={block.remember !== false} onchange={(v) => (block.remember = v)} />
-        <p class="quiet hint">The last five go to the top of the list, and it starts on the last one used.</p>
-        <Toggle label="Allow no choice" checked={block.optional === true} onchange={(v) => (block.optional = v)} />
-        <p class="quiet hint">The box can stay empty, or hold something typed or pasted that is not in the list.</p>
+        <Toggle label={t('Remember the last choices')} checked={block.remember !== false} onchange={(v) => (block.remember = v)} />
+        <p class="quiet hint">{t('The last five go to the top of the list, and it starts on the last one used.')}</p>
+        <Toggle label={t('Allow no choice')} checked={block.optional === true} onchange={(v) => (block.optional = v)} />
+        <p class="quiet hint">{t('The box can stay empty, or hold something typed or pasted that is not in the list.')}</p>
       </div>
       {#if textBlocks.length > 0}
         <Field
-          label="Narrow the list by"
+          label={t('Narrow the list by')}
           hint={block.deeper
-            ? 'Only the threads with this text in their name are shown, so one named like the title is easy to find.'
-            : 'Only the choices with this text in their name are shown, for example a thread named like the title.'}
+            ? t('Only the threads with this text in their name are shown, so one named like the title is easy to find.')
+            : t('Only the choices with this text in their name are shown, for example a thread named like the title.')}
         >
           <select
             value={block.narrow_by ?? ''}
             onchange={(e) => (block.narrow_by = e.currentTarget.value || null)}
           >
-            <option value="">Nothing: show them all</option>
-            {#each textBlocks as t (t.id)}<option value={t.id}>{t.title}</option>{/each}
+            <option value="">{t('Nothing: show them all')}</option>
+            {#each textBlocks as item (item.id)}<option value={item.id}>{item.title}</option>{/each}
           </select>
         </Field>
       {/if}
     {/if}
   {:else if block.type === 'tags'}
     {@const tagsBlock = block}
-    <Field label="Title"><input type="text" bind:value={tagsBlock.title} /></Field>
+    <Field label={t('Title')}><input type="text" bind:value={tagsBlock.title} /></Field>
     <div class="auto-field">
-      <span class="auto-title">Starting tags</span>
+      <span class="auto-title">{t('Starting tags')}</span>
       <p class="quiet hint">
-        Each line is a tag. Use a value like <code>{'{gpu}'}</code> or <code>{'gpu-{gpu}'}</code>: the tag is there only when the value is
-        found, and a value with several parts (<code>a, b</code>) gives several tags. At most {MAX_TAGS}.
+        <Tr text={t('Each line is a tag. Use a value like {value} or {tag}: the tag is there only when the value is found, and a value with several parts ({parts}) gives several tags. At most {max}.', { max: MAX_TAGS })}>
+          {#snippet value()}<code>{'{gpu}'}</code>{/snippet}
+          {#snippet tag()}<code>{'gpu-{gpu}'}</code>{/snippet}
+          {#snippet parts()}<code>a, b</code>{/snippet}
+        </Tr>
       </p>
       {#each tagsBlock.tags as _t, i (i)}
         <div class="tagline">
-          <input type="text" class="mono" bind:value={tagsBlock.tags[i]} list="tag-variables" aria-label={`Starting tag ${i + 1}`} placeholder={'{gpu}'} />
-          <button type="button" aria-label={`Remove starting tag ${i + 1}`} onclick={() => (tagsBlock.tags = tagsBlock.tags.filter((_, n) => n !== i))}>✕</button>
+          <input type="text" class="mono" bind:value={tagsBlock.tags[i]} list="tag-variables" aria-label={t('Starting tag {n}', { n: i + 1 })} placeholder={'{gpu}'} />
+          <button type="button" aria-label={t('Remove starting tag {n}', { n: i + 1 })} onclick={() => (tagsBlock.tags = tagsBlock.tags.filter((_, n) => n !== i))}>✕</button>
         </div>
       {/each}
       <datalist id="tag-variables">
@@ -295,69 +298,66 @@
           {#if v.name.startsWith('rule.')}<option value={`${v.name.slice(5)}-${token(v.name)}`}>{v.description}</option>{/if}
         {/each}
       </datalist>
-      <button type="button" class="start" disabled={tagsBlock.tags.length >= MAX_TAGS} onclick={() => (tagsBlock.tags = [...tagsBlock.tags, ''])}>Add a starting tag</button>
+      <button type="button" class="start" disabled={tagsBlock.tags.length >= MAX_TAGS} onclick={() => (tagsBlock.tags = [...tagsBlock.tags, ''])}>{t('Add a starting tag')}</button>
     </div>
     <div class="toggles">
-      <Toggle label="Remember the last tags" checked={tagsBlock.remember !== false} onchange={(v) => (tagsBlock.remember = v)} />
-      <p class="quiet hint">The last five tags used are offered under the box, one click to add.</p>
+      <Toggle label={t('Remember the last tags')} checked={tagsBlock.remember !== false} onchange={(v) => (tagsBlock.remember = v)} />
+      <p class="quiet hint">{t('The last five tags used are offered under the box, one click to add.')}</p>
     </div>
     {@const suggestConn = connectionOf(tagsBlock.suggest?.connection_id ?? null)}
-    <Field label="Suggest from" hint="Tags of the service shown while typing, like Jira's labels or a repository's labels.">
+    <Field label={t('Suggest from')} hint={t('Tags of the service shown while typing, like Jira\'s labels or a repository\'s labels.')}>
       <select
-        aria-label="Suggest tags from a connection"
+        aria-label={t('Suggest tags from a connection')}
         value={tagsBlock.suggest?.connection_id ?? ''}
         onchange={(e) => (tagsBlock.suggest = e.currentTarget.value ? { connection_id: e.currentTarget.value, options_id: '' } : null)}
       >
-        <option value="">Nothing</option>
+        <option value="">{t('Nothing')}</option>
         {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
       </select>
     </Field>
     {#if tagsBlock.suggest && suggestConn}
       {@const sug = tagsBlock.suggest}
-      <Field label="List">
-        <select aria-label="List the tags come from" bind:value={sug.options_id}>
-          <option value="">Choose…</option>
+      <Field label={t('List')}>
+        <select aria-label={t('List the tags come from')} bind:value={sug.options_id}>
+          <option value="">{t('Choose…')}</option>
           {#each suggestConn.describe.lists.filter((l) => !l.param) as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
         </select>
       </Field>
     {/if}
     {@render sentIn(tagsBlock.id, true)}
   {:else if block.type === 'log_view'}
-    <Field label="Title"><input type="text" bind:value={block.title} /></Field>
-    <Field label="Start with this filter" hint="Only the lines with this text are shown at first (case aside), like error. Empty: every line.">
+    <Field label={t('Title')}><input type="text" bind:value={block.title} /></Field>
+    <Field label={t('Start with this filter')} hint={t('Only the lines with this text are shown at first (case aside), like error. Empty: every line.')}>
       <input type="text" value={block.filter ?? ''} oninput={(e) => (block.filter = e.currentTarget.value || undefined)} placeholder="error" />
     </Field>
     <div class="toggles">
-      <Toggle label="Start on the lines written during the recording" checked={block.during === true} onchange={(v) => (block.during = v || undefined)} />
+      <Toggle label={t('Start on the lines written during the recording')} checked={block.during === true} onchange={(v) => (block.during = v || undefined)} />
       <p class="quiet hint">
-        Lines that start with a time (2026-11-12 14:03:27, [2026.11.12-14.03.27:123], 14:03:27…) are kept when written
-        during the recording, a few seconds either side, or in the minute before a screenshot. The person can show them all
-        again, or pick two times.
+        {t('Lines that start with a time (2026-11-12 14:03:27, [2026.11.12-14.03.27:123], 14:03:27…) are kept when written during the recording, a few seconds either side, or in the minute before a screenshot. The person can show them all again, or pick two times.')}
       </p>
-      <Toggle label="The times in the files are UTC" checked={block.utc === true} onchange={(v) => (block.utc = v || undefined)} />
-      <p class="quiet hint">For logs that write UTC rather than this computer's time (Unreal Engine's, by default). A time that says its zone is read as it says.</p>
+      <Toggle label={t('The times in the files are UTC')} checked={block.utc === true} onchange={(v) => (block.utc = v || undefined)} />
+      <p class="quiet hint">{t('For logs that write UTC rather than this computer\'s time (Unreal Engine\'s, by default). A time that says its zone is read as it says.')}</p>
     </div>
     <div class="toggles">
       <TimeFormatField
         id={`time-format-${block.id}`}
-        label="How the lines write their time"
+        label={t('How the lines write their time')}
         value={block.time_format ?? ''}
         onchange={(v) => (block.time_format = v.trim() || undefined)}
       />
-      <p class="quiet hint">For every file it shows, unless a data rule says it for that file (Data &amp; fields, Read from files).</p>
+      <p class="quiet hint">{t('For every file it shows, unless a data rule says it for that file (Data & fields, Files).')}</p>
     </div>
     <p class="quiet hint">
-      Shows a file of the window's Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the
-      lines shown. Nothing of it is sent.
+      {t('Shows a file of the window\'s Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the lines shown. Nothing of it is sent.')}
     </p>
   {:else if block.type === 'tabs'}
     {@const tabsBlock = block}
-    <Field label="Tabs" hint={`${MIN_TABS} to ${MAX_TABS}. Click a tab's name on the grid to see its blocks: a block dropped inside goes in the tab open.`}>
+    <Field label={t('Tabs')} hint={t('{MIN_TABS} to {MAX_TABS}. Click a tab\'s name on the grid to see its blocks: a block dropped inside goes in the tab open.', { MIN_TABS, MAX_TABS })}>
       <ol class="tablist" data-tour="props.tabs">
-        {#each tabsBlock.tabs as t, i (i)}
+        {#each tabsBlock.tabs as item, i (i)}
           <li>
-            <input type="text" aria-label={`Name of tab ${i + 1}`} bind:value={t.name} placeholder={`Tab ${i + 1}`} />
-            <span class="quiet small">{(t.blocks ?? []).length === 1 ? "1 block" : `${(t.blocks ?? []).length} blocks`}</span>
+            <input type="text" aria-label={t('Name of tab {n}', { n: i + 1 })} bind:value={item.name} placeholder={t('Tab {n}', { n: i + 1 })} />
+            <span class="quiet small">{(item.blocks ?? []).length === 1 ? "1 block" : `${(item.blocks ?? []).length} blocks`}</span>
           </li>
         {/each}
       </ol>
@@ -365,71 +365,70 @@
         <button
           type="button"
           disabled={tabsBlock.tabs.length <= MIN_TABS || (tabsBlock.tabs.at(-1)?.blocks ?? []).length > 0}
-          title={tabsBlock.tabs.length <= MIN_TABS ? `A Tabs block has at least ${MIN_TABS} tabs` : (tabsBlock.tabs.at(-1)?.blocks ?? []).length ? 'Move or remove the blocks of the last tab first' : 'Remove the last tab'}
+          title={tabsBlock.tabs.length <= MIN_TABS ? t('A Tabs block has at least {MIN_TABS} tabs', { MIN_TABS }) : (tabsBlock.tabs.at(-1)?.blocks ?? []).length ? t('Move or remove the blocks of the last tab first') : t('Remove the last tab')}
           onclick={() => (tabsBlock.tabs = tabsBlock.tabs.slice(0, -1))}
-        >− Tab</button>
+        >{t('− Tab')}</button>
         <button
           type="button"
           disabled={tabsBlock.tabs.length >= MAX_TABS}
-          title={tabsBlock.tabs.length >= MAX_TABS ? `A Tabs block has at most ${MAX_TABS} tabs` : 'Add a tab at the end'}
-          onclick={() => (tabsBlock.tabs = [...tabsBlock.tabs, { name: `Tab ${tabsBlock.tabs.length + 1}` }])}
-        >＋ Tab</button>
+          title={tabsBlock.tabs.length >= MAX_TABS ? t('A Tabs block has at most {MAX_TABS} tabs', { MAX_TABS }) : t('Add a tab at the end')}
+          onclick={() => (tabsBlock.tabs = [...tabsBlock.tabs, { name: t('Tab {n}', { n: tabsBlock.tabs.length + 1 }) }])}
+        >{t('＋ Tab')}</button>
       </div>
     </Field>
-    <Field label="Names on the">
-      <select aria-label="Side of the tab names" value={tabsBlock.side ?? 'top'} onchange={(e) => (tabsBlock.side = e.currentTarget.value === 'top' ? undefined : (e.currentTarget.value as TabSide))}>
-        <option value="top">Top</option>
-        <option value="bottom">Bottom</option>
-        <option value="left">Left</option>
-        <option value="right">Right</option>
+    <Field label={t('Names on the')}>
+      <select aria-label={t('Side of the tab names')} value={tabsBlock.side ?? 'top'} onchange={(e) => (tabsBlock.side = e.currentTarget.value === 'top' ? undefined : (e.currentTarget.value as TabSide))}>
+        <option value="top">{t('Top')}</option>
+        <option value="bottom">{t('Bottom')}</option>
+        <option value="left">{t('Left')}</option>
+        <option value="right">{t('Right')}</option>
       </select>
     </Field>
     <p class="quiet hint">
-      Like a binder: the window shows one tab at a time, and what is typed in the others stays. The blocks in the tabs are
-      sent as any other block; moving the Tabs block takes them along, and removing it removes them.
+      {t('Like a binder: the window shows one tab at a time, and what is typed in the others stays. The blocks in the tabs are sent as any other block; moving the Tabs block takes them along, and removing it removes them.')}
     </p>
   {:else if block.type === 'video'}
     <VideoOptions {block} />
   {:else if block.type === 'files'}
-    <Field label="Title"><input type="text" bind:value={block.title} /></Field>
-    <Field label="Show these files" hint="One pattern per line, relative to each folder looked in: *.log, logs/**/*.txt">
+    <Field label={t('Title')}><input type="text" bind:value={block.title} /></Field>
+    <Field label={t('Show these files')} hint={t('One pattern per line, relative to each folder looked in: *.log, logs/**/*.txt')}>
       <textarea rows="3" value={block.include.join('\n')} oninput={(e) => (block.include = lines(e.currentTarget.value))}></textarea>
     </Field>
-    <Field label="Tick these by default" hint="One pattern per line. Only files listed above can be ticked.">
+    <Field label={t('Tick these by default')} hint={t('One pattern per line. Only files listed above can be ticked.')}>
       <textarea rows="2" value={block.preselect.join('\n')} oninput={(e) => (block.preselect = lines(e.currentTarget.value))}></textarea>
     </Field>
     <LookInEditor {block} />
   {:else if block.type === 'sharing_button'}
-    <Field label="Button label"><input type="text" bind:value={block.label} placeholder="Share" /></Field>
+    <Field label={t('Button label')}><input type="text" bind:value={block.label} placeholder={t('Share')} /></Field>
     {@const target = connectionOf(block.connection_id)}
     <Field
-      label="Share to"
+      label={t('Share to')}
       hint={connections.length === 0
-        ? 'Add a connection on the Connections page first.'
+        ? t('Add a connection on the Connections page first.')
         : (target?.describe.summary ?? '')}
     >
       <select
         value={block.connection_id ?? ''}
         onchange={(e) => (block.connection_id = e.currentTarget.value || null)}
       >
-        <option value="">Choose where this shares to</option>
-        {#if block.connection_id && !target}<option value={block.connection_id}>{block.connection_id} (missing)</option>{/if}
+        <option value="">{t('Choose where this shares to')}</option>
+        {#if block.connection_id && !target}<option value={block.connection_id}>{t('{connection_id} (missing)', { connection_id: block.connection_id })}</option>{/if}
         {#each connections as c (c.id)}<option value={c.id}>{c.name} ({c.kind_label})</option>{/each}
       </select>
     </Field>
-    <Field label="Prompt" hint={promptBlocks.length ? 'Required for AI chats: the button stays off until it has text.' : 'Add a Text block and set its role to Prompt to use it here.'}>
+    <Field label={t('Prompt')} hint={promptBlocks.length ? t('Required for AI chats: the button stays off until it has text.') : t('Add a Text block and set its role to Prompt to use it here.')}>
       <select
         value={block.prompt_block_id ?? ''}
         onchange={(e) => (block.prompt_block_id = e.currentTarget.value || null)}
       >
-        <option value="">None</option>
+        <option value="">{t('None')}</option>
         {#each promptBlocks as p (p.id)}<option value={p.id}>{p.title}</option>{/each}
       </select>
     </Field>
-    <Field label="After sharing">
+    <Field label={t('After sharing')}>
       <select bind:value={block.on_success}>
-        <option value="close_window">Close the window</option>
-        <option value="keep_open">Keep it open</option>
+        <option value="close_window">{t('Close the window')}</option>
+        <option value="keep_open">{t('Keep it open')}</option>
       </select>
     </Field>
     <SharingPanel
@@ -443,33 +442,33 @@
     {@const fills = fillsFor(block)}
     {@const own = block.mappings.filter((m) => m.source.kind !== 'block')}
     <div class="maps">
-      <h3>Fields filled on each share</h3>
+      <h3>{t('Fields filled on each share')}</h3>
       {#each fills as f (f.id)}
         <p class="small"><strong>{f.item.name}</strong> <span class="quiet">({stepLines(f.item).length} {stepLines(f.item).length === 1 ? 'step' : 'steps'})</span></p>
       {:else}
-        <p class="quiet small">None. Send a block in a field above, or fill a field from values found in files.</p>
+        <p class="quiet small">{t('None. Send a block in a field above, or fill a field from values found in files.')}</p>
       {/each}
       {#each own as m (m.field)}
         <div class="map">
           <span class="small"><strong>{m.field}</strong> = <span class="mono">{m.source.kind === 'rule' ? `{${m.source.value}}` : m.source.value}</span></span>
-          <button type="button" onclick={() => void moveToFills(block, m)}>Move to Fill fields</button>
-          <button type="button" aria-label="Remove this field" onclick={() => (block.mappings = block.mappings.filter((x) => x !== m))}>✕</button>
+          <button type="button" onclick={() => void moveToFills(block, m)}>{t('Move to Fill fields')}</button>
+          <button type="button" aria-label={t('Remove this field')} onclick={() => (block.mappings = block.mappings.filter((x) => x !== m))}>✕</button>
         </div>
       {/each}
-      {#if own.length > 0}<p class="quiet small">Set on this button before 0.3.0. Fill fields does the same, with conditions.</p>{/if}
+      {#if own.length > 0}<p class="quiet small">{t('Set on this button before 0.3.0. Fill fields does the same, with conditions.')}</p>{/if}
       {#if moveError}<p class="error small" role="alert">{moveError}</p>{/if}
-      <button type="button" onclick={() => go('layouts', 'fields')}>Open Fill fields</button>
+      <button type="button" onclick={() => go('layouts', 'fields')}>{t('Open Fill fields')}</button>
     </div>
   {:else}
-    <p class="quiet">The captured picture, with crop, draw, square, circle and text tools. Nothing to set.</p>
+    <p class="quiet">{t('The captured picture, with crop, draw, square, circle and text tools. Nothing to set.')}</p>
   {/if}
 
 
   {#if block.type !== 'sharing_button'}
     {@const buttons = blocks.filter((b): b is Extract<Block, { type: 'sharing_button' }> => b.type === 'sharing_button')}
     {#if buttons.length > 0}
-      <section class="sentby" aria-label="Sent by">
-        <h3>Sent by</h3>
+      <section class="sentby" aria-label={t('Sent by')}>
+        <h3>{t('Sent by')}</h3>
         <ul>
           {#each buttons as btn (btn.id)}
             {@const r = reach[btn.id]?.blocks.find((x) => x.block_id === block.id)}
@@ -488,30 +487,30 @@
   {/if}
 
   <fieldset class="rect">
-    <legend>Position and size</legend>
-    <label>Column<input type="number" min="1" max={columns} value={block.rect.x + 1} onchange={(e) => setRect({ x: Number(e.currentTarget.value) - 1 })} /></label>
-    <label>Row<input type="number" min="1" value={block.rect.y + 1} onchange={(e) => setRect({ y: Number(e.currentTarget.value) - 1 })} /></label>
-    <label>Width<input type="number" min="1" max={columns} value={block.rect.w} onchange={(e) => setRect({ w: Number(e.currentTarget.value) })} /></label>
-    <label>Height<input type="number" min="1" value={block.rect.h} onchange={(e) => setRect({ h: Number(e.currentTarget.value) })} /></label>
+    <legend>{t('Position and size')}</legend>
+    <label>{t('Column')}<input type="number" min="1" max={columns} value={block.rect.x + 1} onchange={(e) => setRect({ x: Number(e.currentTarget.value) - 1 })} /></label>
+    <label>{t('Row')}<input type="number" min="1" value={block.rect.y + 1} onchange={(e) => setRect({ y: Number(e.currentTarget.value) - 1 })} /></label>
+    <label>{t('Width')}<input type="number" min="1" max={columns} value={block.rect.w} onchange={(e) => setRect({ w: Number(e.currentTarget.value) })} /></label>
+    <label>{t('Height')}<input type="number" min="1" value={block.rect.h} onchange={(e) => setRect({ h: Number(e.currentTarget.value) })} /></label>
   </fieldset>
   {#if rectError}<p class="error" role="alert">{rectError}</p>{/if}
 
-  <button type="button" class="remove" onclick={onremove}>Remove this block</button>
+  <button type="button" class="remove" onclick={onremove}>{t('Remove this block')}</button>
 </div>
 
 {#snippet sentIn(blockId: string, several: boolean)}
   <fieldset class="message-of" data-tour="props.sent_in">
-    <legend>Sent in</legend>
+    <legend>{t('Sent in')}</legend>
     {#each sendingButtons as m (m.button.id)}
       {@const fields = fieldsFor(m.button.connection_id)}
       <label class="sent">
         <span>{m.button.label || blockName(m.button)} <span class="quiet">({m.kind ? KIND_NAME[m.kind] : 'service'})</span></span>
         <select
-          aria-label={`Field of ${m.button.label || blockName(m.button)}`}
+          aria-label={t('Field of {button}', { button: m.button.label || blockName(m.button) })}
           value={fieldOf(m.button, blockId)}
           onchange={(e) => sendIn(m.button, blockId, e.currentTarget.value)}
         >
-          <option value="">Not sent</option>
+          <option value="">{t('Not sent')}</option>
           <!-- tags go best in a field that takes several values: those come first -->
           {#each several ? [...fields.filter((f) => takesSeveral(m.button, f.key)), ...fields.filter((f) => !takesSeveral(m.button, f.key))] : fields as f (f.key)}
             <option value={f.key}>{f.label}{!several && f.key === m.message ? ' (formatted)' : ''}{several && takesSeveral(m.button, f.key) ? ' (several)' : ''}</option>
@@ -521,8 +520,8 @@
     {:else}
       <p class="quiet hint">
         {several
-          ? 'Add a sharing button to the layout to send the tags in one of its fields (Jira labels, hashtags…).'
-          : 'Add a sharing button to the layout to send this box in one of its fields (a Jira summary, a description…).'}
+          ? t('Add a sharing button to the layout to send the tags in one of its fields (Jira labels, hashtags…).')
+          : t('Add a sharing button to the layout to send this box in one of its fields (a Jira summary, a description…).')}
       </p>
     {/each}
   </fieldset>

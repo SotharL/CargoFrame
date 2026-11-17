@@ -11,6 +11,7 @@ use crate::media::{fit, plain_text};
 use crate::model;
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, Body, Method, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -43,7 +44,7 @@ impl BlueskyConnector {
         } else {
             s
         };
-        check_url(s).map_err(|e| invalid(format!("The Bluesky server address: {e}")))?;
+        check_url(s).map_err(|e| invalid(tf("The Bluesky server address: {e}", &[("e", &e)])))?;
         Ok(s.to_string())
     }
 
@@ -57,7 +58,9 @@ impl BlueskyConnector {
         let password = ctx
             .secret("app_password")?
             .filter(|p| !p.trim().is_empty())
-            .ok_or_else(|| not_set_up("Bluesky needs an app password: add it to the connection"))?;
+            .ok_or_else(|| {
+                not_set_up(t("Bluesky needs an app password: add it to the connection"))
+            })?;
         let req = Request::post(format!(
             "{}/xrpc/com.atproto.server.createSession",
             self.service()?
@@ -68,17 +71,14 @@ impl BlueskyConnector {
         ));
         let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
         if matches!(resp.status, 400 | 401) {
-            return Err(SendError::new(
-                FailureKind::AuthExpired,
-                "Bluesky did not accept the handle or the app password: check both, or make a new app password",
-            ));
+            return Err(SendError::new(FailureKind::AuthExpired, t("Bluesky did not accept the handle or the app password: check both, or make a new app password")));
         }
         if !resp.is_success() {
-            return Err(from_response(&resp, "sign in to Bluesky"));
+            return Err(from_response(&resp, msg!("sign in to Bluesky")));
         }
         let v = resp
             .json()
-            .ok_or_else(|| invalid("Bluesky answered the sign-in with something unreadable"))?;
+            .ok_or_else(|| invalid(t("Bluesky answered the sign-in with something unreadable")))?;
         let get = |k: &str| v.get(k).and_then(Value::as_str).map(String::from);
         match (get("did"), get("accessJwt")) {
             (Some(did), Some(jwt)) => Ok(Session {
@@ -86,7 +86,7 @@ impl BlueskyConnector {
                 handle: get("handle").unwrap_or(handle),
                 jwt,
             }),
-            _ => Err(invalid("Bluesky's sign-in answer had no account")),
+            _ => Err(invalid(t("Bluesky's sign-in answer had no account"))),
         }
     }
 
@@ -120,10 +120,11 @@ pub fn clean_handle(raw: &str) -> Result<String, String> {
     if ok {
         Ok(t)
     } else if t.is_empty() {
-        Err("Bluesky needs your handle, like jane.bsky.social".into())
+        Err(cargoframe_i18n::t("Bluesky needs your handle, like jane.bsky.social").into())
     } else {
-        Err(format!(
-            "\"{raw}\" is not a Bluesky handle: it looks like jane.bsky.social"
+        Err(tf(
+            "\"{raw}\" is not a Bluesky handle: it looks like jane.bsky.social",
+            &[("raw", &raw)],
         ))
     }
 }
@@ -212,12 +213,12 @@ impl Connector for BlueskyConnector {
         };
         Describe {
             fields: vec![
-                f("text", "Text", "The post, at most 300 characters. Defaults to the prompt, then the window title"),
-                f("alt", "Picture description", "Read out to people who cannot see the picture. Defaults to the window title"),
-                f("hashtags", "Hashtags", "Added at the end as #tags. Separate several with commas"),
+                f("text", msg!("Text"), msg!("The post, at most 300 characters. Defaults to the prompt, then the window title")),
+                f("alt", msg!("Picture description"), msg!("Read out to people who cannot see the picture. Defaults to the window title")),
+                f("hashtags", msg!("Hashtags"), msg!("Added at the end as #tags. Separate several with commas")),
             ],
             lists: Vec::new(),
-            summary: "Posts the text and the screenshot (made smaller when it is over 1 MB) to your Bluesky account. Links become links; formatting is shown as plain text. Files and videos are not sent.".into(),
+            summary: msg!("Posts the text and the screenshot (made smaller when it is over 1 MB) to your Bluesky account. Links become links; formatting is shown as plain text. Files and videos are not sent.").into(),
         }
     }
 
@@ -242,18 +243,22 @@ impl Connector for BlueskyConnector {
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
         let s = self.sign_in(ctx)?;
-        Ok(format!("Signed in to Bluesky as @{}", s.handle))
+        Ok(tf(
+            "Signed in to Bluesky as @{handle}",
+            &[("handle", &s.handle)],
+        ))
     }
 
     fn options(&self, _ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
-        Err(invalid(format!("Bluesky has no list called \"{list}\"")))
+        Err(invalid(tf(
+            "Bluesky has no list called \"{list}\"",
+            &[("list", &list)],
+        )))
     }
 
     fn send(&self, ctx: &Ctx, payload: &Payload) -> Result<SendOutcome, SendError> {
         if ctx.progress.done("bluesky.posted") {
-            return Err(invalid(
-                "An earlier attempt may already have posted this. Check your Bluesky profile before trying again",
-            ));
+            return Err(invalid(t("An earlier attempt may already have posted this. Check your Bluesky profile before trying again")));
         }
         let mut notes = Vec::new();
         let source = payload
@@ -263,8 +268,9 @@ impl Connector for BlueskyConnector {
             .unwrap_or_else(|| payload.title.clone());
         let (text, cut) = crate::payload::with_hashtags(&source, payload, MAX_TEXT);
         if cut {
-            notes.push(format!(
-                "The text was cut to {MAX_TEXT} characters, the most Bluesky shows"
+            notes.push(tf(
+                "The text was cut to {MAX_TEXT} characters, the most Bluesky shows",
+                &[("MAX_TEXT", &MAX_TEXT)],
             ));
         }
 
@@ -279,13 +285,17 @@ impl Connector for BlueskyConnector {
             .as_ref()
             .is_some_and(|a| a.mime.starts_with("video/"))
         {
-            notes.push("Bluesky gets the screenshot, not the recording".to_string());
+            notes.push(t("Bluesky gets the screenshot, not the recording").to_string());
         }
         if payload.files_zip.is_some() {
-            notes.push("Bluesky cannot take files, so the ticked files were not sent".to_string());
+            notes.push(
+                t("Bluesky cannot take files, so the ticked files were not sent").to_string(),
+            );
         }
         if picture.is_none() && text.trim().is_empty() {
-            return Err(invalid("There is nothing to post: no text and no picture"));
+            return Err(invalid(t(
+                "There is nothing to post: no text and no picture",
+            )));
         }
 
         let session = self.sign_in(ctx)?;
@@ -293,7 +303,7 @@ impl Connector for BlueskyConnector {
         if let Some(pic) = picture {
             let fitted = fit(pic, MAX_PICTURE, "Bluesky").map_err(invalid)?;
             if fitted.shrunk {
-                notes.push("The picture was made smaller to fit Bluesky's 1 MB".to_string());
+                notes.push(t("The picture was made smaller to fit Bluesky's 1 MB").to_string());
             }
             let blob = match ctx.progress.get("bluesky.blob") {
                 Some(saved) => serde_json::from_str(&saved).unwrap_or(Value::Null),
@@ -308,12 +318,12 @@ impl Connector for BlueskyConnector {
                     });
                 let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
                 if !resp.is_success() {
-                    return Err(from_response(&resp, "upload the picture to Bluesky"));
+                    return Err(from_response(&resp, msg!("upload the picture to Bluesky")));
                 }
                 let blob = resp
                     .json()
                     .and_then(|v| v.get("blob").cloned())
-                    .ok_or_else(|| invalid("Bluesky did not say where it kept the picture"))?;
+                    .ok_or_else(|| invalid(t("Bluesky did not say where it kept the picture")))?;
                 ctx.progress.set("bluesky.blob", &blob.to_string());
                 blob
             } else {
@@ -356,15 +366,12 @@ impl Connector for BlueskyConnector {
             Err(e) => {
                 let mut err = from_net(&e);
                 err.kind = FailureKind::Rejected(0);
-                err.message = format!(
-                    "{}. Bluesky may or may not have posted it, so CargoFrame did not retry: check your profile",
-                    err.message
-                );
+                err.message = tf("{message}. Bluesky may or may not have posted it, so CargoFrame did not retry: check your profile", &[("message", &err.message)]);
                 return Err(err);
             }
         };
         if !resp.is_success() {
-            let err = from_response(&resp, "post to Bluesky");
+            let err = from_response(&resp, msg!("post to Bluesky"));
             // a refusal posted nothing, so a later attempt may try again
             if resp.status < 500 {
                 ctx.progress.clear("bluesky.posted");
@@ -376,7 +383,10 @@ impl Connector for BlueskyConnector {
             .and_then(|v| v.get("uri").and_then(Value::as_str).map(String::from))
             .and_then(|uri| post_url(&uri, &session.handle));
         Ok(SendOutcome {
-            summary: format!("Posted to Bluesky as @{}", session.handle),
+            summary: tf(
+                "Posted to Bluesky as @{handle}",
+                &[("handle", &session.handle)],
+            ),
             url,
             notes,
             place: None,

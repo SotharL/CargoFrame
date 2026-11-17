@@ -142,9 +142,9 @@ fn press(key: Key) -> Result<(), String> {
 fn press(key: Key) -> Result<(), String> {
     if let Some(desktop) = wayland() {
         let program = key_presser(&desktop).ok_or_else(|| {
-            format!(
-                "{} does not let CargoFrame press keys: paste with Ctrl+V yourself",
-                desktop.name()
+            cargoframe_i18n::tf(
+                "{desktop} does not let CargoFrame press keys: paste with Ctrl+V yourself",
+                &[("desktop", &desktop.name())],
             )
         })?;
         let args: &[&str] = match key {
@@ -154,11 +154,11 @@ fn press(key: Key) -> Result<(), String> {
         let status = std::process::Command::new(&program)
             .args(args)
             .status()
-            .map_err(|e| format!("wtype could not start: {e}"))?;
+            .map_err(|e| cargoframe_i18n::tf("wtype could not start: {e}", &[("e", &e)]))?;
         return status
             .success()
             .then_some(())
-            .ok_or_else(|| format!("wtype failed ({status})"));
+            .ok_or_else(|| cargoframe_i18n::tf("wtype failed ({status})", &[("status", &status)]));
     }
     let keys = match key {
         Key::Paste => "ctrl+v",
@@ -169,8 +169,10 @@ fn press(key: Key) -> Result<(), String> {
         .status()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
-                "xdotool is not installed: install it so CargoFrame can press keys (X11 only)"
-                    .to_string()
+                cargoframe_i18n::t(
+                    "xdotool is not installed: install it so CargoFrame can press keys (X11 only)",
+                )
+                .to_string()
             } else {
                 e.to_string()
             }
@@ -178,12 +180,12 @@ fn press(key: Key) -> Result<(), String> {
     status
         .success()
         .then_some(())
-        .ok_or_else(|| format!("xdotool failed ({status})"))
+        .ok_or_else(|| cargoframe_i18n::tf("xdotool failed ({status})", &[("status", &status)]))
 }
 
 #[cfg(not(any(windows, target_os = "linux")))]
 fn press(_key: Key) -> Result<(), String> {
-    Err("pressing keys is not supported on this system".into())
+    Err(cargoframe_i18n::t("pressing keys is not supported on this system").into())
 }
 
 #[cfg(test)]

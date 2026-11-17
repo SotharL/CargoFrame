@@ -1,4 +1,5 @@
 import type { ConnectionView, LayoutTemplate } from '../../lib/types';
+import { msg, t, translated } from '../../lib/i18n/index.svelte';
 
 /** One template offered for one connection (or for none, for the local one). */
 export interface TemplateOffer {
@@ -19,13 +20,13 @@ export interface TemplateGroup {
   offers: TemplateOffer[];
 }
 
-const STATE_DETAIL: Record<ConnectionView['state'], string> = {
-  connected: 'signed in',
-  disconnected: 'not signed in yet',
+const STATE_DETAIL: Record<ConnectionView['state'], string> = translated({
+  connected: msg('signed in'),
+  disconnected: msg('not signed in yet'),
   expired: 'sign-in expired',
-  disabled: 'turned off',
-  not_in_build: 'not in this copy of CargoFrame',
-};
+  disabled: msg('turned off'),
+  not_in_build: msg('not in this copy of CargoFrame'),
+}, 'all');
 
 /**
  * The starting points that suit the connections the person has. Signed-in connections come
@@ -46,9 +47,9 @@ export function offersFor(templates: LayoutTemplate[], connections: ConnectionVi
   });
   const local: TemplateGroup = {
     id: '',
-    title: 'No connection',
+    title: t('No connection'),
     state: 'local',
-    detail: 'saves a zip on this computer',
+    detail: t('saves a zip on this computer'),
     offers: templates
       .filter((t) => t.service === null)
       .map((t) => ({ key: t.key, name: t.name, description: t.description, connectionId: null })),

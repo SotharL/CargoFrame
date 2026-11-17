@@ -2,6 +2,7 @@
 // ("If {gpu} is found → add gpu-{gpu} to Labels"). Mirror of core/config/src/infotype.rs.
 import type { FillStep, FillTest, FillWhen, InfoType } from '../lib/types';
 import { fullName, token } from '../lib/valueNames';
+import { t, msg, translated } from '../lib/i18n/index.svelte';
 
 /** What a step looks at, as the capture names it: `{gpu}`, `{{rule.gpu}}` and `gpu` are `rule.gpu`. */
 const subjectName = (s: string) => {
@@ -9,14 +10,14 @@ const subjectName = (s: string) => {
   return n ? fullName(n) : '';
 };
 
-export const TESTS: { value: FillTest; label: string; needsText: boolean }[] = [
-  { value: 'found', label: 'is found', needsText: false },
-  { value: 'missing', label: 'is not found', needsText: false },
-  { value: 'is', label: 'is', needsText: true },
-  { value: 'is_not', label: 'is not', needsText: true },
-  { value: 'contains', label: 'contains', needsText: true },
-];
-export const needsText = (t: FillTest) => TESTS.find((x) => x.value === t)?.needsText ?? false;
+export const TESTS: { value: FillTest; label: string; needsText: boolean }[] = translated([
+  { value: 'found', label: msg('is found'), needsText: false },
+  { value: 'missing', label: msg('is not found'), needsText: false },
+  { value: 'is', label: msg('is'), needsText: true },
+  { value: 'is_not', label: msg('is not'), needsText: true },
+  { value: 'contains', label: msg('contains'), needsText: true },
+]);
+export const needsText = (test: FillTest) => TESTS.find((x) => x.value === test)?.needsText ?? false;
 
 /** A fill with nothing in it. */
 export function blankFill(): InfoType {
@@ -36,14 +37,14 @@ export function stepsOf(t: InfoType): FillStep[] {
 }
 
 /** A fill as it is saved: steps only, empty actions dropped, no starting value. */
-export function cleaned(t: InfoType, steps: FillStep[]): InfoType {
+export function cleaned(it: InfoType, steps: FillStep[]): InfoType {
   const kept = steps
     .map((s) => ({
       ...(s.when ? { when: { subject: subjectName(s.when.subject), test: s.when.test, text: s.when.text } } : {}),
       then: s.then.filter((a) => a.text.trim() !== '' || a.do === 'set'),
     }))
     .filter((s) => s.then.length > 0);
-  const { default_template: _old, ...rest } = t;
+  const { default_template: _old, ...rest } = it;
   return { ...rest, steps: kept };
 }
 
@@ -51,20 +52,36 @@ const quote = (s: string) => `“${s.trim()}”`;
 
 /** "If {gpu} is found" / "If this field is empty" / "Always". */
 export function whenText(w: FillWhen | null | undefined): string {
-  if (!w) return 'Always';
-  const subject = w.subject.trim() ? token(w.subject.trim().replace(/^\{+|\}+$/g, '')) : 'this field';
-  if (!w.subject.trim() && w.test === 'missing') return 'If this field is empty';
-  if (!w.subject.trim() && w.test === 'found') return 'If this field has a value';
-  const t = TESTS.find((x) => x.value === w.test);
-  return `If ${subject} ${t?.label ?? w.test}${t?.needsText ? ` ${quote(w.text)}` : ''}`;
+  if (!w) return t('Always');
+  const subject = w.subject.trim() ? token(w.subject.trim().replace(/^\{+|\}+$/g, '')) : t('this field');
+  if (!w.subject.trim() && w.test === 'missing') return t('If this field is empty');
+  if (!w.subject.trim() && w.test === 'found') return t('If this field has a value');
+  const values = { value: subject, text: quote(w.text) };
+  switch (w.test) {
+    case 'found':
+      return t('If {value} is found', values);
+    case 'missing':
+      return t('If {value} is not found', values);
+    case 'is':
+      return t('If {value} is {text}', values);
+    case 'is_not':
+      return t('If {value} is not {text}', values);
+    default:
+      return t('If {value} contains {text}', values);
+  }
 }
 
 /** "add “crash” and add “gpu”". */
 export function thenText(s: FillStep): string {
-  return s.then.map((a) => `${a.do === 'set' ? 'set it to' : 'add'} ${a.text.trim() ? quote(a.text) : '(nothing)'}`).join(' and ');
+  return s.then
+    .map((a) => {
+      const text = a.text.trim() ? quote(a.text) : t('(nothing)');
+      return a.do === 'set' ? t('set it to {text}', { text }) : t('add {text}', { text });
+    })
+    .join(` ${t('and')} `);
 }
 
 /** One line per step for the card. */
-export function stepLines(t: InfoType): string[] {
-  return stepsOf(t).map((s) => `${whenText(s.when)}: ${thenText(s)}`);
+export function stepLines(it: InfoType): string[] {
+  return stepsOf(it).map((s) => `${whenText(s.when)}: ${thenText(s)}`);
 }

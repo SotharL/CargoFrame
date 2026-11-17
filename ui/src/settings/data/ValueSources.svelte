@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
   // One value and the files it is read in: what each gives in the last capture's folder, which one
   // is used, how several are settled, and what it is when no file has it.
   import { getApi } from '../../lib/ipc';
@@ -79,8 +80,8 @@
   }
 
   const ACROSS: { value: RuleAcross; label: string }[] = [
-    { value: 'newest', label: 'the newest file' },
-    { value: 'all', label: 'all, when they differ' },
+    { value: 'newest', label: t('the newest file') },
+    { value: 'all', label: t('all, when they differ') },
   ];
 
   function setFallback(text: string | null) {
@@ -95,13 +96,13 @@
 
 <div class="sources">
   <header>
-    <button type="button" class="back" onclick={onback}>← Values</button>
+    <button type="button" class="back" onclick={onback}>{t('← Values')}</button>
     <h2><code class="token">{`{${entry.key}}`}</code> {entry.name}</h2>
     <p class="quiet">{usedBy}</p>
   </header>
 
   <section class="box">
-    <h3>Read in</h3>
+    <h3>{t('Read in')}</h3>
     {#each entry.sources as s (s.ruleId)}
       <div class="source" class:used={used(s)}>
         <div class="what">
@@ -111,15 +112,15 @@
             {@const f = legacy.step.find}
             <form class="legacy" onsubmit={(e) => { e.preventDefault(); void run(replaceStep(rules, legacy!.ruleId, $state.snapshot(legacy!.step) as RuleValue)); legacy = null; }}>
               {#if f.type === 'value_of'}
-                <input type="text" bind:value={f.name} aria-label="The name written before the value, or a key" />
+                <input type="text" bind:value={f.name} aria-label={t('The name written before the value, or a key')} />
               {:else if f.type === 'between'}
-                <input type="text" bind:value={f.start} aria-label="The text before the value" />
-                <input type="text" value={f.end ?? ''} oninput={(e) => (f.end = e.currentTarget.value || null)} placeholder="the end of the line" aria-label="The text after the value" />
+                <input type="text" bind:value={f.start} aria-label={t('The text before the value')} />
+                <input type="text" value={f.end ?? ''} oninput={(e) => (f.end = e.currentTarget.value || null)} placeholder={t('the end of the line')} aria-label={t('The text after the value')} />
               {:else if f.type === 'line_with'}
-                <input type="text" bind:value={f.text} aria-label="A text the line holds" />
+                <input type="text" bind:value={f.text} aria-label={t('A text the line holds')} />
               {/if}
-              <button type="submit" class="small">Save</button>
-              <button type="button" class="small" onclick={() => (legacy = null)}>Cancel</button>
+              <button type="submit" class="small">{t('Save')}</button>
+              <button type="button" class="small" onclick={() => (legacy = null)}>{t('Cancel')}</button>
             </form>
           {/if}
         </div>
@@ -130,33 +131,33 @@
             <span class="mono value" title={result(s)?.value ?? ''}>{result(s)?.value}</span>
             <span class="quiet small">{fileFound(s) ?? ''}</span>
           {:else}
-            <span class="quiet small">{fileFound(s) ? 'Not found in it' : 'Not in this capture'}</span>
+            <span class="quiet small">{fileFound(s) ? t('Not found in it') : t('Not in this capture')}</span>
           {/if}
         </div>
-        <span class="badge" class:on={used(s)} class:older={has(s) && !used(s)}>{used(s) ? 'Used' : has(s) ? 'Older' : ''}</span>
+        <span class="badge" class:on={used(s)} class:older={has(s) && !used(s)}>{used(s) ? t('Used') : has(s) ? t('Older') : ''}</span>
         <div class="actions">
           {#if ['value_of', 'between', 'line_with'].includes(s.step.find.type)}
-            <button type="button" class="small" onclick={() => (legacy = { ruleId: s.ruleId, step: structuredClone($state.snapshot(s.step) as RuleValue) })}>Edit</button>
+            <button type="button" class="small" onclick={() => (legacy = { ruleId: s.ruleId, step: structuredClone($state.snapshot(s.step) as RuleValue) })}>{t('Edit')}</button>
           {/if}
-          <button type="button" class="small" onclick={() => onchangesource(s)}>✎ Select again</button>
-          <button type="button" class="small" aria-label={`Stop reading it in ${s.rule.file}`} onclick={() => removeFrom(s)}>×</button>
+          <button type="button" class="small" onclick={() => onchangesource(s)}>{t('✎ Select again')}</button>
+          <button type="button" class="small" aria-label={t('Stop reading it in {file}', { file: s.rule.file })} onclick={() => removeFrom(s)}>×</button>
         </div>
       </div>
     {/each}
-    <div><button type="button" onclick={onadd}>＋ Read it in another file</button></div>
+    <div><button type="button" onclick={onadd}>{t('＋ Read it in another file')}</button></div>
   </section>
 
   <section class="box">
     <div class="line">
-      <h3>When several files have it, take</h3>
-      <Choices label="When several files have it" value={entry.across} options={ACROSS} onchange={(v) => run(setAll(rules, entry.key, { across: v }))} />
+      <h3>{t('When several files have it, take')}</h3>
+      <Choices label={t('When several files have it')} value={entry.across} options={ACROSS} onchange={(v) => run(setAll(rules, entry.key, { across: v }))} />
     </div>
     <div class="line">
-      <h3>When no file has it</h3>
+      <h3>{t('When no file has it')}</h3>
       <Choices
-        label="When no file has it"
+        label={t('When no file has it')}
         value={writing ? 'text' : 'empty'}
-        options={[{ value: 'empty', label: 'leave it empty' }, { value: 'text', label: 'write a text' }]}
+        options={[{ value: 'empty', label: t('leave it empty') }, { value: 'text', label: 'write a text' }]}
         onchange={(v) => { writing = v === 'text'; if (!writing) setFallback(null); }}
       />
       {#if writing}
@@ -164,7 +165,7 @@
           type="text"
           bind:value={fallback}
           placeholder="unknown"
-          aria-label="Text when no file has it"
+          aria-label={t('Text when no file has it')}
           onchange={() => setFallback(fallback)}
         />
       {/if}
@@ -174,10 +175,10 @@
   {#if failure}<p class="error" role="alert">{failure}</p>{/if}
   <div class="buttons">
     {#if confirming}
-      <button type="button" class="danger" onclick={async () => { await run(removeValue(rules, entry.key)); onback(); }}>Delete {`{${entry.key}}`} for good</button>
-      <button type="button" onclick={() => (confirming = false)}>Keep</button>
+      <button type="button" class="danger" onclick={async () => { await run(removeValue(rules, entry.key)); onback(); }}>{t('Delete {token} for good', { token: `{${entry.key}}` })}</button>
+      <button type="button" onclick={() => (confirming = false)}>{t('Keep')}</button>
     {:else}
-      <button type="button" onclick={() => (confirming = true)}>Delete this value</button>
+      <button type="button" onclick={() => (confirming = true)}>{t('Delete this value')}</button>
     {/if}
   </div>
 </div>

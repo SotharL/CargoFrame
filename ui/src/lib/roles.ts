@@ -1,4 +1,5 @@
 import type { Block } from './types';
+import { t } from './i18n/index.svelte';
 
 type Text = Extract<Block, { type: 'text' }>;
 
@@ -6,9 +7,9 @@ type Text = Extract<Block, { type: 'text' }>;
 export function roleTag(role: Text['role']): string {
   switch (role) {
     case 'prompt':
-      return 'Prompt';
+      return t('Prompt');
     case 'zip_name':
-      return 'Zip name';
+      return t('Zip name');
     default:
       return '';
   }
@@ -18,10 +19,10 @@ export function roleTag(role: Text['role']): string {
 export function roleHint(role: Text['role']): string {
   switch (role) {
     case 'prompt':
-      return 'The text sent to an AI chat. A sharing button to Claude needs one.';
+      return t('The text sent to an AI chat. A sharing button to Claude needs one.');
     case 'zip_name':
-      return 'The name of the zip saved on this computer (when a button saves locally, or a send fails and a copy is kept). Only the first one in the layout is used; empty keeps the dated name.';
+      return t('The name of the zip saved on this computer (when a button saves locally, or a send fails and a copy is kept). Only the first one in the layout is used; empty keeps the dated name.');
     default:
-      return 'Plain notes that are sent along with the capture.';
+      return t('Plain notes that are sent along with the capture.');
   }
 }

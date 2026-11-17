@@ -17,6 +17,7 @@ use crate::model;
 use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
 use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{encode_component, Body, Method, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
@@ -68,7 +69,9 @@ impl SlackConnector {
             .map(|t| t.trim().to_string())
             .filter(|t| !t.is_empty())
             .ok_or_else(|| {
-                not_set_up("Slack has no bot token yet: open Connections, paste it and press Save")
+                not_set_up(t(
+                    "Slack has no bot token yet: open Connections, paste it and press Save",
+                ))
             })
     }
 
@@ -86,9 +89,12 @@ impl SlackConnector {
         if !resp.is_success() {
             return Err(from_response(&resp, what));
         }
-        let v = resp
-            .json()
-            .ok_or_else(|| invalid(format!("Slack answered {what} with something unreadable")))?;
+        let v = resp.json().ok_or_else(|| {
+            invalid(tf(
+                "Slack answered {what} with something unreadable",
+                &[("what", &t(what))],
+            ))
+        })?;
         if v.get("ok").and_then(Value::as_bool) == Some(true) {
             Ok(v)
         } else {
@@ -123,7 +129,7 @@ impl SlackConnector {
             let v = self.call(
                 ctx,
                 self.request(ctx, Method::Get, &name)?,
-                "list the channels",
+                msg!("list the channels"),
             )?;
             for c in v
                 .get("channels")
@@ -166,16 +172,14 @@ impl SlackConnector {
         } else {
             let name = raw.trim_start_matches('#').trim().to_lowercase();
             if name.is_empty() {
-                return Err(invalid("The Slack channel is empty"));
+                return Err(invalid(t("The Slack channel is empty")));
             }
             self.channels(ctx)?
                 .into_iter()
                 .find(|c| c.name == name)
                 .map(|c| c.id)
                 .ok_or_else(|| {
-                    invalid(format!(
-                        "Slack has no channel called #{name} that the app can see. For a private channel, invite the app to it first"
-                    ))
+                    invalid(tf("Slack has no channel called #{name} that the app can see. For a private channel, invite the app to it first", &[("name", &name)]))
                 })?
         };
         ctx.progress.set("slack.channel", &id);
@@ -203,17 +207,21 @@ impl SlackConnector {
         let req = self
             .request(ctx, Method::Post, "files.getUploadURLExternal")?
             .body(Body::form(&[("filename", &att.name), ("length", &length)]));
-        let v = self.call(ctx, req, &format!("start uploading {}", att.name))?;
+        let v = self.call(
+            ctx,
+            req,
+            &tf("start uploading {name}", &[("name", &att.name)]),
+        )?;
         let (Some(url), Some(id)) = (
             v.get("upload_url").and_then(Value::as_str),
             v.get("file_id").and_then(Value::as_str),
         ) else {
-            return Err(invalid("Slack did not say where to upload the file"));
+            return Err(invalid(t("Slack did not say where to upload the file")));
         };
         if !self.trusted_upload(url) {
-            return Err(invalid(
+            return Err(invalid(t(
                 "Slack gave an upload address that is not Slack's, so nothing was uploaded",
-            ));
+            )));
         }
         // No token goes here: the address itself is the permission.
         let put = Request::new(Method::Post, url)
@@ -224,7 +232,10 @@ impl SlackConnector {
             .timeout(ctx.timeout);
         let resp = ctx.http.send(&put).map_err(|e| from_net(&e))?;
         if !resp.is_success() {
-            return Err(from_response(&resp, &format!("upload {}", att.name)));
+            return Err(from_response(
+                &resp,
+                &tf("upload {name}", &[("name", &att.name)]),
+            ));
         }
         Ok(id.to_string())
     }
@@ -278,9 +289,7 @@ pub fn parse_thread(raw: &str) -> Result<ThreadRef, String> {
         });
     }
     let bad = || {
-        format!(
-            "\"{raw}\" is not a Slack thread: paste the link of a message (Copy link in Slack) or its timestamp like 1699999999.000100"
-        )
+        tf("\"{raw}\" is not a Slack thread: paste the link of a message (Copy link in Slack) or its timestamp like 1699999999.000100", &[("raw", &raw)])
     };
     let rest = raw.strip_prefix("https://").ok_or_else(bad)?;
     let (authority, path_and_query) = rest.split_once('/').ok_or_else(bad)?;
@@ -359,59 +368,66 @@ pub fn api_error(v: &Value, what: &str) -> SendError {
         "invalid_auth" | "not_authed" | "token_revoked" | "token_expired" | "account_inactive"
         | "no_permission" => (
             FailureKind::AuthExpired,
-            "Slack does not accept the bot token any more: open Connections and paste a new one"
+            t("Slack does not accept the bot token any more: open Connections and paste a new one")
                 .to_string(),
         ),
         "missing_scope" => (
             FailureKind::Rejected(200),
             match needed {
-                Some(n) => format!(
-                    "The Slack app is missing the permission \"{n}\": add it under OAuth & Permissions, then reinstall the app and paste the new token"
+                Some(n) => tf(
+                    "The Slack app is missing the permission \"{n}\": add it under OAuth & Permissions, then reinstall the app and paste the new token",
+                    &[("n", &n)],
                 ),
-                None => "The Slack app is missing a permission: add it under OAuth & Permissions, then reinstall the app and paste the new token".to_string(),
+                None => t("The Slack app is missing a permission: add it under OAuth & Permissions, then reinstall the app and paste the new token").to_string(),
             },
         ),
         "channel_not_found" => (
             FailureKind::Rejected(200),
-            "Slack cannot find that channel. For a private channel, invite the app first (type /invite @ and the app's name there)".to_string(),
+            t("Slack cannot find that channel. For a private channel, invite the app first (type /invite @ and the app's name there)").to_string(),
         ),
         "not_in_channel" => (
             FailureKind::Rejected(200),
-            "The app is not in that channel. Invite it (type /invite @ and the app's name there)".to_string(),
+            t("The app is not in that channel. Invite it (type /invite @ and the app's name there)").to_string(),
         ),
         "is_archived" => (
             FailureKind::Rejected(200),
-            "That channel is archived".to_string(),
+            t("That channel is archived").to_string(),
         ),
         "msg_too_long" => (
             FailureKind::Rejected(200),
-            "The message is too long for Slack".to_string(),
+            t("The message is too long for Slack").to_string(),
         ),
         "no_text" => (
             FailureKind::Rejected(200),
-            "There was no text to post".to_string(),
+            t("There was no text to post").to_string(),
         ),
         "restricted_action"
         | "restricted_action_read_only_channel"
         | "restricted_action_thread_only_channel"
         | "restricted_action_non_threadable_channel" => (
             FailureKind::Rejected(200),
-            "Slack's settings for that channel do not let the app post there".to_string(),
+            t("Slack's settings for that channel do not let the app post there").to_string(),
         ),
         "ratelimited" | "rate_limited" => (
             FailureKind::Throttled(429),
-            "Slack says to slow down".to_string(),
+            t("Slack says to slow down").to_string(),
         ),
         "fatal_error" | "internal_error" | "service_unavailable" | "request_timeout" => (
             FailureKind::Server(500),
-            "Slack had a problem on its side".to_string(),
+            t("Slack had a problem on its side").to_string(),
         ),
         other => (
             FailureKind::Rejected(200),
-            format!("Slack said \"{other}\""),
+            tf("Slack said \"{other}\"", &[("other", &other)]),
         ),
     };
-    SendError::new(kind, format!("Could not {what}: {text}"))
+    SendError::new(
+        kind,
+        tf(
+            "Could not {what}: {text}",
+            &[("what", &t(what)), ("text", &text)],
+        ),
+    )
 }
 
 impl Connector for SlackConnector {
@@ -424,19 +440,19 @@ impl Connector for SlackConnector {
         };
         Describe {
             fields: vec![
-                f("channel", "Channel", "Where to post. The app must have been invited to it", Some("channels")),
-                f("thread", "Reply in a thread", "A message link (Copy link in Slack) or its timestamp. Empty: a new message", None),
-                f("message", "Message", "Defaults to the prompt text, then the window title", None),
-                f("title", "Bold first line", "Empty: none", None),
-                f("tags", "Tags", "Added as a last line. Separate several with commas", None),
+                f("channel", msg!("Channel"), msg!("Where to post. The app must have been invited to it"), Some("channels")),
+                f("thread", msg!("Reply in a thread"), msg!("A message link (Copy link in Slack) or its timestamp. Empty: a new message"), None),
+                f("message", msg!("Message"), msg!("Defaults to the prompt text, then the window title"), None),
+                f("title", msg!("Bold first line"), msg!("Empty: none"), None),
+                f("tags", msg!("Tags"), msg!("Added as a last line. Separate several with commas"), None),
             ],
             lists: vec![ListSpec {
                 id: "channels".into(),
-                label: "Channels the app can see".into(),
+                label: msg!("Channels the app can see").into(),
                 param: None,
                 inside: None,
             }],
-            summary: "Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached. The app has to be a member of the channel.".into(),
+            summary: msg!("Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached. The app has to be a member of the channel.").into(),
         }
     }
 
@@ -457,12 +473,15 @@ impl Connector for SlackConnector {
         let req = self
             .request(ctx, Method::Post, "auth.test")?
             .body(Body::form(&[]));
-        let v = self.call(ctx, req, "check the sign-in")?;
+        let v = self.call(ctx, req, msg!("check the sign-in"))?;
         let text = |k: &str| v.get(k).and_then(Value::as_str).filter(|s| !s.is_empty());
         Ok(match (text("team"), text("user")) {
-            (Some(team), Some(user)) => format!("Signed in to {team} as {user}"),
-            (Some(team), None) => format!("Signed in to {team}"),
-            _ => "Signed in to Slack".to_string(),
+            (Some(team), Some(user)) => tf(
+                "Signed in to {team} as {user}",
+                &[("team", &team), ("user", &user)],
+            ),
+            (Some(team), None) => tf("Signed in to {team}", &[("team", &team)]),
+            _ => t("Signed in to Slack").to_string(),
         })
     }
 
@@ -477,9 +496,9 @@ impl Connector for SlackConnector {
                         let mut item = OptionItem::new(c.id, format!("#{}", c.name));
                         item.group = Some(
                             if c.private {
-                                "Private channels"
+                                t("Private channels")
                             } else {
-                                "Public channels"
+                                t("Public channels")
                             }
                             .to_string(),
                         );
@@ -487,7 +506,10 @@ impl Connector for SlackConnector {
                     })
                     .collect())
             }
-            other => Err(invalid(format!("Slack has no list called \"{other}\""))),
+            other => Err(invalid(tf(
+                "Slack has no list called \"{other}\"",
+                &[("other", &other)],
+            ))),
         }
     }
 
@@ -504,16 +526,16 @@ impl Connector for SlackConnector {
             ) {
                 (Some(c), _) => c.to_string(),
                 (None, Some(c)) => c.to_string(),
-                (None, None) => return Err(invalid(
+                (None, None) => return Err(invalid(t(
                     "Slack needs a channel: map one to the field \"channel\" on the sharing button",
-                )),
+                ))),
             };
         let channel = self.resolve_channel(ctx, &channel_raw)?;
         if let Some(from_link) = thread.as_ref().and_then(|t| t.channel.as_deref()) {
             if from_link != channel {
-                return Err(invalid(
+                return Err(invalid(t(
                     "The thread link is in a different channel than the one chosen",
-                ));
+                )));
             }
         }
         let thread_ts = thread.as_ref().map(|t| t.ts.clone());
@@ -530,16 +552,16 @@ impl Connector for SlackConnector {
         let mut url = None;
         if uploads.is_empty() {
             if text.is_empty() {
-                return Err(invalid(
+                return Err(invalid(t(
                     "There is nothing to send to Slack: no text, no screenshot and no files",
-                ));
+                )));
             }
             if ctx.progress.get("slack.ts").is_none() {
                 let mut body = json!({ "channel": channel, "text": text });
                 if let Some(ts) = &thread_ts {
                     body["thread_ts"] = json!(ts);
                 }
-                let v = self.post_json(ctx, "chat.postMessage", &body, "post the message")?;
+                let v = self.post_json(ctx, "chat.postMessage", &body, msg!("post the message"))?;
                 let ts = v
                     .get("ts")
                     .and_then(Value::as_str)
@@ -556,7 +578,7 @@ impl Connector for SlackConnector {
                 // A missing link is not worth failing a share that already went through.
                 url = self
                     .request(ctx, Method::Get, &path)
-                    .and_then(|r| self.call(ctx, r, "get the link"))
+                    .and_then(|r| self.call(ctx, r, msg!("get the link")))
                     .ok()
                     .and_then(|v| v.get("permalink").and_then(Value::as_str).map(String::from));
             }
@@ -587,7 +609,7 @@ impl Connector for SlackConnector {
                     ctx,
                     "files.completeUploadExternal",
                     &body,
-                    "share the files",
+                    msg!("share the files"),
                 )?;
                 url = v
                     .pointer("/files/0/permalink")
@@ -599,9 +621,9 @@ impl Connector for SlackConnector {
 
         Ok(SendOutcome {
             summary: if thread_ts.is_some() {
-                "Posted in the Slack thread".to_string()
+                t("Posted in the Slack thread").to_string()
             } else {
-                "Posted to Slack".to_string()
+                t("Posted to Slack").to_string()
             },
             url,
             notes: Vec::new(),

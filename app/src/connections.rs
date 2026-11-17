@@ -8,6 +8,7 @@ use cargoframe_connectors::{
     self as conn, Browser, Connection, Connector, Ctx, Deliver, DeliverError, Delivered, Delivery,
     Describe, Kind, OptionItem, Progress, SecretStore, Status,
 };
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{
     Capabilities, ConnectionInfo, ConnectionKind, ConnectionState, CustomShape,
 };
@@ -44,7 +45,7 @@ pub struct Connections {
 struct NoBrowser;
 impl Browser for NoBrowser {
     fn open(&self, _url: &str) -> Result<(), String> {
-        Err("a browser is not available here".into())
+        Err(t("a browser is not available here").into())
     }
 }
 
@@ -57,7 +58,7 @@ impl Deliver for NoDeliver {
         _: &dyn Fn() -> bool,
     ) -> Result<Delivered, DeliverError> {
         Err(DeliverError::Desk(
-            "pasting into another program is not available here".into(),
+            t("pasting into another program is not available here").into(),
         ))
     }
 }
@@ -173,12 +174,12 @@ impl Connections {
 
     pub fn load(&self, store: &Store, id: &str) -> Result<Connection, String> {
         if !cargoframe_config::valid_id(id) {
-            return Err("That is not a connection".into());
+            return Err(t("That is not a connection").into());
         }
         store
             .load_item::<Connection>(ConfigKind::Connections, id)
             .map_err(|e| e.to_string())?
-            .ok_or_else(|| format!("The connection \"{id}\" no longer exists"))
+            .ok_or_else(|| tf("The connection \"{id}\" no longer exists", &[("id", &id)]))
     }
 
     /// Run `f` with a connector and the things it needs. `cancelled` ends waits (a sign-in, a
@@ -200,9 +201,12 @@ impl Connections {
             cargoframe_safe::SendError::new(
                 cargoframe_safe::FailureKind::ConnectorUnavailable,
                 if conn::available(kind) {
-                    "This connection is turned off".to_string()
+                    t("This connection is turned off").to_string()
                 } else {
-                    format!("This copy of CargoFrame is built without {}", kind.label())
+                    tf(
+                        "This copy of CargoFrame is built without {kind}",
+                        &[("kind", &kind.label())],
+                    )
                 },
             )
         })?;
@@ -322,7 +326,7 @@ impl Connections {
                     enabled: true,
                     ..c.clone()
                 })
-                .map(|b| b.describe())
+                .map(|b| b.describe().translated())
                 .unwrap_or_default();
                 ConnectionView {
                     id: id.clone(),
@@ -360,7 +364,10 @@ impl Connections {
         let connection = self.load(store, id)?;
         let kind = connection.settings.kind();
         if !kind.typed_secrets().contains(&name) {
-            return Err(format!("{} has no \"{name}\" to set", kind.label()));
+            return Err(tf(
+                "{kind} has no \"{name}\" to set",
+                &[("kind", &kind.label()), ("name", &name)],
+            ));
         }
         let key = conn::secrets::key(id, name);
         let result = if value.is_empty() {
@@ -471,8 +478,8 @@ impl Connections {
             enabled: true,
             ..connection
         })
-        .map(|b| b.describe())
-        .ok_or_else(|| "This connection cannot be described".to_string())
+        .map(|b| b.describe().translated())
+        .ok_or_else(|| t("This connection cannot be described").to_string())
     }
 }
 

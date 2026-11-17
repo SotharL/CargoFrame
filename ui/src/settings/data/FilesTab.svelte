@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { t } from '../../lib/i18n/index.svelte';
+  import Tr from '../../lib/i18n/Tr.svelte';
   // The files Data & fields looks for in a capture's project folder: whether each is added to the
   // window's files, how its lines write their time, and the values read in it.
   import Field from '../../lib/components/Field.svelte';
@@ -36,7 +38,7 @@
     failure = '';
     const rule = $state.snapshot(draft.rule) as Rule;
     if (!rule.file.trim()) {
-      failure = 'Write the file’s name, or part of it.';
+      failure = t('Write the file’s name, or part of it.');
       return;
     }
     if (!rule.name.trim()) rule.name = rule.file.trim();
@@ -67,19 +69,19 @@
           <h3 class="mono">{item.file}</h3>
           {#if item.name.trim() && item.name.trim() !== item.file.trim()}<p class="quiet small">{item.name}</p>{/if}
           <p class="small">
-            {item.add_to_files ? 'Added to the window’s files' : 'Only read'}{#if item.several === 'all'}, every file with this name{:else}, the newest if several have this name{/if}{#if item.log_time}, lines’ time <span class="mono">{item.log_time}</span>{/if}
+            {item.add_to_files ? t('Added to the window’s files') : t('Only read')}, {item.several === 'all' ? t('every file with this name') : t('the newest if several have this name')}{#if item.log_time}, <Tr text={t('lines’ time {format}')}>{#snippet format()}<span class="mono">{item.log_time}</span>{/snippet}</Tr>{/if}
           </p>
           {#if values.length}
             <p class="tokens">{#each values as v (v.key)}<code>{token(v.key)}</code>{/each}</p>
           {/if}
         </div>
         <div class="actions">
-          <button type="button" onclick={() => edit(id, item)}>Edit</button>
+          <button type="button" onclick={() => edit(id, item)}>{t('Edit')}</button>
           {#if confirming === id}
-            <button type="button" class="danger" onclick={async () => { await onremove(id); confirming = null; }}>Delete for good</button>
-            <button type="button" onclick={() => (confirming = null)}>Keep</button>
+            <button type="button" class="danger" onclick={async () => { await onremove(id); confirming = null; }}>{t('Delete for good')}</button>
+            <button type="button" onclick={() => (confirming = null)}>{t('Keep')}</button>
           {:else}
-            <button type="button" onclick={() => (confirming = id)}>Delete</button>
+            <button type="button" onclick={() => (confirming = id)}>{t('Delete')}</button>
           {/if}
         </div>
       </article>
@@ -90,10 +92,10 @@
 
   {#if !draft}
     <div class="bottom">
-      <button type="button" data-tour="rules.add" onclick={() => edit(null, { ...blankRule(), add_to_files: true })}>＋ Add a file</button>
+      <button type="button" data-tour="rules.add" onclick={() => edit(null, { ...blankRule(), add_to_files: true })}>{t('＋ Add a file')}</button>
       <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div class="drop" class:over ondragover={(e) => { e.preventDefault(); over = true; }} ondragleave={() => (over = false)} ondrop={drop}>
-        Drop a file here to pick a value in it
+        {t('Drop a file here to pick a value in it')}
       </div>
     </div>
   {/if}
@@ -102,27 +104,27 @@
 {#snippet editor()}
   {#if draft}
     <form class="card editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <Field label="File" hint="Its name or part of it, looked for in every folder of the project: Game.log, .log, package.json. Or a path: logs/*.log." tour="rules.file">
+      <Field label={t('File')} hint={t('Its name or part of it, looked for in every folder of the project: Game.log, .log, package.json. Or a path: logs/*.log.')} tour="rules.file">
         <input type="text" class="mono" bind:value={draft.rule.file} placeholder="Game.log" />
       </Field>
       <label class="check">
-        <span>If several files have this name, read</span>
+        <span>{t('If several files have this name, read')}</span>
         <select bind:value={draft.rule.several}>
-          <option value="newest">the newest</option>
-          <option value="all">all of them</option>
+          <option value="newest">{t('the newest')}</option>
+          <option value="all">{t('all of them')}</option>
         </select>
       </label>
       <label class="check" data-tour="rules.add_files">
         <input type="checkbox" bind:checked={draft.rule.add_to_files} />
-        <span>Add it to the window’s files <span class="quiet">(ticked in the Files box, ready to send)</span></span>
+        <span>{t('Add it to the window’s files')} <span class="quiet">{t('(ticked in the Files box, ready to send)')}</span></span>
       </label>
       <div class="time" data-tour="rules.log_time">
-        <TimeFormatField id="rule-log-time" label="In a log viewer, its lines’ time looks like" bind:value={draft.rule.log_time} />
+        <TimeFormatField id="rule-log-time" label={t('In a log viewer, its lines’ time looks like')} bind:value={draft.rule.log_time} />
       </div>
       {#if failure}<p class="error" role="alert">{failure}</p>{/if}
       <div class="actions">
-        <button type="submit" class="primary" data-tour="rules.save">Save</button>
-        <button type="button" onclick={() => (draft = null)}>Cancel</button>
+        <button type="submit" class="primary" data-tour="rules.save">{t('Save')}</button>
+        <button type="button" onclick={() => (draft = null)}>{t('Cancel')}</button>
       </div>
     </form>
   {/if}

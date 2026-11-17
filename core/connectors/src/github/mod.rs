@@ -15,6 +15,7 @@ use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
 use base64::Engine;
+use cargoframe_i18n::{msg, t, tf};
 use cargoframe_net::{check_url, encode_component, Body, Method, Request, Response};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Map, Value};
@@ -93,7 +94,7 @@ impl GithubConnector {
 
     fn api(&self) -> Result<String, SendError> {
         check_url(&self.settings.api_url)
-            .map_err(|e| invalid(format!("GitHub API address: {e}")))?;
+            .map_err(|e| invalid(tf("GitHub API address: {e}", &[("e", &e)])))?;
         Ok(self
             .settings
             .api_url
@@ -106,7 +107,9 @@ impl GithubConnector {
         ctx.secret("token")?
             .filter(|t| !t.trim().is_empty())
             .ok_or_else(|| {
-                not_set_up("GitHub has no token yet: open Connections, paste it and press Save")
+                not_set_up(t(
+                    "GitHub has no token yet: open Connections, paste it and press Save",
+                ))
             })
     }
 
@@ -129,8 +132,10 @@ impl GithubConnector {
             let mut e = from_response(&resp, what);
             // GitHub answers 404 for a private repository the token cannot see
             if resp.status == 404 {
-                e.message
-                    .push_str(". If the repository exists, the token may not have access to it");
+                e.message = tf(
+                    "{problem}. If the repository exists, the token may not have access to it",
+                    &[("problem", &e.message)],
+                );
             }
             Err(e)
         }
@@ -139,7 +144,12 @@ impl GithubConnector {
     fn get_json(&self, ctx: &Ctx, path: &str, what: &str) -> Result<Value, SendError> {
         self.call(ctx, self.request(ctx, Method::Get, path)?, what)?
             .json()
-            .ok_or_else(|| invalid(format!("GitHub answered {what} with something unreadable")))
+            .ok_or_else(|| {
+                invalid(tf(
+                    "GitHub answered {what} with something unreadable",
+                    &[("what", &t(what))],
+                ))
+            })
     }
 
     /// The repository a share goes to: the field `repo`, else the connection's.
@@ -153,8 +163,9 @@ impl GithubConnector {
         if repository_ok(&r) {
             Ok(r)
         } else {
-            Err(invalid(format!(
-                "\"{r}\" is not a repository: write it as owner/name"
+            Err(invalid(tf(
+                "\"{r}\" is not a repository: write it as owner/name",
+                &[("r", &r)],
             )))
         }
     }
@@ -171,30 +182,41 @@ impl GithubConnector {
             .send(&self.request(ctx, Method::Get, &path)?)
             .map_err(|e| from_net(&e))?;
         if resp.status == 404 {
-            let info = self.get_json(ctx, &format!("/repos/{repo}"), "read the repository")?;
+            let info =
+                self.get_json(ctx, &format!("/repos/{repo}"), msg!("read the repository"))?;
             let default = info
                 .get("default_branch")
                 .and_then(Value::as_str)
-                .ok_or_else(|| invalid("GitHub did not say which branch the repository uses"))?;
+                .ok_or_else(|| invalid(t("GitHub did not say which branch the repository uses")))?;
             let head = self.get_json(
                 ctx,
                 &format!("/repos/{repo}/git/ref/heads/{}", encode_component(default)),
-                "read the default branch",
+                msg!("read the default branch"),
             )?;
             let sha = head
                 .pointer("/object/sha")
                 .and_then(Value::as_str)
                 .ok_or_else(|| {
-                    invalid("The repository has no commit yet to start a branch from")
+                    invalid(t("The repository has no commit yet to start a branch from"))
                 })?;
             let req = self
                 .request(ctx, Method::Post, &format!("/repos/{repo}/git/refs"))?
                 .body(Body::json(
                     &json!({ "ref": format!("refs/heads/{branch}"), "sha": sha }),
                 ));
-            self.call(ctx, req, &format!("make the branch {branch} for pictures"))?;
+            self.call(
+                ctx,
+                req,
+                &tf(
+                    "make the branch {branch} for pictures",
+                    &[("branch", &branch)],
+                ),
+            )?;
         } else if !resp.is_success() {
-            return Err(from_response(&resp, &format!("find the branch {branch}")));
+            return Err(from_response(
+                &resp,
+                &tf("find the branch {branch}", &[("branch", &branch)]),
+            ));
         }
         ctx.progress.set("github.branch", "1");
         Ok(())
@@ -215,11 +237,15 @@ impl GithubConnector {
         let req = self
             .request(ctx, Method::Put, &format!("/repos/{repo}/contents/{path}"))?
             .body(Body::json(&json!({
-                "message": format!("CargoFrame: {}", att.name),
+                "message": tf("CargoFrame: {name}", &[("name", &att.name)]),
                 "content": STANDARD.encode(&att.data),
                 "branch": self.settings.branch.trim(),
             })));
-        let resp = match self.call(ctx, req, &format!("put {} in the repository", att.name)) {
+        let resp = match self.call(
+            ctx,
+            req,
+            &tf("put {name} in the repository", &[("name", &att.name)]),
+        ) {
             Ok(r) => r,
             // the same file is already there (a retry after the answer was lost): link it
             Err(e) if matches!(e.kind, FailureKind::Rejected(422)) => {
@@ -238,7 +264,7 @@ impl GithubConnector {
                     .and_then(Value::as_str)
                     .map(String::from)
             })
-            .ok_or_else(|| invalid("GitHub did not say where it put the file"))?;
+            .ok_or_else(|| invalid(t("GitHub did not say where it put the file")))?;
         Ok(format!("{html}?raw=true"))
     }
 
@@ -306,36 +332,38 @@ impl Connector for GithubConnector {
         };
         Describe {
             fields: vec![
-                f("repo", "Repository", "owner/name. Defaults to the connection's", Some("repositories")),
-                f("title", "Title", "One line. Defaults to the window title", None),
-                f("body", "Description", "Defaults to the prompt text", None),
-                f("labels", "Labels", "Separate several with commas", Some("labels")),
-                f("assignees", "Assignees", "GitHub user names. Separate several with commas", Some("assignees")),
-                f("milestone", "Milestone", "", Some("milestones")),
-                f("type", "Issue type", "For organisations that use issue types: Bug, Task…", None),
+                f("repo", msg!("Repository"), msg!("owner/name. Defaults to the connection's"), Some("repositories")),
+                f("title", msg!("Title"), msg!("One line. Defaults to the window title"), None),
+                f("body", msg!("Description"), msg!("Defaults to the prompt text"), None),
+                f("labels", msg!("Labels"), msg!("Separate several with commas"), Some("labels")),
+                f("assignees", msg!("Assignees"), msg!("GitHub user names. Separate several with commas"), Some("assignees")),
+                f("milestone", msg!("Milestone"), "", Some("milestones")),
+                f("type", msg!("Issue type"), msg!("For organisations that use issue types: Bug, Task…"), None),
                 f(
                     "issue",
-                    "Add to an existing issue",
-                    "An issue number: adds a comment (and the labels) instead of opening an issue",
+                    msg!("Add to an existing issue"),
+                    msg!("An issue number: adds a comment (and the labels) instead of opening an issue"),
                     Some("recent_issues"),
                 ),
             ],
             lists: vec![
-                l("repositories", "My repositories"),
-                l("labels", "Labels of the repository"),
-                l("assignees", "People who can be assigned"),
-                l("milestones", "Open milestones"),
-                l("recent_issues", "Open issues, recently updated"),
+                l("repositories", msg!("My repositories")),
+                l("labels", msg!("Labels of the repository")),
+                l("assignees", msg!("People who can be assigned")),
+                l("milestones", msg!("Open milestones")),
+                l("recent_issues", msg!("Open issues, recently updated")),
             ],
             summary: match self.settings.files {
-                GithubFiles::Branch => format!(
-                    "Opens an issue in {}. The screenshot and the ticked files go in the branch {} and are shown in the issue.",
-                    self.settings.repository.trim(),
-                    self.settings.branch.trim()
+                GithubFiles::Branch => tf(
+                    "Opens an issue in {repo}. The screenshot and the ticked files go in the branch {branch} and are shown in the issue.",
+                    &[
+                        ("repo", &self.settings.repository.trim()),
+                        ("branch", &self.settings.branch.trim()),
+                    ],
                 ),
-                GithubFiles::None => format!(
-                    "Opens an issue in {}, with the text only: pictures and files are not sent.",
-                    self.settings.repository.trim()
+                GithubFiles::None => tf(
+                    "Opens an issue in {repo}, with the text only: pictures and files are not sent.",
+                    &[("repo", &self.settings.repository.trim())],
                 ),
             },
         }
@@ -355,20 +383,28 @@ impl Connector for GithubConnector {
     }
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
-        let me = self.get_json(ctx, "/user", "check the token")?;
+        let me = self.get_json(ctx, "/user", msg!("check the token"))?;
         let login = me
             .get("login")
             .and_then(Value::as_str)
-            .unwrap_or("your account")
+            .unwrap_or(t("your account"))
             .to_string();
         let repo = self.repository(None)?;
-        let info = self.get_json(ctx, &format!("/repos/{repo}"), &format!("open {repo}"))?;
+        let info = self.get_json(
+            ctx,
+            &format!("/repos/{repo}"),
+            &tf("open {repo}", &[("repo", &repo)]),
+        )?;
         if info.pointer("/has_issues").and_then(Value::as_bool) == Some(false) {
-            return Err(invalid(format!(
-                "Issues are turned off in {repo}: turn them on in its settings"
+            return Err(invalid(tf(
+                "Issues are turned off in {repo}: turn them on in its settings",
+                &[("repo", &repo)],
             )));
         }
-        Ok(format!("Signed in as @{login}, opening issues in {repo}"))
+        Ok(tf(
+            "Signed in as @{login}, opening issues in {repo}",
+            &[("login", &login), ("repo", &repo)],
+        ))
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
@@ -376,8 +412,9 @@ impl Connector for GithubConnector {
         let (name, repo) = match list.split_once(':') {
             Some((n, r)) if repository_ok(r) => (n, r.trim().to_string()),
             Some((_, r)) => {
-                return Err(invalid(format!(
-                    "\"{r}\" is not a repository: write it as owner/name"
+                return Err(invalid(tf(
+                    "\"{r}\" is not a repository: write it as owner/name",
+                    &[("r", &r)],
                 )))
             }
             None => (list, self.settings.repository.trim().to_string()),
@@ -388,7 +425,7 @@ impl Connector for GithubConnector {
             "repositories" => arr(self.get_json(
                 ctx,
                 "/user/repos?per_page=100&sort=updated",
-                "list repositories",
+                msg!("list repositories"),
             )?)
             .iter()
             .filter(|r| r.get("has_issues").and_then(Value::as_bool) != Some(false))
@@ -397,7 +434,7 @@ impl Connector for GithubConnector {
             "labels" => arr(self.get_json(
                 ctx,
                 &format!("/repos/{repo}/labels?per_page=100"),
-                "list labels",
+                msg!("list labels"),
             )?)
             .iter()
             .filter_map(|l| s(l, "name").map(|n| OptionItem::new(n.clone(), n)))
@@ -405,7 +442,7 @@ impl Connector for GithubConnector {
             "assignees" => arr(self.get_json(
                 ctx,
                 &format!("/repos/{repo}/assignees?per_page=100"),
-                "list people",
+                msg!("list people"),
             )?)
             .iter()
             .filter_map(|u| s(u, "login").map(|n| OptionItem::new(n.clone(), format!("@{n}"))))
@@ -413,7 +450,7 @@ impl Connector for GithubConnector {
             "milestones" => arr(self.get_json(
                 ctx,
                 &format!("/repos/{repo}/milestones?state=open&per_page=100"),
-                "list milestones",
+                msg!("list milestones"),
             )?)
             .iter()
             .filter_map(|m| {
@@ -427,7 +464,7 @@ impl Connector for GithubConnector {
             "recent_issues" => arr(self.get_json(
                 ctx,
                 &format!("/repos/{repo}/issues?state=open&sort=updated&per_page=30"),
-                "list issues",
+                msg!("list issues"),
             )?)
             .iter()
             // the issues list has the pull requests in it too
@@ -440,7 +477,12 @@ impl Connector for GithubConnector {
                 ))
             })
             .collect(),
-            other => return Err(invalid(format!("GitHub has no list called \"{other}\""))),
+            other => {
+                return Err(invalid(tf(
+                    "GitHub has no list called \"{other}\"",
+                    &[("other", &other)],
+                )))
+            }
         })
     }
 
@@ -451,10 +493,9 @@ impl Connector for GithubConnector {
             .map(str::trim)
             .filter(|v| !v.is_empty())
         {
-            Some(v) => Some(
-                issue_number(v)
-                    .ok_or_else(|| invalid(format!("\"{v}\" is not an issue number, like 12")))?,
-            ),
+            Some(v) => Some(issue_number(v).ok_or_else(|| {
+                invalid(tf("\"{v}\" is not an issue number, like 12", &[("v", &v)]))
+            })?),
             None => None,
         };
         let labels = payload.value("labels").map(split_list).unwrap_or_default();
@@ -475,7 +516,7 @@ impl Connector for GithubConnector {
             GithubFiles::None => {
                 if payload.image.is_some() || payload.files_zip.is_some() {
                     notes.push(
-                        "The picture and files were not sent: the connection sends text only"
+                        t("The picture and files were not sent: the connection sends text only")
                             .to_string(),
                     );
                 }
@@ -500,7 +541,7 @@ impl Connector for GithubConnector {
                             &format!("{}/comments", web(&n.to_string())),
                         )?
                         .body(Body::json(&json!({ "body": body })));
-                    self.call(ctx, req, &format!("comment on #{n}"))?;
+                    self.call(ctx, req, &tf("comment on #{n}", &[("n", &n)]))?;
                 }
                 ctx.progress.set("github.comment", "1");
             }
@@ -512,11 +553,11 @@ impl Connector for GithubConnector {
                         &format!("{}/labels", web(&n.to_string())),
                     )?
                     .body(Body::json(&json!({ "labels": labels })));
-                self.call(ctx, req, &format!("label #{n}"))?;
+                self.call(ctx, req, &tf("label #{n}", &[("n", &n)]))?;
                 ctx.progress.set("github.labels", "1");
             }
             return Ok(SendOutcome {
-                summary: format!("Added to #{n} in {repo}"),
+                summary: tf("Added to #{n} in {repo}", &[("n", &n), ("repo", &repo)]),
                 url: Some(self.html(&repo, n)),
                 notes,
                 place: None,
@@ -536,7 +577,7 @@ impl Connector for GithubConnector {
                     .filter(|t| !t.trim().is_empty())
                     .unwrap_or_else(|| {
                         if payload.title.trim().is_empty() {
-                            "CargoFrame capture".into()
+                            t("CargoFrame capture").into()
                         } else {
                             payload.title.clone()
                         }
@@ -562,8 +603,9 @@ impl Connector for GithubConnector {
                     .filter(|m| !m.is_empty())
                 {
                     let n = issue_number(m).ok_or_else(|| {
-                        invalid(format!(
-                            "\"{m}\" is not a milestone number: pick it from the list"
+                        invalid(tf(
+                            "\"{m}\" is not a milestone number: pick it from the list",
+                            &[("m", &m)],
                         ))
                     })?;
                     issue.insert("milestone".into(), json!(n));
@@ -579,13 +621,13 @@ impl Connector for GithubConnector {
                     .request(ctx, Method::Post, &format!("/repos/{repo}/issues"))?
                     .body(Body::json(&Value::Object(issue)));
                 let made = self
-                    .call(ctx, req, &format!("open an issue in {repo}"))?
+                    .call(ctx, req, &tf("open an issue in {repo}", &[("repo", &repo)]))?
                     .json()
-                    .ok_or_else(|| invalid("GitHub did not say which issue it opened"))?;
+                    .ok_or_else(|| invalid(t("GitHub did not say which issue it opened")))?;
                 let n = made
                     .get("number")
                     .and_then(Value::as_u64)
-                    .ok_or_else(|| invalid("GitHub did not say which issue it opened"))?;
+                    .ok_or_else(|| invalid(t("GitHub did not say which issue it opened")))?;
                 ctx.progress.set("github.issue", &n.to_string());
                 let url = made
                     .get("html_url")
@@ -596,7 +638,10 @@ impl Connector for GithubConnector {
             }
         };
         Ok(SendOutcome {
-            summary: format!("Opened #{number} in {repo}"),
+            summary: tf(
+                "Opened #{number} in {repo}",
+                &[("number", &number), ("repo", &repo)],
+            ),
             url: Some(url),
             notes,
             place: None,

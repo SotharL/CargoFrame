@@ -7,6 +7,7 @@
 //! at once whether another choice works on their PC.
 
 use cargoframe_config::{Video, VideoCapture, VideoEncoder};
+use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{BlockKind, DesktopSound, Layout, VideoAudio, VideoSubject};
 use cargoframe_video::pcm::Feed;
 use cargoframe_video::recorder::{
@@ -148,24 +149,27 @@ pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String>
     };
     let Some(ffmpeg) = locate("ffmpeg") else {
         return Err(if chosen {
-            format!("ffmpeg was not found in {}.", place())
+            tf("ffmpeg was not found in {place}.", &[("place", &place())])
         } else {
-            "ffmpeg was not found. Install it (on Windows: winget install Gyan.FFmpeg) or choose the folder it is in.".into()
+            t("ffmpeg was not found. Install it (on Windows: winget install Gyan.FFmpeg) or choose the folder it is in.").into()
         });
     };
     let Some(ffprobe) = locate("ffprobe") else {
-        return Err(format!(
-            "ffprobe was not found next to ffmpeg ({}). It comes in the same download.",
-            ffmpeg
-                .parent()
-                .map(|p| p.display().to_string())
-                .unwrap_or_default()
+        return Err(tf(
+            "ffprobe was not found next to ffmpeg ({folder}). It comes in the same download.",
+            &[(
+                "folder",
+                &ffmpeg
+                    .parent()
+                    .map(|p| p.display().to_string())
+                    .unwrap_or_default(),
+            )],
         ));
     };
     let version = ask(&ffmpeg, &["-hide_banner", "-version"])
-        .map_err(|e| format!("ffmpeg would not start: {e}"))?;
+        .map_err(|e| tf("ffmpeg would not start: {e}", &[("e", &e)]))?;
     let encoders = ask(&ffmpeg, &["-hide_banner", "-encoders"])
-        .map_err(|e| format!("ffmpeg would not list its encoders: {e}"))?;
+        .map_err(|e| tf("ffmpeg would not list its encoders: {e}", &[("e", &e)]))?;
     // old builds may not know the lists; no devices or filters just means fewer choices
     let devices = ask(&ffmpeg, &["-hide_banner", "-devices"]).unwrap_or_default();
     let filters = ask(&ffmpeg, &["-hide_banner", "-filters"]).unwrap_or_default();
@@ -206,14 +210,14 @@ pub fn wayland_reader() -> Option<PathBuf> {
 }
 
 /// What to install to record a Wayland desktop.
-pub const WAYLAND_RECORDING_NEEDS: &str = "Recording a Wayland desktop needs GStreamer with its PipeWire plugin: install gstreamer1.0-tools and gstreamer1.0-pipewire (Ubuntu, Debian), gstreamer1-plugins-base-tools and pipewire-gstreamer (Fedora), or gstreamer and gst-plugin-pipewire (Arch).";
+pub const WAYLAND_RECORDING_NEEDS: &str = cargoframe_i18n::msg!("Recording a Wayland desktop needs GStreamer with its PipeWire plugin: install gstreamer1.0-tools and gstreamer1.0-pipewire (Ubuntu, Debian), gstreamer1-plugins-base-tools and pipewire-gstreamer (Fedora), or gstreamer and gst-plugin-pipewire (Arch).");
 
 /// "ffmpeg version 7.1-full_build ..." -> "7.1-full_build"
 pub fn parse_version(text: &str) -> String {
     text.lines()
         .find_map(|l| l.trim().strip_prefix("ffmpeg version "))
         .map(|v| v.split_whitespace().next().unwrap_or(v).to_string())
-        .unwrap_or_else(|| "unknown version".into())
+        .unwrap_or_else(|| t("unknown version").into())
 }
 
 /// Which H.264 encoders `ffmpeg -encoders` lists. Listed does not mean usable on this PC.
@@ -272,7 +276,7 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
             Os::Windows => [VideoCapture::Gdigrab, VideoCapture::Ddagrab]
                 .into_iter()
                 .find(|c| found.captures.contains(c))
-                .ok_or("This ffmpeg cannot capture the Windows screen (it has neither gdigrab nor ddagrab). Use a full build, for example winget install Gyan.FFmpeg.")?,
+                .ok_or(t("This ffmpeg cannot capture the Windows screen (it has neither gdigrab nor ddagrab). Use a full build, for example winget install Gyan.FFmpeg."))?,
             Os::Linux => {
                 if session.wayland {
                     if !found.captures.contains(&VideoCapture::Wayland) {
@@ -284,24 +288,21 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
                     });
                 }
                 if !found.captures.contains(&VideoCapture::X11) {
-                    return Err("This ffmpeg cannot capture an X11 screen (no x11grab).".into());
+                    return Err(t("This ffmpeg cannot capture an X11 screen (no x11grab).").into());
                 }
                 VideoCapture::X11
             }
-            Os::Other => return Err("Recording is not supported on this system yet.".into()),
+            Os::Other => return Err(t("Recording is not supported on this system yet.").into()),
         },
         explicit => {
             if !found.captures.contains(&explicit) {
-                return Err(format!(
-                    "This ffmpeg does not have the {} capture.",
-                    capture_name(explicit)
-                ));
+                return Err(tf("This ffmpeg does not have the {value} capture.", &[("value", &capture_name(explicit))]));
             }
             if explicit == VideoCapture::X11 && session.wayland {
-                return Err("This desktop runs Wayland: X11 capture would only see old-style windows. Choose Automatic or Wayland screen sharing in Settings, Recording.".into());
+                return Err(t("This desktop runs Wayland: X11 capture would only see old-style windows. Choose Automatic or Wayland screen sharing in Settings, Recording.").into());
             }
             if explicit == VideoCapture::Wayland && !session.wayland {
-                return Err("Wayland screen sharing only works in a Wayland session.".into());
+                return Err(t("Wayland screen sharing only works in a Wayland session.").into());
             }
             explicit
         }
@@ -326,13 +327,13 @@ fn choose_encoder(setting: &Video, found: &Found) -> Result<VideoEncoder, String
             ]
             .into_iter()
             .find(|e| found.encoders.contains(e))
-            .ok_or("This ffmpeg has no H.264 encoder. Use a full build, for example winget install Gyan.FFmpeg.")?
+            .ok_or(t("This ffmpeg has no H.264 encoder. Use a full build, for example winget install Gyan.FFmpeg."))?
         }
         explicit => {
             if !found.encoders.contains(&explicit) {
-                return Err(format!(
-                    "This ffmpeg does not have the {} encoder.",
-                    encoder_name(explicit)
+                return Err(tf(
+                    "This ffmpeg does not have the {value} encoder.",
+                    &[("value", &encoder_name(explicit))],
                 ));
             }
             explicit
@@ -342,22 +343,22 @@ fn choose_encoder(setting: &Video, found: &Found) -> Result<VideoEncoder, String
 
 pub fn capture_name(c: VideoCapture) -> &'static str {
     match c {
-        VideoCapture::Auto => "automatic",
+        VideoCapture::Auto => cargoframe_i18n::t("automatic"),
         VideoCapture::Gdigrab => "GDI",
-        VideoCapture::Ddagrab => "Desktop Duplication",
+        VideoCapture::Ddagrab => cargoframe_i18n::t("Desktop Duplication"),
         VideoCapture::X11 => "X11",
-        VideoCapture::Wayland => "Wayland screen sharing",
+        VideoCapture::Wayland => cargoframe_i18n::t("Wayland screen sharing"),
     }
 }
 
 pub fn encoder_name(e: VideoEncoder) -> &'static str {
     match e {
-        VideoEncoder::Auto => "automatic",
-        VideoEncoder::Software => "software (x264)",
+        VideoEncoder::Auto => cargoframe_i18n::t("automatic"),
+        VideoEncoder::Software => cargoframe_i18n::t("software (x264)"),
         VideoEncoder::Nvenc => "NVIDIA (NVENC)",
         VideoEncoder::Qsv => "Intel (Quick Sync)",
         VideoEncoder::Amf => "AMD (AMF)",
-        VideoEncoder::MediaFoundation => "Windows built-in",
+        VideoEncoder::MediaFoundation => cargoframe_i18n::t("Windows built-in"),
         VideoEncoder::Vaapi => "VAAPI",
     }
 }
@@ -365,20 +366,19 @@ pub fn encoder_name(e: VideoEncoder) -> &'static str {
 /// The settings must be sensible before they are stored or used.
 pub fn validate(video: &Video) -> Result<(), String> {
     if !(Video::MIN_FPS..=Video::MAX_FPS).contains(&video.fps) {
-        return Err(format!(
-            "Frames per second must be between {} and {}",
-            Video::MIN_FPS,
-            Video::MAX_FPS
+        return Err(tf(
+            "Frames per second must be between {MIN_FPS} and {MAX_FPS}",
+            &[("MIN_FPS", &Video::MIN_FPS), ("MAX_FPS", &Video::MAX_FPS)],
         ));
     }
     if !(1..=Video::MAX_WINDOW_SECS).contains(&video.window_secs) {
-        return Err(format!(
-            "The length kept must be between 1 and {} seconds",
-            Video::MAX_WINDOW_SECS
+        return Err(tf(
+            "The length kept must be between 1 and {MAX_WINDOW_SECS} seconds",
+            &[("MAX_WINDOW_SECS", &Video::MAX_WINDOW_SECS)],
         ));
     }
     if video.max_height != 0 && !(240..=4320).contains(&video.max_height) {
-        return Err("The largest height must be 0 (no limit) or between 240 and 4320".into());
+        return Err(t("The largest height must be 0 (no limit) or between 240 and 4320").into());
     }
     Ok(())
 }
@@ -440,19 +440,17 @@ pub fn wish_for(
     let focus = (wants_window || wants_program).then(focused).flatten();
     let area = match block.subject {
         VideoSubject::Screen => None,
-        VideoSubject::FocusedWindow => {
-            match focus.map(|f| f.area) {
-                Some(a) if a.even().is_some() => Some(a),
-                Some(_) => {
-                    notes.push("The window in focus is too small to record, so the whole screen is recorded.".into());
-                    None
-                }
-                None => {
-                    notes.push("CargoFrame could not tell which window has the focus, so the whole screen is recorded.".into());
-                    None
-                }
+        VideoSubject::FocusedWindow => match focus.map(|f| f.area) {
+            Some(a) if a.even().is_some() => Some(a),
+            Some(_) => {
+                notes.push(t("The window in focus is too small to record, so the whole screen is recorded.").into());
+                None
             }
-        }
+            None => {
+                notes.push(t("CargoFrame could not tell which window has the focus, so the whole screen is recorded.").into());
+                None
+            }
+        },
     };
     (
         Wish {
@@ -515,14 +513,17 @@ fn open_sounds(
                 });
                 feeds.push(feed);
             }
-            Err(why) => notes.push(format!(
-                "The sound of {} could not be recorded ({why}), so this recording has none of it.",
-                if program.is_some() {
-                    "the program in focus"
-                } else {
-                    "the computer"
-                }
-            )),
+            Err(why) => notes.push(if program.is_some() {
+                tf(
+                    "The sound of the program in focus could not be recorded ({why}), so this recording has none of it.",
+                    &[("why", &why)],
+                )
+            } else {
+                tf(
+                    "The sound of the computer could not be recorded ({why}), so this recording has none of it.",
+                    &[("why", &why)],
+                )
+            }),
         }
     }
     (inputs, feeds)
@@ -559,8 +560,13 @@ fn open_wayland_picture(
     let token_file = screen_sharing_token(work);
     let token = std::fs::read_to_string(&token_file).ok();
     let cast = ScreenCast::start(token.as_deref().map(str::trim)).map_err(|e| match e {
-        CaptureError::Refused => "The screen was not shared, so nothing was recorded.".to_string(),
-        other => format!("The desktop did not share the screen: {other}"),
+        CaptureError::Refused => {
+            cargoframe_i18n::t("The screen was not shared, so nothing was recorded.").to_string()
+        }
+        other => tf(
+            "The desktop did not share the screen: {other}",
+            &[("other", &other)],
+        ),
     })?;
     if let Some(t) = &cast.restore_token {
         let _ = std::fs::write(&token_file, t);
@@ -569,12 +575,12 @@ fn open_wayland_picture(
         (Some(a), Some((x, y)), Some((w, h))) => {
             let part = cargoframe_video::recorder::Part::of(a, Area { x, y, w, h });
             if part.is_none() {
-                notes.push("The window in focus is not on the shared screen, so the whole screen is recorded.".into());
+                notes.push(t("The window in focus is not on the shared screen, so the whole screen is recorded.").into());
             }
             part
         }
         (Some(_), _, _) => {
-            notes.push("The desktop did not say where the shared screen is, so the whole screen is recorded.".into());
+            notes.push(t("The desktop did not say where the shared screen is, so the whole screen is recorded.").into());
             None
         }
         _ => None,
@@ -598,7 +604,7 @@ fn open_wayland_picture(
     ),
     String,
 > {
-    Err("Wayland screen sharing only works on Linux.".into())
+    Err(t("Wayland screen sharing only works on Linux.").into())
 }
 
 /// How a recording began: whether it has sound, and what the person should be told about what
@@ -742,10 +748,10 @@ impl Trial {
 fn hint(choice: &Choice) -> &'static str {
     match (choice.capture, choice.encoder) {
         (_, e) if e != VideoEncoder::Software && e != VideoEncoder::Auto => {
-            " Hardware encoders need the matching graphics card and driver: choose Software to carry on."
+            t(" Hardware encoders need the matching graphics card and driver: choose Software to carry on.")
         }
         (VideoCapture::Ddagrab, _) => {
-            " Desktop Duplication does not work on every PC (remote sessions and some virtual machines): try GDI."
+            t(" Desktop Duplication does not work on every PC (remote sessions and some virtual machines): try GDI.")
         }
         _ => "",
     }
@@ -824,10 +830,10 @@ pub fn step(view: &RecordingView, started_by_trigger: bool, continuous: bool) ->
         RecordingView::Failed { .. } => Step::Start,
         RecordingView::Recording { .. } if started_by_trigger && continuous => Step::Snapshot,
         RecordingView::Recording { .. } if started_by_trigger => Step::Stop,
-        RecordingView::Recording { .. } => {
-            Step::Refuse("A test recording started from Settings is running. Stop it there first.")
-        }
-        RecordingView::Finishing => Step::Refuse("The last recording is still being finished."),
+        RecordingView::Recording { .. } => Step::Refuse(t(
+            "A test recording started from Settings is running. Stop it there first.",
+        )),
+        RecordingView::Finishing => Step::Refuse(t("The last recording is still being finished.")),
     }
 }
 
@@ -900,7 +906,7 @@ impl Recording {
         let taken = {
             let mut slot = self.lock();
             let Slot::Running(a) = &mut *slot else {
-                return Trial::failed("No recording is running.", None);
+                return Trial::failed(t("No recording is running."), None);
             };
             let dir = a.work.join(format!("snapshot-{n}"));
             let _ = std::fs::remove_dir_all(&dir);
@@ -932,16 +938,19 @@ impl Recording {
             Err(e) => {
                 let _ = std::fs::remove_dir_all(&dir);
                 return Trial::failed(
-                    format!("The clip could not be read back: {e}"),
+                    tf("The clip could not be read back: {e}", &[("e", &e)]),
                     Some(&choice),
                 );
             }
         };
         Trial {
             ok: true,
-            message: format!(
-                "The last {:.1} s of the recording.",
-                info.duration_ms as f64 / 1000.0
+            message: tf(
+                "The last {seconds} s of the recording.",
+                &[(
+                    "seconds",
+                    &format!("{:.1}", info.duration_ms as f64 / 1000.0),
+                )],
             ),
             capture: Some(choice.capture),
             encoder: Some(choice.encoder),
@@ -1031,8 +1040,8 @@ impl Recording {
         // refuse early, before looking for ffmpeg, so the message is the right one
         match &*self.lock() {
             Slot::Idle { .. } => {}
-            Slot::Running(_) => return Err("A recording is already running.".into()),
-            Slot::Finishing => return Err("The last recording is still being finished.".into()),
+            Slot::Running(_) => return Err(t("A recording is already running.").into()),
+            Slot::Finishing => return Err(t("The last recording is still being finished.").into()),
         }
         let found = find(video, program_beside_app().as_deref())?;
         let choice = choose(video, &found, os, session)?;
@@ -1110,13 +1119,17 @@ impl Recording {
         let mut slot = self.lock();
         match &*slot {
             Slot::Idle { .. } => {}
-            Slot::Running(_) => return Err("A recording is already running.".into()),
-            Slot::Finishing => return Err("The last recording is still being finished.".into()),
+            Slot::Running(_) => return Err(t("A recording is already running.").into()),
+            Slot::Finishing => return Err(t("The last recording is still being finished.").into()),
         }
         let _ = std::fs::remove_dir_all(work);
         let ring = work.join("ring");
-        std::fs::create_dir_all(&ring)
-            .map_err(|e| format!("CargoFrame could not make a folder for the recording: {e}"))?;
+        std::fs::create_dir_all(&ring).map_err(|e| {
+            tf(
+                "CargoFrame could not make a folder for the recording: {e}",
+                &[("e", &e)],
+            )
+        })?;
         let mut cfg = recorder_config(&found, &choice, video, session, &ring);
         cfg.window = Window::seconds(keep_secs);
         cfg.area = extras.area;
@@ -1157,8 +1170,9 @@ impl Recording {
                 recorder.cancel();
                 let _ = std::fs::remove_dir_all(&ring);
                 let _ = std::fs::create_dir_all(&ring);
-                notes.push(format!(
-                    "The sound could not be recorded, so this recording has none ({why})."
+                notes.push(tf(
+                    "The sound could not be recorded, so this recording has none ({why}).",
+                    &[("why", &why)],
                 ));
                 cfg.audio.clear();
                 recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
@@ -1204,9 +1218,8 @@ impl Recording {
                     keep_secs: a.keep_secs,
                 };
             }
-            Ok(_) => {
-                "The recording was stopped after 10 minutes. Start it again to go on.".to_string()
-            }
+            Ok(_) => t("The recording was stopped after 10 minutes. Start it again to go on.")
+                .to_string(),
             Err(e) => e.to_string(),
         };
         // it is over: throw it away and remember why
@@ -1236,12 +1249,12 @@ impl Recording {
                 Slot::Idle { failure } => {
                     *slot = Slot::Idle { failure: None };
                     return Trial::failed(
-                        failure.unwrap_or_else(|| "No recording is running.".into()),
+                        failure.unwrap_or_else(|| t("No recording is running.").into()),
                         None,
                     );
                 }
                 Slot::Finishing => {
-                    return Trial::failed("The recording is already being finished.", None)
+                    return Trial::failed(t("The recording is already being finished."), None)
                 }
             }
         };
@@ -1322,7 +1335,7 @@ fn finish(active: Active) -> Trial {
     }
     let info = match probe(&found.ffprobe, &clip) {
         Ok(i) => i,
-        Err(e) => return fail(format!("The clip could not be read back: {e}")),
+        Err(e) => return fail(tf("The clip could not be read back: {e}", &[("e", &e)])),
     };
     let bytes = std::fs::metadata(&clip).map(|m| m.len()).unwrap_or(0);
     let took_ms = u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX);
@@ -1429,7 +1442,7 @@ pub fn edit_clip(
 ) -> Result<Trial, String> {
     let found = find(video, program_beside_app().as_deref())?;
     let info = probe(&found.ffprobe, input)
-        .map_err(|e| format!("The recording could not be read: {e}"))?;
+        .map_err(|e| tf("The recording could not be read: {e}", &[("e", &e)]))?;
     // The encoder wants an even picture: round the crop to even numbers, inside the picture.
     let crop = edit.crop.map(|c| {
         let even = |n: u32| n & !1;
@@ -1493,9 +1506,13 @@ pub fn edit_clip(
     let began = Instant::now();
     let _ = std::fs::remove_file(output);
     run(&found.ffmpeg, &planned, &|| false, Duration::from_secs(120))
-        .map_err(|e| format!("The recording could not be edited: {e}"))?;
-    let out = probe(&found.ffprobe, output)
-        .map_err(|e| format!("The edited recording could not be read back: {e}"))?;
+        .map_err(|e| tf("The recording could not be edited: {e}", &[("e", &e)]))?;
+    let out = probe(&found.ffprobe, output).map_err(|e| {
+        tf(
+            "The edited recording could not be read back: {e}",
+            &[("e", &e)],
+        )
+    })?;
     let bytes = std::fs::metadata(output).map(|m| m.len()).unwrap_or(0);
     Ok(Trial {
         ok: true,
@@ -1521,7 +1538,7 @@ pub fn read_clip(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
     let meta = std::fs::metadata(path)
         .map_err(|_| "There is no test clip yet: run a test recording first".to_string())?;
     if !meta.is_file() {
-        return Err("There is no test clip yet: run a test recording first".into());
+        return Err(t("There is no test clip yet: run a test recording first").into());
     }
     if meta.len() > limit {
         return Err(format!(
@@ -1529,7 +1546,7 @@ pub fn read_clip(path: &Path, limit: u64) -> Result<Vec<u8>, String> {
             meta.len() as f64 / (1024.0 * 1024.0)
         ));
     }
-    std::fs::read(path).map_err(|e| format!("The clip could not be read: {e}"))
+    std::fs::read(path).map_err(|e| tf("The clip could not be read: {e}", &[("e", &e)]))
 }
 
 #[cfg(test)]

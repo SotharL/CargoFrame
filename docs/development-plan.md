@@ -142,6 +142,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `config` | One versioned JSON file per item; checks; migrations with backup | |
 | `update` | Check GitHub releases, download, verify SHA-256, run the installer | `check`, `fetch`, `install` |
 | `shortcuts` | Wayland: hand each shortcut to the desktop (GNOME settings, sway and Hyprland IPC, the portal's GlobalShortcuts, or a command to copy) | `Route`, `gnome::sync`, `wlroots`, `portal::Portal` |
+| `i18n` | The language in use and the packs (French, Spanish, Italian, German) embedded in the program: `t`, `tf`, `msg!`; the computer's language from the system | `lib.rs`, `packs/*.json` |
 | `app` | Glue: tray, triggers, sessions, share, commands, secrets, setup checks, clean-up, CLI | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs` |
 
 <details>
@@ -226,6 +227,7 @@ flowchart LR
 | **13 · Time (0.4.1)** | The time over a recording; texts over a clip through one upload; log lines read by their time (during the recording, around the capture, between two times), with formats the person writes or a data rule sets | Each format of log time has a test; a share sends the keys and the time |
 | **14 · Layout round (0.4.1)** | Rows that hold one line; sharing labels cut, not overflowing; the log viewer opened large in the middle; the ring round the picture; the recording's tools as icons above it; sharing dots in each block's first row; one icon set; the Tabs block (2 to 5 tabs, names on any side) in the model, its checks, the builder and the window | Tabs checks and moves have Rust and TS tests; the window test opens a layout with tabs and switches them |
 | **15 · Values (0.5.0)** | A value made by selecting it in a file (`Find::Pick`: the lines with a label, right after it or from the line's start, up to a text); the same value read in several files (the newest, or every different value; empty or a text when none has it); `{name}` beside `{{name}}`, with Jira's own names and JSON left alone; Data & fields as Values and Files; Fill fields a tab of Layouts; `{` and a values preview in the builder | The pick and the short form have Rust and TS tests on the same text; several files have tests for the newest, all and none; the Settings page is tested selecting a value in a log |
+| **16 · Languages (0.6.0)** | `core/i18n` (`t`, `tf`, `msg!`, packs embedded) and `ui/src/lib/i18n` (`t`, `tn`, `msg`, `Tr`, packs loaded before mount); every text of Settings, the window, the guides, the search, the connectors, checks, templates, tray and notifications marked; French, Spanish, Italian and German packs; *General › Language* (the computer's by default); kept windows let go on a change; sentences built from pieces rewritten whole | `scripts/i18n/check.mjs` fails a push when a pack misses a text, keeps a stale one or changes a `{name}` (local gate and CI); Rust and UI tests speak French, Spanish and German; Settings and the window looked at in each language |
 
 ---
 

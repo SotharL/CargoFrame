@@ -18,7 +18,7 @@ describe('General settings', () => {
     render(General);
     await screen.findByRole('heading', { name: 'When sharing fails' });
     const titles = [...document.querySelectorAll('section > h2')].map((h) => h.textContent);
-    expect(titles).toEqual(['Appearance', 'Startup', 'Notifications', 'When sharing fails', 'Windows kept ready']);
+    expect(titles).toEqual(['Appearance', 'Language', 'Startup', 'Notifications', 'When sharing fails', 'Windows kept ready']);
   });
 
   it('saves the memory setting and says what it does', async () => {
@@ -27,6 +27,27 @@ describe('General settings', () => {
     await fireEvent.change(box, { target: { value: 'low_memory' } });
     await waitFor(async () => expect((await api.getGeneral()).memory_mode).toBe('low_memory'));
     expect(screen.getByText(/Frees the memory as soon as a window closes/)).toBeTruthy();
+  });
+});
+
+describe('Language', () => {
+  afterEach(() => localStorage.removeItem('cargoframe.demo.language'));
+
+  it('follows the computer by default and lists each language in its own name', async () => {
+    render(General);
+    const box = (await screen.findByRole('combobox', { name: 'Language' })) as HTMLSelectElement;
+    expect(box.value).toBe('system');
+    const names = [...box.options].map((o) => o.textContent);
+    expect(names[0]).toMatch(/^Same as this computer \(.+\)$/);
+    expect(names.slice(1)).toEqual(['English', 'Français', 'Español', 'Italiano', 'Deutsch']);
+  });
+
+  it('saves the language chosen', async () => {
+    render(General);
+    const box = await screen.findByRole('combobox', { name: 'Language' });
+    await fireEvent.change(box, { target: { value: 'fr' } });
+    await waitFor(async () => expect((await api.getGeneral()).language).toBe('fr'));
+    expect((await api.getLanguage()).code).toBe('fr');
   });
 });
 

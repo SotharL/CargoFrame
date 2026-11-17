@@ -19,6 +19,7 @@ use crate::model::{
 };
 use crate::reach::{reach, Verdict};
 use cargoframe_context::template;
+use cargoframe_i18n::{msg, t, tf};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
@@ -185,7 +186,7 @@ fn beyond_the_limit(layout: &Layout, block_id: &str) -> bool {
 }
 
 const TOO_MANY_BUTTONS: &str =
-    "A window has room for 5 sharing buttons: this one cannot send. Remove a button";
+    msg!("A window has room for 5 sharing buttons: this one cannot send. Remove a button");
 
 fn issue(block: &Block, severity: Severity, code: Code, message: impl Into<String>) -> Issue {
     Issue {
@@ -238,10 +239,7 @@ fn check_paths(
             block,
             Severity::Error,
             Code::TwoPaths,
-            format!(
-                "\u{201c}{}\u{201d} already chooses from the same list of this connection. One dropdown holds the whole path to post in: remove this one",
-                if o.title.trim().is_empty() { &other.id } else { &o.title }
-            ),
+            tf("\u{201c}{value}\u{201d} already chooses from the same list of this connection. One dropdown holds the whole path to post in: remove this one", &[("value", &if o.title.trim().is_empty() { &other.id } else { &o.title })]),
         ));
         return;
     }
@@ -258,7 +256,7 @@ fn check_paths(
                 block,
                 Severity::Warning,
                 Code::SeparateThreads,
-                "A channel dropdown and a thread dropdown for the same Discord connection: use one \u{201c}Where to post\u{201d} dropdown that goes on to the threads by itself",
+                cargoframe_i18n::t("A channel dropdown and a thread dropdown for the same Discord connection: use one \u{201c}Where to post\u{201d} dropdown that goes on to the threads by itself"),
             ));
         }
     }
@@ -280,7 +278,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                             block,
                             Severity::Warning,
                             Code::SeveralZipNames,
-                            "Only the first block with the Zip name role names the zip: this one is ignored",
+                            cargoframe_i18n::t("Only the first block with the Zip name role names the zip: this one is ignored"),
                         ));
                     }
                 }
@@ -292,7 +290,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                         block,
                         Severity::Error,
                         Code::TooManySharingButtons,
-                        TOO_MANY_BUTTONS,
+                        t(TOO_MANY_BUTTONS),
                     ));
                 }
                 out.extend(sharing_issues(layout, block, s, reg));
@@ -307,7 +305,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                             block,
                             Severity::Warning,
                             Code::NarrowByMissing,
-                            format!("This list is narrowed by the text block \"{by}\", which is not in this layout: it shows everything"),
+                            tf("This list is narrowed by the text block \"{by}\", which is not in this layout: it shows everything", &[("by", &by)]),
                         ));
                     }
                 }
@@ -318,13 +316,16 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                             block,
                             Severity::Error,
                             Code::MissingConnection,
-                            format!("Connection \"{connection_id}\" no longer exists"),
+                            tf(
+                                "Connection \"{connection_id}\" no longer exists",
+                                &[("connection_id", &connection_id)],
+                            ),
                         )),
                         Some(c) if c.state != ConnectionState::Connected => out.push(issue(
                             block,
                             Severity::Error,
                             Code::ConnectionDisconnected,
-                            "Connection is not signed in, so the options cannot load",
+                            t("Connection is not signed in, so the options cannot load"),
                         )),
                         Some(_) => {}
                     }
@@ -337,7 +338,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                         block,
                         Severity::Warning,
                         Code::BadSubfolder,
-                        "Each subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no ..",
+                        t("Each subfolder must be a plain folder name inside each folder, like logs: no drive, no leading slash, no .."),
                     ));
                 }
             }
@@ -351,10 +352,7 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                         block,
                         Severity::Warning,
                         Code::TooManyTags,
-                        format!(
-                            "A Tags block holds {} tags at most: the ones after are left out",
-                            crate::MAX_TAGS
-                        ),
+                        tf("A Tags block holds {MAX_TAGS} tags at most: the ones after are left out", &[("MAX_TAGS", &crate::MAX_TAGS)]),
                     ));
                 }
             }
@@ -369,7 +367,9 @@ pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
                         block,
                         Severity::Warning,
                         Code::NoFilesToView,
-                        "A log viewer shows the files of a Files block: add one to this layout",
+                        cargoframe_i18n::t(cargoframe_i18n::t(
+                            "A log viewer shows the files of a Files block: add one to this layout",
+                        )),
                     ));
                 }
             }
@@ -456,7 +456,7 @@ fn sharing_issues(
             block,
             Severity::Warning,
             Code::NoConnection,
-            "No connection chosen: this button reads \u{201c}Save locally\u{201d} and saves a zip",
+            t("No connection chosen: this button reads \u{201c}Save locally\u{201d} and saves a zip"),
         ));
         return out;
     };
@@ -466,9 +466,7 @@ fn sharing_issues(
             block,
             Severity::Warning,
             Code::MissingConnection,
-            format!(
-                "Connection \"{connection_id}\" no longer exists: this button reads \u{201c}Save locally\u{201d}"
-            ),
+            tf("Connection \"{connection_id}\" no longer exists: this button reads \u{201c}Save locally\u{201d}", &[("connection_id", &connection_id)]),
         ));
         return out;
     };
@@ -480,7 +478,7 @@ fn sharing_issues(
                 block,
                 Severity::Warning,
                 Code::ConnectionDisconnected,
-                "This connection is not signed in: this button reads \u{201c}Save locally\u{201d}",
+                t("This connection is not signed in: this button reads \u{201c}Save locally\u{201d}"),
             ));
             return out;
         }
@@ -488,7 +486,7 @@ fn sharing_issues(
             block,
             Severity::Warning,
             Code::ConnectionExpired,
-            "Sign-in expired: reconnect, or a share will be saved locally instead",
+            t("Sign-in expired: reconnect, or a share will be saved locally instead"),
         )),
     }
 
@@ -502,8 +500,10 @@ fn sharing_issues(
                 block,
                 Severity::Warning,
                 Code::PromptBlockMissing,
-                "Sharing to an AI tool needs a prompt: add a text block with the Prompt role \
+                t(
+                    "Sharing to an AI tool needs a prompt: add a text block with the Prompt role \
                  and bind it to this button",
+                ),
             )),
             Some(prompt) => match &prompt.kind {
                 BlockKind::Text(t) if t.role == TextRole::Prompt => {}
@@ -511,7 +511,7 @@ fn sharing_issues(
                     block,
                     Severity::Warning,
                     Code::PromptBlockNotPrompt,
-                    "The bound block is not a text block with the Prompt role",
+                    t("The bound block is not a text block with the Prompt role"),
                 )),
             },
         }
@@ -523,18 +523,18 @@ fn sharing_issues(
                 block,
                 Severity::Error,
                 Code::MappingBlockMissing,
-                format!(
-                    "Field \"{}\" reads from a block that was removed",
-                    mapping.field
+                tf(
+                    "Field \"{field}\" reads from a block that was removed",
+                    &[("field", &mapping.field)],
                 ),
             )),
             ValueSource::Rule(id) if !reg.rule_exists(id) => out.push(issue(
                 block,
                 Severity::Warning,
                 Code::MappingRuleMissing,
-                format!(
-                    "Field \"{}\" reads from a data rule that does not exist",
-                    mapping.field
+                tf(
+                    "Field \"{field}\" reads from a data rule that does not exist",
+                    &[("field", &mapping.field)],
                 ),
             )),
             _ => {}
@@ -557,12 +557,15 @@ fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry)
                 let name = layout
                     .block(&b.block_id)
                     .map(|blk| match &blk.kind {
-                        BlockKind::Screenshot => "the screenshot".to_string(),
-                        BlockKind::Video(_) => "the video".to_string(),
-                        BlockKind::Files(f) if f.title.trim().is_empty() => "the files".to_string(),
-                        BlockKind::Files(f) => {
-                            format!("the files in \u{201c}{}\u{201d}", f.title.trim())
+                        BlockKind::Screenshot => t("the screenshot").to_string(),
+                        BlockKind::Video(_) => t("the video").to_string(),
+                        BlockKind::Files(f) if f.title.trim().is_empty() => {
+                            t("the files").to_string()
                         }
+                        BlockKind::Files(f) => tf(
+                            "the files in \u{201c}{title}\u{201d}",
+                            &[("title", &f.title.trim())],
+                        ),
                         BlockKind::Text(t) if !t.title.trim().is_empty() => {
                             format!("\u{201c}{}\u{201d}", t.title.trim())
                         }
@@ -576,7 +579,10 @@ fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry)
                     button_block,
                     Severity::Warning,
                     Code::CannotSend,
-                    format!("This button does not send {name}: {why}"),
+                    tf(
+                        "This button does not send {name}: {why}",
+                        &[("name", &name), ("why", &why)],
+                    ),
                 ))
             }
             _ => None,
@@ -590,11 +596,13 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
             block_id: None,
             severity: Severity::Warning,
             code: Code::BadColumns,
-            message: format!(
-                "A grid has {} to {} columns: {} is used",
-                crate::MIN_COLUMNS,
-                crate::MAX_COLUMNS,
-                layout.grid_columns()
+            message: tf(
+                "A grid has {MIN_COLUMNS} to {MAX_COLUMNS} columns: {layout} is used",
+                &[
+                    ("MIN_COLUMNS", &crate::MIN_COLUMNS),
+                    ("MAX_COLUMNS", &crate::MAX_COLUMNS),
+                    ("layout", &layout.grid_columns()),
+                ],
             ),
         });
     }
@@ -604,7 +612,7 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
                 block,
                 Severity::Error,
                 Code::DuplicateId,
-                "Two blocks share an id",
+                t("Two blocks share an id"),
             ));
         }
         if block.rect.w == 0 || block.rect.h == 0 {
@@ -612,14 +620,14 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
                 block,
                 Severity::Error,
                 Code::EmptySize,
-                "Block has no size",
+                t("Block has no size"),
             ));
         } else if block.rect.right() > layout.grid_columns() {
             out.push(issue(
                 block,
                 Severity::Error,
                 Code::OutOfBounds,
-                "Block extends past the right edge of the grid",
+                t("Block extends past the right edge of the grid"),
             ));
         }
         if let Some(other) = layout.blocks[..i]
@@ -630,7 +638,7 @@ fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
                 block,
                 Severity::Error,
                 Code::Overlap,
-                format!("Overlaps block \"{}\"", other.id),
+                tf("Overlaps block \"{id}\"", &[("id", &other.id)]),
             ));
         }
     }
@@ -642,10 +650,12 @@ fn check_tabs(layout: &Layout, block: &Block, tabs: &TabsBlock, out: &mut Vec<Is
     if !(crate::MIN_TABS..=crate::MAX_TABS).contains(&tabs.tabs.len()) {
         bad(
             Severity::Error,
-            format!(
-                "A Tabs block has {} to {} tabs",
-                crate::MIN_TABS,
-                crate::MAX_TABS
+            tf(
+                "A Tabs block has {MIN_TABS} to {MAX_TABS} tabs",
+                &[
+                    ("MIN_TABS", &crate::MIN_TABS),
+                    ("MAX_TABS", &crate::MAX_TABS),
+                ],
             ),
         );
     }
@@ -653,9 +663,9 @@ fn check_tabs(layout: &Layout, block: &Block, tabs: &TabsBlock, out: &mut Vec<Is
     if r.w < crate::MIN_TABS_SIZE || r.h < crate::MIN_TABS_SIZE {
         bad(
             Severity::Error,
-            format!(
-                "A Tabs block is at least {0} by {0} cells",
-                crate::MIN_TABS_SIZE
+            tf(
+                "A Tabs block is at least {size} by {size} cells",
+                &[("size", &crate::MIN_TABS_SIZE)],
             ),
         );
     }
@@ -666,17 +676,17 @@ fn check_tabs(layout: &Layout, block: &Block, tabs: &TabsBlock, out: &mut Vec<Is
             if layout.tab_of(id).map(|(t, j)| (t.id.as_str(), j)) != Some((block.id.as_str(), i)) {
                 bad(
                     Severity::Error,
-                    format!("The block \"{id}\" is in two tabs"),
+                    tf("The block \"{id}\" is in two tabs", &[("id", &id)]),
                 );
                 continue;
             }
             match layout.block(id) {
                 None => bad(
                     Severity::Warning,
-                    format!("The tab \u{201c}{name}\u{201d} lists the block \"{id}\", which is not in this layout"),
+                    tf("The tab \u{201c}{name}\u{201d} lists the block \"{id}\", which is not in this layout", &[("name", &name), ("id", &id)]),
                 ),
                 Some(b) if matches!(b.kind, BlockKind::Tabs(_)) => {
-                    bad(Severity::Error, "Tabs cannot go inside tabs".into())
+                    bad(Severity::Error, t("Tabs cannot go inside tabs").into())
                 }
                 Some(b)
                     if b.rect.x < r.x
@@ -686,7 +696,7 @@ fn check_tabs(layout: &Layout, block: &Block, tabs: &TabsBlock, out: &mut Vec<Is
                 {
                     bad(
                         Severity::Error,
-                        format!("The block \"{id}\" of the tab \u{201c}{name}\u{201d} is not inside the tabs"),
+                        tf("The block \"{id}\" of the tab \u{201c}{name}\u{201d} is not inside the tabs", &[("id", &id), ("name", &name)]),
                     )
                 }
                 Some(_) => {}
@@ -702,7 +712,10 @@ fn check_variables(block: &Block, text: &str, reg: &dyn Registry, out: &mut Vec<
                 block,
                 Severity::Debug,
                 Code::UnresolvedVariable,
-                format!("{{{name}}} is not defined by any data rule"),
+                tf(
+                    "{var} is not defined by any data rule",
+                    &[("var", &format!("{{{name}}}"))],
+                ),
             ));
         }
     }

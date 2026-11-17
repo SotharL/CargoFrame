@@ -10,8 +10,8 @@ const pages = import.meta.glob('../**/*.svelte', { query: '?raw', import: 'defau
 const code = Object.values(pages).join('\n');
 /** The titles the pages give their sections, and the headings they write themselves. */
 const titles = new Set([
-  ...[...code.matchAll(/<Section\s+title="([^"]+)"/g)].map((m) => m[1]!),
-  ...[...code.matchAll(/<h2[^>]*>([^<{]+)<\/h2>/g)].map((m) => m[1]!.trim()),
+  ...[...code.matchAll(/<Section\s+title=(?:"([^"]+)"|\{t\('((?:[^'\\]|\\.)+)'\)\})/g)].map((m) => (m[1] ?? m[2])!.replace(/\\'/g, "'")),
+  ...[...code.matchAll(/<h2[^>]*>(?:([^<{]+)|\{t\('((?:[^'\\]|\\.)+)'\)\})<\/h2>/g)].map((m) => (m[1] ?? m[2])!.trim().replace(/\\'/g, "'")),
 ]);
 
 describe('the settings search', () => {
