@@ -100,6 +100,7 @@
 
 <Section
   title={t('Updates')}
+  tour="system.updates"
   hint={t('CargoFrame looks for a newer release on GitHub, checks the download against its published checksum, and installs it over this one. Your settings stay.')}
 >
   {#if view}

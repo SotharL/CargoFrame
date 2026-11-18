@@ -193,7 +193,7 @@ pub fn run() {
             commands::open_video_test,
         ])
         .on_window_event(|window, event| match event {
-            // Settings, General, Memory decides whether a closed window is destroyed or kept.
+            // Settings, System, Windows kept ready decides whether a closed window is destroyed or kept.
             tauri::WindowEvent::CloseRequested { api, .. } => {
                 windowing::close_requested(window, api)
             }
@@ -219,6 +219,13 @@ pub fn run() {
             }
             sweep_every_hour(app.handle().clone());
             check_for_updates_daily(app.handle().clone());
+            // with a shortcut that records, ffmpeg is asked what it can do (and its hardware
+            // encoders tried) in the background, so the first recording starts at once
+            if let Some(state) = app.handle().try_state::<AppState>() {
+                if let Some(video) = video_to_learn(&state.store) {
+                    video::learn_in_background(video);
+                }
+            }
             tray::build(app.handle())?;
             triggers::reload(app.handle());
             notify::launched(app.handle());
@@ -226,18 +233,19 @@ pub fn run() {
             if let Some(open) = cli.open.clone() {
                 open_from_another_program(app.handle(), open);
             }
-            if startup == Startup::OpenSettings {
-                // The first run lands on Setup, which says whether anything is missing; after
-                // that, Settings opens where it was left.
-                let first = app
-                    .handle()
-                    .try_state::<AppState>()
-                    .is_some_and(|s| setup::first_run(s.store.dirs().config()));
-                if first {
-                    windowing::open_settings_at(app.handle(), "setup");
-                } else {
-                    windowing::open_settings(app.handle());
-                }
+            // The first start of a version (a new install, or an update) opens Settings on its
+            // tour, which can be skipped; otherwise Settings opens where it was left, when asked.
+            let config = app
+                .handle()
+                .try_state::<AppState>()
+                .map(|s| s.store.dirs().config().to_path_buf());
+            let tour = config
+                .as_deref()
+                .is_some_and(|c| setup::tour_due(c, env!("CARGO_PKG_VERSION")));
+            if tour {
+                windowing::open_settings_at(app.handle(), "connections&tour=basics");
+            } else if startup == Startup::OpenSettings {
+                windowing::open_settings(app.handle());
             }
             Ok(())
         })
@@ -299,6 +307,22 @@ fn check_for_updates_daily(app: tauri::AppHandle) {
     if let Err(e) = spawned {
         tracing::warn!("could not start the update check: {e}");
     }
+}
+
+/// The recording settings, when an enabled shortcut records.
+fn video_to_learn(store: &Store) -> Option<cargoframe_config::Video> {
+    let triggers = store
+        .load_all::<cargoframe_config::Trigger>(cargoframe_config::Kind::Triggers)
+        .ok()?;
+    triggers
+        .items
+        .iter()
+        .any(|(_, t)| t.enabled && session::records(store, t))
+        .then(|| {
+            store
+                .load_or_default::<cargoframe_config::Video>()
+                .unwrap_or_default()
+        })
 }
 
 /// Capture folders belong to open windows; this removes any that got left behind.

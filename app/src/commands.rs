@@ -72,7 +72,7 @@ pub fn get_general(state: State<'_, AppState>) -> Result<General, String> {
         .map_err(|e| e.to_string())
 }
 
-/// The language the windows speak (Settings, General, or the computer's).
+/// The language the windows speak (Settings, Preferences, or the computer's).
 #[tauri::command]
 pub fn get_language() -> crate::language::LanguageInfo {
     crate::language::info()
@@ -100,7 +100,7 @@ pub fn set_general(
     Ok(())
 }
 
-// ----- your data (Settings, General) -----
+// ----- what is kept (Settings, Files & backup) -----
 
 /// What CargoFrame keeps on this computer, by kind, and where.
 #[derive(Serialize)]
@@ -264,17 +264,23 @@ pub fn edit_layout(app: AppHandle, layout_id: Option<String>) {
 /// Open Settings on one of its pages (for example `connections`, to reconnect).
 #[tauri::command]
 pub fn open_settings(app: AppHandle, page: String) {
-    const PAGES: [&str; 10] = [
-        "setup",
+    // the pages, then the names they had before 0.7 (Settings follows them)
+    const PAGES: [&str; 15] = [
         "connections",
         "layouts",
         "triggers",
         "rules",
-        "infotypes",
         "video",
+        "preferences",
+        "files",
+        "system",
+        "setup",
+        "infotypes",
         "general",
         "data",
         "about",
+        "safe",
+        "updates",
     ];
     if PAGES.contains(&page.as_str()) {
         windowing::open_settings_at(&app, &page);
@@ -712,7 +718,7 @@ fn wants_claude_app(state: &AppState, os: video::Os) -> bool {
         .unwrap_or(false)
 }
 
-/// What the Setup page shows: the apps CargoFrame leans on, and what the one button does.
+/// What the System page shows: the apps CargoFrame leans on, and what the one button does.
 fn current_setup(app: &AppHandle) -> crate::setup::Report {
     let state = app.state::<AppState>();
     let installer = app.state::<crate::setup::Installer>();
@@ -1338,13 +1344,13 @@ pub fn report_painted(state: State<'_, AppState>, flow: String) {
     }
 }
 
-/// The last timings, for Settings, General.
+/// The last timings, for Settings, System.
 #[tauri::command]
 pub fn get_timings(state: State<'_, AppState>) -> Vec<crate::timing::TimingView> {
     state.timings.snapshot()
 }
 
-/// The memory setting in force and what it is doing to each window, for Settings, General,
+/// The memory setting in force and what it is doing to each window, for Settings, System,
 /// Performance (the Refresh button).
 #[tauri::command]
 pub fn get_memory_status(
@@ -1550,7 +1556,7 @@ mod template_tests {
     }
 }
 
-// ----- updates (Settings, General) -----
+// ----- updates (Settings, System) -----
 
 fn updates_dir(state: &AppState) -> std::path::PathBuf {
     state.store.dirs().data().join("updates")

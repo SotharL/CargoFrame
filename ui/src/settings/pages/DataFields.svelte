@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/index.svelte';
   import Tr from '../../lib/i18n/Tr.svelte';
-  // Data & fields: values read from the files of a capture (`{map}`, `{gpu}`), and the files they
+  // Data parsing: values read from the files of a capture (`{map}`, `{gpu}`), and the files they
   // are read in. A value is made by selecting it in a file; it can be read in several files, the
   // newest winning. Layouts write the values in titles, descriptions, tags and fields (Fill fields
   // is a tab of the Layouts page). Stored as data rules, one per file (settings/data/values.ts).
@@ -125,7 +125,7 @@
     />
   {:else}
     <PageTabs
-      label={t('Data & fields')}
+      label={t('Data parsing')}
       bind:value={tab}
       tabs={[
         { id: 'values', label: t('Values'), count: entries.length, tour: 'data.values' },
@@ -168,8 +168,8 @@
 </div>
 
 <style>
-  .page { display: grid; gap: 12px; max-width: 1280px; }
-  .panel { display: grid; gap: 12px; }
+  .page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 1280px; }
+  .panel { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; }
   .tried { margin: 0; font-size: 13px; }
   .mono { font-family: var(--mono); }
   .buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }

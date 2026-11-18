@@ -122,6 +122,7 @@
 
 <Section
   title={t('Export and import')}
+  tour="files.transfer"
   hint={t('Back up layouts, data from files and field fills, or move them to another computer. Connections, passwords, keys and shortcuts are never included.')}
 >
   <div class="panel">

@@ -7,7 +7,7 @@
   import { getApi } from '../../lib/ipc';
   import type { Safe } from '../../lib/types';
 
-  /** Reports the outcome of a save so the General page can show one status line. */
+  /** Reports the outcome of a save so the page can show one status line. */
   let { onstatus }: { onstatus: (kind: 'ok' | 'err', text: string) => void } = $props();
 
   let loaded = $state(false);
@@ -52,7 +52,8 @@
 
 {#if loaded}
   <Section
-    title={t('When sharing fails')}
+    title={t('When a share fails')}
+    tour="files.safe"
     hint={t('Nothing you captured is lost: CargoFrame tries again, then keeps a zip in a folder you choose.')}
   >
     <details class="steps">

@@ -39,7 +39,7 @@ describe('SharingBlock', () => {
   it('is disabled and says why when the folder for saved zips is not set', () => {
     render(SharingBlock, {
       block, enabled: false, mode: 'save_locally', note: null,
-      reasons: ['Set a “Folder for saved zips” in Settings, General, When sharing fails to save locally'],
+      reasons: ['Set a “Folder for saved zips” in Settings, Files & backup, When a share fails to save locally'],
       onshare: () => {},
     });
     const button = screen.getByRole('button', { name: 'Save locally' }) as HTMLButtonElement;

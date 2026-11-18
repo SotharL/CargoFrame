@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.6.0 (beta) · English, Français, Español, Italiano, Deutsch</p>
+Windows 11 and Linux · version 0.7.0 (beta) · English, Français, Español, Italiano, Deutsch</p>
 
 <p align="center">
   <picture>
@@ -75,13 +75,14 @@ flowchart LR
 
 **Windows 11:** download **CargoFrame-Setup.exe** from **Releases**, double-click it and press **Install**. No
 administrator password is needed. Windows may say the publisher is unknown (the installer is not signed yet): choose
-**More info**, then **Run anyway**. CargoFrame then opens on its **Setup** page.
+**More info**, then **Run anyway**. CargoFrame then opens Settings on a short **tour** of where everything is (skip it
+whenever you like; *Guides* starts it again).
 
 **Linux (x64):** download **CargoFrame-<version>-linux-x64.tar.gz** from **Releases**, unpack it and run
 `./install.sh`.
 
 Each release also has **SHA256SUMS.txt** to check the download. To update, run the new installer over the old one
-(your settings stay), or press **Check for updates** in *Settings, About*.
+(your settings stay), or press **Check for updates** in *Settings, System*.
 
 <details>
 <summary><b>Linux details, silent install, uninstall, video</b></summary>
@@ -90,13 +91,14 @@ Each release also has **SHA256SUMS.txt** to check the download. To update, run t
   one, GNOME needs the AppIndicator extension. Uninstall with `./uninstall.sh` (`--delete-data` also removes your
   settings).
 - **Wayland** (GNOME, KDE, sway, Hyprland) works too: CargoFrame hands each shortcut to the desktop (on GNOME it
-  appears in *Settings, Keyboard, Custom Shortcuts*). *Settings, Setup* lists what Wayland needs: the desktop portal
+  appears in *Settings, Keyboard, Custom Shortcuts*). *Settings, System* lists what Wayland needs: the desktop portal
   (or `grim`), GStreamer with its PipeWire plugin for video, `wtype` on sway and Hyprland. How each desktop is handled:
   [design](docs/design.md#2-what-it-does).
 - **Silent install (Windows):** `CargoFrame-Setup.exe /S`, add `/NOSTARTUP` to leave "start when I sign in" off.
 - **Uninstall (Windows):** *Settings, Apps*. It asks whether to delete your settings too.
-- **Video needs ffmpeg** (screenshots do not). *Settings, Setup* installs it on Windows with one button; on Linux it
-  shows the one command to copy.
+- **Video needs ffmpeg** (screenshots do not). *Settings, System* installs it on Windows with one button; on Linux it
+  shows the one command to copy. Recording uses the graphics card where it can (its copy of the screen and its encoder)
+  and runs below the programs in use, so the program you record stays smooth.
 
 </details>
 
@@ -106,32 +108,32 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 
 | Step | Where | What you do |
 |:----:|-------|-------------|
-| 1 | **Setup, Connections** | Add the service you share to. A button beside each token field opens the page where you get it. Skip this to start with **Save locally** |
+| 1 | **Connections** | Add the service you share to. A button beside each token field opens the page where you get it. Skip this to start with **Save locally** |
 | 2 | **Layouts** | Press **Start from a template**, then **Use**, change what you like, **Save**. A layout is the window a capture opens. Bigger templates keep the screenshot and the logs in tabs |
-| 3 | **Triggers** | Name it, click **Shortcut** and press the keys, pick your layout, **Save** |
-| 4 | **Data & fields** *(optional)* | After a first capture, **New value: select it in a file**: click the map in a log, name it, **Save**. Write `{map}` in a layout's title, text or tags |
+| 3 | **Shortcuts** | Name it, click **Keys** and press them, pick your layout, **Save** |
+| 4 | **Data parsing** *(optional)* | After a first capture, **New value: select it in a file**: click the map in a log, name it, **Save**. Write `{map}` in a layout's title, text or tags |
 
 <table>
 <tr>
 <td width="50%"><img alt="Settings, Layouts: the layout builder with a screenshot, a note and a Save locally button" src="docs/images/layout-builder.png"></td>
-<td width="50%"><img alt="Settings, Triggers: name, shortcut, layout and what the screenshot shows" src="docs/images/trigger-form.png"></td>
+<td width="50%"><img alt="Settings, Shortcuts: name, keys, layout and what the screenshot shows" src="docs/images/trigger-form.png"></td>
 </tr>
 <tr>
 <td><b>Layouts.</b> Add blocks, drag them, resize them, group them in tabs. A <b>Video</b> block makes the shortcut record.</td>
-<td><b>Triggers.</b> A shortcut and the layout it opens. That is all a trigger needs.</td>
+<td><b>Shortcuts.</b> The keys and the layout they open. That is all a shortcut needs.</td>
 </tr>
 </table>
 
-<p><img alt="Settings, Data & fields: a game log with the map selected, how to find it again, and what each log gives" src="docs/images/data-values.png"></p>
-<p><b>Data & fields.</b> Select a value once in a file of a capture; CargoFrame finds it again in every capture, in every log you tick, the newest winning.</p>
+<p><img alt="Settings, Data parsing: a game log with the map selected, how to find it again, and what each log gives" src="docs/images/data-values.png"></p>
+<p><b>Data parsing.</b> Select a value once in a file of a capture; CargoFrame finds it again in every capture, in every log you tick, the newest winning.</p>
 
 > **Looking for a setting?** Type in the search box at the top of the Settings menu (Ctrl+F): the menu lists only
 > what has your words, and the rest of the page shown is greyed out. The × clears it.
 
 > **Another language?** CargoFrame follows your computer's language (English, French, Spanish, Italian or German).
-> To choose another, open **General, Language**. Texts you write yourself stay as you wrote them.
+> To choose another, open **Preferences, Language**. Texts you write yourself stay as you wrote them.
 
-> **Stuck?** **Guides**, at the bottom of the Settings menu, walks you through any setup: it opens the right page,
+> **Stuck?** **Guides**, at the bottom of the Settings menu, has the tour again and walks you through any setup: it opens the right page,
 > outlines the field and says in one sentence what goes in it.
 
 ### 3. Press the shortcut
@@ -149,12 +151,12 @@ or click the ones you want. *Try again* reads it another way. It is read on your
 
 | Word | Meaning |
 |------|---------|
-| **Trigger** | A shortcut, and the layout it opens |
+| **Shortcut** | Keys (or the tray menu), and the layout they open |
 | **Layout** | The window a capture opens: blocks on a grid of 12 columns, or more (up to 24) for a wider window |
 | **Block** | One piece of the window: Screenshot, Video, Text, Dropdown, Files, Tags, Log viewer, Tabs, or a sharing button |
 | **Connection** | A service you signed in to (Jira, Slack…) |
 | **Where to post** | One dropdown that goes as deep as the service does: project, or server, channel, thread |
-| **Value** | Something read in the files of each capture, like the map in a game's log: select it once in a file, then write `{map}` in a title, a description, a tag or a field (*Data & fields*) |
+| **Value** | Something read in the files of each capture, like the map in a game's log: select it once in a file, then write `{map}` in a title, a description, a tag or a field (*Data parsing*) |
 | **Fill fields** | A field of the service filled on each share, with steps such as "if `{gpu}` is found, add the label `gpu-{gpu}`" (a tab of *Layouts*) |
 | **Template** | A ready-made layout to start from; it becomes yours when you save it |
 
@@ -215,7 +217,7 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   service wants.
 - **Pictures in the text:** for Jira, GitHub and Teams, put *Screenshot* or *Recording* from the values list (or the
   *Repro | Highlight* table) in the text, and the picture shows right there instead of as an attachment at the end.
-- **Values from files** (*Settings, Data & fields*): *New value: select it in a file* shows the text files of the last
+- **Values from files** (*Settings, Data parsing*): *New value: select it in a file* shows the text files of the last
   capture (or one you open or drop). Click a word, or drag over the text you want: CargoFrame suggests how to find it
   again (in the lines with the label just before it, up to the next sign, a space or the end of the line, the most
   recent line), shows what each file gives, and you name it. Tick the files to read it in: when several have it, the
@@ -237,14 +239,17 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   lines, pick one to read it whole and copy it, or *Copy all*. The expand icon opens it large in the middle of the
   window; the cross or Escape closes it.
 - **Log lines by time:** the clock button at the start of the log viewer's search row turns it to a time search: the
-  lines written during the recording, around the screenshot, or between two times you type (the magnifier turns it
-  back). Logs write their time in many ways: type the one yours uses in the format box (`[YYYY_MM_DD] HH:mm -`,
-  `MM_DD_HH_mm_ss`) and the missing day or year is taken from the capture; or let a data rule set it for the file it
-  finds. The last format used for a file comes back next time.
+  lines written during the recording, around the screenshot, or between two times (type them, or pick a line and press
+  *Start here* or *End here*; the magnifier turns it back). Logs write their time in many ways: **select the time in a
+  line**, as it is written (`[2026.11.18-14.32.05:123]`), and CargoFrame reads every line's time that way; or type the
+  format (`[YYYY_MM_DD] HH:mm -`) behind the button that shows how times are read, or let a data rule set it for the
+  file it finds. The missing day or year is taken from the capture, and the last format used for a file comes back.
+- **Logs that follow the clip:** while a recording plays, the log viewer shows the lines written up to the moment on
+  screen, the newest coming in at the bottom as it plays. Untick *Following the clip* to see every line.
 - **Tabs:** a Tabs block is a binder: 2 to 5 tabs (named, with the names on the top, bottom, left or right), each
   holding blocks. In the layout builder, click a tab's name and drop blocks inside; drag the grip at its top right to
   move it with its blocks. In the window, click a tab to see its blocks. What is in the other tabs is kept and sent.
-- **Values made from other values:** in *Data & fields*, *Made from other values*: for example a build id
+- **Values made from other values:** in *Data parsing*, *Made from other values*: for example a build id
   `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
   one line, however small the window.
@@ -265,12 +270,12 @@ recording, a *Recording* tab comes first.
 
 | Remove | How | Gentler |
 |--------|-----|---------|
-| A layout, trigger, rule or field | **Delete**, then **Delete for good** | Switch off **Enabled** (triggers) |
+| A layout, shortcut, rule or field | **Delete**, then **Delete for good** | Switch off **Enabled** (shortcuts) |
 | A connection | **Delete**, then **Delete for good**; its tokens leave the password store | **Sign out** |
-| Everything | *Your data*, **Reset CargoFrame** (keeps the program and your saved zips) | *Your data*, **Export** first |
+| Everything | *Files & backup*, **Reset CargoFrame** (keeps the program and your saved zips) | *Files & backup*, **Export** first |
 
-*Settings, Your data* lists what is kept on this computer, with its size and a **Clear** button for each kind.
-*Pause triggers* in the tray menu turns every shortcut off for a while.
+*Settings, Files & backup* lists what is kept on this computer, with its size and a **Clear** button for each kind.
+*Pause shortcuts* in the tray menu turns every shortcut off for a while.
 
 </details>
 
@@ -302,11 +307,11 @@ recording, a *Recording* tab comes first.
 |--------------|------------|
 | No tray icon (Linux) | GNOME needs the AppIndicator extension. Meanwhile, start CargoFrame again to open Settings |
 | "Unknown publisher" (Windows) | The installer is not signed yet: **More info**, **Run anyway** |
-| No video | *Settings, Setup*: install ffmpeg (and, on Wayland, GStreamer's PipeWire plugin) |
-| A shortcut does nothing (Wayland) | *Settings, Triggers* says how this desktop takes shortcuts; where it cannot, it shows the command to add to your desktop's keyboard shortcuts, with a **Copy** button |
+| No video | *Settings, System*: install ffmpeg (and, on Wayland, GStreamer's PipeWire plugin) |
+| A shortcut does nothing (Wayland) | *Settings, Shortcuts* says how this desktop takes shortcuts; where it cannot, it shows the command to add to your desktop's keyboard shortcuts, with a **Copy** button |
 | The whole screen was captured, not the program (Wayland) | GNOME does not tell programs which window is in focus (except older X11 programs). The window's note says so |
 | A video without sound | Click the Video block in your layout and check **Sound of the computer**. The notification after a recording says why a sound was left out |
-| Notifications appear in recordings | *Settings, General, Notifications*: switch off *Say when something happens* |
+| Notifications appear in recordings | *Settings, Preferences, Notifications*: switch off *When something happens* |
 | Claude opened but nothing was pasted | Leave Claude in front a few seconds; raise **Extra seconds to wait** in the Claude connection. On GNOME and KDE Wayland, programs cannot paste for you: the message is on the clipboard, press Ctrl+V |
 | A send failed | Nothing is lost: CargoFrame retried, kept a zip and said where. The message says what the service answered |
 

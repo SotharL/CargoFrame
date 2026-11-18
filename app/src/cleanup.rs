@@ -1,4 +1,4 @@
-//! Clearing what CargoFrame keeps on this computer (Settings, General, Your data).
+//! Clearing what CargoFrame keeps on this computer (Settings, Files & backup).
 //!
 //! Everything here stays inside the two folders CargoFrame owns: the data folder (work in
 //! progress, kept zips, logs, downloaded updates) and the settings folder. A file that cannot be

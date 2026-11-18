@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/index.svelte';
   // The Layouts page: the builder, and Fill fields (what fills a field of a service on each share
-  // from the values of Data & fields). Fill fields was a tab of Data & fields before 0.5.0.
+  // from the values of Data parsing). Fill fields was a tab of Data & fields before 0.5.0.
   import { untrack } from 'svelte';
   import PageTabs from '../../lib/components/PageTabs.svelte';
   import { route } from '../route.svelte';

@@ -100,15 +100,15 @@
 
 <div class="page">
   {#if triggers.failure}<Chip kind="err" label={triggers.failure} />{/if}
-  {#each triggers.problems as p (p)}<Chip kind="warn" label={t('Could not read a trigger file: {problem}', { problem: p })} />{/each}
+  {#each triggers.problems as p (p)}<Chip kind="warn" label={t('Could not read a shortcut file: {problem}', { problem: p })} />{/each}
 
   {#if status.note}<p class="note" role="note" data-tour="triggers.desktop">{status.note}</p>{/if}
 
   {#if triggers.loaded && triggers.items.length === 0 && !draft}
     <div class="empty">
-      <h2>{t('No triggers yet')}</h2>
-      <p class="quiet">{t('A trigger is a shortcut that captures your screen and opens a CargoFrame window with the layout you choose.')}</p>
-      <button class="primary" data-tour="triggers.add" onclick={add}>{t('Add a trigger')}</button>
+      <h2>{t('No shortcuts yet')}</h2>
+      <p class="quiet">{t('A shortcut captures your screen, or records it, and opens a CargoFrame window with the layout you choose.')}</p>
+      <button class="primary" data-tour="triggers.add" onclick={add}>{t('Add a shortcut')}</button>
     </div>
   {/if}
 
@@ -158,19 +158,19 @@
   {/each}
 
   {#if triggers.items.length > 0 && !draft}
-    <div><button class="primary" data-tour="triggers.add" onclick={add}>{t('Add a trigger')}</button></div>
+    <div><button class="primary" data-tour="triggers.add" onclick={add}>{t('Add a shortcut')}</button></div>
   {/if}
 
   {#if draft}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
-      <h2>{draft.id ? t('Edit trigger') : t('New trigger')}</h2>
+      <h2>{draft.id ? t('Edit shortcut') : t('New shortcut')}</h2>
       <Field label={t('Name')}><input type="text" bind:value={draft.value.name} placeholder={t('Bug report')} /></Field>
       <div class="field" data-tour="triggers.shortcut">
-        <span class="label">{t('Shortcut')}</span>
-        <ShortcutInput bind:value={draft.value.shortcut} label={t('Shortcut')} />
-        <p class="quiet hint">{t('Click the box, then press the keys. Leave it empty to start this trigger from the tray menu only.')}</p>
+        <span class="label">{t('Keys')}</span>
+        <ShortcutInput bind:value={draft.value.shortcut} label={t('Keys')} />
+        <p class="quiet hint">{t('Click the box, then press the keys. Leave it empty to start this shortcut from the tray menu only.')}</p>
       </div>
-      <Field label={t('Layout')} hint={t('The window this trigger opens. It also says what a press does.')} tour="triggers.layout">
+      <Field label={t('Layout')} hint={t('The window this shortcut opens. It also says what a press does.')} tour="triggers.layout">
         <select bind:value={draft.value.layout_id}>
           <option value={null}>{t('None (empty window)')}</option>
           {#each layouts.items as l (l.id)}<option value={l.id}>{l.item.name}</option>{/each}
@@ -178,7 +178,7 @@
       </Field>
       {#if records(draft.value.layout_id)}
         <p class="quiet what" role="note" data-tour="triggers.makes">
-          {t('This layout has a Video block, so a press records the screen: the first press starts, the next one stops and opens the window with the clip. What is recorded and its sound are set in the Video block. Needs ffmpeg (Setup).')}
+          {t('This layout has a Video block, so a press records the screen: the first press starts, the next one stops and opens the window with the clip. What is recorded and its sound are set in the Video block. Needs ffmpeg (System).')}
         </p>
       {:else}
         <Field label={t('Screenshot of')} hint={MODES.find((m) => m.value === draft!.value.capture)?.hint}>

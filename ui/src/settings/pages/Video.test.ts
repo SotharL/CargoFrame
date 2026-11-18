@@ -63,7 +63,7 @@ describe('Video settings', () => {
   it('sends the person to Setup to install ffmpeg when it is not there', async () => {
     open({ noFfmpeg: true });
     await screen.findByText('ffmpeg not found');
-    expect(screen.getByRole('button', { name: 'Install it from Setup' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Install it from System' })).toBeTruthy();
   });
 
   it('says plainly when ffmpeg is not there and does not offer a test recording', async () => {

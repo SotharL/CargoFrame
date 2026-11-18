@@ -140,7 +140,11 @@
       <span class="count">{guide.index + 1} / {tour.steps.length}</span>
       {#if guide.index > 0}<button type="button" onclick={back}>{t('Back')}</button>{/if}
       <button type="button" class="go" onclick={next}>{last ? t('Done') : t('Next')}</button>
-      <button type="button" aria-label={t('Close the guide')} onclick={stopTour}>✕</button>
+      {#if tour.intro && !last}
+        <button type="button" onclick={stopTour}>{t('Skip the tour')}</button>
+      {:else}
+        <button type="button" aria-label={t('Close the guide')} onclick={stopTour}>✕</button>
+      {/if}
     </div>
   </div>
 {/if}

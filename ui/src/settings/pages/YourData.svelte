@@ -77,7 +77,7 @@
   }
 </script>
 
-<Section title={t('Your data')} hint={t('Everything CargoFrame keeps stays in these two folders on this computer.')}>
+<Section title={t('Kept on this computer')} tour="files.kept" hint={t('Everything CargoFrame keeps stays in these two folders.')}>
   {#if report}
     <p class="quiet"><Tr text={t('Settings: {path}')}>{#snippet path()}<span class="mono selectable">{report!.config_dir}</span>{/snippet}</Tr></p>
     <p class="quiet"><Tr text={t('Logs, kept zips and work in progress: {path}')}>{#snippet path()}<span class="mono selectable">{report!.data_dir}</span>{/snippet}</Tr></p>
@@ -109,7 +109,7 @@
     <div class="reset">
       <h3>{t('Start again')}</h3>
       <p class="quiet">
-        {t('Removes every trigger, layout, value from a file, field fill and connection, forgets the sign-ins and tokens kept for them, and clears all of the above. CargoFrame itself stays installed, and so do the files you saved zips to.')}
+        {t('Removes every shortcut, layout, value from a file, field fill and connection, forgets the sign-ins and tokens kept for them, and clears all of the above. CargoFrame itself stays installed, and so do the files you saved zips to.')}
       </p>
       {#if confirming}
         <div class="sure" role="alert">

@@ -242,8 +242,8 @@
       {:else}
         <div class="facts">
           <Chip kind="err" label={t('ffmpeg not found')} />
-          <p class="quiet note">{t('The Setup page installs it for you (Windows) or gives the one command to run (Linux).')}</p>
-          <button type="button" class="primary" onclick={() => go('setup')}>{t('Install it from Setup')}</button>
+          <p class="quiet note">{t('The System page installs it for you (Windows) or gives the one command to run (Linux).')}</p>
+          <button type="button" class="primary" onclick={() => go('system')}>{t('Install it from System')}</button>
         </div>
       {/if}
       {#if tools.problem}<p class="problem" role="alert">{tools.problem}</p>{/if}

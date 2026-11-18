@@ -16,7 +16,7 @@ pub struct AppState {
     pub store: Store,
     /// The services CargoFrame can share to, and their sign-ins.
     pub connections: Connections,
-    /// "Pause triggers" in the tray menu.
+    /// "Pause shortcuts" in the tray menu.
     paused: AtomicBool,
     /// False when a Linux desktop has no tray host.
     pub tray_available: bool,
@@ -26,7 +26,7 @@ pub struct AppState {
     pub workspace: Workspace,
     /// Which hidden windows are being kept warm (Memory mode).
     pub warm: Warm,
-    /// The last timings, for Settings, General.
+    /// The last timings, for Settings, System.
     pub timings: Timings,
     /// The screen recording that is running, if any.
     pub recording: crate::video::Recording,

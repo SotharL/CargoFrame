@@ -5,6 +5,7 @@
 </script>
 
 <script lang="ts">
+  import { clearPlayhead, movePlayhead } from '../playhead.svelte';
   import { t } from '../../lib/i18n/index.svelte';
   import { onDestroy, onMount, untrack } from 'svelte';
   import { getApi } from '../../lib/ipc';
@@ -245,6 +246,7 @@
     return () => document.removeEventListener('fullscreenchange', changed);
   });
   onDestroy(() => {
+    clearPlayhead();
     if (url) URL.revokeObjectURL(url);
     if (typeof document !== 'undefined' && document.fullscreenElement === stage) void document.exitFullscreen?.();
   });
@@ -265,7 +267,13 @@
   }
   function played() {
     if (player && (player.currentTime < start || player.currentTime >= end - 0.05)) seek(start);
+    watched = true;
   }
+  // Once played, the log viewers follow the clip: the moment shown, as the computer's clock said
+  let watched = $state(false);
+  $effect(() => {
+    if (watched && info.started_at_ms) movePlayhead(info.started_at_ms + now * 1000, playing);
+  });
   // while it plays, the keys and a following crop keep up with every picture
   $effect(() => {
     if (!playing || !player || typeof requestAnimationFrame === 'undefined') return;

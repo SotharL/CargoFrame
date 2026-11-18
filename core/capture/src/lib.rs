@@ -103,6 +103,28 @@ impl WindowPlace {
     }
 }
 
+/// The screens of this computer, as far as a recording needs them.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Screens {
+    /// The main screen, which starts at the top left of the desktop.
+    pub main_width: u32,
+    pub main_height: u32,
+    pub count: u32,
+}
+
+/// The screens, on Windows (where the graphics-card capture takes one screen). `None` elsewhere,
+/// or when Windows does not say.
+pub fn screens() -> Option<Screens> {
+    #[cfg(windows)]
+    {
+        win::screens()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
 /// The window in focus right now, without taking a picture. `None` when nothing has the focus.
 /// On a Wayland desktop that does not say (GNOME), the error is [`CaptureError::FocusUnknown`].
 pub fn focused_app() -> Result<Option<FocusedApp>, CaptureError> {

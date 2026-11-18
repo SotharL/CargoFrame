@@ -1,10 +1,11 @@
 //! Settings, Video: finding ffmpeg, choosing how the screen is captured and compressed, and a
 //! short test recording the person can run on their own PC.
 //!
-//! Which capture and which encoder work best is something only a real machine can say (spike
-//! S9), so nothing here guesses beyond a safe default: "Auto" is software compression of the old
-//! GDI capture on Windows and x11grab on an X11 desktop, and the test recording tells the person
-//! at once whether another choice works on their PC.
+//! "Auto" takes what costs the program being recorded the least and works on this PC: on
+//! Windows the graphics card's copy of the main screen (Desktop Duplication), GDI for the rest;
+//! x11grab on an X11 desktop and the portal's stream on Wayland; a hardware encoder that encoded
+//! a test picture, software (x264) otherwise. What ffmpeg refuses at once is swapped for GDI and
+//! software as the recording starts, and the test recording tells the person how it went.
 
 use cargoframe_config::{Video, VideoCapture, VideoEncoder};
 use cargoframe_i18n::{t, tf};
@@ -84,6 +85,8 @@ pub struct Found {
     pub captures: Vec<VideoCapture>,
     /// GStreamer with its PipeWire plugin, which reads a Wayland desktop's screen.
     pub gstreamer: Option<PathBuf>,
+    /// The hardware encoders that encoded a test picture on this computer, best first.
+    pub fast: Vec<VideoEncoder>,
 }
 
 /// Where the settings window is told things stand.
@@ -166,14 +169,8 @@ pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String>
             )],
         ));
     };
-    let version = ask(&ffmpeg, &["-hide_banner", "-version"])
-        .map_err(|e| tf("ffmpeg would not start: {e}", &[("e", &e)]))?;
-    let encoders = ask(&ffmpeg, &["-hide_banner", "-encoders"])
-        .map_err(|e| tf("ffmpeg would not list its encoders: {e}", &[("e", &e)]))?;
-    // old builds may not know the lists; no devices or filters just means fewer choices
-    let devices = ask(&ffmpeg, &["-hide_banner", "-devices"]).unwrap_or_default();
-    let filters = ask(&ffmpeg, &["-hide_banner", "-filters"]).unwrap_or_default();
-    let mut captures = parse_captures(&devices, &filters);
+    let known = abilities(&ffmpeg)?;
+    let mut captures = known.captures;
     let gstreamer = wayland_reader();
     if gstreamer.is_some() {
         captures.push(VideoCapture::Wayland);
@@ -181,11 +178,111 @@ pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String>
     Ok(Found {
         ffmpeg,
         ffprobe,
-        version: parse_version(&version),
-        encoders: parse_encoders(&encoders),
+        version: known.version,
+        encoders: known.encoders,
         captures,
         gstreamer,
+        fast: known.fast,
     })
+}
+
+/// What one ffmpeg can do. Asking takes several runs of it (and a test picture for each
+/// hardware encoder), so the answer is kept for as long as the program file is the same.
+#[derive(Debug, Clone)]
+struct Abilities {
+    version: String,
+    encoders: Vec<VideoEncoder>,
+    captures: Vec<VideoCapture>,
+    fast: Vec<VideoEncoder>,
+}
+
+type Known = (PathBuf, Option<std::time::SystemTime>, Abilities);
+static KNOWN: Mutex<Vec<Known>> = Mutex::new(Vec::new());
+
+fn changed(ffmpeg: &Path) -> Option<std::time::SystemTime> {
+    std::fs::metadata(ffmpeg).and_then(|m| m.modified()).ok()
+}
+
+fn abilities(ffmpeg: &Path) -> Result<Abilities, String> {
+    let stamp = changed(ffmpeg);
+    let kept = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    if let Some((_, _, a)) = kept.iter().find(|(p, at, _)| p == ffmpeg && *at == stamp) {
+        return Ok(a.clone());
+    }
+    drop(kept);
+    let version = ask(ffmpeg, &["-hide_banner", "-version"])
+        .map_err(|e| tf("ffmpeg would not start: {e}", &[("e", &e)]))?;
+    let encoders = ask(ffmpeg, &["-hide_banner", "-encoders"])
+        .map_err(|e| tf("ffmpeg would not list its encoders: {e}", &[("e", &e)]))?;
+    // old builds may not know the lists; no devices or filters just means fewer choices
+    let devices = ask(ffmpeg, &["-hide_banner", "-devices"]).unwrap_or_default();
+    let filters = ask(ffmpeg, &["-hide_banner", "-filters"]).unwrap_or_default();
+    let encoders = parse_encoders(&encoders);
+    let found = Abilities {
+        version: parse_version(&version),
+        fast: fast_encoders(ffmpeg, &encoders, Os::current()),
+        encoders,
+        captures: parse_captures(&devices, &filters),
+    };
+    let mut kept = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    kept.retain(|(p, _, _)| p != ffmpeg);
+    kept.push((ffmpeg.to_path_buf(), stamp, found.clone()));
+    Ok(found)
+}
+
+/// The hardware encoders of this build that work on this computer, best first. Each is tried
+/// on a small test picture: a build lists them whatever graphics card there is.
+fn fast_encoders(ffmpeg: &Path, listed: &[VideoEncoder], os: Os) -> Vec<VideoEncoder> {
+    let tried: &[VideoEncoder] = match os {
+        Os::Windows => &[VideoEncoder::Nvenc, VideoEncoder::Qsv, VideoEncoder::Amf],
+        Os::Linux if Path::new(VAAPI_DEVICE).exists() => &[VideoEncoder::Vaapi],
+        _ => &[],
+    };
+    tried
+        .iter()
+        .copied()
+        .filter(|e| listed.contains(e))
+        .filter(|e| encoder_of(*e).works(ffmpeg))
+        .collect()
+}
+
+/// A hardware encoder failed after all: next time, software (until ffmpeg changes, or the
+/// next start of CargoFrame).
+fn forget_fast(ffmpeg: &Path) {
+    let mut kept = KNOWN.lock().unwrap_or_else(|e| e.into_inner());
+    for (p, _, a) in kept.iter_mut() {
+        if p == ffmpeg {
+            a.fast.clear();
+        }
+    }
+}
+
+/// Ask ffmpeg what it can do now, so the first recording starts at once. Run in the
+/// background after CargoFrame starts.
+pub fn learn_in_background(video: Video) {
+    let _ = std::thread::Builder::new()
+        .name("ffmpeg-abilities".into())
+        .spawn(move || {
+            std::thread::sleep(Duration::from_secs(20));
+            let _ = find(&video, program_beside_app().as_deref());
+        });
+}
+
+const VAAPI_DEVICE: &str = "/dev/dri/renderD128";
+
+fn encoder_of(e: VideoEncoder) -> Encoder {
+    match e {
+        VideoEncoder::Nvenc => Encoder::Nvenc,
+        VideoEncoder::Qsv => Encoder::Qsv,
+        VideoEncoder::Amf => Encoder::Amf,
+        VideoEncoder::MediaFoundation => Encoder::MediaFoundation,
+        VideoEncoder::Vaapi => Encoder::Vaapi {
+            device: PathBuf::from(VAAPI_DEVICE),
+        },
+        _ => Encoder::X264 {
+            preset: X264Preset::Ultrafast,
+        },
+    }
 }
 
 /// `gst-launch-1.0`, when GStreamer can read PipeWire here (`pipewiresrc`).
@@ -273,7 +370,9 @@ pub struct Choice {
 pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Result<Choice, String> {
     let capture = match setting.capture {
         VideoCapture::Auto => match os {
-            Os::Windows => [VideoCapture::Gdigrab, VideoCapture::Ddagrab]
+            // the graphics card's copy of the screen costs little; GDI copies it slowly through
+            // the processor, and is what is left when the other is not there
+            Os::Windows => [VideoCapture::Ddagrab, VideoCapture::Gdigrab]
                 .into_iter()
                 .find(|c| found.captures.contains(c))
                 .ok_or(t("This ffmpeg cannot capture the Windows screen (it has neither gdigrab nor ddagrab). Use a full build, for example winget install Gyan.FFmpeg."))?,
@@ -315,6 +414,9 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
 
 fn choose_encoder(setting: &Video, found: &Found) -> Result<VideoEncoder, String> {
     Ok(match setting.encoder {
+        // a graphics card that encodes (tried beforehand) leaves the processor to the program
+        // being recorded
+        VideoEncoder::Auto if !found.fast.is_empty() => found.fast[0],
         VideoEncoder::Auto => {
             // software works everywhere; a build without it falls back to what it has
             [
@@ -476,6 +578,8 @@ pub struct Extras {
     pub listen: Option<Listen>,
     /// The most it may run, in seconds; `None` is the recorder's own limit (an hour).
     pub max_run_secs: Option<u32>,
+    /// The screens (Windows), to know what the graphics-card capture can see.
+    pub screens: Option<cargoframe_capture::Screens>,
 }
 
 /// Open a sound CargoFrame listens to itself: the computer's (`None`), or one program's.
@@ -542,6 +646,7 @@ fn open_wayland_picture(
     found: &Found,
     fps: u32,
     area: Option<Area>,
+    max_height: Option<u32>,
     work: &Path,
     notes: &mut Vec<String>,
 ) -> Result<
@@ -585,7 +690,13 @@ fn open_wayland_picture(
         }
         _ => None,
     };
-    let args = cargoframe_video::screenfeed::pipewire_args(cast.stream.node, fps);
+    // A whole screen larger than the clip is made smaller by GStreamer already, so a quarter of
+    // the bytes (or less) go to ffmpeg. A part of it is cut by ffmpeg, at full size.
+    let height = match (part, cast.stream.size, max_height) {
+        (None, Some((_, h)), Some(max)) if h > max => Some(max),
+        _ => None,
+    };
+    let args = cargoframe_video::screenfeed::pipewire_args(cast.stream.node, fps, height);
     let feed = cargoframe_video::screenfeed::PictureFeed::open(gst, args, Box::new(cast))?;
     Ok((feed, part))
 }
@@ -595,6 +706,7 @@ fn open_wayland_picture(
     _found: &Found,
     _fps: u32,
     _area: Option<Area>,
+    _max_height: Option<u32>,
     _work: &Path,
     _notes: &mut Vec<String>,
 ) -> Result<
@@ -638,18 +750,7 @@ pub fn recorder_config(
         },
     };
     let mut cfg = Config::new(found.ffmpeg.clone(), capture, dir.to_path_buf());
-    cfg.encoder = match choice.encoder {
-        VideoEncoder::Nvenc => Encoder::Nvenc,
-        VideoEncoder::Qsv => Encoder::Qsv,
-        VideoEncoder::Amf => Encoder::Amf,
-        VideoEncoder::MediaFoundation => Encoder::MediaFoundation,
-        VideoEncoder::Vaapi => Encoder::Vaapi {
-            device: PathBuf::from("/dev/dri/renderD128"),
-        },
-        _ => Encoder::X264 {
-            preset: X264Preset::Ultrafast,
-        },
-    };
+    cfg.encoder = encoder_of(choice.encoder);
     cfg.fps = video.fps.clamp(recorder::MIN_FPS, recorder::MAX_FPS);
     cfg.window = Window::seconds(video.window_secs);
     cfg.max_height = (video.max_height != 0).then_some(video.max_height);
@@ -754,6 +855,50 @@ fn hint(choice: &Choice) -> &'static str {
             t(" Desktop Duplication does not work on every PC (remote sessions and some virtual machines): try GDI.")
         }
         _ => "",
+    }
+}
+
+/// Can the graphics-card capture (main screen only) take what is recorded? A part must lie on
+/// the main screen; the whole desktop must be one screen, unless the person chose this capture.
+fn dda_sees(
+    area: Option<Area>,
+    screens: Option<cargoframe_capture::Screens>,
+    chosen: bool,
+) -> bool {
+    match (area, screens) {
+        (Some(a), Some(s)) => {
+            a.x >= 0
+                && a.y >= 0
+                && a.x as i64 + a.w as i64 <= s.main_width as i64
+                && a.y as i64 + a.h as i64 <= s.main_height as i64
+        }
+        (Some(_), None) => false,
+        (None, Some(s)) => s.count <= 1 || chosen,
+        (None, None) => true,
+    }
+}
+
+/// What ffmpeg gave up on at once, from what it said.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Failed {
+    Capture,
+    Encoder,
+    Sound,
+}
+
+fn early_failure_of(said: &str, sound: bool, capture: bool, encoder: bool) -> Failed {
+    let s = said.to_ascii_lowercase();
+    let has = |words: &[&str]| words.iter().any(|w| s.contains(w));
+    if capture && has(&["ddagrab", "dxgi", "d3d11", "duplicat"]) {
+        Failed::Capture
+    } else if encoder && has(&["nvenc", "qsv", "amf", "vaapi", "encoder", "cuda", "mfx"]) {
+        Failed::Encoder
+    } else if sound {
+        Failed::Sound
+    } else if capture {
+        Failed::Capture
+    } else {
+        Failed::Encoder
     }
 }
 
@@ -1066,6 +1211,7 @@ impl Recording {
             patience: SOUND_PATIENCE,
             listen: None,
             max_run_secs,
+            screens: cargoframe_capture::screens(),
         };
         let mut started =
             self.start_with_extras(found, choice, video, session, work, keep_secs, &extras)?;
@@ -1108,11 +1254,15 @@ impl Recording {
         extras: &Extras,
     ) -> Result<Started, String> {
         let mut choice = choice;
-        // A part of the desktop is cut out by the capture itself. GDI takes it from anywhere on
-        // the desktop, on any screen; the graphics-card capture only sees one screen.
-        if extras.area.is_some()
-            && choice.capture == VideoCapture::Ddagrab
+        // The graphics-card capture sees the main screen only (output 0 is the screen Windows
+        // calls main). What it cannot see is taken by GDI, which sees the whole desktop.
+        if choice.capture == VideoCapture::Ddagrab
             && found.captures.contains(&VideoCapture::Gdigrab)
+            && !dda_sees(
+                extras.area,
+                extras.screens,
+                video.capture == VideoCapture::Ddagrab,
+            )
         {
             choice.capture = VideoCapture::Gdigrab;
         }
@@ -1137,16 +1287,18 @@ impl Recording {
             cfg.max_run_secs = secs;
         }
         let mut notes = Vec::new();
-        let (inputs, feeds) = open_sounds(
-            &extras.sources,
-            extras.listen.unwrap_or(listen_to_the_computer),
-            &mut notes,
-        );
-        cfg.audio = inputs;
+        let listen = extras.listen.unwrap_or(listen_to_the_computer);
         // Wayland: the desktop shares the screen as a stream, which GStreamer reads for ffmpeg.
+        // The feed serves each ffmpeg started, so it stays here until the recording runs.
         let picture = if choice.capture == VideoCapture::Wayland {
-            let (feed, part) =
-                open_wayland_picture(&found, cfg.fps, extras.area, work, &mut notes)?;
+            let (feed, part) = open_wayland_picture(
+                &found,
+                cfg.fps,
+                extras.area,
+                cfg.max_height,
+                work,
+                &mut notes,
+            )?;
             cfg.capture = Capture::Feed {
                 port: feed.port(),
                 part,
@@ -1156,27 +1308,76 @@ impl Recording {
         } else {
             None
         };
-        let mut recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
-        for feed in feeds {
-            recorder.keep(Box::new(feed));
+        // A sound CargoFrame listens to serves one ffmpeg only: each start opens them again.
+        let launch =
+            |cfg: &mut Config, notes: &mut Vec<String>, sound: bool| -> Result<Recorder, String> {
+                let (inputs, feeds) = if sound {
+                    open_sounds(&extras.sources, listen, notes)
+                } else {
+                    (Vec::new(), Vec::new())
+                };
+                cfg.audio = inputs;
+                let mut recorder = Recorder::start(cfg).map_err(|e| e.to_string())?;
+                for feed in feeds {
+                    recorder.keep(Box::new(feed));
+                }
+                Ok(recorder)
+            };
+        let mut recorder = launch(&mut cfg, &mut notes, true)?;
+        // What ffmpeg refuses at once (a sound device that is not there, a capture or a
+        // hardware encoder this PC does not have) is swapped for what always works: GDI,
+        // software compression, no sound. The picture matters more than the sound.
+        let auto_capture = video.capture == VideoCapture::Auto;
+        let auto_encoder = video.encoder == VideoEncoder::Auto;
+        let mut sound = true;
+        let mut again = Vec::new();
+        for _ in 0..3 {
+            let can_swap_capture = auto_capture
+                && choice.capture == VideoCapture::Ddagrab
+                && found.captures.contains(&VideoCapture::Gdigrab);
+            let can_swap_encoder = auto_encoder
+                && choice.encoder != VideoEncoder::Software
+                && found.encoders.contains(&VideoEncoder::Software);
+            if cfg.audio.is_empty() && !can_swap_capture && !can_swap_encoder {
+                break;
+            }
+            let Some(why) = recorder.early_failure(extras.patience) else {
+                break;
+            };
+            recorder.cancel();
+            let _ = std::fs::remove_dir_all(&ring);
+            let _ = std::fs::create_dir_all(&ring);
+            match early_failure_of(
+                &why,
+                !cfg.audio.is_empty(),
+                can_swap_capture,
+                can_swap_encoder,
+            ) {
+                Failed::Capture => {
+                    tracing::warn!("the graphics-card capture failed ({why}): recording with GDI");
+                    choice.capture = VideoCapture::Gdigrab;
+                    cfg.capture = Capture::Gdigrab;
+                }
+                Failed::Encoder => {
+                    tracing::warn!("the hardware encoder failed ({why}): recording with software");
+                    forget_fast(&found.ffmpeg);
+                    choice.encoder = VideoEncoder::Software;
+                    cfg.encoder = Encoder::X264 {
+                        preset: X264Preset::Ultrafast,
+                    };
+                }
+                Failed::Sound => {
+                    notes.push(tf(
+                        "The sound could not be recorded, so this recording has none ({why}).",
+                        &[("why", &why)],
+                    ));
+                    sound = false;
+                }
+            }
+            recorder = launch(&mut cfg, &mut again, sound)?;
         }
         if let Some(p) = picture {
             recorder.keep(Box::new(p));
-        }
-        if !cfg.audio.is_empty() {
-            // A sound device that is not there ends ffmpeg at once. The picture matters more than
-            // the sound, so go on without it, and say so.
-            if let Some(why) = recorder.early_failure(extras.patience) {
-                recorder.cancel();
-                let _ = std::fs::remove_dir_all(&ring);
-                let _ = std::fs::create_dir_all(&ring);
-                notes.push(tf(
-                    "The sound could not be recorded, so this recording has none ({why}).",
-                    &[("why", &why)],
-                ));
-                cfg.audio.clear();
-                recorder = Recorder::start(&cfg).map_err(|e| e.to_string())?;
-            }
         }
         let sound = !cfg.audio.is_empty();
         *slot = Slot::Running(Box::new(Active {

@@ -6,7 +6,7 @@ import { memoryApi, setApiForTests } from '../lib/ipc';
 
 beforeEach(() => {
   setApiForTests(memoryApi());
-  go('setup');
+  go('connections');
 });
 afterEach(() => {
   cleanup();
@@ -18,36 +18,55 @@ describe('Settings sidebar', () => {
     render(App);
     const group = (name: string) =>
       [...screen.getByRole('group', { name }).querySelectorAll('button')].map((b) => b.textContent?.replace(/\d+$/, ''));
-    expect(group('Get started')).toEqual(['Setup']);
-    expect(group('Captures')).toEqual(['Layouts', 'Triggers', 'Data & fields', 'Recording']);
-    expect(group('CargoFrame')).toEqual(['General', 'Your data', 'About']);
+    expect(group('Get started')).toEqual(['Connections']);
+    expect(group('Captures')).toEqual(['Layouts', 'Shortcuts', 'Data parsing', 'Recording']);
+    expect(group('CargoFrame')).toEqual(['Preferences', 'Files & backup', 'System']);
+    // each with its icon, and its name on hover (for a sidebar folded to its icons)
+    const first = screen.getByRole('button', { name: 'Connections' });
+    expect(first.querySelector('svg.icon')).toBeTruthy();
+    expect(first.getAttribute('title')).toBe('Connections');
   });
 
   it('moves through every page with the arrow keys, across the groups', async () => {
     render(App);
-    const setup = screen.getByRole('button', { name: 'Setup' });
-    await fireEvent.keyDown(setup, { key: 'ArrowDown' });
+    const first = screen.getByRole('button', { name: 'Connections' });
+    await fireEvent.keyDown(first, { key: 'ArrowDown' });
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Layouts');
     await fireEvent.keyDown(screen.getByRole('button', { name: 'Layouts' }), { key: 'ArrowUp' });
-    await fireEvent.keyDown(screen.getByRole('button', { name: 'Setup' }), { key: 'ArrowUp' });
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('About');
+    await fireEvent.keyDown(screen.getByRole('button', { name: 'Connections' }), { key: 'ArrowUp' });
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('System');
+  });
+});
+
+describe('The tour of CargoFrame', () => {
+  it('starts when the program asks for it (a new install or an update), and can be skipped', async () => {
+    window.history.replaceState(null, '', '/settings.html?page=connections&tour=basics');
+    try {
+      render(App);
+      const say = await screen.findByRole('dialog', { name: 'Tour of CargoFrame' });
+      expect(say.textContent).toContain('Connections');
+      await fireEvent.click(screen.getByRole('button', { name: 'Skip the tour' }));
+      expect(screen.queryByRole('dialog', { name: 'Tour of CargoFrame' })).toBeNull();
+    } finally {
+      window.history.replaceState(null, '', '/');
+    }
   });
 });
 
 describe('Settings search', () => {
   const box = () => screen.getByRole('textbox', { name: 'Search settings' }) as HTMLInputElement;
 
-  it('sits above Setup, lists only what has the words, and clears with its ×', async () => {
+  it('sits above the pages, lists only what has the words, and clears with its ×', async () => {
     render(App);
     const nav = screen.getByRole('navigation', { name: 'Settings sections' });
     const order = [...nav.querySelectorAll('input, button')].map((e) => (e as HTMLElement).getAttribute('aria-label') ?? e.textContent);
-    expect(order.indexOf('Search settings')).toBeLessThan(order.findIndex((t) => t?.startsWith('Setup')));
+    expect(order.indexOf('Search settings')).toBeLessThan(order.findIndex((t) => t?.startsWith('Connections')));
     expect(screen.queryByRole('button', { name: 'Clear the search' })).toBeNull();
 
     await fireEvent.input(box(), { target: { value: 'DARK theme' } });
     // the groups give way to what was found, by page
     expect(screen.queryByRole('group', { name: 'Captures' })).toBeNull();
-    expect(screen.getByRole('button', { name: 'General' })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Preferences' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Appearance' })).toBeTruthy();
     expect(screen.queryByRole('button', { name: 'Layouts' })).toBeNull();
 
@@ -61,7 +80,7 @@ describe('Settings search', () => {
   });
 
   it('greys out the sections of the page shown that do not have the words', async () => {
-    go('general');
+    go('preferences');
     render(App);
     await screen.findByRole('heading', { name: 'Appearance' });
     await fireEvent.input(box(), { target: { value: 'theme' } });
@@ -84,7 +103,7 @@ describe('Settings search', () => {
 
     await fireEvent.input(box(), { target: { value: 'backup' } });
     await fireEvent.keyDown(box(), { key: 'Enter' });
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Your data');
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Files & backup');
   });
 
   it('is found with Ctrl+F', async () => {

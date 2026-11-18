@@ -351,9 +351,11 @@
   header h2 { margin: 0; font-size: 18px; }
   header p { margin: 0; }
   .back { border: 0; background: none; padding: 0; color: var(--accent); font-size: 13px; }
-  .split { display: flex; flex-wrap: wrap; gap: 14px; align-items: flex-start; }
-  .split > :global(.viewer), .viewer-wait { flex: 999 1 560px; }
-  aside { flex: 1 1 340px; min-width: 0; max-width: 460px; display: grid; gap: 10px; }
+  /* the panel always stays beside the file: a long line scrolls inside the file, never the page */
+  .teach { grid-template-columns: minmax(0, 1fr); }
+  .split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 34%, 420px); gap: 14px; align-items: start; }
+  .split > :global(.viewer), .viewer-wait { min-width: 0; }
+  aside { min-width: 0; display: grid; gap: 10px; position: sticky; top: 0; }
   .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
   .box h3 { margin: 0; font-size: 14px; }
   .empty { border-style: dashed; }

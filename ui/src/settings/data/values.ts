@@ -1,4 +1,4 @@
-// The values of Data & fields as a person sees them: one value (`{map}`) read in one or more files.
+// The values of Data parsing as a person sees them: one value (`{map}`) read in one or more files.
 // They are stored as before, file by file (a data rule per file, each with the values it reads), so
 // settings exported by an older CargoFrame still load and the rules export as they always have.
 // These functions turn the rules into values and back. A capture merges the steps of the same key:

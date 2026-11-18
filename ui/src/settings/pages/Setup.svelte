@@ -96,7 +96,7 @@
   {t('CargoFrame itself needs nothing else: screenshots and sharing work as soon as it is installed. These apps only switch on video, its sound, and pasting into a Claude chat.')}
 </p>
 
-<Section title={t('This computer')}>
+<Section title={t('This computer')} tour="system.apps">
   <div class="summary">
     {#if checking}
       <Spinner label={t('Checking this computer')} />

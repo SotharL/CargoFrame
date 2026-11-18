@@ -20,11 +20,12 @@ use std::time::Duration;
 const POLL: Duration = Duration::from_millis(50);
 
 /// The GStreamer pipeline that reads a PipeWire node and writes YUV4MPEG at `fps` frames a
-/// second. The portal sends a frame only when the screen changes; `keepalive-time` repeats the
-/// last one so a still screen still makes a steady video.
-pub fn pipewire_args(node: u32, fps: u32) -> Vec<String> {
+/// second, made `height` pixels high when given (the width follows). The portal sends a frame
+/// only when the screen changes; `keepalive-time` repeats the last one so a still screen still
+/// makes a steady video. The rate is set first, so frames that are dropped are never converted.
+pub fn pipewire_args(node: u32, fps: u32, height: Option<u32>) -> Vec<String> {
     let keepalive = (1000 / fps.max(1)).max(10);
-    [
+    let mut a: Vec<String> = [
         "-q",
         "pipewiresrc",
         &format!("path={node}"),
@@ -32,21 +33,38 @@ pub fn pipewire_args(node: u32, fps: u32) -> Vec<String> {
         &format!("keepalive-time={keepalive}"),
         "always-copy=true",
         "!",
-        "videoconvert",
-        "!",
         "videorate",
         "!",
-        &format!("video/x-raw,format=I420,framerate={fps}/1"),
+        &format!("video/x-raw,framerate={fps}/1"),
+        "!",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    if let Some(h) = height {
+        for x in [
+            "videoscale",
+            "!",
+            &format!("video/x-raw,height={h},pixel-aspect-ratio=1/1"),
+            "!",
+        ] {
+            a.push(x.to_string());
+        }
+    }
+    for x in [
+        "videoconvert",
+        "!",
+        "video/x-raw,format=I420",
         "!",
         "y4menc",
         "!",
         "fdsink",
         "fd=1",
         "sync=false",
-    ]
-    .iter()
-    .map(|s| s.to_string())
-    .collect()
+    ] {
+        a.push(x.to_string());
+    }
+    a
 }
 
 /// A program's output passed to ffmpeg. Dropping it stops the program and whatever `keep` holds
@@ -196,14 +214,27 @@ mod tests {
 
     #[test]
     fn the_pipeline_reads_the_node_and_repeats_still_frames() {
-        let a = pipewire_args(57, 30).join(" ");
+        let a = pipewire_args(57, 30, None).join(" ");
         assert!(a.contains("pipewiresrc path=57"), "{a}");
         assert!(a.contains("keepalive-time=33"), "{a}");
+        // the rate first, then one conversion
         assert!(
-            a.contains("videoconvert ! videorate ! video/x-raw,format=I420,framerate=30/1"),
+            a.contains(
+                "videorate ! video/x-raw,framerate=30/1 ! videoconvert ! video/x-raw,format=I420"
+            ),
             "{a}"
         );
+        assert!(!a.contains("videoscale"), "{a}");
         assert!(a.ends_with("y4menc ! fdsink fd=1 sync=false"), "{a}");
+    }
+
+    #[test]
+    fn a_screen_larger_than_the_clip_is_made_smaller_before_it_is_handed_over() {
+        let a = pipewire_args(57, 30, Some(1080)).join(" ");
+        assert!(
+            a.contains("framerate=30/1 ! videoscale ! video/x-raw,height=1080,pixel-aspect-ratio=1/1 ! videoconvert"),
+            "{a}"
+        );
     }
 
     #[cfg(unix)]

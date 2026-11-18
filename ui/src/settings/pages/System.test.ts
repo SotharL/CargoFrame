@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import About from './About.svelte';
+import About from './System.svelte';
 import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
 
 let api: Api;
@@ -13,12 +13,20 @@ afterEach(() => {
   setApiForTests(undefined);
 });
 
-describe('About', () => {
-  it('has the version and updates first, then speed and memory', async () => {
+describe('System', () => {
+  it('has the apps on this computer, the updates, the memory, then the speed', async () => {
     render(About);
-    await screen.findByRole('heading', { name: 'Updates' });
-    const titles = [...document.querySelectorAll('section > h2')].map((h) => h.textContent);
-    expect(titles).toEqual(['Updates', 'Speed and memory']);
+    await screen.findByRole('heading', { name: 'Windows kept ready' });
+    const titles = [...document.querySelectorAll('section h2')].map((h) => h.textContent);
+    expect(titles.filter((t) => t !== 'Install what is missing')).toEqual(['This computer', 'Updates', 'Windows kept ready', 'Speed and memory']);
+  });
+
+  it('saves the memory setting and says what it does', async () => {
+    render(About);
+    const box = await screen.findByRole('combobox', { name: 'Keep windows ready' });
+    await fireEvent.change(box, { target: { value: 'low_memory' } });
+    await waitFor(async () => expect((await api.getGeneral()).memory_mode).toBe('low_memory'));
+    expect(screen.getByText(/The memory is freed as soon as a window closes/)).toBeTruthy();
   });
 
   it('saves the daily update check as a General setting', async () => {

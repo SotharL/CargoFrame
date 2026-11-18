@@ -1,15 +1,18 @@
 <script lang="ts">
   import { LANGUAGES, resolve, t } from '../../lib/i18n/index.svelte';
+  // How CargoFrame is to you: its language, its look, what it tells you, and whether it starts
+  // with the computer. What it keeps and saves is on Files & backup; the program on this computer
+  // (memory, updates) on System.
   import { onMount } from 'svelte';
   import Section from '../../lib/components/Section.svelte';
   import Segmented from '../../lib/components/Segmented.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import Chip from '../../lib/components/Chip.svelte';
-  import SafetySection from './SafetySection.svelte';
   import AccentControl from './AccentControl.svelte';
   import { getApi } from '../../lib/ipc';
+  import { go } from '../route.svelte';
   import { applyAccent, applyTheme } from '../../lib/theme';
-  import type { General, LanguageInfo, MemoryMode, ThemeChoice } from '../../lib/types';
+  import type { General, LanguageInfo, ThemeChoice } from '../../lib/types';
 
   let loaded = $state(false);
   let general = $state<General>({
@@ -26,12 +29,6 @@
     { value: 'light', label: t('Light') },
     { value: 'dark', label: t('Dark') },
   ];
-
-  const memoryHints: Record<MemoryMode, string> = {
-    balanced: t('Keeps the window ready for 5 minutes after you close it, then frees the memory.'),
-    low_memory: t('Frees the memory as soon as a window closes. Windows open a little slower.'),
-    always_warm: t('Keeps the window ready at all times. Opens fastest, uses the most memory.'),
-  };
 
   onMount(async () => {
     const api = await getApi();
@@ -62,7 +59,6 @@
     applyAccent(hex);
     return save(async () => (await getApi()).setGeneral({ ...general }));
   };
-  const onMemory = () => save(async () => (await getApi()).setGeneral({ ...general }));
   const onNotices = () => save(async () => (await getApi()).setGeneral({ ...general }));
   /** The language the computer is set to, as CargoFrame would speak it (English when it has no pack). */
   const systemName = $derived(
@@ -73,7 +69,7 @@
     const chosen = (e.currentTarget as HTMLSelectElement).value;
     return save(async () => {
       await (await getApi()).setGeneral({ ...general, language: chosen });
-      if (import.meta.env.MODE !== 'test') location.replace(`${location.pathname}?page=general`);
+      if (import.meta.env.MODE !== 'test') location.replace(`${location.pathname}?page=preferences`);
     });
   };
   const onAutostart = (v: boolean) => save(async () => (await getApi()).setAutostart(v));
@@ -81,60 +77,43 @@
 
 {#if loaded}
   <div class="page">
-    <Section title={t('Appearance')}>
-      <Segmented
-        label={t('Theme')}
-        options={themes}
-        bind:value={general.theme}
-        onchange={onTheme}
-      />
-      <AccentControl value={general.accent} onpreview={applyAccent} onsave={onAccentSave} />
-    </Section>
-
     <Section
       title={t('Language')}
-      hint={t('Settings, the CargoFrame windows, the tray menu and the notifications. Changing it opens Settings again in the new language; a CargoFrame window already open keeps its language until it closes.')}
+      tour="prefs.language"
+      hint={t('Settings, the CargoFrame windows, the tray menu and the notifications. Settings opens again in the new language; a CargoFrame window already open keeps its own until it closes.')}
     >
-      <label class="row">
-        <span>{t('Language')}</span>
-        <select value={general.language ?? 'system'} onchange={onLanguage}>
+      {#snippet aside()}
+        <select value={general.language ?? 'system'} onchange={onLanguage} aria-label={t('Language')}>
           <option value="system">{t('Same as this computer ({name})', { name: systemName })}</option>
           {#each LANGUAGES as l (l.code)}
             <option value={l.code} lang={l.code}>{l.name}</option>
           {/each}
         </select>
-      </label>
+      {/snippet}
     </Section>
 
-    <Section title={t('Startup')} hint={t('CargoFrame stays in the tray and waits for your shortcut.')}>
-      <Toggle label={t('Run CargoFrame when I sign in')} bind:checked={autostart} onchange={onAutostart} />
+    <Section title={t('Appearance')} tour="prefs.appearance">
+      <Segmented label={t('Theme')} options={themes} bind:value={general.theme} onchange={onTheme} />
+      <AccentControl value={general.accent} onpreview={applyAccent} onsave={onAccentSave} />
     </Section>
 
     <Section
       title={t('Notifications')}
-      hint={t('A notice can show up inside a recording of the screen. Switch off the ones you do not want there.')}
+      tour="prefs.notifications"
+      hint={t('A notification can show in a recording of the screen: switch off the ones you do not want there.')}
     >
-      <Toggle label={t('Say when something happens')} bind:checked={general.notifications.routine} onchange={onNotices} />
+      <Toggle label={t('When something happens')} bind:checked={general.notifications.routine} onchange={onNotices} />
       <p class="quiet hint">{t('CargoFrame started, a recording started, something was shared or saved.')}</p>
-      <Toggle label={t('Say when something goes wrong')} bind:checked={general.notifications.problems} onchange={onNotices} />
+      <Toggle label={t('When something goes wrong')} bind:checked={general.notifications.problems} onchange={onNotices} />
       <p class="quiet hint">{t('A capture or a recording failed, or a share did not go through.')}</p>
+      <p class="quiet hint">
+        {t('What shows on screen while recording (the red outline, the dot) is set on Recording.')}
+        <button type="button" class="link" onclick={() => go('video')}>{t('Open Recording')}</button>
+      </p>
     </Section>
 
-    <SafetySection onstatus={(kind, text) => { status = kind === 'ok' ? 'saved' : 'error'; errorText = kind === 'ok' ? '' : text; }} />
-
-    <Section
-      title={t('Windows kept ready')}
-      hint={t('A CargoFrame window that is kept ready opens at once, but holds memory while it waits. The About page shows what each window holds now.')}
-    >
-      <label class="row">
-        <span>{t('Keep windows ready')}</span>
-        <select bind:value={general.memory_mode} onchange={onMemory}>
-          <option value="balanced">{t('Balanced')}</option>
-          <option value="low_memory">{t('Low memory')}</option>
-          <option value="always_warm">{t('Always warm')}</option>
-        </select>
-      </label>
-      <p class="quiet">{memoryHints[general.memory_mode]}</p>
+    <Section title={t('Startup')} tour="prefs.startup" hint={t('CargoFrame waits in the tray for your shortcuts.')}>
+      <Toggle label={t('Start CargoFrame when I sign in')} bind:checked={autostart} onchange={onAutostart} />
     </Section>
 
     <div class="status" role="status" aria-live="polite">
@@ -146,6 +125,7 @@
 
 <style>
   .page { display: grid; gap: 14px; }
-  .row { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+  .hint { margin: 0; font-size: 12.5px; }
+  .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
   .status { min-height: 26px; display: flex; align-items: center; gap: 8px; }
 </style>
