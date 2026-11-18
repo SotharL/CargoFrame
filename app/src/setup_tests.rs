@@ -378,15 +378,17 @@ fn installs_run_one_at_a_time_and_remember_how_the_last_one_went() {
 }
 
 #[test]
-fn the_setup_page_opens_by_itself_once() {
+fn the_tour_opens_by_itself_once_per_version() {
     let dir = tempfile::tempdir().unwrap();
     let config = dir.path().join("config");
-    assert!(first_run(&config), "the first time");
-    assert!(!first_run(&config), "never again");
+    assert!(tour_due(&config, "0.7.0"), "a new install");
+    assert!(!tour_due(&config, "0.7.0"), "never again for this version");
+    assert!(tour_due(&config, "0.7.1"), "an update");
+    assert!(!tour_due(&config, "0.7.1"));
     // a place that cannot be written to does not make it open every time
     let file = dir.path().join("a-file");
     std::fs::write(&file, b"x").unwrap();
-    assert!(!first_run(&file.join("config")));
+    assert!(!tour_due(&file.join("config"), "0.7.0"));
 }
 
 #[test]

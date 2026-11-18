@@ -1,4 +1,4 @@
-//! The notifications CargoFrame shows (a Windows toast, a Linux notification). Settings, General
+//! The notifications CargoFrame shows (a Windows toast, a Linux notification). Settings, Preferences
 //! can switch off the routine ones and the ones about problems, since a notice can show up inside
 //! a recording of the screen.
 
@@ -148,7 +148,7 @@ fn show(_app: &AppHandle, title: &str, body: &str) {
 #[cfg(not(any(windows, target_os = "linux")))]
 fn show(_app: &AppHandle, _title: &str, _body: &str) {}
 
-/// "A newer version is available". Clicking it opens Settings, General, where Updates is.
+/// "A newer version is available". Clicking it opens Settings, System, where Updates is.
 #[cfg(windows)]
 pub fn update_available(app: &AppHandle, version: &str) {
     use tauri_winrt_notification::{Duration, Toast};
@@ -168,7 +168,7 @@ pub fn update_available(app: &AppHandle, version: &str) {
         .text1(cargoframe_i18n::t("Click here to update."))
         .duration(Duration::Long)
         .on_activated(move |_| {
-            crate::windowing::open_settings_at(&handle, "about");
+            crate::windowing::open_settings_at(&handle, "system");
             Ok(())
         })
         .show();
@@ -198,7 +198,7 @@ pub fn update_available(app: &AppHandle, version: &str) {
         match result {
             Ok(note) => note.wait_for_action(|action| {
                 if action == "default" {
-                    crate::windowing::open_settings_at(&handle, "about");
+                    crate::windowing::open_settings_at(&handle, "system");
                 }
             }),
             Err(e) => tracing::warn!("update notification failed: {e}"),

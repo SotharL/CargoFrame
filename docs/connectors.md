@@ -12,7 +12,7 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 | 1 | One build switch per service | A company can ship an installer without the services it does not use; their code is not in the program | Started |
 | 2 | Pictures made to fit each service's size limit | No failed share because a 4K screenshot is too big | Started (X, Bluesky, Instagram) |
 | 3 | A "where to post" path for every service with places (the Discord path, extended) | One box instead of several dropdowns; the last place is remembered | Discord done; others below |
-| 4 | Extra fields reworked as *Fill fields* (Settings, Data & fields): steps that fill a field on each share, from values found in files; a block is sent in a field from the sharing button only | One place for each: what a block sends, what fills a field by itself | Done (0.3.0) |
+| 4 | Extra fields reworked as *Fill fields* (Settings, Layouts, Fill fields): steps that fill a field on each share, from values found in files; a block is sent in a field from the sharing button only | One place for each: what a block sends, what fills a field by itself | Done (0.3.0) |
 | 5 | Required fields asked by the service shown in the layout before the first send | No "field X is required" error after pressing the button | Proposed (Jira first) |
 | 6 | Company sign-in (OAuth with the company's identity provider) | No personal tokens to paste in a large company | Proposed (Jira, Custom API) |
 | 7 | Other programs fill a layout (`cargoframe open`) | A company tool can open CargoFrame with its own data in the blocks | Started (text boxes and dropdowns) |

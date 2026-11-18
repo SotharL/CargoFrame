@@ -1,6 +1,6 @@
 //! Creating and focusing windows. Windows are created on demand, so a tray-only CargoFrame
 //! holds no web view and uses little memory. What a closed window does next (destroyed at once,
-//! kept hidden for five minutes, or kept for good) follows Settings, General, Memory.
+//! kept hidden for five minutes, or kept for good) follows Settings, System, Windows kept ready.
 
 use crate::state::AppState;
 use crate::warm::{self, OnClose};
@@ -68,14 +68,28 @@ fn open_settings_now(app: &AppHandle) -> tauri::Result<()> {
         win.set_focus()?;
         return Ok(());
     }
-    WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App("settings.html".into()))
-        .title(t("CargoFrame settings"))
-        .inner_size(1000.0, 720.0)
-        .min_inner_size(760.0, 520.0)
-        .center()
-        .build()?;
+    settings_window(app, "settings.html").build()?;
     Ok(())
 }
+
+/// The Settings window, in one place for both ways of opening it.
+fn settings_window<'a>(
+    app: &'a AppHandle,
+    url: &str,
+) -> WebviewWindowBuilder<'a, tauri::Wry, AppHandle> {
+    WebviewWindowBuilder::new(app, SETTINGS, WebviewUrl::App(url.into()))
+        .title(t("CargoFrame settings"))
+        .inner_size(1100.0, 760.0)
+        .min_inner_size(MIN_SETTINGS_WIDTH, MIN_SETTINGS_HEIGHT)
+        .center()
+        // Files dropped on a page reach the page itself (Data parsing opens them); the system's
+        // own drop handler would take them first and the page would never see them.
+        .disable_drag_drop_handler()
+}
+
+/// The smallest Settings window: a file, the panel beside it and the sidebar all fit at once.
+pub const MIN_SETTINGS_WIDTH: f64 = 960.0;
+pub const MIN_SETTINGS_HEIGHT: f64 = 600.0;
 
 /// Show the CargoFrame window `label` for the capture it was given. If the window is already
 /// there (kept warm) it is reused: the new capture replaces the old one without rebuilding the
@@ -177,13 +191,7 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
             return;
         }
         let url = format!("settings.html?page={page}");
-        if let Err(e) = WebviewWindowBuilder::new(&app, SETTINGS, WebviewUrl::App(url.into()))
-            .title(cargoframe_i18n::t("CargoFrame settings"))
-            .inner_size(1000.0, 720.0)
-            .min_inner_size(760.0, 520.0)
-            .center()
-            .build()
-        {
+        if let Err(e) = settings_window(&app, &url).build() {
             tracing::error!("could not open settings: {e}");
         }
     });

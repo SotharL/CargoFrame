@@ -266,7 +266,7 @@
       {#if !connections.length}
         <p class="quiet small">
           {t('Add a connection to see the layouts made for it.')}
-          <button class="link" onclick={() => go('setup', 'connections')}>{t('Go to Connections')}</button>
+          <button class="link" onclick={() => go('connections')}>{t('Go to Connections')}</button>
         </p>
       {/if}
     </section>
@@ -275,7 +275,7 @@
   {#if layouts.loaded && layouts.items.length === 0 && !draft}
     <div class="empty">
       <h2>{t('No layouts yet')}</h2>
-      <p class="quiet">{t('A layout is the window a trigger opens. Start from a template made for your connections, or from an empty one and add the screenshot, text boxes, files, dropdowns and a sharing button you want.')}</p>
+      <p class="quiet">{t('A layout is the window a shortcut opens. Start from a template made for your connections, or from an empty one and add the screenshot, text boxes, files, dropdowns and a sharing button you want.')}</p>
       <div class="buttons">
         <button class="primary" onclick={() => (picking = true)}>{t('Start from a template')}</button>
         <button onclick={create}>{t('Create an empty layout')}</button>
@@ -298,7 +298,7 @@
         {:else if usedBy.length}
           <span class="quiet used">{t('Used by {names}', { names: usedBy.map((u) => u.item.name).join(', ') })}</span>
         {:else}
-          <span class="quiet used">{t('Not used by any trigger yet')}</span>
+          <span class="quiet used">{t('Not used by any shortcut yet')}</span>
         {/if}
       </div>
       <div class="actions">

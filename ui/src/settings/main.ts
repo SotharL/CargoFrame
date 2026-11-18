@@ -14,6 +14,10 @@ applyAccent(general.accent);
 // the language first, so the window opens in it
 await setLanguage((await api.getLanguage().catch(() => ({ code: 'en' }))).code);
 
+// A file dropped outside a drop area would replace the page with the file: only the areas that
+// take files (they stop the event first) get them.
+for (const kind of ['dragover', 'drop'] as const) window.addEventListener(kind, (e) => e.preventDefault());
+
 mount(App, { target: document.getElementById('app')! });
-// Tell the app the window is usable, for the timings in Settings, General.
+// Tell the app the window is usable, for the timings in Settings, System.
 afterPaint(() => void api.reportPainted('settings').catch(() => {}));

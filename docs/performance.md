@@ -32,13 +32,13 @@ wrong thread) without failing on a busy runner.
 | Idle memory and CPU on Windows | `installers/windows/smoke-test.ps1` | `bundle.yml`, Windows, installed program (CPU gated, memory reported) |
 
 While running, the program also times itself (`app/src/timing.rs`): from the shortcut to the
-capture being ready, to the window being shown, and to the first painted frame. Settings, General,
-Performance shows the last numbers. Timings are kept in memory and in the log as plain
+capture being ready, to the window being shown, and to the first painted frame. Settings, System,
+Speed and memory shows the last numbers. Timings are kept in memory and in the log as plain
 milliseconds. They contain no window titles, paths or content, and nothing is sent anywhere.
 
 ## Memory modes
 
-Settings, General, Windows kept ready decides what a closed window costs.
+Settings, System, Windows kept ready decides what a closed window costs.
 
 | Mode | A closed window | Reopening |
 |------|-----------------|-----------|
@@ -85,6 +85,24 @@ The settings window's script grew from 52 to 94 KB with the video pages, the gui
   a browser, with no animations in the way.
 - **A very large capture** (several 4K displays at once) was not timed. Only one display or one
   window is captured at a time.
+
+## While recording
+
+Recording is the one time CargoFrame does real work for long, so the defaults keep what it costs the program being
+recorded low (0.7.0):
+
+| Part | Default | Why |
+|------|---------|-----|
+| Screen copy (Windows) | Desktop Duplication (`ddagrab`) for the main screen; GDI only for another screen, a desktop of several screens, or when Duplication fails | GDI copies the screen through the processor and makes the program being recorded wait for it |
+| Encoder | A hardware encoder (NVENC, Quick Sync, AMF; VAAPI on Linux) when it encodes a test picture; x264 `ultrafast` otherwise | Leaves the processor to the program being recorded |
+| Conversion | One, to the format the encoder takes (NV12 for hardware, yuv420p for x264), after scaling to 1080 lines | Each conversion of a large picture costs a part of a core |
+| Priority | ffmpeg below normal (Windows), `nice 5` (Linux) | A busy PC drops a frame of the clip rather than slowing the program |
+| Wayland | GStreamer scales the shared screen to the clip's height before handing it over | A quarter of the bytes cross the local connection and ffmpeg |
+| Start | What ffmpeg can do is asked once per ffmpeg file, and learnt in the background after start when a shortcut records | Four runs of ffmpeg and the encoder test are not paid at each press |
+
+Measured on the cloud machine with ffmpeg on a virtual 2560×1440 screen at 30 frames a second (two cores): copying
+the screen 0.1 of a core, scaling and converting 0.4, x264 ultrafast at 1080 lines about 0.4, superfast 1.2, veryfast
+3.2. The cost on a real Windows PC, with Desktop Duplication and a hardware encoder, is still to be measured.
 
 ## If a gate fails
 

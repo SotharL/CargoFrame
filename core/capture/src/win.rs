@@ -22,9 +22,26 @@ use windows::Win32::System::Threading::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     GetCursorPos, GetForegroundWindow, GetSystemMetrics, GetWindowRect, GetWindowTextW,
-    GetWindowThreadProcessId, IsIconic, IsWindow, SM_CXVIRTUALSCREEN, SM_CYVIRTUALSCREEN,
-    SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
+    GetWindowThreadProcessId, IsIconic, IsWindow, SM_CMONITORS, SM_CXSCREEN, SM_CXVIRTUALSCREEN,
+    SM_CYSCREEN, SM_CYVIRTUALSCREEN, SM_XVIRTUALSCREEN, SM_YVIRTUALSCREEN,
 };
+
+/// The main screen's size (it starts at 0,0 of the desktop) and how many screens there are.
+pub fn screens() -> Option<crate::Screens> {
+    // SAFETY: GetSystemMetrics has no preconditions.
+    let (w, h, count) = unsafe {
+        (
+            GetSystemMetrics(SM_CXSCREEN),
+            GetSystemMetrics(SM_CYSCREEN),
+            GetSystemMetrics(SM_CMONITORS),
+        )
+    };
+    (w > 0 && h > 0).then(|| crate::Screens {
+        main_width: w as u32,
+        main_height: h as u32,
+        count: count.max(1) as u32,
+    })
+}
 
 pub struct Windows;
 

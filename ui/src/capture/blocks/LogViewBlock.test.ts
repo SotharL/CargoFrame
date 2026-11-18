@@ -151,8 +151,9 @@ describe('LogViewBlock by time', () => {
     // times while every line shows
     expect(screen.getByRole('searchbox')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
-    // the time row is there to write the format the file uses, and says no time was found
-    expect(screen.getByRole('combobox', { name: 'How the lines write their time' })).toBeTruthy();
+    // the time row says no time was found, and how to show it one
+    expect(screen.getByRole('button', { name: 'Change how times are read' }).textContent).toMatch(/No time found/);
+    expect(screen.getByText(/Select the date and time in a line/)).toBeTruthy();
     expect(screen.getByText(/no times CargoFrame can read in this file/)).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Search by text' }));
     expect(screen.getByRole('searchbox')).toBeTruthy();
@@ -176,7 +177,12 @@ describe('LogViewBlock with a time format', () => {
     return { ...v, ...more };
   }
   const shownLines = (list: HTMLElement) => within(list).getAllByRole('button').map((b) => b.textContent?.replace(/^\d+/, '').trim());
-  const formatBox = () => screen.getByRole('combobox', { name: 'How the lines write their time' }) as HTMLInputElement;
+  // the format is written in a box behind its button
+  const formatBox = async () => {
+    const edit = screen.queryByRole('button', { name: 'Change how times are read' });
+    if (edit) await fireEvent.click(edit);
+    return screen.getByRole('combobox', { name: 'How the lines write their time' }) as HTMLInputElement;
+  };
 
   it('reads the times with a format written the way the log does, and keeps it for files of that name', async () => {
     render(LogViewBlock, { block, view: await recorded(), files: { logs: ['Saved/Logs/Game.log'] }, api: api() });
@@ -184,8 +190,8 @@ describe('LogViewBlock with a time format', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
     // found by itself: none of these lines is a time it knows
     expect(screen.getByText(/no times CargoFrame can read in this file/)).toBeTruthy();
-    await fireEvent.input(formatBox(), { target: { value: '[YYYY_MM_DD] HH:mm -' } });
-    await fireEvent.change(formatBox());
+    await fireEvent.input((await formatBox()), { target: { value: '[YYYY_MM_DD] HH:mm -' } });
+    await fireEvent.change((await formatBox()));
     // a line written 12:01 covers its minute, so it is in a recording at 12:01:30
     await waitFor(() => expect(shownLines(list)).toEqual(['[2026_11_12] 12:01 - crash']));
     expect(screen.getByText(/times read as \[2026_11_12\] 12:01 -/)).toBeTruthy();
@@ -194,7 +200,7 @@ describe('LogViewBlock with a time format', () => {
     render(LogViewBlock, { block, view: await recorded(), files: { logs: ['Other/Game.log'] }, api: api() });
     await screen.findByRole('list', { name: 'Lines' });
     await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
-    expect(formatBox().value).toBe('[YYYY_MM_DD] HH:mm -');
+    expect((await formatBox()).value).toBe('[YYYY_MM_DD] HH:mm -');
   });
 
   it("uses the data rule's format for the file it found, and says so", async () => {
@@ -204,8 +210,8 @@ describe('LogViewBlock with a time format', () => {
     // nothing to do: the lines of the recording show
     await waitFor(() => expect(shownLines(list)).toEqual(['[2026_11_12] 12:01 - crash']));
     await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
-    expect(formatBox().value).toBe('[YYYY_MM_DD] HH:mm -');
-    expect(formatBox().title).toMatch(/Set by the data rule “Game log”/);
+    expect((await formatBox()).value).toBe('[YYYY_MM_DD] HH:mm -');
+    expect((await formatBox()).title).toMatch(/Set by the data rule “Game log”/);
     expect(screen.getByText(/\(data rule “Game log”\)/)).toBeTruthy();
   });
 
@@ -213,9 +219,48 @@ describe('LogViewBlock with a time format', () => {
     render(LogViewBlock, { block: { ...block, time_format: '[YYYY_MM_DD] HH:mm' }, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
     await screen.findByRole('list', { name: 'Lines' });
     await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
-    expect(formatBox().value).toBe('[YYYY_MM_DD] HH:mm');
-    await fireEvent.input(formatBox(), { target: { value: '[foo]' } });
-    expect(formatBox().classList.contains('bad')).toBe(true);
+    expect((await formatBox()).value).toBe('[YYYY_MM_DD] HH:mm');
+    await fireEvent.input((await formatBox()), { target: { value: '[foo]' } });
+    expect((await formatBox()).classList.contains('bad')).toBe(true);
     expect(screen.getByText(/The format has no time in it/)).toBeTruthy();
+  });
+
+  it('learns the format from a time selected in a line', async () => {
+    render(LogViewBlock, { block, view: await recorded(), files: { logs: ['run.log'] }, api: api() });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    await fireEvent.click(screen.getByRole('button', { name: 'Search by time' }));
+    // the person selects "[2026_11_12] 12:01" in the second line
+    const span = within(list).getAllByRole('button')[1]!.querySelector('.t')!;
+    const walker = document.createTreeWalker(span, NodeFilter.SHOW_TEXT);
+    let node = walker.nextNode();
+    while (node && !node.textContent) node = walker.nextNode();
+    const range = document.createRange();
+    range.setStart(node!, 0);
+    range.setEnd(node!, '[2026_11_12] 12:01'.length);
+    window.getSelection()!.removeAllRanges();
+    window.getSelection()!.addRange(range);
+    await fireEvent.mouseUp(list);
+    window.getSelection()!.removeAllRanges();
+    await waitFor(() => expect(shownLines(list)).toEqual(['[2026_11_12] 12:01 - crash']));
+    expect(screen.getByRole('button', { name: 'Change how times are read' }).textContent).toMatch(/\[2026_11_12\] 12:01/);
+  });
+
+  it('follows the clip as it plays: the lines written up to the moment shown', async () => {
+    const { playhead } = await import('../playhead.svelte');
+    const log = ['12:01:20 before', '12:01:31 one', '12:01:33 two', '12:01:40 after'].join('\n');
+    const timedApi = memoryApi({ readOfferedFile: () => ({ text: log, size: log.length, cut: false }) });
+    render(LogViewBlock, { block, view: await recorded(), files: { logs: ['run.log'] }, api: timedApi });
+    const list = await screen.findByRole('list', { name: 'Lines' });
+    await waitFor(() => expect(shownLines(list)).toHaveLength(4));
+    playhead.at = local(12, 1, 32);
+    playhead.playing = true;
+    await waitFor(() => expect(shownLines(list)).toEqual(['12:01:20 before', '12:01:31 one']));
+    playhead.at = local(12, 1, 34);
+    await waitFor(() => expect(shownLines(list)).toEqual(['12:01:20 before', '12:01:31 one', '12:01:33 two']));
+    // turned off, every line shows again
+    await fireEvent.click(screen.getByRole('checkbox', { name: /Following the clip/ }));
+    await waitFor(() => expect(shownLines(list)).toHaveLength(4));
+    playhead.at = null;
+    playhead.playing = false;
   });
 });

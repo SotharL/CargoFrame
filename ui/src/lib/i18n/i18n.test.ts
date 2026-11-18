@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/svelte';
 import { lang, resolve, setLanguage, t, tn } from './index.svelte';
-import General from '../../settings/pages/General.svelte';
+import General from '../../settings/pages/Preferences.svelte';
 
 afterEach(() => setLanguage('en'));
 

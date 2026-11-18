@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.6.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.7.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -29,7 +29,7 @@ everything and send it to a web service with **one button**. Nothing is sent wit
 
 ```mermaid
 flowchart LR
-    T[Trigger<br><i>a shortcut</i>] -- opens --> L[Layout<br><i>the window</i>]
+    T[Shortcut<br><i>keys, or the tray menu</i>] -- opens --> L[Layout<br><i>the window</i>]
     L -- holds --> B[Blocks<br><i>Screenshot · Video · Text<br>Dropdown · Files</i>]
     L -- holds --> S[Sharing buttons<br><i>up to 5</i>]
     S -- send through --> C[Connection<br><i>a signed-in service</i>]
@@ -41,7 +41,7 @@ flowchart LR
 
 | Concept | One line | Stored as |
 |---------|----------|-----------|
-| **Trigger** | A shortcut and the layout it opens; for a screenshot, what it shows (program, screen, all screens) | `triggers/<id>.json` |
+| **Shortcut** | Keys (or none: the tray menu only) and the layout they open; for a screenshot, what it shows (program, screen, all screens). Called a trigger in the code and the files | `triggers/<id>.json` |
 | **Layout** | Blocks on a 12-column grid. A **Video** block makes a press record; otherwise it takes a screenshot | `layouts/<id>.json` |
 | **Block** | Screenshot, Video, Text, Dropdown, Files, or a sharing button | inside its layout |
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
@@ -84,7 +84,7 @@ sequenceDiagram
 |------|--------------|------|
 | Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse. While recording, a red outline and a blinking dot say so (never in the recording itself), and a change of focus is followed: the program used longest names the capture | `core/capture`, `core/indicator`, `app/src/watch.rs` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
-| Data rules | If a file named like this is found (newest, or all): add it to the Files blocks, read values. A value is made by **selecting it in a file** (0.5.0, `Find::Pick`): in the lines with a text (the label just before the selection, or every line), right after it or from the start of the line, up to a text (the next sign, a space) or the end of the line; the most recent line, the first or all. Values from 0.4 (after a name, between two pieces, the line with a word; JSON, YAML, TOML, INI and XML read by key) keep working. **The same value in several files**: each file's rule reads it with the same key; the newest file (by its change time) wins, or every different value, the newest first; a value no file has is empty, or the text it says. A value can also be **made from other values**: choices tried from the top (`{stream}_{change}_{shelf}_{config}`, else without the shelf), with conditions when needed | `core/rules` |
+| Data parsing | If a file named like this is found (newest, or all): add it to the Files blocks, read values. A value is made by **selecting it in a file** (0.5.0, `Find::Pick`): in the lines with a text (the label just before the selection, or every line), right after it or from the start of the line, up to a text (the next sign, a space) or the end of the line; the most recent line, the first or all. Values from 0.4 (after a name, between two pieces, the line with a word; JSON, YAML, TOML, INI and XML read by key) keep working. **The same value in several files**: each file's rule reads it with the same key; the newest file (by its change time) wins, or every different value, the newest first; a value no file has is empty, or the text it says. A value can also be **made from other values**: choices tried from the top (`{stream}_{change}_{shelf}_{config}`, else without the shelf), with conditions when needed | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
 | Share | One `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices), handed to the connector | `app/src/share.rs` |
 | Fallback | Retry with backoff; then a zip of everything is kept. A button with no connection is **Save locally** | `core/safe`, `core/bundle` |
@@ -178,7 +178,7 @@ the desktop for each. The program checks which desktop it is on and picks the wa
   focused window the whole screen is captured, and the window says why.
 - **Recording.** The portal shares a screen (the desktop may ask which, once: the choice is remembered), GStreamer reads
   it (`pipewiresrc`), and ffmpeg records it as on other systems. The window in focus is cut out when it is on that screen.
-- **What it needs** is listed on the Setup page: the desktop portal (or `grim`), GStreamer with its PipeWire plugin
+- **What it needs** is listed on the System page: the desktop portal (or `grim`), GStreamer with its PipeWire plugin
   for video, and `wtype` on sway and Hyprland.
 
 </details>
@@ -187,7 +187,15 @@ the desktop for each. The program checks which desktop it is on and picks the wa
 <summary><b>Video</b></summary>
 
 `core/video` runs **ffmpeg** (the one optional program) into a ring of short segments, so the last seconds are kept
-(10 by default). The window plays the clip, trims it, crops it (drag a frame, then *Confirm*, as for a screenshot)
+(10 by default). **What it costs the program being recorded** is kept low by default: on Windows the graphics card's
+copy of the screen (Desktop Duplication) is used for the main screen, and GDI (which copies the screen slowly through
+the processor) only for what that copy cannot see (another screen, the whole desktop of several screens) or when it
+fails; a hardware encoder (NVIDIA, Intel, AMD; VAAPI on Linux) is used when it encodes a test picture on this PC, x264
+otherwise; the picture is converted once, to the format the encoder takes; ffmpeg runs below normal priority, so a
+busy computer drops a frame of the clip rather than slowing the program. What ffmpeg refuses as it starts (a capture,
+an encoder, a sound device) is swapped for GDI, software or no sound, and the recording goes on. What ffmpeg can do is
+asked once per ffmpeg (and in the background after start when a shortcut records), so a recording starts at once. On
+Wayland the shared screen is made smaller by GStreamer before it reaches ffmpeg. The window plays the clip, trims it, crops it (drag a frame, then *Confirm*, as for a screenshot)
 and draws marks on it with the screenshot's tools (pen, square, circle, arrow, text; colour and size); ffmpeg cuts the
 export and lays the marks over it.
 
@@ -216,11 +224,15 @@ them over the clip where the person drags them, and the share lays them over the
 **The time** of each moment, on the computer's clock (2026-11-12 14:03:27), can be shown over a recording (*Time*
 under it, or from the start when the Video block says), moved and taken off like the keys, and is sent the same way.
 A **Log viewer** reads the time each line was written and can keep the lines written during the recording (a few
-seconds either side), around a screenshot, or between two times; times without a zone are the computer's, or UTC when
-the block says (Unreal Engine's logs). The time is found by itself, or read with a format written the way the log
-writes it (`[YYYY-MM-DD HH:mm]`, `MM_DD_HH_mm_ss`; `#` for a counter), which a data rule can set for the file it
-finds ("if Game.log is found, its times are `[YYYY_MM_DD] HH:mm -`"), the block can set, or the person types once:
-the last one used for a file of that name comes back next time.
+seconds either side), around a screenshot, or between two times (typed, or *Start here* and *End here* on a line
+picked); times without a zone are the computer's, or UTC when the block says (Unreal Engine's logs). The time is found
+by itself; for a log that writes it its own way, the person **selects the time in a line**, as with a value, and the
+format is worked out from it (`2026.11.18-14.32.05:123` gives `YYYY.MM.DD-HH.mm.ss:SSS`; day and month in the order
+they can only be in, or as the computer writes them) and checked against the selection. A format can also be written
+(`[YYYY-MM-DD HH:mm]`, `MM_DD_HH_mm_ss`; `#` for a counter), set by a data rule for the file it finds ("if Game.log is
+found, its times are `[YYYY_MM_DD] HH:mm -`") or by the block; the last one used for a file of that name comes back
+next time. **While the clip plays**, the lines follow it: those written up to the moment shown, the newest coming in
+at the bottom as it plays (a switch turns it off).
 
 **A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the whole
 screen is recorded and the window's place is noted ten times a second; the clip opens cropped to the window and the
@@ -237,14 +249,21 @@ It costs a larger picture to encode.
 
 ```mermaid
 flowchart LR
-    I[Install<br><i>one button</i>] --> S[Setup page<br><i>what is missing,<br>one install button</i>]
-    S --> C[Add a connection<br><i>or Save locally</i>]
+    I[Install<br><i>one button</i>] --> R[Tour of CargoFrame<br><i>starts by itself,<br>can be skipped</i>]
+    R --> C[Add a connection<br><i>or Save locally</i>]
     C --> L[Layout from<br>a template]
-    L --> T[Trigger:<br>shortcut + layout]
+    L --> T[Shortcut:<br>keys + layout]
     T --> P([Press it anywhere])
 ```
 
 ### The Settings window
+
+The first start of a version (a new install, or an update) opens Settings on the **tour of CargoFrame**: one look at
+each page, in the order a capture goes through them, then what can be turned on or off (the recording sign, the
+notifications, the safe folder, export and import, the language, updates). *Skip the tour* ends it; *Guides* starts it
+again. The window has a minimum size so a page never scrolls sideways (a long line of a file scrolls in its own box,
+and names too long are cut with an ellipsis). Each page has an icon in the sidebar, so the sidebar can one day fold to
+its icons (their names on hover).
 
 The sidebar follows that order, under a **search** box (Ctrl+F): while it has words, the sidebar lists only the pages
 and settings that have them (a click opens the page and lights the setting up), and the sections of the page shown
@@ -254,18 +273,18 @@ service are grouped under *Connect a service*, below the others.
 
 | Group | Page | What it holds |
 |-------|------|---------------|
-| Get started | **Setup** | What CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button; then **Connections** |
+| Get started | **Connections** | The services captures go to, each with its sign-in or token, a test, and *Add a connection*; Claude's pinned and recent chats |
 | Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends, with a *Fill fields* tab (steps that fill a field of the service on each share); a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
-| | **Triggers** | Shortcuts and the layout each opens |
-| | **Data & fields** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or one opened or dropped), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives; a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read, each added to the window's files or not, with its lines' time format and its values |
-| | **Recording** | Where ffmpeg is, quality, a 5-second test, continuous recording, following a window that is moved, the outline and dot shown while recording |
-| CargoFrame | **General** | Appearance, language (the computer's by default; English, French, Spanish, Italian, German), startup, notifications, what happens when a share fails, windows kept ready |
-| | **Your data** | What is kept on this computer, clear or reset, export and import |
-| | **About** | Version, updates, speed and memory numbers |
+| | **Shortcuts** | The keys and the layout each opens; what a press makes (a screenshot of the program, the screen or all screens, or a recording) |
+| | **Data parsing** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or one opened or dropped on it), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives (the panel beside the file always stays in sight); a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read (one dropped on the page starts a new value in it), each added to the window's files or not, with its lines' time format and its values |
+| | **Recording** | What shows on screen while recording (the outline and dot), how long a clip is, continuous recording, following a window that is moved, where ffmpeg is, capture and compression (Automatic picks the cheapest that works), a 5-second test |
+| CargoFrame | **Preferences** | Language (its dropdown on the title's line; the computer's by default; English, French, Spanish, Italian, German), appearance (theme, accent colour), notifications (each kind on or off, with a link to the recording sign), starting with the computer |
+| | **Files & backup** | When a share fails (the folder for saved zips, retries), export and import, what is kept on this computer (clear each kind, forget the remembered choices) and *Reset CargoFrame* |
+| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing), updates and the version, windows kept ready, speed and memory |
 
-| Setup and Connections | Layout builder | Trigger |
+| Connections | Layout builder | Shortcut |
 |:---:|:---:|:---:|
-| <img alt="Setup page with connections" src="images/connections.png" width="280"> | <img alt="Layout builder" src="images/layout-builder.png" width="280"> | <img alt="Trigger form" src="images/trigger-form.png" width="280"> |
+| <img alt="Connections page" src="images/connections.png" width="280"> | <img alt="Layout builder" src="images/layout-builder.png" width="280"> | <img alt="Shortcut form" src="images/trigger-form.png" width="280"> |
 
 ### The CargoFrame window
 
@@ -277,13 +296,13 @@ service are grouped under *Connect a service*, below the others.
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
-| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown; the expand icon opens it large, in the middle of the window over a dimmed one (the cross, Escape or a click outside closes it). It has no background of its own until opened large. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (UTC when the block says); the time of each line is found by itself, or read with a format written the way the log does (`[YYYY_MM_DD] HH:mm -`), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. Nothing of it is sent |
+| **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown; the expand icon opens it large, in the middle of the window over a dimmed one (the cross, Escape or a click outside closes it). It has no background of its own until opened large. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (typed, or set from a line picked: *Start here*, *End here*; UTC when the block says); the time of each line is found by itself, or read the way a time **selected in a line** is written (the format is worked out from it; selected in the text search, it is offered), or a format written by hand (behind the button that shows how times are read), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. While the clip plays, the lines written up to the moment shown are shown, the newest coming in at the bottom. Nothing of it is sent |
 | **Tabs** | Like a binder: the names on the top (or the bottom, left or right), the blocks of the open tab under them. A click (or the arrow keys) opens a tab; the blocks of the others are only hidden, so what is typed or edited in them stays and is sent. A tab's name lights up while a hovered button sends something in it |
 | **Sharing buttons** | Up to five, in the service's colour; a label too long for its button is cut with an ellipsis and is whole on hover. One dot per button at the end of each block's first row (its title, or its tools) says which button sends it: full = sent, an empty ring in the button's colour = left out (a click switches it), dashed = cannot take it, an outer ring = required, a number when two buttons go to the same kind of service. A block with no first row has them on its top edge. Hovering a button or a dot rings what each block it sends holds: the picture of a screenshot or a recording, the box of a text, not the block's title or tools |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">
 
-Pressing a shortcut while a window is open opens another one (up to ten). *Pause triggers* in the tray turns them all
+Pressing a shortcut while a window is open opens another one (up to ten). *Pause shortcuts* in the tray turns them all
 off without deleting anything.
 
 ---
@@ -293,7 +312,7 @@ off without deleting anything.
 ```mermaid
 flowchart TB
     subgraph Tray["Tray program (Rust, Tauri 2) — always on, no web view"]
-        SC[Shortcuts and tray] --> TR[Triggers]
+        SC[Shortcuts and tray] --> TR[Shortcut runs]
         TR --> CAP[Capture and recording]
         TR --> SES[Session view]
         SH[Share] --> CON[Connectors]
@@ -356,7 +375,7 @@ Meant for companies of thousands of people.
 | Need | How | State |
 |------|-----|-------|
 | Only the services a company uses | One Cargo feature per connector; `set CF_SERVICES=jira,teams` before `scripts\windows\build.cmd`. The code is not in the program; forms, templates and guides are hidden; a saved connection of a missing kind shows "not in this copy" | Built |
-| Other programs hand data in | `cargoframe open --trigger <id> --set <block>=<text>` reaches the running copy through the single-instance channel (same user, no network port), runs the trigger and fills text boxes and dropdowns. Only layouts with *Other programs can fill this*; nothing is sent until the person presses a button. At most 50 values of 20,000 characters; the log records counts only | Built (text, dropdowns) |
+| Other programs hand data in | `cargoframe open --trigger <id> --set <block>=<text>` reaches the running copy through the single-instance channel (same user, no network port), runs the shortcut and fills text boxes and dropdowns. Only layouts with *Other programs can fill this*; nothing is sent until the person presses a button. At most 50 values of 20,000 characters; the log records counts only | Built (text, dropdowns) |
 | Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`); the update check can be off | Built |
 | The company's network | The system certificate store and proxy setting | Built |
 | The company's sign-in | OAuth with the company's identity provider: Teams with Entra today; Jira OAuth and generic OAuth 2.0 for Custom API next | Partly built |
@@ -416,6 +435,9 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   Reddit flairs are not set from them.
 - Tabs hold blocks one level deep (no tabs inside tabs), 2 to 5 of them; a tab that still holds blocks cannot be
   removed until they are moved out or removed.
+- On Windows the graphics card's capture sees the main screen only: a window on another screen, or the whole desktop
+  of several screens, is recorded with GDI, which costs the processor more. The speed numbers of each kind of PC are
+  still to be measured on real machines.
 - Continuous recording cannot tell a held shortcut on Wayland: the tray menu starts and stops it there. It stops by
   itself after 12 hours.
 - The keys pressed and following a moved window: Windows and X11, not Wayland. A key tapped faster than the keyboard is

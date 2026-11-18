@@ -1,6 +1,6 @@
 //! Field fills: one field of a service, such as Jira's "Labels", "Priority" or a custom field,
 //! and the steps that fill it on every share to that service: "if {{rule.gpu}} is found, add
-//! gpu-{{rule.gpu}}". Shown in Settings as *Data & fields → Fill fields*.
+//! gpu-{{rule.gpu}}". Shown in Settings as *Layouts → Fill fields*.
 //!
 //! The person writes it once (`infotypes/<id>.json`, the name from before 0.3.0 when it only
 //! described the field); the layout builder also offers the field when a block is sent in it, and

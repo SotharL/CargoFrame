@@ -57,7 +57,8 @@ fn a_windows_recording_downloads_the_picture_from_the_graphics_card_first() {
     let a = strings(&args(&cfg, &ring));
     assert_eq!(after(&a, "-f"), "lavfi");
     assert_eq!(after(&a, "-i"), "ddagrab=output_idx=1:framerate=30");
-    assert_eq!(after(&a, "-vf"), "hwdownload,format=bgra,format=yuv420p");
+    // the hardware encoders take NV12: one conversion, to that
+    assert_eq!(after(&a, "-vf"), "hwdownload,format=bgra,format=nv12");
     assert_eq!(after(&a, "-c:v"), "h264_nvenc");
 
     cfg.capture = Capture::Gdigrab;

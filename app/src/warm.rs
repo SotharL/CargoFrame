@@ -1,4 +1,4 @@
-//! What happens to a window's web view when the window is closed (Settings, General, Memory).
+//! What happens to a window's web view when the window is closed (Settings, System, Windows kept ready).
 //!
 //! - **Low memory:** the window is destroyed, so the web view is freed at once.
 //! - **Balanced:** the window is hidden and kept for a few minutes. Opening it again in that
@@ -58,7 +58,7 @@ pub fn window_state(exists: bool, visible: bool) -> WindowState {
     }
 }
 
-/// One window's line in Settings, General, Performance.
+/// One window's line in Settings, System, Speed and memory.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct WindowStatus {
     pub label: String,

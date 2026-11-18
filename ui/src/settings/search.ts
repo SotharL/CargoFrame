@@ -21,14 +21,12 @@ export interface Finding {
 
 /** The findings with English titles; FINDINGS reads them in the language in use. */
 const RAW: Finding[] = [
-  // Setup
-  { page: 'setup', title: msg('This computer'), section: 'This computer', words: msg('ffmpeg xdotool tesseract claude app installed programs tools check missing') },
-  { page: 'setup', title: msg('Install what is missing'), section: 'Install what is missing', words: msg('winget download install ffmpeg tesseract') },
+  // Connections
   {
-    page: 'setup', title: msg('Connections'), section: 'Connections', arg: 'connections',
+    page: 'connections', title: msg('Connections'), target: 'conn.add',
     words: msg('services accounts token sign in jira github google drive sheets slack discord teams reddit claude x twitter bluesky instagram custom api webhook'),
   },
-  { page: 'setup', title: msg('Add a connection'), section: 'Add a connection', arg: 'connections', words: msg('new service account jira github google slack discord teams reddit claude x bluesky instagram api') },
+  { page: 'connections', title: msg('Add a connection'), section: 'Add a connection', words: msg('new service account jira github google slack discord teams reddit claude x bluesky instagram api') },
   // Layouts
   { page: 'layouts', title: msg('Ready-made layouts'), target: 'layouts.templates', words: msg('templates jira bug github issue start new layout') },
   {
@@ -45,11 +43,11 @@ const RAW: Finding[] = [
   { page: 'layouts', title: msg('Tabs block'), words: msg('tabs binder pages sections group blocks tab names side') },
   { page: 'layouts', title: msg('Where each block is sent'), target: 'props.sent_in', words: msg('field mapping sharing button sent in jira field') },
   // Triggers
-  { page: 'triggers', title: msg('Add a trigger'), target: 'triggers.add', words: msg('shortcut hotkey keyboard key combination capture screenshot record') },
-  { page: 'triggers', title: msg('Shortcut'), target: 'triggers.shortcut', words: msg('hotkey keyboard keys combination ctrl alt shift') },
-  { page: 'triggers', title: msg('What a trigger makes'), target: 'triggers.makes', words: msg('screenshot recording video layout opens') },
+  { page: 'triggers', title: msg('Add a shortcut'), target: 'triggers.add', words: msg('shortcut hotkey keyboard key combination capture screenshot record') },
+  { page: 'triggers', title: msg('Keys'), target: 'triggers.shortcut', words: msg('hotkey keyboard keys combination ctrl alt shift') },
+  { page: 'triggers', title: msg('What a shortcut makes'), target: 'triggers.makes', words: msg('screenshot recording video layout opens') },
   { page: 'triggers', title: msg('Shortcuts on this desktop'), target: 'triggers.desktop', words: msg('wayland gnome sway hyprland kde desktop shortcuts') },
-  // Data & fields
+  // Data parsing
   { page: 'rules', title: msg('New value: select it in a file'), target: 'data.new', arg: 'values', words: msg('data rules values file log select pick map version token name {value} read find') },
   { page: 'rules', title: msg('Files read in a capture'), target: 'rules.add', arg: 'files', words: msg('data rules file version config log json xml ini yaml project folder add to files newest several') },
   { page: 'rules', title: msg('Time format of a log'), target: 'rules.add', arg: 'files', words: msg('log viewer timestamp time format YYYY MM DD HH mm ss lines game log') },
@@ -62,19 +60,21 @@ const RAW: Finding[] = [
   { page: 'video', title: msg('Follow a window that is moved'), section: 'A window that is moved', target: 'video.follow-window', words: msg('moving window drag follow crop') },
   { page: 'video', title: msg('While recording'), section: 'While recording', target: 'video.sign', words: msg('sign outline red dot blinking indicator') },
   { page: 'video', title: msg('Try it on this PC'), section: 'Try it on this PC', words: msg('test record trial check') },
-  // General
-  { page: 'general', title: msg('Appearance'), section: 'Appearance', words: msg('theme dark light colour color accent look') },
-  { page: 'general', title: msg('Language'), section: 'Language', words: msg('language translation translated english french spanish italian german locale') },
-  { page: 'general', title: msg('Startup'), section: 'Startup', words: msg('start with the computer login autostart tray boot') },
-  { page: 'general', title: msg('Notifications'), section: 'Notifications', words: msg('notices toasts messages popups') },
-  { page: 'general', title: msg('Windows kept ready'), section: 'Windows kept ready', words: msg('memory warm fast open speed ram') },
-  { page: 'general', title: msg('When sharing fails'), section: 'When sharing fails', words: msg('retry fallback zip save locally folder offline failed') },
-  // Your data
-  { page: 'data', title: msg('Your data'), section: 'Your data', words: msg('files kept folders delete clear cache logs captures reset start again privacy') },
-  { page: 'data', title: msg('Export and import'), section: 'Export and import', words: msg('backup move another computer copy settings layouts restore') },
-  // About
-  { page: 'about', title: msg('Updates'), section: 'Updates', words: msg('version check update download install new release') },
-  { page: 'about', title: msg('Speed and memory'), section: 'Speed and memory', words: msg('diagnostics performance timing fast slow') },
+  // Preferences
+  { page: 'preferences', title: msg('Language'), section: 'Language', words: msg('language translation translated english french spanish italian german locale') },
+  { page: 'preferences', title: msg('Appearance'), section: 'Appearance', words: msg('theme dark light colour color accent look') },
+  { page: 'preferences', title: msg('Notifications'), section: 'Notifications', words: msg('notices toasts messages popups') },
+  { page: 'preferences', title: msg('Startup'), section: 'Startup', words: msg('start with the computer login autostart tray boot') },
+  // Files & backup
+  { page: 'files', title: msg('When a share fails'), section: 'When a share fails', words: msg('retry fallback zip save locally folder offline failed safe') },
+  { page: 'files', title: msg('Export and import'), section: 'Export and import', words: msg('backup move another computer copy settings layouts restore') },
+  { page: 'files', title: msg('Kept on this computer'), section: 'Kept on this computer', words: msg('your data files kept folders delete clear cache logs captures reset start again privacy') },
+  // System
+  { page: 'system', title: msg('This computer'), section: 'This computer', words: msg('setup ffmpeg xdotool tesseract claude app installed programs tools check missing') },
+  { page: 'system', title: msg('Install what is missing'), section: 'Install what is missing', words: msg('winget download install ffmpeg tesseract') },
+  { page: 'system', title: msg('Updates'), section: 'Updates', words: msg('version about check update download install new release') },
+  { page: 'system', title: msg('Windows kept ready'), section: 'Windows kept ready', words: msg('memory warm fast open speed ram') },
+  { page: 'system', title: msg('Speed and memory'), section: 'Speed and memory', words: msg('diagnostics performance timing fast slow') },
 ];
 export const FINDINGS: Finding[] = translated(RAW, new Set(['title', 'words']));
 

@@ -18,7 +18,7 @@ const demo = {
 const original = TOURS[0]!;
 
 beforeEach(() => {
-  go('general');
+  go('preferences');
   TOURS[0] = demo;
 });
 afterEach(() => {

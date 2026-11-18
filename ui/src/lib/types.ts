@@ -680,7 +680,7 @@ export interface FillStep {
   then: FillAction[];
 }
 
-/** A field fill: one field of a service and the steps that fill it (Data & fields → Fill fields). */
+/** A field fill: one field of a service and the steps that fill it (Layouts → Fill fields). */
 export interface InfoType {
   name: string;
   connection_id: string;

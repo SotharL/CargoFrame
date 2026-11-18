@@ -280,7 +280,7 @@
   {/if}
 
   {#if !draft}
-    <section class="adders" aria-label={t('Add a connection')}>
+    <section class="adders" data-tour="conn.add" aria-label={t('Add a connection')}>
       <h2>{t('Add a connection')}</h2>
       <div class="kinds">
         {#each offered as k (k.kind)}

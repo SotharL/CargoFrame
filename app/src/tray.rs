@@ -19,7 +19,7 @@ const ID_CAPTURE_PREFIX: &str = "capture:";
 const TRAY_ID: &str = "main";
 
 /// The tray icon is drawn in two layers: the frames as they are, and the arrow, which takes the
-/// accent colour chosen in Settings, General, Appearance (see `scripts/dev/render-icons.mjs`).
+/// accent colour chosen in Settings, Preferences, Appearance (see `scripts/dev/render-icons.mjs`).
 const FRAMES_PNG: &[u8] = include_bytes!("../icons/tray-frames.png");
 const ARROW_PNG: &[u8] = include_bytes!("../icons/tray-arrow.png");
 /// What the icon was before it had layers, kept for the case where a layer cannot be read.
@@ -131,7 +131,7 @@ fn menu(app: &AppHandle) -> tauri::Result<Menu<tauri::Wry>> {
     let pause = CheckMenuItem::with_id(
         app,
         ID_PAUSE,
-        t("Pause triggers"),
+        t("Pause shortcuts"),
         true,
         paused,
         None::<&str>,

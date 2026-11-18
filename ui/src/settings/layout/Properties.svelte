@@ -345,7 +345,7 @@
         value={block.time_format ?? ''}
         onchange={(v) => (block.time_format = v.trim() || undefined)}
       />
-      <p class="quiet hint">{t('For every file it shows, unless a data rule says it for that file (Data & fields, Files).')}</p>
+      <p class="quiet hint">{t('For every file it shows, unless a data rule says it for that file (Data parsing, Files).')}</p>
     </div>
     <p class="quiet hint">
       {t('Shows a file of the window\'s Files blocks line by line. Pick a line to see it whole and copy it; Copy all copies the lines shown. Nothing of it is sent.')}

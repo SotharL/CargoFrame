@@ -1450,3 +1450,60 @@ in one round, the computer's language by default with a setting, and a check on 
 - **Checked on every push.** `scripts/i18n/check.mjs` reads the calls in both codebases and fails when a pack misses a
   text, keeps a stale one, or a translation changes a `{name}`; it runs in the local gate and in CI. `--missing`,
   `--merge` and `--where` make the update quick.
+
+### 0.7.0, 18 Nov 2026: Settings regrouped, lighter recording, logs that follow the clip
+
+Asked for: wording closer to what technical tools say (a *trigger* is a *shortcut*, *Raccourci*), two bugs of Data
+& fields (a dropped file did not open; a long line hid the panel), recording that eats less, the log time found the
+way values are made, the logs following the clip, the Language dropdown beside its title, a new name for Data &
+fields, Setup, General, Your data and About reworked, an icon per page, and a tour of the whole program that starts
+by itself after an install or an update.
+
+- **Shortcut, not trigger.** What the person makes is the keys and the layout they open: the page is *Shortcuts*,
+  the item is a shortcut, its key box is *Keys*. The files, the code and `cargoframe open --trigger` keep the old
+  word, so nothing saved or scripted changes. Each language uses the word current tools use (*raccourci*, *atajo*,
+  *scorciatoia*, *Tastenkürzel*), and the same review moved French *mise en page* to *disposition*, *journal* to
+  *log* in French, Spanish and German, and Italian *acquisizione* to *cattura* (glossary in `i18n.md`).
+- **Data parsing.** Chosen by the person from the names offered: the page reads values out of files; filling fields
+  had already moved to Layouts.
+- **Sections merged first, pages after.** The person asked for the sections to be regrouped by what they are for and
+  the pages to follow. What a capture goes to (Connections) leads; how CargoFrame is to the person (language,
+  appearance, notifications, startup) is *Preferences*; what it saves or keeps (the folder for a failed share, export
+  and import, what is kept, reset) is *Files & backup*, reset last so export comes first; the program on this
+  computer (the apps it uses, updates, windows kept ready, speed) is *System*. *Setup* had been both "apps" and
+  "connections"; *General* had held a folder and a memory setting beside the theme. Old addresses (`setup`,
+  `general`, `data`, `about`, `setup/connections`) still land on the right page.
+- **An icon per page**, drawn on the same 24 px grid as the other icons, with the page's name as its tooltip, so the
+  sidebar can later fold to its icons without other work.
+- **The tour starts once per version.** `tour-seen` in the settings folder holds the version that showed it; a new
+  install or an update opens Settings with `&tour=basics`, which the window reads (and the navigate event, when
+  Settings is already open). It replaces the old "first run opens Setup". *Skip the tour* ends it; *Guides* has it.
+  The tour is a guide like the others, so `walk.test.ts` walks it and `tours.test.ts` checks every step's target.
+- **Drag and drop in Settings.** The window's own (system) drop handler took the files before the page saw them;
+  it is turned off for Settings, which only takes files in Data parsing, and the page ignores a file dropped
+  outside a drop area instead of opening it.
+- **A long line stays in its box.** The page's grid had `auto` columns, which grow to the widest content: a long
+  line widened the page and pushed the panel beside the file out of sight. Every column on the way is now
+  `minmax(0, 1fr)`, the panel has its own column beside the file, file tabs are cut with an ellipsis, and the window
+  has a minimum size (960 × 600) at which the file, the panel and the sidebar fit.
+- **What recording costs.** Measured on Linux (a virtual 2560×1440 screen, 30 frames a second): converting the
+  picture costs about 0.4 of a core, x264 ultrafast about 0.4 more, veryfast nine times that. On Windows the default
+  was GDI, which copies the whole screen through the processor and slows the program being recorded, and software
+  compression even with a graphics card that encodes. Now: Desktop Duplication (the graphics card's copy) for the main
+  screen, GDI for what it cannot see; a hardware encoder when it encodes a test picture (a build of ffmpeg lists
+  NVENC, Quick Sync and AMF whatever the card), else x264 ultrafast; the picture converted once, to the format the
+  encoder takes (NV12 for the hardware ones); ffmpeg below normal priority (`nice` on Linux), so a busy PC drops a
+  frame of the clip rather than slowing the program; on Wayland GStreamer makes the shared screen smaller before it is
+  handed over. What ffmpeg can do is kept per ffmpeg file and learnt in the background after start when a shortcut
+  records, so the first recording starts at once. What ffmpeg refuses as it starts is told from what it said and
+  swapped for GDI, software or no sound, in that order; a hardware encoder that failed is not offered again until
+  the next start.
+- **The log time, the way values are made.** Selecting the time in a line works out the format (`logInfer.ts`):
+  numbers read in the order people write them, day and month in the order they can only be in or as the computer
+  writes them, a zone kept, letters that mean something written as themselves; a guess is kept only if it reads the
+  selection back. Selected in the text search, it is offered; in the time search, it is used. The format box is
+  still there, behind the button that shows how times are read. A line picked can start or end the times kept.
+- **Logs follow the clip.** The Video block says where the clip is (`playhead.svelte.ts`), only once it has been
+  played and in steps of a tenth of a second; the log viewer shows the lines up to that moment (the lines are in time
+  order, so it stops at the first one after) and keeps the newest in sight unless the person scrolled up. A switch
+  turns it off.

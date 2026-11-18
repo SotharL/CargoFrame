@@ -164,7 +164,7 @@ pub struct SharingView {
 
 /// Why "Save locally" is disabled. The same words are used when the share is refused.
 pub const NEEDS_SAVE_FOLDER: &str = cargoframe_i18n::msg!(
-    "Set a \u{201c}Folder for saved zips\u{201d} in Settings, General, When sharing fails to save locally"
+    "Set a \u{201c}Folder for saved zips\u{201d} in Settings, Files & backup, When a share fails to save locally"
 );
 
 #[derive(Debug, Clone, Serialize)]
@@ -282,7 +282,7 @@ fn code_name(c: Code) -> String {
 
 fn problem_text(p: &LayoutProblem) -> String {
     match p {
-        LayoutProblem::NotSet => cargoframe_i18n::t("This trigger has no layout yet.").into(),
+        LayoutProblem::NotSet => cargoframe_i18n::t("This shortcut has no layout yet.").into(),
         LayoutProblem::Missing(id) => cargoframe_i18n::tf(
             "The layout \u{201c}{id}\u{201d} no longer exists.",
             &[("id", id)],

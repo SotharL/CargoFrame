@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import YourData from './YourData.svelte';
-import General from './General.svelte';
+import General from './Preferences.svelte';
 import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
 import { deeperKey, recentChoices, remember } from '../../lib/recent';
 
@@ -117,11 +117,11 @@ describe('Your data', () => {
   });
 });
 
-describe('General: notifications', () => {
+describe('Preferences: notifications', () => {
   it('has a switch for each kind of notice, both on to begin with, and saves a change', async () => {
     render(General);
-    const routine = (await screen.findByRole('switch', { name: 'Say when something happens' })) as HTMLInputElement;
-    const problems = screen.getByRole('switch', { name: 'Say when something goes wrong' }) as HTMLInputElement;
+    const routine = (await screen.findByRole('switch', { name: 'When something happens' })) as HTMLInputElement;
+    const problems = screen.getByRole('switch', { name: 'When something goes wrong' }) as HTMLInputElement;
     expect(routine.checked && problems.checked).toBe(true);
     await fireEvent.click(routine);
     await waitFor(async () => expect((await api.getGeneral()).notifications).toEqual({ routine: false, problems: true }));
@@ -131,6 +131,6 @@ describe('General: notifications', () => {
   it('shows a saved choice', async () => {
     setApiForTests(memoryApi({ general: { notifications: { routine: true, problems: false } } }));
     render(General);
-    expect(((await screen.findByRole('switch', { name: 'Say when something goes wrong' })) as HTMLInputElement).checked).toBe(false);
+    expect(((await screen.findByRole('switch', { name: 'When something goes wrong' })) as HTMLInputElement).checked).toBe(false);
   });
 });

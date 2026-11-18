@@ -66,7 +66,7 @@
 
     <h3>{t('Last measured')}</h3>
     {#if timings.length === 0}
-      <p class="quiet">{t('Nothing measured yet. Use a trigger or share something, then press Refresh.')}</p>
+      <p class="quiet">{t('Nothing measured yet. Use a shortcut or share something, then press Refresh.')}</p>
     {:else}
       <ul class="timings">
         {#each timings as item (item.id)}

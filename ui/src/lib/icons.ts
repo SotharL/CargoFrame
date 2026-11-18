@@ -28,6 +28,15 @@ export const ICONS = {
   search: 'M10.5 4a6.5 6.5 0 100 13a6.5 6.5 0 100-13M15.5 15.5L21 21',
   expand: 'M14 4h6v6M20 4l-7 7M10 20H4v-6M4 20l7-7',
   close: 'M6 6l12 12M18 6L6 18',
+  // the pages of Settings, one each (the sidebar shows them, and alone when it is folded)
+  connections: 'M9 15l6-6M10.5 6.5l1.8-1.8a4 4 0 015.7 5.7l-1.8 1.8M13.5 17.5l-1.8 1.8a4 4 0 01-5.7-5.7l1.8-1.8',
+  layouts: 'M4 4h16v16H4zM4 9h16M10 9v11',
+  shortcuts: 'M13 3L5 13h6l-1 8 8-10h-6z',
+  parsing: 'M8 4H7a2 2 0 00-2 2v4l-2 2 2 2v4a2 2 0 002 2h1M16 4h1a2 2 0 012 2v4l2 2-2 2v4a2 2 0 01-2 2h-1M9.5 12h.01M12 12h.01M14.5 12h.01',
+  recording: 'M3 7h12v10H3zM15 10.5l6-3.5v10l-6-3.5',
+  preferences: 'M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1M15 4v4M9 10v4M17 16v4',
+  files: 'M3 6h6l2 2h10v11H3zM12 11v5M9.5 13.5L12 16l2.5-2.5',
+  system: 'M4 5h16v11H4zM9 20h6M12 16v4',
 } as const;
 
 export type IconName = keyof typeof ICONS;

@@ -36,6 +36,7 @@ fn found(encoders: &[VideoEncoder], captures: &[VideoCapture]) -> Found {
         gstreamer: captures
             .contains(&VideoCapture::Wayland)
             .then(|| "gst-launch-1.0".into()),
+        fast: Vec::new(),
     }
 }
 
@@ -110,14 +111,29 @@ fn a_chosen_place_is_the_only_place_looked_in() {
 }
 
 #[test]
-fn auto_picks_a_safe_capture_and_software_on_windows() {
-    let all = found(
+fn auto_picks_the_cheap_capture_and_a_working_hardware_encoder_on_windows() {
+    let mut all = found(
         &[VideoEncoder::Software, VideoEncoder::Nvenc],
         &[VideoCapture::Gdigrab, VideoCapture::Ddagrab],
     );
+    // listed is not enough: only an encoder that encoded the test picture is used
     let c = choose(&Video::default(), &all, Os::Windows, &windows()).unwrap();
-    assert_eq!(c.capture, VideoCapture::Gdigrab);
+    assert_eq!(c.capture, VideoCapture::Ddagrab);
     assert_eq!(c.encoder, VideoEncoder::Software);
+    all.fast = vec![VideoEncoder::Nvenc];
+    let c = choose(&Video::default(), &all, Os::Windows, &windows()).unwrap();
+    assert_eq!(c.encoder, VideoEncoder::Nvenc);
+    // what the person chose stays
+    let soft = Video {
+        encoder: VideoEncoder::Software,
+        ..Video::default()
+    };
+    assert_eq!(
+        choose(&soft, &all, Os::Windows, &windows())
+            .unwrap()
+            .encoder,
+        VideoEncoder::Software
+    );
 
     // a build with only one of them uses that one
     let dda = found(&[VideoEncoder::Software], &[VideoCapture::Ddagrab]);
@@ -1080,6 +1096,7 @@ fn a_window_is_recorded_on_its_own_and_a_missing_sound_device_costs_only_the_sou
         patience: Duration::from_secs(8),
         listen: None,
         max_run_secs: None,
+        screens: None,
     };
     let rec = Recording::new();
     let started = rec
@@ -1167,4 +1184,77 @@ fn a_continuous_recording_hands_out_its_last_seconds_and_goes_on() {
     assert!(std::path::Path::new(first.clip.as_deref().unwrap()).exists());
     rec.cancel();
     assert!(!rec.is_continuous());
+}
+
+#[test]
+fn the_graphics_card_capture_takes_the_main_screen_only() {
+    let one = Some(cargoframe_capture::Screens {
+        main_width: 1920,
+        main_height: 1080,
+        count: 1,
+    });
+    let two = Some(cargoframe_capture::Screens {
+        main_width: 1920,
+        main_height: 1080,
+        count: 2,
+    });
+    let on_main = Area {
+        x: 100,
+        y: 50,
+        w: 800,
+        h: 600,
+    };
+    let beside = Area {
+        x: 2000,
+        y: 50,
+        w: 800,
+        h: 600,
+    };
+    assert!(dda_sees(Some(on_main), two, false));
+    assert!(!dda_sees(Some(beside), two, false));
+    assert!(!dda_sees(
+        Some(Area {
+            x: -8,
+            y: 0,
+            w: 800,
+            h: 600
+        }),
+        one,
+        false
+    ));
+    assert!(dda_sees(None, one, false));
+    // the whole desktop of two screens is GDI's, unless the person chose the other
+    assert!(!dda_sees(None, two, false));
+    assert!(dda_sees(None, two, true));
+}
+
+#[test]
+fn what_ffmpeg_refused_at_once_is_told_from_what_it_said() {
+    let f = early_failure_of;
+    assert_eq!(
+        f(
+            "Failed to create D3D11 device for ddagrab",
+            true,
+            true,
+            true
+        ),
+        Failed::Capture
+    );
+    assert_eq!(
+        f(
+            "[h264_nvenc] OpenEncodeSessionEx failed: no capable devices found",
+            true,
+            true,
+            true
+        ),
+        Failed::Encoder
+    );
+    assert_eq!(
+        f("audio=Microphone: I/O error", true, true, true),
+        Failed::Sound
+    );
+    // nothing in the words: the sound goes first, then the capture
+    assert_eq!(f("Conversion failed!", true, true, true), Failed::Sound);
+    assert_eq!(f("Conversion failed!", false, true, true), Failed::Capture);
+    assert_eq!(f("Conversion failed!", false, false, true), Failed::Encoder);
 }

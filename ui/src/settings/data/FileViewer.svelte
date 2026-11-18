@@ -219,7 +219,7 @@
         aria-selected={file?.id === f.id}
         title={f.id}
         onclick={() => { current = f.id; hit = 0; top = 0; if (scroller) scroller.scrollTop = 0; }}
-      >{f.name}{#if q}<span class="count" class:none={!counts(f)}>{counts(f)}</span>{/if}</button>
+      ><span class="tabname">{f.name}</span>{#if q}<span class="count" class:none={!counts(f)}>{counts(f)}</span>{/if}</button>
     {/each}
     <button type="button" class="open" onclick={() => picker?.click()}>{t('＋ Open or drop a file')}</button>
     <input bind:this={picker} type="file" multiple hidden onchange={(e) => { const l = [...(e.currentTarget.files ?? [])]; e.currentTarget.value = ''; if (l.length) onopen(l); }} />
@@ -283,7 +283,9 @@
   [role='tab'] {
     font-size: 13px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid transparent;
     border-radius: 6px 6px 0 0; background: none; color: var(--quiet); margin-bottom: -1px;
+    max-width: 260px; min-width: 0;
   }
+  .tabname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   [role='tab'][aria-selected='true'] { background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface); color: var(--text); font-weight: 600; }
   .count { font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; background: color-mix(in srgb, var(--dbg) 22%, transparent); }
   .count.none { background: var(--border); color: var(--quiet); }

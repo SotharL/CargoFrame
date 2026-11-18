@@ -365,7 +365,7 @@
             {#if view.video}
               {#key view.session_id}<VideoBlock bind:this={clip} info={view.video} bind:edit={clipEdit} clockShown={b.clock === true} onshot={paired ? takeShot : undefined} />{/key}
             {:else}
-              <p class="quiet videonote">{t('The recording of a video trigger appears here. This capture is a screenshot.')}</p>
+              <p class="quiet videonote">{t('The recording of a shortcut that records appears here. This capture is a screenshot.')}</p>
             {/if}
           {:else if b.type === 'text'}
             {@const formats = marksFor(view, b)}

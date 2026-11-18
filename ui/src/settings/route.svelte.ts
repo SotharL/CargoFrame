@@ -15,16 +15,18 @@ export function go(page: PageId, arg: string | null = null) {
 export function parseTarget(target: string | null | undefined): { page: PageId; arg: string | null } | null {
   if (!target) return null;
   const [name, ...rest] = target.split('/');
+  // Connections was the lower half of Setup (0.4 to 0.6): its address there is its page now
+  if (name === 'setup' && rest.join('/') === 'connections') return { page: 'connections', arg: null };
   const page = resolvePage(name);
   if (!page) return null;
-  // Connections is the lower half of Setup now; its old address scrolls there. Extra fields are
-  // the Fill fields tab of the Layouts page (of Data & fields before 0.5.0: rules/fields goes there too).
+  // Extra fields are the Fill fields tab of the Layouts page (of Data & fields before 0.5.0:
+  // rules/fields goes there too).
   if (page === 'rules' && rest.join('/') === 'fields') return { page: 'layouts', arg: 'fields' };
-  const arg = rest.join('/') || (name === 'connections' ? 'connections' : name === 'infotypes' ? 'fields' : null);
+  const arg = rest.join('/') || (name === 'infotypes' ? 'fields' : null);
   return { page, arg };
 }
 
-/** The page to start on: the address (`?page=`), else the last page used, else Setup. */
+/** The page to start on: the address (`?page=`), else the last page used, else Connections. */
 export function restore(search: string) {
   const fromUrl = parseTarget(new URLSearchParams(search).get('page'));
   if (fromUrl) {

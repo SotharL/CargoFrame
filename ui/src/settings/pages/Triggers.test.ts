@@ -26,7 +26,7 @@ afterEach(() => {
 describe('Triggers: the layout says screenshot or recording', () => {
   it('a layout without a Video block takes a screenshot, and asks of what', async () => {
     render(Triggers);
-    await fireEvent.click(await screen.findByRole('button', { name: 'Add a trigger' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add a shortcut' }));
     expect(screen.queryByRole('combobox', { name: 'Makes' })).toBeNull();
     await fireEvent.change(screen.getByRole('combobox', { name: 'Layout' }), { target: { value: 'pic' } });
     expect(screen.getByRole('combobox', { name: 'Screenshot of' })).toBeTruthy();
@@ -35,7 +35,7 @@ describe('Triggers: the layout says screenshot or recording', () => {
 
   it('a layout with a Video block records, and the screenshot choice goes away', async () => {
     render(Triggers);
-    await fireEvent.click(await screen.findByRole('button', { name: 'Add a trigger' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Add a shortcut' }));
     await fireEvent.change(screen.getByRole('combobox', { name: 'Layout' }), { target: { value: 'clip' } });
     expect(screen.queryByRole('combobox', { name: 'Screenshot of' })).toBeNull();
     expect(screen.getByText(/a press records the screen/)).toBeTruthy();

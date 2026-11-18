@@ -10,7 +10,7 @@ import { memoryApi, setApiForTests } from '../../lib/ipc';
 
 beforeEach(() => {
   setApiForTests(memoryApi({ setup: 'windows_missing' }));
-  go('general');
+  go('preferences');
 });
 afterEach(() => {
   stopTour();

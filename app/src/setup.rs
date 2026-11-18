@@ -116,7 +116,7 @@ pub enum Install {
 pub struct Report {
     pub os: &'static str,
     pub items: Vec<Item>,
-    /// How many are missing: the number on the Setup page's tab.
+    /// How many are missing: the number on the System page's tab.
     pub missing: usize,
     pub install: Install,
 }
@@ -337,7 +337,7 @@ fn sound_output_item(os: Os, p: &Probes) -> Item {
     }
 }
 
-/// Turn what was found into the lines of the Setup page and the one button.
+/// Turn what was found into the lines of the System page and the one button.
 pub fn report(os: Os, p: &Probes, installing: bool, failed: Option<&str>) -> Report {
     let mut items = Vec::new();
 
@@ -863,15 +863,16 @@ pub fn install_with_winget(package: &'static str) -> Result<(), String> {
     }
 }
 
-/// Has this person seen the Setup page at least once? The first run opens it; this remembers.
-/// A folder that cannot be written to says "yes", so the page does not open at every start.
-pub fn first_run(config: &Path) -> bool {
-    let marker = config.join("setup-seen");
-    if marker.exists() {
+/// Is the tour of CargoFrame due: the first start of this version (a new install, or an update)?
+/// Asked once per version: the answer is kept in `tour-seen`. A folder that cannot be written to
+/// says "no", so the tour does not open at every start.
+pub fn tour_due(config: &Path, version: &str) -> bool {
+    let marker = config.join("tour-seen");
+    if std::fs::read_to_string(&marker).is_ok_and(|v| v.trim() == version) {
         return false;
     }
     std::fs::create_dir_all(config)
-        .and_then(|()| std::fs::write(&marker, b"1"))
+        .and_then(|()| std::fs::write(&marker, version))
         .is_ok()
 }
 

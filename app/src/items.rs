@@ -115,7 +115,7 @@ fn check_item(kind: ItemKind, id: &str, item: Value) -> Result<Checked, String> 
         ItemKind::Trigger => {
             let mut t: Trigger = parse(item)?;
             if t.name.trim().is_empty() {
-                return Err(cargoframe_i18n::t("Give the trigger a name").into());
+                return Err(cargoframe_i18n::t("Give the shortcut a name").into());
             }
             if !t.shortcut.trim().is_empty() {
                 t.shortcut = shortcut::normalize(&t.shortcut).map_err(|e| e.to_string())?;

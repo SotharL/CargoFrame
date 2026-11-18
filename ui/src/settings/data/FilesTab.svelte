@@ -1,7 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/index.svelte';
   import Tr from '../../lib/i18n/Tr.svelte';
-  // The files Data & fields looks for in a capture's project folder: whether each is added to the
+  // The files Data parsing looks for in a capture's project folder: whether each is added to the
   // window's files, how its lines write their time, and the values read in it.
   import Field from '../../lib/components/Field.svelte';
   import TimeFormatField from '../../lib/components/TimeFormatField.svelte';

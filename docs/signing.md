@@ -23,7 +23,7 @@ and never by an automated session.
 ## Private beta (now)
 
 - The certificate is self-signed. Testers see an "unknown publisher" warning. That is expected.
-- "Check for updates" (Settings, General) works while the repository is private, with a
+- "Check for updates" (Settings, System) works while the repository is private, with a
   read-only GitHub token you create (fine-grained, *Contents: read* on this repository only). It is
   kept in the system credential store. The daily automatic check is **off** by default. You can
   also update by hand: run the newer installer, which upgrades in place and keeps your settings.
@@ -42,4 +42,4 @@ offline, encrypted backup, and do not paste the key into chats, tickets or issue
 2. Scan the git history for secrets and personal paths; rotate anything found.
 3. Keep OAuth client secrets out of the repository (use PKCE public clients, or CI secrets).
 4. Choose a license; add a security policy (`SECURITY.md`).
-5. Make the repository public, then the token is no longer needed: remove it in Settings, General, Updates. Consider a signed update manifest on top of the checksum file.
+5. Make the repository public, then the token is no longer needed: remove it in Settings, System, Updates. Consider a signed update manifest on top of the checksum file.

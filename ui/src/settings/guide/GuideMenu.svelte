@@ -25,7 +25,7 @@
   }
 </script>
 
-<details class="menu" bind:this={menu}>
+<details class="menu" bind:this={menu} data-tour="nav.guides">
   <summary>{t('Guides')}</summary>
   <ul>
     {#each usage as item (item.id)}

@@ -151,6 +151,92 @@ pub enum Encoder {
     },
 }
 
+impl Encoder {
+    /// The encoder and how hard it works. Hardware encoders are told to be quick: the picture
+    /// is for a bug report, not a film.
+    pub fn args(&self) -> &'static [&'static str] {
+        match self {
+            Encoder::X264 { preset } => match preset {
+                X264Preset::Ultrafast => &["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28"],
+                X264Preset::Veryfast => &["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"],
+            },
+            Encoder::Nvenc => &["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28"],
+            Encoder::Qsv => &[
+                "-c:v",
+                "h264_qsv",
+                "-preset",
+                "veryfast",
+                "-global_quality",
+                "28",
+            ],
+            Encoder::Amf => &[
+                "-c:v", "h264_amf", "-quality", "speed", "-rc", "cqp", "-qp_i", "26", "-qp_p", "28",
+            ],
+            Encoder::MediaFoundation => &["-c:v", "h264_mf"],
+            Encoder::Vaapi { .. } => &["-c:v", "h264_vaapi", "-qp", "24"],
+        }
+    }
+
+    /// The last filter: the picture as this encoder takes it, so ffmpeg converts it once.
+    pub fn picture_format(&self) -> &'static str {
+        match self {
+            Encoder::X264 { .. } => "format=yuv420p",
+            Encoder::Vaapi { .. } => "format=nv12,hwupload",
+            // the hardware encoders all take NV12; Quick Sync takes nothing else
+            _ => "format=nv12",
+        }
+    }
+
+    /// Does this encoder work on this computer? A build of ffmpeg lists the hardware encoders
+    /// it was made with, whatever graphics card there is: a short test picture tells.
+    pub fn works(&self, ffmpeg: &Path) -> bool {
+        let mut a: Vec<OsString> = ["-hide_banner", "-loglevel", "error"]
+            .iter()
+            .map(OsString::from)
+            .collect();
+        if let Encoder::Vaapi { device } = self {
+            a.extend(["-vaapi_device".into(), device.clone().into_os_string()]);
+        }
+        a.extend(
+            [
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=black:s=640x360:r=30",
+                "-frames:v",
+                "5",
+                "-vf",
+            ]
+            .iter()
+            .map(OsString::from),
+        );
+        a.push(self.picture_format().into());
+        a.extend(self.args().iter().map(OsString::from));
+        a.extend(["-f", "null", "-"].iter().map(OsString::from));
+        let mut command = Command::new(ffmpeg);
+        command
+            .args(a)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::null());
+        let Ok(mut child) = export::quiet(&mut command).spawn() else {
+            return false;
+        };
+        let until = Instant::now() + Duration::from_secs(8);
+        loop {
+            match child.try_wait() {
+                Ok(Some(status)) => return status.success(),
+                Ok(None) if Instant::now() < until => std::thread::sleep(Duration::from_millis(20)),
+                _ => {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return false;
+                }
+            }
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum X264Preset {
     Ultrafast,
@@ -289,14 +375,7 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
         // never enlarge; keep the width even (-2) and the aspect ratio
         filters.push(format!("scale=-2:min(ih\\,{h})"));
     }
-    filters.push(
-        if matches!(cfg.encoder, Encoder::Vaapi { .. }) {
-            "format=nv12,hwupload"
-        } else {
-            "format=yuv420p"
-        }
-        .into(),
-    );
+    filters.push(cfg.encoder.picture_format().into());
     // the sounds: each is one more input, after the picture
     let sounds = cfg.sounds().count();
     for source in cfg.sounds() {
@@ -354,18 +433,7 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
 
     // a keyframe every second, so every segment can start on one
     a.extend(["-g".into(), fps.to_string().into()]);
-    let enc: &[&str] = match &cfg.encoder {
-        Encoder::X264 { preset } => match preset {
-            X264Preset::Ultrafast => &["-c:v", "libx264", "-preset", "ultrafast", "-crf", "28"],
-            X264Preset::Veryfast => &["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"],
-        },
-        Encoder::Nvenc => &["-c:v", "h264_nvenc", "-preset", "p1", "-cq", "28"],
-        Encoder::Qsv => &["-c:v", "h264_qsv", "-global_quality", "28"],
-        Encoder::Amf => &["-c:v", "h264_amf", "-quality", "speed"],
-        Encoder::MediaFoundation => &["-c:v", "h264_mf"],
-        Encoder::Vaapi { .. } => &["-c:v", "h264_vaapi", "-qp", "24"],
-    };
-    a.extend(enc.iter().map(OsString::from));
+    a.extend(cfg.encoder.args().iter().map(OsString::from));
     if sounds > 0 {
         for x in ["-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", "48000"] {
             a.push(x.into());
@@ -407,16 +475,52 @@ pub struct Recorder {
     feeds: Vec<Box<dyn Send>>,
 }
 
+/// The recorder runs a little behind the programs in use, so that the one being recorded stays
+/// smooth when the computer is busy: a frame dropped from the clip matters less than a stutter in
+/// the program. On Linux through `nice`, which then becomes ffmpeg (same process); a system
+/// without it runs ffmpeg as it is.
+fn recorder_command(ffmpeg: &Path) -> Command {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        const BELOW_NORMAL_PRIORITY_CLASS: u32 = 0x0000_4000;
+        let mut command = Command::new(ffmpeg);
+        command.creation_flags(CREATE_NO_WINDOW | BELOW_NORMAL_PRIORITY_CLASS);
+        command
+    }
+    #[cfg(unix)]
+    {
+        // only for an ffmpeg that is there, so a missing one is still refused at once
+        let nice = ["/usr/bin/nice", "/bin/nice"]
+            .into_iter()
+            .map(Path::new)
+            .find(|p| p.is_file() && ffmpeg.is_file());
+        match nice {
+            Some(nice) => {
+                let mut command = Command::new(nice);
+                command.args(["-n", "5"]).arg(ffmpeg);
+                command
+            }
+            None => Command::new(ffmpeg),
+        }
+    }
+    #[cfg(not(any(windows, unix)))]
+    {
+        Command::new(ffmpeg)
+    }
+}
+
 impl Recorder {
     pub fn start(cfg: &Config) -> Result<Self, RecordError> {
         let ring = Ring::new(&cfg.dir, cfg.window, cfg.max_bytes);
-        let mut command = Command::new(&cfg.ffmpeg);
+        let mut command = recorder_command(&cfg.ffmpeg);
         command
             .args(args(cfg, &ring))
             .stdin(Stdio::piped())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
-        let mut child = export::quiet(&mut command)
+        let mut child = command
             .spawn()
             .map_err(|e| ExportError::NoEncoder(format!("{}: {e}", cfg.ffmpeg.display())))?;
         let said = Arc::new(Mutex::new(String::new()));

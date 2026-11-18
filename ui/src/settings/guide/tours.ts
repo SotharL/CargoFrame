@@ -25,12 +25,14 @@ export interface Tour {
   id: string;
   title: string;
   steps: Step[];
+  /** The tour of the whole program: it starts by itself after an install or an update. */
+  intro?: boolean;
 }
 
 /** The longest a step may say, in characters. A guide is a nudge, not a manual. */
 export const MAX_SAY = 90;
 
-const SETUP: PageId = 'setup';
+const SETUP: PageId = 'connections';
 
 /** The same ending for the services that need a sign-in in the browser. */
 const signIn = (service: string): Step => ({
@@ -40,6 +42,29 @@ const signIn = (service: string): Step => ({
 });
 
 export const TOURS: Tour[] = translated([
+  {
+    // where everything is, in the order a capture goes through it, then what can be turned on
+    // or off: one look at each page
+    id: 'basics',
+    intro: true,
+    title: msg('Tour of CargoFrame'),
+    steps: [
+      { target: 'conn.add', page: 'connections', say: msg('Connections: the services your captures go to. Add one here.') },
+      { target: 'layouts.templates', page: 'layouts', say: msg('Layouts: the window a capture opens. Start from a ready-made one.') },
+      { target: 'triggers.add', page: 'triggers', say: msg('Shortcuts: the keys that capture or record, then open a layout.') },
+      { target: 'video.sign', page: 'video', say: msg('Recording: the red outline and dot while recording, on or off.') },
+      { target: 'data.new', page: 'rules', say: msg('Data parsing: values read in the files of a capture, like a version.') },
+      { target: 'prefs.language', page: 'preferences', say: msg('Your language, then the theme and colour, just below.') },
+      { target: 'prefs.notifications', page: 'preferences', say: msg('Notifications: choose which ones show. They can appear in a recording.') },
+      { target: 'files.safe', page: 'files', say: msg('A safe folder: a share that fails is saved there as a zip.') },
+      { target: 'files.transfer', page: 'files', say: msg('Export and import: your layouts and values, to back up or move.') },
+      { target: 'files.kept', page: 'files', say: msg('What CargoFrame keeps on this computer, where, and a reset.') },
+      { target: 'system.apps', page: 'system', say: msg('System: ffmpeg and the other apps CargoFrame uses, installed from here.') },
+      { target: 'system.updates', page: 'system', say: msg('Updates: check for a new version, or let CargoFrame look once a day.') },
+      { target: 'nav.search', say: msg('Search any setting here (Ctrl+F).') },
+      { target: 'nav.guides', say: msg('Guides: this tour again, and step by step help for each service.') },
+    ],
+  },
   {
     id: 'connect-jira',
     title: msg('Connect Jira'),
@@ -184,7 +209,7 @@ export const TOURS: Tour[] = translated([
       { target: 'layouts.templates', say: msg('A layout is the window a capture opens. Start from a template.'), page: 'layouts', click: true },
       { target: 'template-local-capture', say: msg('This one needs no account: it saves a zip on this computer.'), click: true },
       { target: 'layouts.save', say: msg('Save it as your own layout.'), click: true },
-      { target: 'triggers.add', say: msg('Now a trigger: a shortcut that opens the layout.'), page: 'triggers', click: true },
+      { target: 'triggers.add', say: msg('Now a shortcut: the keys that open the layout.'), page: 'triggers', click: true },
       { target: 'triggers.shortcut', say: msg('Click the box, then press the keys you want.') },
       { target: 'triggers.layout', say: msg('Pick the layout you just saved.') },
       { target: 'triggers.save', say: msg('Save. Press the shortcut anywhere to try it.') },

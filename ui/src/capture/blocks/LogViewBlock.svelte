@@ -4,14 +4,16 @@
   // lines with its words in them (case aside); Copy all copies those. When the lines say when
   // they were written, the button at the start of the row turns it from a text search (the
   // magnifier) into a time search (the clock), which keeps the lines of a moment: during the
-  // recording (or around the capture), or between two times. Both searches keep applying; the
-  // button shows a dot while the one not shown is on. The time of each line is found by itself, or
-  // read with a format the person writes the way the log does ([YYYY-MM-DD HH:mm]); a data rule
-  // can say it for the file it finds, and the last one used for a file of that name comes back
-  // next time (logFormat.ts, logFormats.ts). A line picked is shown whole under the list,
-  // to read and copy. The expand button opens it large, in the middle of the window (× or
-  // Escape closes it). Nothing of it is sent: the files go
-  // as the Files blocks say.
+  // recording (or around the capture), or between two times (typed, or set from a line picked).
+  // Both searches keep applying; the button shows a dot while the one not shown is on. The time of
+  // each line is found by itself; for a log that writes it its own way, the person selects the
+  // time in a line and its format is worked out from it (logInfer.ts), or writes it
+  // ([YYYY-MM-DD HH:mm], logFormat.ts). A data rule can say it for the file it finds, and the last
+  // one used for a file of that name comes back next time (logFormats.ts). While the clip plays,
+  // the lines follow it: those written up to the moment shown, the newest coming in as it plays
+  // (playhead.svelte.ts). A line picked is shown whole under the list, to read and copy. The
+  // expand button opens it large, in the middle of the window (× or Escape closes it). Nothing
+  // of it is sent: the files go as the Files blocks say.
   import Icon from '../../lib/components/Icon.svelte';
   import { untrack } from 'svelte';
   import type { Api } from '../../lib/ipc';
@@ -21,6 +23,8 @@
   import { during, hms, onDay, stamps, type Span } from './logTimes';
   import { COMMON_FORMATS, FORMAT_HELP, compile, example, isFormat } from './logFormat';
   import { formatFor, keepFormat, recentFormats, sameFile } from './logFormats';
+  import { inferFormat } from './logInfer';
+  import { playhead } from '../playhead.svelte';
 
   type LogViewBlock = Extract<Block, { type: 'log_view' }>;
 
@@ -130,7 +134,67 @@
     return null;
   });
   const byTime = $derived(timed && span ? during(all, times, span) : all);
-  const lines = $derived(matching(byTime, query));
+  const found = $derived(matching(byTime, query));
+
+  /** While the clip is watched, the lines follow it: those written up to the moment shown. */
+  let follow = $state(true);
+  const following = $derived(follow && timed && !!view.video && playhead.at !== null);
+  const lines = $derived.by(() => {
+    if (!following) return found;
+    const until = playhead.at!;
+    // the lines are mostly in time order: cut at the first written after the moment
+    let end = found.length;
+    for (let i = 0; i < found.length; i++) {
+      const at = times[found[i]!.n - 1];
+      if (at && at.at > until) {
+        end = i;
+        break;
+      }
+    }
+    return found.slice(0, end);
+  });
+  // the newest line in sight as it comes in, unless the person scrolled up to read
+  let list = $state<HTMLElement | null>(null);
+  let atBottom = true;
+  $effect(() => {
+    void lines.length;
+    if (following && list && atBottom) list.scrollTop = list.scrollHeight;
+  });
+
+  /** A time selected in a line: its format is worked out, and the lines are read with it. */
+  let suggestion = $state<{ format: string; text: string } | null>(null);
+  let editing = $state(false);
+  function onSelect() {
+    const sel = typeof window !== 'undefined' ? window.getSelection() : null;
+    const text = sel?.toString().trim() ?? '';
+    if (!text || text.includes('\n')) return;
+    const f = inferFormat(text, day, utc);
+    if (!f) {
+      if (mode === 'time') problemTime = t('“{text}” does not look like a time: select the date and time of a line, as it is written.', { text });
+      return;
+    }
+    problemTime = '';
+    if (mode === 'time') useFormat(f);
+    else suggestion = { format: f, text };
+  }
+  let problemTime = $state('');
+  function useFormat(f: string) {
+    formatText = f;
+    suggestion = null;
+    if (mode !== 'time') switchMode();
+    if (path) keepFormat(path, f);
+  }
+  /** From or to the time of the line picked. */
+  function fromLine(which: 'from' | 'to') {
+    if (picked === null) return;
+    const at = times[picked - 1];
+    if (!at) return;
+    when = 'between';
+    if (which === 'from') fromText = hms(at.at);
+    else toText = hms(at.at + Math.max(0, at.unit - 1));
+    if (which === 'from' && !toText) toText = fromText;
+    if (which === 'to' && !fromText) fromText = toText;
+  }
 
   /** The time search starts on the moment of the capture, when there is one. */
   function switchMode() {
@@ -190,10 +254,11 @@
   /** The line under the lines: how many, which, and how their times were read. */
   const foot = $derived.by(() => {
     const words = query.trim();
-    let main = words || (timed && span) ? t('{n} of {total} lines', { n: lines.length, total }) : tn('{n} line', '{n} lines', total);
+    let main = words || (timed && span) || following ? t('{n} of {total} lines', { n: lines.length, total }) : tn('{n} line', '{n} lines', total);
     if (words) main += ' ' + t('with “{words}”', { words });
     if (timed && span) main += ', ' + t('written {from} to {to}', { from: hms(span.from), to: hms(span.to) });
     if (lines.length > SHOWN) main += ', ' + t('the last {n} shown', { n: SHOWN });
+    if (following) main += ', ' + t('up to {time} in the clip', { time: hms(playhead.at!) });
     const notes = [main];
     if (loaded?.cut) notes.push(t('the end of a {size} file', { size: formatSize(loaded.size) }));
     if (!timed && (mode === 'time' || when !== 'all') && total > 0)
@@ -276,22 +341,33 @@
         <span class="quiet">{t('to')}</span>
         <input type="time" step="1" class="time" bind:value={toText} aria-label={t('To')} />
       {/if}
-      <input
-        type="text"
-        class="format mono"
-        class:bad={!!formatProblem || (!!format && loaded && !timed)}
-        bind:value={formatText}
-        onchange={formatChosen}
-        list={`formats-${block.id}`}
-        placeholder={t('Time format: found by itself')}
-        aria-label={t('How the lines write their time')}
-        title={(ruled ? t('Set by the data rule “{rule}”.', { rule: ruled.rule }) + ' ' : '') + t('Write it the way the log does, e.g. [YYYY-MM-DD HH:mm]: {help}. Empty: found by itself.', { help: t(FORMAT_HELP) })}
-        autocomplete="off"
-        spellcheck="false"
-      />
-      <datalist id={`formats-${block.id}`}>
-        {#each offeredFormats as f (f)}<option value={f}></option>{/each}
-      </datalist>
+      {#if editing || formatProblem}
+        <input
+          type="text"
+          class="format mono"
+          class:bad={!!formatProblem || (!!format && loaded && !timed)}
+          bind:value={formatText}
+          onchange={formatChosen}
+          list={`formats-${block.id}`}
+          placeholder={t('Time format: found by itself')}
+          aria-label={t('How the lines write their time')}
+          title={(ruled ? t('Set by the data rule “{rule}”.', { rule: ruled.rule }) + ' ' : '') + t('Write it the way the log does, e.g. [YYYY-MM-DD HH:mm]: {help}. Empty: found by itself.', { help: t(FORMAT_HELP) })}
+          autocomplete="off"
+          spellcheck="false"
+        />
+        <datalist id={`formats-${block.id}`}>
+          {#each offeredFormats as f (f)}<option value={f}></option>{/each}
+        </datalist>
+      {:else}
+        <button
+          type="button"
+          class="small chip mono"
+          class:bad={!timed && total > 0}
+          onclick={() => (editing = true)}
+          title={t('Change how times are read')}
+          aria-label={t('Change how times are read')}
+        >{format ? example(format, day, utc) : timed ? t('Times found by themselves') : t('No time found')} ✎</button>
+      {/if}
       <label class="utc quiet" title={t('The times written in this file are UTC, not this computer\'s time (Unreal Engine\'s logs are, by default)')}>
         <input type="checkbox" bind:checked={utc} /> UTC
       </label>
@@ -300,6 +376,24 @@
       {copied === 'all' ? t('Copied') : query.trim() || (timed && span) ? tn('Copy {n} line', 'Copy {n} lines', lines.length) : t('Copy all')}
     </button>
   </div>
+  {#if mode === 'time' && loaded}
+    <p class="hint quiet" class:err={!!problemTime} role={problemTime ? 'alert' : undefined}>
+      {problemTime || (timed ? t('Select the time in a line to read this log’s times that way. Pick a line to start or end there.') : t('Select the date and time in a line, as it is written: CargoFrame reads every line’s time that way.'))}
+    </p>
+  {/if}
+  {#if suggestion}
+    <div class="suggest" role="status">
+      <span>{t('“{text}” is a time: read every line’s time that way ({format})?', { text: suggestion.text, format: suggestion.format })}</span>
+      <button type="button" class="small" onclick={() => useFormat(suggestion!.format)}>{t('Read the times')}</button>
+      <button type="button" class="small square" aria-label={t('Close')} onclick={() => (suggestion = null)}><Icon name="close" size={13} /></button>
+    </div>
+  {/if}
+  {#if view.video && timed}
+    <label class="follow quiet" title={t('While the clip plays, show the lines written up to the moment shown, the newest coming in as it plays.')}>
+      <input type="checkbox" bind:checked={follow} />
+      {following ? t('Following the clip: {time}', { time: hms(playhead.at!) }) : t('Follow the clip as it plays')}
+    </label>
+  {/if}
   {#if offered.length === 0}
     <p class="quiet note">{t('No file to show: the Files blocks of this capture list none.')}</p>
   {:else if problem}
@@ -307,13 +401,28 @@
   {:else if loading && !loaded}
     <p class="quiet note">{t('Reading the file…')}</p>
   {:else if loaded}
-    <ol class="lines mono" aria-label={t('Lines')}>
+    <!-- a line is picked with a click; text selected in it (a time) is read as the time format -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+    <ol
+      class="lines mono"
+      aria-label={t('Lines')}
+      bind:this={list}
+      onmouseup={onSelect}
+      onscroll={(e) => { const l = e.currentTarget; atBottom = l.scrollTop + l.clientHeight >= l.scrollHeight - 24; }}
+    >
       {#each shown as l (l.n)}
         <li class:on={picked === l.n}>
-          <button type="button" class="line" onclick={() => (picked = picked === l.n ? null : l.n)} aria-pressed={picked === l.n}>
+          <div
+            class="line"
+            role="button"
+            tabindex="0"
+            aria-pressed={picked === l.n}
+            onclick={() => { if (!window.getSelection()?.toString()) picked = picked === l.n ? null : l.n; }}
+            onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); picked = picked === l.n ? null : l.n; } }}
+          >
             <span class="n" aria-hidden="true">{l.n}</span>
             <span class="t">{#each pieces(l.text) as p, i (i)}{#if p.hit}<mark>{p.t}</mark>{:else}{p.t}{/if}{/each}</span>
-          </button>
+          </div>
         </li>
       {:else}
         <li class="quiet note">{query.trim() ? t('No line has these words.') : timed && span ? t('No line was written then.') : t('The file is empty.')}</li>
@@ -325,7 +434,13 @@
     {#if pickedLine}
       <div class="picked" role="group" aria-label={t('Line {n}', { n: pickedLine.n })}>
         <pre class="mono selectable">{pickedLine.text}</pre>
-        <button type="button" class="small" onclick={() => copy(pickedLine.text, 'line')}>{copied === 'line' ? t('Copied') : t('Copy line')}</button>
+        <div class="actions">
+          <button type="button" class="small" onclick={() => copy(pickedLine.text, 'line')}>{copied === 'line' ? t('Copied') : t('Copy line')}</button>
+          {#if mode === 'time' && times[pickedLine.n - 1]}
+            <button type="button" class="small" onclick={() => fromLine('from')}>{t('Start here')}</button>
+            <button type="button" class="small" onclick={() => fromLine('to')}>{t('End here')}</button>
+          {/if}
+        </div>
       </div>
     {/if}
   {/if}
@@ -364,7 +479,16 @@
     margin: 0; padding: 0; list-style: none; overflow: auto; min-height: 0; flex: 1 1 auto; font-size: 12px;
     border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
   }
-  .line { display: flex; gap: 8px; width: 100%; text-align: left; border: 0; background: transparent; padding: 0 6px; font: inherit; color: inherit; cursor: pointer; white-space: pre; }
+  .line { display: flex; gap: 8px; width: 100%; box-sizing: border-box; text-align: left; padding: 0 6px; cursor: text; white-space: pre; user-select: text; -webkit-user-select: text; }
+  .line:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .chip { flex: 0 1 auto; min-width: 0; max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+  .chip.bad { border-color: var(--err); }
+  .hint { margin: 0; font-size: 11.5px; }
+  .hint.err { color: var(--err); }
+  .suggest { display: flex; gap: 6px; align-items: center; font-size: 12.5px; padding: 4px 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--accent) 12%, var(--surface)); }
+  .suggest span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .follow { display: inline-flex; gap: 6px; align-items: center; font-size: 12px; }
+  .actions { display: flex; flex-direction: column; gap: 4px; flex: none; }
   .line:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
   .on .line { background: color-mix(in srgb, var(--accent) 20%, transparent); }
   .n { color: var(--quiet); min-width: 4ch; text-align: right; user-select: none; }

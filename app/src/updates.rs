@@ -1,4 +1,4 @@
-//! Updating CargoFrame from its GitHub releases: what the Settings, General, Updates section
+//! Updating CargoFrame from its GitHub releases: what the Settings, System, Updates section
 //! shows and does. The network and the installer sit behind small seams, so the whole flow
 //! (check, download, verify, hand over to the installer) is tested without a network, a real
 //! installer or Tauri.

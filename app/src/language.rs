@@ -1,4 +1,4 @@
-//! The language CargoFrame speaks: chosen in Settings, General, or the computer's own.
+//! The language CargoFrame speaks: chosen in Settings, Preferences, or the computer's own.
 
 use serde::Serialize;
 

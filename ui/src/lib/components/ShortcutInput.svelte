@@ -48,11 +48,11 @@
       {#each keycaps(shown) as k, i (i)}<kbd>{k}</kbd>{/each}
       {#if listening && live.endsWith('+')}<span class="quiet">…</span>{/if}
     {:else}
-      <span class="quiet">{listening ? t('Press the keys…') : t('No shortcut (tray menu only)')}</span>
+      <span class="quiet">{listening ? t('Press the keys…') : t('No keys (tray menu only)')}</span>
     {/if}
   </button>
   {#if value}
-    <button type="button" class="clear" onclick={() => (value = '')} aria-label={t('Clear shortcut')}>{t('Clear')}</button>
+    <button type="button" class="clear" onclick={() => (value = '')} aria-label={t('Clear the keys')}>{t('Clear')}</button>
   {/if}
 </div>
 

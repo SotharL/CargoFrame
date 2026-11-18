@@ -177,7 +177,7 @@
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? t('Edit the field fill') : t('Fill a field')}</h2>
       <div class="sentence">
-        <Field label={t('On')} tour="fields.connection" hint={connections.length === 0 ? t('Add a connection in Setup first.') : ''}>
+        <Field label={t('On')} tour="fields.connection" hint={connections.length === 0 ? t('Add a connection first (Connections).') : ''}>
           <select bind:value={draft.value.connection_id} aria-label={t('Service')}>
             <option value="">{t('Choose a service…')}</option>
             {#if draft.value.connection_id && !connectionOf(draft.value.connection_id)}
@@ -233,7 +233,7 @@
         <p class="quiet hint">
           <Tr text={t('Add puts one more value in a list (a label), a new line in a description, or words at the end of a title. Values such as {value} come from {page}.')}>
             {#snippet value()}{'{gpu}'}{/snippet}
-            {#snippet page()}<em>{t('Data & fields')}</em>{/snippet}
+            {#snippet page()}<em>{t('Data parsing')}</em>{/snippet}
           </Tr>
         </p>
       </fieldset>

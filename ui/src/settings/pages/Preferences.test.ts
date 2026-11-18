@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
-import General from './General.svelte';
+import General from './Preferences.svelte';
 import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
 
 let api: Api;
@@ -13,20 +13,23 @@ afterEach(() => {
   setApiForTests(undefined);
 });
 
-describe('General settings', () => {
-  it('holds how CargoFrame looks, starts, tells you things, keeps windows and handles a failed share', async () => {
+describe('Preferences', () => {
+  it('holds the language first, then how CargoFrame looks, what it tells you and how it starts', async () => {
     render(General);
-    await screen.findByRole('heading', { name: 'When sharing fails' });
-    const titles = [...document.querySelectorAll('section > h2')].map((h) => h.textContent);
-    expect(titles).toEqual(['Appearance', 'Language', 'Startup', 'Notifications', 'When sharing fails', 'Windows kept ready']);
+    await screen.findByRole('heading', { name: 'Startup' });
+    const titles = [...document.querySelectorAll('section h2')].map((h) => h.textContent);
+    expect(titles).toEqual(['Language', 'Appearance', 'Notifications', 'Startup']);
   });
 
-  it('saves the memory setting and says what it does', async () => {
+  it('has the language dropdown on the line of its title', async () => {
     render(General);
-    const box = await screen.findByRole('combobox', { name: 'Keep windows ready' });
-    await fireEvent.change(box, { target: { value: 'low_memory' } });
-    await waitFor(async () => expect((await api.getGeneral()).memory_mode).toBe('low_memory'));
-    expect(screen.getByText(/Frees the memory as soon as a window closes/)).toBeTruthy();
+    const box = await screen.findByRole('combobox', { name: 'Language' });
+    expect(box.closest('.head')?.querySelector('h2')?.textContent).toBe('Language');
+  });
+
+  it('points to Recording for what shows on screen while recording', async () => {
+    render(General);
+    expect(await screen.findByRole('button', { name: 'Open Recording' })).toBeTruthy();
   });
 });
 
