@@ -14,6 +14,7 @@
     select,
     selectionIn,
     showMarksAt,
+    removeFromTable,
     tableText,
     toHtml,
     type Table,
@@ -118,6 +119,20 @@
     return start;
   }
 
+  /** Take a whole table out of the text (its last column or line was removed), with its line break. */
+  function dropTable(grid: HTMLElement) {
+    if (!box) return;
+    const start = offsetOf(box, grid, 0);
+    let from = start;
+    let to = start + (grid.dataset.text ?? '').length;
+    if (value[to] === '\n') to++;
+    else if (from > 0 && value[from - 1] === '\n') from--;
+    const next = value.slice(0, from) + value.slice(to);
+    value = next;
+    box.focus();
+    draw(next, [from, from]);
+  }
+
   /** Where the selection is in a cell. */
   function inCell(cell: HTMLElement): [number, number] {
     const sel = document.getSelection();
@@ -190,15 +205,18 @@
         focus = [0, t.head.length - 1];
         break;
       case 'row':
-        t.rows.splice(n, 1);
-        focus = [Math.min(n, t.rows.length), 0];
-        break;
-      case 'col':
-        if (t.head.length < 2) return;
-        t.head.splice(n, 1);
-        for (const r of t.rows) r.splice(n, 1);
-        focus = [0, Math.min(n, t.head.length - 1)];
-        break;
+      case 'head':
+      case 'col': {
+        const act = btn.dataset.act;
+        const left = removeFromTable(t, act, n);
+        remember('table');
+        if (!left) return dropTable(grid);
+        putTable(grid, left, true);
+        focus = act === 'col' ? [0, Math.min(n, left.head.length - 1)] : [Math.min(act === 'row' ? n + 1 : 0, left.rows.length), 0];
+        const cell = cellAt(nth, focus[0], focus[1]);
+        if (cell) caretInCell(cell, cell.textContent?.length ?? 0);
+        return;
+      }
       default:
         return;
     }

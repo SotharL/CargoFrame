@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { blocksOf, classify, isRule, newLine, offsetOf, parse, pointAt, readText, tableOf, tableText, toHtml } from './richtext';
+import { blocksOf, classify, isRule, newLine, offsetOf, parse, pointAt, readText, removeFromTable, tableOf, tableText, toHtml } from './richtext';
 
 const kinds = (s: string) => parse(s).map((p) => `${p.kind}:${s.slice(p.s, p.e)}`);
 
@@ -83,5 +83,18 @@ describe('tables and code blocks in the formatted box', () => {
     expect(offsetOf(div, n, o)).toBe(end + 1);
     expect(pointAt(div, 3)).toEqual([div, 1]);
     div.remove();
+  });
+});
+
+describe('removeFromTable', () => {
+  const t = { head: ['A', 'B'], rows: [['1', '2'], ['3', '4']] };
+  it('takes out a column or a line, the next line becoming the header', () => {
+    expect(removeFromTable(t, 'col', 0)).toEqual({ head: ['B'], rows: [['2'], ['4']] });
+    expect(removeFromTable(t, 'row', 1)).toEqual({ head: ['A', 'B'], rows: [['1', '2']] });
+    expect(removeFromTable(t, 'head', 0)).toEqual({ head: ['1', '2'], rows: [['3', '4']] });
+  });
+  it('leaves nothing when the last column or the last line goes', () => {
+    expect(removeFromTable({ head: ['A'], rows: [['1']] }, 'col', 0)).toBeNull();
+    expect(removeFromTable({ head: ['A', 'B'], rows: [] }, 'head', 0)).toBeNull();
   });
 });

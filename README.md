@@ -210,7 +210,8 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   Jira summary or description, a Slack message…). When it is a message, the box shows bold, italic, underline, code,
   quotes, lists, code blocks and tables as they look, with buttons and shortcuts above it (Ctrl+B, Ctrl+I, Ctrl+U,
   Ctrl+E for code, Ctrl+Shift+9 quote, Ctrl+Shift+8 bullets, Ctrl+Shift+7 numbers), only the ones that service can
-  show. A table is a grid: type in its cells, ＋ adds a row or a column, × removes one. The block's starting text in
+  show. A table is a grid: type in its cells, ＋ adds a row or a column, × removes one (every row and column has one, the
+  header row too; removing the last one removes the table). The block's starting text in
   the layout builder has the same buttons, and every value is listed on its right with a search box (or type `{` to
   pick one), so `Seen in `{app.exe}` **({project.name})**` is written formatted once and filled in on every capture.
   *Values* above the box shows the text as the last capture fills it in. CargoFrame writes the marks the way each
@@ -261,16 +262,16 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
 <details>
 <summary><b>Templates, clean-up and your data</b></summary>
 
-Templates are offered for the services you connected: *Save a capture locally*, *Save a recording locally*, Jira
-*Bug report* (also with a recording) and *Create or update*, GitHub *Issue* (also with a recording) and *Create or
-update*, Google *Drive upload* (also a recording) and *Sheet row*, Slack and Discord *Message* (also with a
+Templates are offered for the services you connected: *Save a capture locally*, *Save a recording locally*, *Jira ticket* and *Jira ticket with recording*, *GitHub issue* and *GitHub issue with recording*, Google *Drive upload* (also a recording) and *Sheet row*, Slack and Discord *Message* (also with a
 recording), *Ask Claude about a capture*, and a *Message* or *Post* for each other service. Most keep the screenshot
 and a *Logs* tab (files and a log viewer) in tabs; with a recording, a *Recording* tab comes first, and the
 recording is of the window in focus. A report's starting text says where it was seen (program, project, date and
 time) and, for Jira and GitHub, shows the recording beside the screenshot in a table.
 
-**Create or update:** leave *Issue to update* empty for a new issue, or pick one: the title stays, the description is
-added below the one there, the labels are added, and the *Comment* goes with it. In the layout builder, the sharing
+**Create or update, with one button:** the Jira and GitHub templates' button (*Send to Jira*, *Send to GitHub*)
+creates a new ticket when *Ticket to update* (GitHub: *Issue to update*) is left empty, or updates the one picked:
+the title stays, the description is added below the one there, the labels are added, and the optional *Comment* goes
+with it. In the layout builder, the sharing
 button says for each block what it does to an issue that is there (replace, add below, add one line, add to the
 list, count up, leave it), and can also vote (Jira) or react 👍 (GitHub).
 

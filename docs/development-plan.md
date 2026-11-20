@@ -26,7 +26,7 @@ the app is and how it is used, read the [design](design.md).
 | F6 | Fill dropdowns from the service's API; "where to post" as one path that goes as deep as the service does |
 | F7 | Send to Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip; **create or update** an issue (Jira, GitHub), each field doing what its mapping says, with a comment and a vote; a button waits for the blocks it says must be filled |
 | F8 | Retry a failed send, then keep a zip in a safe folder, so nothing is lost |
-| F9 | One Settings window, its pages in three groups with an icon each, a search, in-app guides and a **tour** that starts by itself after an install or an update; templates (a recording variant, of the window in focus, wherever the service takes a video); export, import, reset; ffmpeg downloaded and updated from System; updates checked and installed |
+| F9 | One Settings window, its pages in three groups with an icon each, a search, in-app guides and a **tour** that starts by itself after an install or an update; templates (a recording variant, of the window in focus, wherever the service takes a video; one Jira and one GitHub template, with or without a recording, that create or update with one *Send to* button); export, import, reset; ffmpeg downloaded and updated from System; updates checked and installed |
 | F10 | Other programs fill a layout through `cargoframe open` |
 | F11 | Speak English, French, Spanish, Italian and German, the computer's language by default |
 

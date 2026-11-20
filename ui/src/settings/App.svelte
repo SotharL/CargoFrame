@@ -102,11 +102,18 @@
     return () => watch.disconnect();
   });
 
+  // the window (or a test) can close while a finding is still being looked for
+  let alive = true;
+  $effect(() => () => {
+    alive = false;
+  });
+
   /** Go to a finding and show it: the page, scrolled to it, which lights up a moment. */
   async function show(f: Finding) {
     go(f.page, f.arg ?? null);
     for (let i = 0; i < 20; i++) {
       await tick();
+      if (!alive) return;
       const el = placeOf(f);
       if (el) {
         el.scrollIntoView?.({ block: 'center', behavior: 'smooth' });
@@ -117,6 +124,7 @@
         return;
       }
       await new Promise((r) => setTimeout(r, 50));
+      if (!alive) return;
     }
   }
 

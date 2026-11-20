@@ -26,7 +26,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 22] = [
+pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "local-capture",
         name: msg!("Save a capture locally"),
@@ -40,39 +40,27 @@ pub const TEMPLATES: [TemplateInfo; 22] = [
         service: None,
     },
     TemplateInfo {
-        key: "jira-bug",
-        name: msg!("Jira bug report"),
-        description: msg!("Project, issue type, summary and description, with the screenshot and any files attached to a new issue. A Logs tab beside the screenshot reads the logs, to copy lines from."),
+        key: "jira-ticket",
+        name: msg!("Jira ticket"),
+        description: msg!("Creates a ticket, or updates the one you pick in Ticket to update: the summary stays, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are attached, and a Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
         key: "jira-video",
-        name: msg!("Jira bug report with a recording"),
-        description: msg!("Like the Jira bug report, with the recording of the window in focus attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus."),
-        service: Some(ConnectionKind::Jira),
-    },
-    TemplateInfo {
-        key: "jira-update",
-        name: msg!("Jira issue: create or update"),
-        description: msg!("Pick one of your recent issues to update it, or leave it empty for a new one. An update keeps the summary, adds the description below the one there and adds the labels; a comment can go with either. The screenshot and files are attached."),
+        name: msg!("Jira ticket with recording"),
+        description: msg!("Like the Jira ticket, with the recording of the window in focus attached; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
         key: "github-issue",
         name: msg!("GitHub issue"),
-        description: msg!("Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it. A Logs tab beside the screenshot reads the logs."),
+        description: msg!("Opens an issue in a repository, or updates the one you pick in Issue to update: the title stays, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are shown in it, and a Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
         key: "github-video",
-        name: msg!("GitHub issue with a recording"),
+        name: msg!("GitHub issue with recording"),
         description: msg!("Like the GitHub issue, with the recording of the window in focus linked from it beside the screenshot taken from it; tabs hold the recording, the screenshot and the logs. A shortcut that opens it records the window in focus."),
-        service: Some(ConnectionKind::Github),
-    },
-    TemplateInfo {
-        key: "github-update",
-        name: msg!("GitHub issue: create or update"),
-        description: msg!("Pick an open issue to update it, or leave it empty for a new one. An update keeps the title, adds the description below the one there and adds the labels; a comment can go with either. The screenshot and files are shown in it."),
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
@@ -331,6 +319,17 @@ fn from_block(field: &str, block_id: &str) -> InfoMapping {
     }
 }
 
+/// A list from the connection that may stay empty (an issue to update: none picked makes a new one).
+fn optional_list(title: &str, connection_id: &str, list: &str) -> BlockKind {
+    match web_list(title, connection_id, list) {
+        BlockKind::Dropdown(mut d) => {
+            d.optional = true;
+            BlockKind::Dropdown(d)
+        }
+        other => other,
+    }
+}
+
 /// A mapping that says what it does to an issue that is there.
 fn updating(field: &str, block_id: &str, how: UpdateMode) -> InfoMapping {
     InfoMapping {
@@ -403,7 +402,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
     // video block, so the two cannot drift apart.
     let (key, is_video) = match key {
         "local-video" => ("local-capture", true),
-        "jira-video" => ("jira-bug", true),
+        "jira-video" => ("jira-ticket", true),
         "github-video" => ("github-issue", true),
         "google-drive-video" => ("google-drive", true),
         "slack-video" => ("slack-message", true),
@@ -438,78 +437,33 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             ],
         ]
         .concat(),
-        ("jira-bug", Some(c)) => [
-            capture_tabs(9, is_video, msg!("Attach files")),
+        ("jira-ticket", Some(c)) => [
+            capture_tabs(11, is_video, msg!("Attach files")),
             vec![
                 block(
-                    "project",
+                    "issue",
                     rect(7, 0, 5, 1),
-                    web_list(msg!("Project"), c, "projects"),
-                ),
-                block(
-                    "type",
-                    rect(7, 1, 5, 1),
-                    web_list(msg!("Issue type"), c, "issue_types"),
-                ),
-                block("summary", rect(7, 2, 5, 1), line(msg!("Summary"), WHERE)),
-                block(
-                    "description",
-                    rect(7, 3, 5, 4),
-                    text_of(msg!("Description"), report(is_video)),
-                ),
-                block(
-                    "labels",
-                    rect(7, 7, 5, 1),
-                    tags(msg!("Labels"), c, "labels"),
-                ),
-                requiring(
-                    button(
-                        rect(7, 8, 5, 1),
-                        msg!("Create issue"),
-                        Some(c),
-                        None,
-                        vec![
-                            from_block("project", "project"),
-                            from_block("issuetype", "type"),
-                            from_block("summary", "summary"),
-                            from_block("description", "description"),
-                            from_block("labels", "labels"),
-                        ],
-                    ),
-                    &["project", "type", "summary"],
-                ),
-            ],
-        ]
-        .concat(),
-        ("jira-update", Some(c)) => [
-            capture_tabs(11, false, msg!("Attach files")),
-            vec![
-                block("issue", rect(7, 0, 5, 1), {
-                    let BlockKind::Dropdown(mut d) = web_list(
-                        msg!("Issue to update (empty: a new one)"),
+                    optional_list(
+                        msg!("Ticket to update (empty: a new one)"),
                         c,
                         "recent_issues",
-                    ) else {
-                        unreachable!("web_list makes a dropdown")
-                    };
-                    d.optional = true;
-                    BlockKind::Dropdown(d)
-                }),
+                    ),
+                ),
                 block(
                     "project",
                     rect(7, 1, 5, 1),
-                    web_list(msg!("Project (for a new issue)"), c, "projects"),
+                    web_list(msg!("Project (for a new ticket)"), c, "projects"),
                 ),
                 block(
                     "type",
                     rect(7, 2, 5, 1),
-                    web_list(msg!("Issue type (for a new issue)"), c, "issue_types"),
+                    web_list(msg!("Issue type (for a new ticket)"), c, "issue_types"),
                 ),
                 block("summary", rect(7, 3, 5, 1), line(msg!("Summary"), WHERE)),
                 block(
                     "description",
                     rect(7, 4, 5, 3),
-                    text_of(msg!("Description"), report(false)),
+                    text_of(msg!("Description"), report(is_video)),
                 ),
                 block(
                     "labels",
@@ -524,7 +478,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 requiring(
                     button(
                         rect(7, 10, 5, 1),
-                        msg!("Create or update"),
+                        msg!("Send to Jira"),
                         Some(c),
                         None,
                         vec![
@@ -543,50 +497,17 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ]
         .concat(),
         ("github-issue", Some(c)) => [
-            capture_tabs(8, is_video, msg!("Attach files")),
+            capture_tabs(9, is_video, msg!("Attach files")),
             vec![
-                block("title", rect(7, 0, 5, 1), line(msg!("Title"), WHERE)),
                 block(
-                    "labels",
-                    rect(7, 1, 5, 1),
-                    tags(msg!("Labels"), c, "labels"),
-                ),
-                block(
-                    "description",
-                    rect(7, 2, 5, 5),
-                    text_of(msg!("Description"), report(is_video)),
-                ),
-                requiring(
-                    button(
-                        rect(7, 7, 5, 1),
-                        msg!("Open issue"),
-                        Some(c),
-                        None,
-                        vec![
-                            from_block("title", "title"),
-                            from_block("labels", "labels"),
-                            from_block("body", "description"),
-                        ],
-                    ),
-                    &["title"],
-                ),
-            ],
-        ]
-        .concat(),
-        ("github-update", Some(c)) => [
-            capture_tabs(9, false, msg!("Attach files")),
-            vec![
-                block("issue", rect(7, 0, 5, 1), {
-                    let BlockKind::Dropdown(mut d) = web_list(
+                    "issue",
+                    rect(7, 0, 5, 1),
+                    optional_list(
                         msg!("Issue to update (empty: a new one)"),
                         c,
                         "recent_issues",
-                    ) else {
-                        unreachable!("web_list makes a dropdown")
-                    };
-                    d.optional = true;
-                    BlockKind::Dropdown(d)
-                }),
+                    ),
+                ),
                 block("title", rect(7, 1, 5, 1), line(msg!("Title"), WHERE)),
                 block(
                     "labels",
@@ -596,7 +517,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 block(
                     "description",
                     rect(7, 3, 5, 3),
-                    text_of(msg!("Description"), report(false)),
+                    text_of(msg!("Description"), report(is_video)),
                 ),
                 block(
                     "comment",
@@ -606,7 +527,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 requiring(
                     button(
                         rect(7, 8, 5, 1),
-                        msg!("Create or update"),
+                        msg!("Send to GitHub"),
                         Some(c),
                         None,
                         vec![
@@ -1112,13 +1033,22 @@ mod tests {
     #[test]
     fn create_or_update_keeps_the_title_adds_below_and_adds_labels_and_says_what_must_be_filled() {
         for (key, title, body) in [
-            ("jira-update", "summary", "description"),
-            ("github-update", "title", "body"),
+            ("jira-ticket", "summary", "description"),
+            ("jira-video", "summary", "description"),
+            ("github-issue", "title", "body"),
+            ("github-video", "title", "body"),
         ] {
             let l = build(key, Some("c")).unwrap();
             let BlockKind::SharingButton(b) = &l.block("send").unwrap().kind else {
                 panic!("{key}: no button")
             };
+            // one button that creates or updates, named for where it sends
+            let send = if key.starts_with("jira") {
+                "Send to Jira"
+            } else {
+                "Send to GitHub"
+            };
+            assert_eq!(b.label, send, "{key}");
             let how = |f: &str| {
                 b.mappings
                     .iter()
@@ -1159,10 +1089,8 @@ mod tests {
         };
         for key in [
             "local-capture",
-            "jira-bug",
-            "jira-update",
+            "jira-ticket",
             "github-issue",
-            "github-update",
             "google-drive",
             "slack-message",
             "discord-message",
@@ -1242,8 +1170,8 @@ mod tests {
 
     #[test]
     fn a_service_template_needs_a_connection_and_unknown_keys_give_nothing() {
-        assert!(build("jira-bug", None).is_none());
-        assert!(build("jira-bug", Some("  ")).is_none());
+        assert!(build("jira-ticket", None).is_none());
+        assert!(build("jira-ticket", Some("  ")).is_none());
         assert!(build("nope", Some("c")).is_none());
         assert!(info("nope").is_none());
     }

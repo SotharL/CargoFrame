@@ -47,7 +47,7 @@ flowchart LR
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
 | **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{<key>}` (or `{{rule.<key>}}`). The same key can be read by the rules of several files: the newest file's value wins, or every different value | `rules/<id>.json` |
 | **Field fill** | One field of a service and the steps that fill it on each share ("if `{gpu}` is found, add `gpu-{gpu}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
-| **Template** | A ready-made layout per service, never stored until saved. Most hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording (the time of each moment shown over it, the log starting on the lines written while it recorded). Every connection that takes a video has a recording variant, and a template's recording is of the **window in focus**. A report's starting text says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and, for Jira and GitHub, a table with the recording beside the screenshot. Jira and GitHub have **Create or update** (an optional issue: empty makes a new one). Titles and links are one-line boxes, and X, Bluesky and Instagram posts have a Hashtags block | in the code |
+| **Template** | A ready-made layout per service, never stored until saved. Most hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording (the time of each moment shown over it, the log starting on the lines written while it recorded). Every connection that takes a video has a recording variant, and a template's recording is of the **window in focus**. A report's starting text says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and, for Jira and GitHub, a table with the recording beside the screenshot. The Jira and GitHub templates (*Jira ticket*, *Jira ticket with recording*, *GitHub issue*, *GitHub issue with recording*) create or update with one button, *Send to Jira* / *Send to GitHub*: an optional issue list, empty for a new one. Titles and links are one-line boxes, and X, Bluesky and Instagram posts have a Hashtags block | in the code |
 
 ---
 
@@ -141,7 +141,8 @@ code blocks between ```` ``` ```` and tables as `| a | b |`), and `core/connecto
 each service wants: Jira wiki markup, HTML for Teams, Slack's mrkdwn, Markdown for Discord, Reddit and GitHub. A table
 becomes a Jira or HTML table, a Markdown one, or aligned lines in a code block where the service has no tables
 (Slack, Discord). In the window and in the builder a table is a grid to type in, with ＋ for a row or a column and ×
-to take one out.
+to take one out: every column and every row has one, the header row too (the next row takes its place), and the last
+one left takes the table out of the text.
 
 **How a value is written.** `{name}` (0.5.0) or `{{name}}`: `{map}` is the value `map` read from files (`{{rule.map}}`
 the older way), `{app.exe}` a value of the capture. Single braces stay as written when what is inside cannot be a value,

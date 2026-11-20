@@ -27,7 +27,7 @@ describe('Layouts: templates', () => {
     render(Layouts);
     await fireEvent.click(await screen.findByRole('button', { name: 'Start from a template' }));
     expect(await screen.findByText('Save a capture locally')).toBeTruthy();
-    expect(screen.queryByText('Jira bug report')).toBeNull();
+    expect(screen.queryByText('Jira ticket')).toBeNull();
     await fireEvent.click(screen.getByRole('button', { name: 'Use Save a capture locally' }));
     expect(await screen.findByRole('button', { name: 'Save as my layout' })).toBeTruthy();
     expect(screen.getByText(/saving makes your own copy/)).toBeTruthy();
@@ -53,7 +53,7 @@ describe('Layouts: templates', () => {
     render(Layouts);
     await fireEvent.click(await screen.findByRole('button', { name: 'Start from a template' }));
     expect(await screen.findByText('Work Jira')).toBeTruthy();
-    await fireEvent.click(screen.getByRole('button', { name: 'Use Jira bug report for Work Jira' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Use Jira ticket for Work Jira' }));
     await fireEvent.click(await screen.findByRole('button', { name: 'Save as my layout' }));
     await waitFor(async () => expect((await names()).length).toBe(1));
     const saved = (await api.listItems<Layout>('layout')).items[0]!.item;

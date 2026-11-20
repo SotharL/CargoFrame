@@ -1548,8 +1548,11 @@ parsing that close and stay open while Settings is open.
   capture's values come from; a Video block added in the builder starts the same way. The starting text of a report
   says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and,
   where pictures show in the text (Jira, GitHub), a table with the recording beside the screenshot.
-- **Create or update, not comment.** *Jira comment* and *GitHub comment* are replaced by *Create or update*: the
-  issue list is optional (nothing picked: a new issue), and a *Comment* field goes with either. An update does to
+- **Create or update, not comment, with one button.** The comment-only templates are gone, and the regular ones do
+  both: *Jira ticket* and *Jira ticket with recording* (*GitHub issue* and *GitHub issue with recording* the same
+  way), their button named for where it sends (*Send to Jira*, *Send to GitHub*) rather than for one action. The
+  issue list is optional (nothing picked: a new issue; project and type are only read then), and a *Comment* field
+  goes with either. An update does to
   each field what its mapping says: replace it, add it below what is there (or only its first line), add to a list
   (labels, components, versions, assignees), count up (a number field), or leave it as it is. The templates keep
   the title, add the description below and add the labels. A *Vote* (Jira) or *👍* (GitHub) can go with an update;
@@ -1563,3 +1566,7 @@ parsing that close and stay open while Settings is open.
 - **File tabs in Data parsing.** Each tab has a ×; files opened or dropped, and the capture's files closed, are
   kept in the page's memory until the Settings window closes, so leaving a value and coming back finds them as they
   were. Nothing is written to disk for it.
+- **Tables: the last row and column.** The × of the last column was hidden and the header row had none, so the last
+  of a table could not be removed the way the rest was. Every column and row now has its ×; the header row's makes
+  the next row the header; the last one left removes the table from the text. *Add a column* moved to the grid's top
+  right corner, where the header row's × used to have no room.

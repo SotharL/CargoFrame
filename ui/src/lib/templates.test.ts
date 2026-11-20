@@ -15,7 +15,7 @@ const program = [...rs.matchAll(/key: "([^"]+)",\s*name: msg!\("([^"]+)"\),\s*de
 describe('the ready-made layouts of the stand-in', () => {
   it('are the program’s', async () => {
     const listed = await memoryApi().listLayoutTemplates();
-    expect(program.length).toBe(22);
+    expect(program.length).toBe(20);
     expect(listed.map(({ key, name, description }) => ({ key, name, description }))).toEqual(program);
   });
 });

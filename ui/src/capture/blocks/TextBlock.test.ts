@@ -190,6 +190,26 @@ describe('TextBlock tables', () => {
     expect(readText(rich())).toBe('| B | Column 3 |\n| --- | --- |\n| 2 |  |');
   });
 
+  it('takes out the last column, the header line and the last line like any other, the table going with the last one', async () => {
+    render(TextBlock, { block: block('above'), value: `x\n${T}\ny`, marks: ['table'], services: ['jira'] });
+    // the header line: the next line takes its place
+    await fireEvent.click(rich().querySelector('[data-act="head"]')!);
+    expect(readText(rich())).toBe('x\n| 1 | 2 |\n| --- | --- |\ny');
+    await fireEvent.click(rich().querySelector('[data-act="col"][data-n="1"]')!);
+    expect(readText(rich())).toBe('x\n| 1 |\n| --- |\ny');
+    // the last column left has its × too, and takes the table away
+    await fireEvent.click(rich().querySelector('[data-act="col"][data-n="0"]')!);
+    expect(readText(rich())).toBe('x\ny');
+  });
+
+  it('takes the table away with its last line', async () => {
+    render(TextBlock, { block: block('above'), value: T, marks: ['table'], services: ['jira'] });
+    await fireEvent.click(rich().querySelector('[data-act="row"][data-n="0"]')!);
+    expect(readText(rich())).toBe('| A | B |\n| --- | --- |');
+    await fireEvent.click(rich().querySelector('[data-act="head"]')!);
+    expect(readText(rich())).toBe('');
+  });
+
   it('a button pressed with the cursor in a cell marks the cell text', async () => {
     render(TextBlock, { block: block('above'), value: T, marks: ['bold', 'table'], services: ['jira'] });
     const c = cells()[2]!;
