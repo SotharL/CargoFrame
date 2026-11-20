@@ -1507,3 +1507,59 @@ by itself after an install or an update.
   played and in steps of a tenth of a second; the log viewer shows the lines up to that moment (the lines are in time
   order, so it stops at the first one after) and keeps the newest in sight unless the person scrolled up. A switch
   turns it off.
+
+### 0.7.1, 20 Nov 2026: updates found again, any keys for a shortcut, ffmpeg from the app, issues updated
+
+Asked for: *Check for updates* that works, recording that follows a window without slowing the PC, shortcuts made
+of any keys (and keys that were not registered at all), ffmpeg installed and updated from System, templates with a
+recording and a screenshot that record the window in focus, starting texts that use the values and show the
+recording and the screenshot, Jira (and GitHub) issues created *or* updated rather than only commented, blocks that
+must be filled before a share, a way to say what each block does to an issue that is there, and file tabs in Data
+parsing that close and stay open while Settings is open.
+
+- **Why updates were never found on Windows.** The check looked for `CargoFrame-{version}-windows-x64-setup.exe`,
+  but the release workflow publishes `CargoFrame-Setup.exe` (one name, so the download link on the site never
+  changes): a release was there, its installer was not, so the check said nothing. The check now takes the versioned
+  name first and the fixed name after it, and the release workflow also uploads the versioned copy, so 0.7.0 and
+  older find 0.7.1 too. Two smaller flaws went with it: a token saved while the repository was private and since
+  expired made GitHub answer 401 to a public repository (the check and the download now try once more without it),
+  and the daily check slept 24 hours in one go, which a PC asleep or restarted never reached (it now looks at the
+  clock every hour and checks when a day has passed since the last time).
+- **What following a window cost.** While a followed window moved, the outline round it was taken down and drawn
+  again ten times a second, and the screens were asked for each time. Now the screens are read every five seconds,
+  the outline is hidden while the window moves and comes back when it has been still for a quarter of a second, and
+  the recording is of the screen the window is on, cut to the window, instead of the whole desktop.
+- **Any keys, watched by CargoFrame when it must be.** The system shortcut library takes modifiers and one key it
+  knows. A shortcut it can take still goes through it (nothing runs while waiting); anything else (up to three keys
+  besides the modifiers, a key alone when it is F1–F24, Pause or a media key, the number pad, `<>`, `Intl` keys,
+  media and browser keys) is watched by CargoFrame itself: a small loop reads the keys' state every 25 ms
+  (`GetAsyncKeyState` on Windows, the X keymap on Linux) and fires on the moment the last key goes down, with the
+  modifiers not named in it up. The loop exists only while such a shortcut does. Keys are named by their place on
+  the keyboard (`KeyA`, `IntlBackslash`), so the same shortcut works on any layout. On Wayland a shortcut is what
+  the desktop's portal takes (modifiers and one key) and anything else is refused with that reason. The key box in
+  Settings reads the keys as they are held and released, and says when a key cannot be used.
+- **ffmpeg from the app.** System has *Download ffmpeg* (or *Update to ffmpeg X*) under its ffmpeg line: the
+  build ffmpeg.org links to (BtbN on GitHub, GPL, the newest release), checked against the checksums published
+  beside it, unpacked into CargoFrame's own folder (`tools/ffmpeg`) and used before any other ffmpeg. No
+  administrator, no PATH change; winget stays for the rest. The messages that said ffmpeg was missing now point there.
+- **Templates.** Every template that records has the recording and the screenshot taken from it in tabs, with the
+  logs; there are recording variants for every connection that takes a video (local, Jira, GitHub, Google Drive,
+  Slack, Discord). A template's recording is of the window in focus (`subject: focused_window`), the program the
+  capture's values come from; a Video block added in the builder starts the same way. The starting text of a report
+  says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and,
+  where pictures show in the text (Jira, GitHub), a table with the recording beside the screenshot.
+- **Create or update, not comment.** *Jira comment* and *GitHub comment* are replaced by *Create or update*: the
+  issue list is optional (nothing picked: a new issue), and a *Comment* field goes with either. An update does to
+  each field what its mapping says: replace it, add it below what is there (or only its first line), add to a list
+  (labels, components, versions, assignees), count up (a number field), or leave it as it is. The templates keep
+  the title, add the description below and add the labels. A *Vote* (Jira) or *👍* (GitHub) can go with an update;
+  one refused (Jira refuses a vote on your own issue) is said, not a failure. The update is one `PUT`/`PATCH`,
+  after one read of only the fields that are added to or counted, and is recorded in the share's progress like the
+  rest, so a retry does not add the text twice. A layout of 0.7.0 or before says none of this (no update mode, no
+  comment field) and keeps doing what it did: its description becomes a comment.
+- **Blocks that must be filled.** A sharing button lists the blocks it waits for (*Before sharing* in its
+  settings): a text written, a choice made, a tag, a file ticked, the picture or the recording there. The window
+  greys the button and lists what is missing; the share checks it again, so an old window cannot get past it.
+- **File tabs in Data parsing.** Each tab has a ×; files opened or dropped, and the capture's files closed, are
+  kept in the page's memory until the Settings window closes, so leaving a value and coming back finds them as they
+  were. Nothing is written to disk for it.

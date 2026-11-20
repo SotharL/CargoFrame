@@ -164,6 +164,39 @@ impl Poll for Keyboard {
     }
 }
 
+/// The keys of the shortcuts CargoFrame watches itself (see `combo.rs`): an X key code is
+/// the Linux key number plus 8.
+pub struct Board {
+    conn: RustConnection,
+}
+
+impl Board {
+    pub fn connect() -> Result<Self, String> {
+        let (conn, _) = RustConnection::connect(None)
+            .map_err(|e| format!("The keyboard could not be read: {e}"))?;
+        Ok(Self { conn })
+    }
+}
+
+impl crate::combo::Board for Board {
+    fn down(&mut self, keys: &[usize]) -> Vec<bool> {
+        let map = self
+            .conn
+            .query_keymap()
+            .ok()
+            .and_then(|c| c.reply().ok())
+            .map(|r| r.keys)
+            .unwrap_or([0; 32]);
+        keys.iter()
+            .map(|&k| {
+                crate::CODES
+                    .get(k)
+                    .is_some_and(|c| Keyboard::is_down(&map, usize::from(c.evdev) + 8))
+            })
+            .collect()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

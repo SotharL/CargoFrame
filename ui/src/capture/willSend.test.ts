@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { demoSession } from './demo';
 import { demoCapabilities, demoReach } from '../lib/demoReach';
 import { initialValues } from './values';
-import { chatToOpen, pairedWithRecording, willSend } from './willSend';
+import { chatToOpen, missing, pairedWithRecording, willSend } from './willSend';
 import { initialTicks, setTick } from './ticks';
 import type { Block, ServiceKind, SessionView } from '../lib/types';
 
@@ -150,5 +150,29 @@ describe('chatToOpen', () => {
     expect(chatToOpen(view, button, values)).toBe('a new chat');
     values.dropdowns.chat = null;
     expect(chatToOpen(view, button, values)).toBe('a new chat');
+  });
+});
+
+describe('missing', () => {
+  it('names the blocks the button waits for, in the order of the window, until they are filled', async () => {
+    const { view, button } = await viewFor('jira', (b) => { b.required = ['proj', 'note', 'logs']; });
+    const values = initialValues(view);
+    values.texts.note = '  ';
+    values.dropdowns.proj = null;
+    values.files.logs = [];
+    expect(missing(view, button, values)).toEqual([
+      '“Note” must be filled before sharing',
+      '“Jira project” must be filled before sharing',
+      '“Logs” must be filled before sharing',
+    ]);
+    values.texts.note = 'It crashed';
+    values.dropdowns.proj = 'CF';
+    values.files.logs = ['app.log'];
+    expect(missing(view, button, values)).toEqual([]);
+  });
+
+  it('asks for nothing when the button names nothing', async () => {
+    const { view, button } = await viewFor('jira');
+    expect(missing(view, button, initialValues(view))).toEqual([]);
   });
 });

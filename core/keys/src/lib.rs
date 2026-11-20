@@ -12,6 +12,7 @@
 //!   so, and the recording goes on without them.
 
 mod caption;
+mod combo;
 #[cfg(windows)]
 #[allow(unsafe_code)]
 mod win;
@@ -19,6 +20,7 @@ mod win;
 mod x11;
 
 pub use caption::{captions, Caption, LINGER_MS, MAX_CAPTIONS, MAX_CHARS};
+pub use combo::{code, modifier_codes, Code, Combo, Combos, WinKey, CODES, COMBO_POLL};
 
 use std::collections::VecDeque;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -110,6 +112,11 @@ fn open() -> Result<Box<dyn Poll>, String> {
 /// Why the keys cannot be shown on a Wayland desktop.
 pub const WAYLAND: &str =
     "A Wayland desktop does not let a program see the keys pressed in other programs, so the recording shows no keys.";
+
+/// Why a shortcut of several keys (or of a key the desktop does not know) cannot be watched on
+/// a Wayland desktop.
+pub const WAYLAND_SHORTCUTS: &str =
+    "A Wayland desktop does not let a program see the keys pressed in other programs: its shortcuts are modifiers and one key.";
 
 /// Keys are read while it lives.
 pub struct Tracker {

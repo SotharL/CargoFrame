@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.7.0 (beta) · English, Français, Español, Italiano, Deutsch</p>
+Windows 11 and Linux · version 0.7.1 (beta) · English, Français, Español, Italiano, Deutsch</p>
 
 <p align="center">
   <picture>
@@ -55,8 +55,8 @@ flowchart LR
 
 | Service | Sends | Video |
 |---------|-------|:-----:|
-| **Jira** (Cloud, Server, Data Center) | A new issue or a comment, with pictures and files | ✓ |
-| **GitHub** (and Enterprise Server) | A new issue or a comment; pictures and files shown from a branch of the repository | ✓ |
+| **Jira** (Cloud, Server, Data Center) | A new issue, or an update of one (fields replaced or added to, a comment, a vote), with pictures and files | ✓ |
+| **GitHub** (and Enterprise Server) | A new issue, or an update of one (fields replaced or added to, a comment, a 👍); pictures and files shown from a branch of the repository | ✓ |
 | **Google** | A file in Drive, and optionally a row in a spreadsheet | ✓ |
 | **Slack** | A message in a channel or a thread | ✓ |
 | **Discord** | A message, a forum post, or a reply in a thread | ✓ |
@@ -96,8 +96,8 @@ Each release also has **SHA256SUMS.txt** to check the download. To update, run t
   [design](docs/design.md#2-what-it-does).
 - **Silent install (Windows):** `CargoFrame-Setup.exe /S`, add `/NOSTARTUP` to leave "start when I sign in" off.
 - **Uninstall (Windows):** *Settings, Apps*. It asks whether to delete your settings too.
-- **Video needs ffmpeg** (screenshots do not). *Settings, System* installs it on Windows with one button; on Linux it
-  shows the one command to copy. Recording uses the graphics card where it can (its copy of the screen and its encoder)
+- **Video needs ffmpeg** (screenshots do not). *Settings, System* downloads it with one button (Windows and Linux,
+  no administrator needed, checked against its published checksums) and offers the newer one when there is one. Recording uses the graphics card where it can (its copy of the screen and its encoder)
   and runs below the programs in use, so the program you record stays smooth.
 
 </details>
@@ -110,7 +110,7 @@ The app starts empty. Open **Settings** by left-clicking the tray icon, then:
 |:----:|-------|-------------|
 | 1 | **Connections** | Add the service you share to. A button beside each token field opens the page where you get it. Skip this to start with **Save locally** |
 | 2 | **Layouts** | Press **Start from a template**, then **Use**, change what you like, **Save**. A layout is the window a capture opens. Bigger templates keep the screenshot and the logs in tabs |
-| 3 | **Shortcuts** | Name it, click **Keys** and press them, pick your layout, **Save** |
+| 3 | **Shortcuts** | Name it, click **Keys** and hold the keys together (Ctrl, Alt, Shift or Win with up to three others, any of them), pick your layout, **Save** |
 | 4 | **Data parsing** *(optional)* | After a first capture, **New value: select it in a file**: click the map in a log, name it, **Save**. Write `{map}` in a layout's title, text or tags |
 
 <table>
@@ -193,8 +193,8 @@ them back with the keyboard icon. Every key typed while it records shows, passwo
 **The time:** the clock icon shows the time of each moment over the recording (2026-11-12 14:03:27), the way logs
 write it; it is sent as you see it. To find the log lines of that moment, see *Log viewer* below.
 
-**A window that is moved:** with *Follow the window when it is moved* on (*Settings, Recording*), the whole screen is
-recorded and the crop follows the window as it moves.
+**A window that is moved:** with *Follow the window when it is moved* on (*Settings, Recording*), the screen the window
+is on is recorded and the crop follows the window as it moves; its outline hides while it moves.
 
 Click the Video block in the layout builder to choose the screen or the window in
 focus, the computer's sound (on by default) and a microphone (off). With a Screenshot block in the layout too, tick
@@ -218,7 +218,7 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
 - **Pictures in the text:** for Jira, GitHub and Teams, put *Screenshot* or *Recording* from the values list (or the
   *Repro | Highlight* table) in the text, and the picture shows right there instead of as an attachment at the end.
 - **Values from files** (*Settings, Data parsing*): *New value: select it in a file* shows the text files of the last
-  capture (or one you open or drop). Click a word, or drag over the text you want: CargoFrame suggests how to find it
+  capture (or ones you open or drop; they stay, and a tab's × closes it, until Settings closes). Click a word, or drag over the text you want: CargoFrame suggests how to find it
   again (in the lines with the label just before it, up to the next sign, a space or the end of the line, the most
   recent line), shows what each file gives, and you name it. Tick the files to read it in: when several have it, the
   newest file wins, or all their different values. A value no file has stays empty, or gives a text you choose. The
@@ -262,11 +262,20 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
 <summary><b>Templates, clean-up and your data</b></summary>
 
 Templates are offered for the services you connected: *Save a capture locally*, *Save a recording locally*, Jira
-*Bug report* (also with a recording) and *Comment on an issue*, GitHub *Issue* and *Comment on an issue*, Google
-*Drive upload* (also a recording) and *Sheet row*, Slack *Message* (also with a recording), *Ask Claude about a
-capture*, and a *Message* or *Post* for each other service. The ones with much to fill in (Jira bug report, GitHub
-issue, Slack, Discord, Ask Claude) keep the screenshot and a *Logs* tab (files and a log viewer) in tabs; with a
-recording, a *Recording* tab comes first.
+*Bug report* (also with a recording) and *Create or update*, GitHub *Issue* (also with a recording) and *Create or
+update*, Google *Drive upload* (also a recording) and *Sheet row*, Slack and Discord *Message* (also with a
+recording), *Ask Claude about a capture*, and a *Message* or *Post* for each other service. Most keep the screenshot
+and a *Logs* tab (files and a log viewer) in tabs; with a recording, a *Recording* tab comes first, and the
+recording is of the window in focus. A report's starting text says where it was seen (program, project, date and
+time) and, for Jira and GitHub, shows the recording beside the screenshot in a table.
+
+**Create or update:** leave *Issue to update* empty for a new issue, or pick one: the title stays, the description is
+added below the one there, the labels are added, and the *Comment* goes with it. In the layout builder, the sharing
+button says for each block what it does to an issue that is there (replace, add below, add one line, add to the
+list, count up, leave it), and can also vote (Jira) or react 👍 (GitHub).
+
+**Must be filled:** under *Before sharing*, tick the blocks a button waits for; in the window the button stays grey
+and lists what is still empty.
 
 | Remove | How | Gentler |
 |--------|-----|---------|

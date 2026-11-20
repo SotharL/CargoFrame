@@ -1,6 +1,6 @@
 # Development plan
 
-How to make CargoFrame as it is in version 0.7.0, written as if it were started today: what it must do, the stack,
+How to make CargoFrame as it is in version 0.7.1, written as if it were started today: what it must do, the stack,
 the architecture, each module, the order to build them in, and the gates every change passes. The order is the one a
 new team would follow, not the order the versions came in (that history is in [decisions](decisions.md)). For what
 the app is and how it is used, read the [design](design.md).
@@ -18,15 +18,15 @@ the app is and how it is used, read the [design](design.md).
 
 | # | Requirement |
 |---|-------------|
-| F1 | Wait in the tray; run a **shortcut** (a key combination, or the tray menu) that opens a layout |
+| F1 | Wait in the tray; run a **shortcut** (any key combination: modifiers with up to three other keys, whatever keys the keyboard has; or the tray menu) that opens a layout |
 | F2 | Capture the program in focus, the screen, or all screens; or **record** the last seconds when the layout has a Video block, showing that it records (an outline, a blinking dot), following the focus and a window that is moved, with the keys pressed and the time over it; or record **continuously** and hand out the last seconds on each press. Recording costs the program being recorded as little as the PC allows |
 | F3 | Find the program's **project folder** (same name as the program, else one folder above) |
 | F4 | **Data parsing**: a value is made by selecting it in a file of a capture; CargoFrame finds it again in every capture, in one file or several (the newest, or all); files can be added to the window's files; values made from other values, with choices |
 | F5 | Open a window built from a **layout** (a grid of 12 to 24 columns): Screenshot (with editor and text reading), Video (trim, crop, marks), Text (formatting, tables, pictures in the text), Dropdown, Files (and files added by hand), Tags, Log viewer (by words, by time read from a time selected in a line, following the clip as it plays), Tabs, sharing buttons |
 | F6 | Fill dropdowns from the service's API; "where to post" as one path that goes as deep as the service does |
-| F7 | Send to Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip |
+| F7 | Send to Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, a custom API, or a local zip; **create or update** an issue (Jira, GitHub), each field doing what its mapping says, with a comment and a vote; a button waits for the blocks it says must be filled |
 | F8 | Retry a failed send, then keep a zip in a safe folder, so nothing is lost |
-| F9 | One Settings window, its pages in three groups with an icon each, a search, in-app guides and a **tour** that starts by itself after an install or an update; templates; export, import, reset |
+| F9 | One Settings window, its pages in three groups with an icon each, a search, in-app guides and a **tour** that starts by itself after an install or an update; templates (a recording variant, of the window in focus, wherever the service takes a video); export, import, reset; ffmpeg downloaded and updated from System; updates checked and installed |
 | F10 | Other programs fill a layout through `cargoframe open` |
 | F11 | Speak English, French, Spanish, Italian and German, the computer's language by default |
 
@@ -133,18 +133,18 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `handoff` | Claude chat links, clipboard plan, pinned and recent chats | |
 | `capture` | Program in focus and its screenshot, per platform behind a `Backend` trait; where a window is (`WindowPlace`); the screens (Windows: what the graphics-card capture can see); Wayland focus, portal screenshot and screen sharing | `capture_with`, `screens`, `wayland.rs`, `screencast.rs` |
 | `video` | Ring of segments (and a copy of it while it goes on, for continuous recording), clip edits (trim, crop that may follow a window, marks laid over as a picture, keys laid over the sent picture), the ffmpeg command (each encoder's arguments and picture format in one place, a test picture that tells whether a hardware encoder works, ffmpeg run below normal priority); Windows loopback sound; a fed picture (Wayland, made smaller by GStreamer first) | `recorder.rs` (`Encoder::works`), `segments.rs`, `export.rs` (`keys_list`), `loopback.rs`, `pcm.rs`, `screenfeed.rs` |
-| `keys` | The keys pressed while recording: the keyboard asked which keys are down (Windows `GetAsyncKeyState`, X11 `QueryKeymap`), each press with its time; lines of keys with when they show | `Tracker`, `captions` |
+| `keys` | The keys pressed while recording: the keyboard asked which keys are down (Windows `GetAsyncKeyState`, X11 `QueryKeymap`), each press with its time; lines of keys with when they show. Shortcuts the system library cannot take: each key by its place (`KeyA`, `IntlBackslash`, the number pad, media keys; Windows virtual key or scan code, Linux evdev code), held together with the modifiers not named up, watched every 25 ms on a thread that exists only while such a shortcut does | `Tracker`, `captions`, `combo.rs` (`Combo`, `Combos`, `Board`) |
 | `indicator` | The sign shown while recording: a red outline and a blinking dot, as native windows (Win32, excluded from capture; X11 with the Shape extension); none on Wayland | `geometry.rs`, `win.rs`, `x11.rs` |
 | `ocr` | Read the text in part of a screenshot on this computer: `Windows.Media.Ocr`, or the `tesseract` program on Linux; the picture is prepared first (grey, larger, light-on-dark turned), three ways to try | `read`, `prepare.rs` |
-| `layout` | Blocks on a grid of 12 to 24 columns (`Layout::columns`), validation chips, templates; tags kept clean and at most 25 (`split_tags`); Tabs blocks and the blocks they hold (`tab_of`, `may_share`) | `model.rs`, `templates.rs` |
+| `layout` | Blocks on a grid of 12 to 24 columns (`Layout::columns`), validation chips, templates (built from shared pieces: `capture_tabs`, `report`); tags kept clean and at most 25 (`split_tags`); Tabs blocks and the blocks they hold (`tab_of`, `may_share`); what a mapping does to an issue that is there (`UpdateMode`), the blocks a button waits for (`required`) and its vote (`react`) | `model.rs`, `templates.rs` |
 | `rules` | Data rules: find a file, read values from it; values made from other values | `find.rs` (the three ways to find a value), `combine.rs`, one module per format |
 | `window` | Everything the CargoFrame window shows for one capture, as one serializable view | `view::SessionView` |
 | `bundle` | The fallback zip and the Files zip, with a manifest | |
 | `net` | The one HTTP client: HTTPS only, checked redirects, size cap, multipart; a mock server | `Http`, `Request`, `mock::MockServer` |
 | `deliver` | Paste into a chat window after checking it is the right window | |
-| `connectors` | One folder per service behind the `Connector` trait; OAuth with PKCE; secret store trait; text converter (marks, code blocks, tables) and pictures placed in the text (`{{capture.screenshot}}`) | `Connector`, `Payload`, `oauth.rs`, `richtext.rs`, `payload.rs`, `media.rs` |
+| `connectors` | One folder per service behind the `Connector` trait; Jira and GitHub create or update (`build_update`, `Payload::update_of`); OAuth with PKCE; secret store trait; text converter (marks, code blocks, tables) and pictures placed in the text (`{{capture.screenshot}}`) | `Connector`, `Payload`, `oauth.rs`, `richtext.rs`, `payload.rs`, `media.rs` |
 | `config` | One versioned JSON file per item; checks; migrations with backup | |
-| `update` | Check GitHub releases, download, verify SHA-256, run the installer | `check`, `fetch`, `install` |
+| `update` | Check GitHub releases (the installer under its versioned name or `CargoFrame-Setup.exe`; a token that no longer works left out for a public repository), download, verify SHA-256, run the installer. Its checked download also fetches ffmpeg | `check`, `fetch`, `install` |
 | `shortcuts` | Wayland: hand each shortcut to the desktop (GNOME settings, sway and Hyprland IPC, the portal's GlobalShortcuts, or a command to copy) | `Route`, `gnome::sync`, `wlroots`, `portal::Portal` |
 | `i18n` | The language in use and the packs (French, Spanish, Italian, German) embedded in the program: `t`, `tf`, `msg!`; the computer's language from the system | `lib.rs`, `packs/*.json` |
 | `app` | Glue: tray, shortcuts, sessions, share, commands, secrets, setup checks, clean-up, CLI | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs` |
@@ -157,19 +157,21 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `lib.rs` | Start-up: plugins, tray, shortcuts, single instance, `cargoframe open` |
 | `tray.rs`, `tray_host.rs` | Tray icon and menu (pause shortcuts, open settings, quit) |
 | `triggers.rs` | Run a shortcut: capture or record, build the session, open a window |
-| `watch.rs` | While recording: show the sign (following the window in focus in a continuous recording), note which program has the focus and for how long, where a followed window is, and the keys pressed; the crop that follows a window and the lines of keys for a clip |
+| `watch.rs` | While recording: show the sign (following the window in focus in a continuous recording; hidden while a followed window moves), note which program has the focus and for how long, where a followed window is (the screens read every five seconds; `screen_of` gives the one to record), and the keys pressed; the crop that follows a window and the lines of keys for a clip |
 | `hold.rs` | A shortcut held two seconds (continuous recording) told from a press |
 | `desktop_keys.rs` | Wayland: hand the shortcuts to the desktop, and say how in Settings |
 | `session.rs` | Build the `SessionView`; `records()` (layout has a Video block); apply values from `cargoframe open` |
-| `share.rs` | Build the `Payload` from ticked blocks, call the connector, fall back to a zip |
+| `share.rs` | Check the blocks the button waits for, build the `Payload` from ticked blocks (with each field's update mode), call the connector, fall back to a zip |
 | `commands.rs` | The Tauri commands |
 | `items.rs`, `connections.rs`, `registry.rs` | Settings items, connections, connector registry |
 | `secrets.rs` | The credential store |
 | `video.rs`, `audio.rs` | Recording sessions and sound sources; what ffmpeg can do (kept while the program file is the same, learnt in the background after start), the cheapest capture and encoder, and the fall back to GDI, software or no sound when ffmpeg refuses at once |
 | `setup.rs`, `tools.rs` | What is installed (ffmpeg, Claude app, `xdotool`), winget installs; when the tour is due (`tour_due`) |
+| `ffmpeg_get.rs` | ffmpeg from System: the newest release build for this computer (BtbN on GitHub), checked against its checksums, unpacked into `tools/ffmpeg`, used first (`video::set_own_ffmpeg_dir`) |
 | `cleanup.rs`, `transfer.rs` | The only code that deletes; export and import |
 | `warm.rs`, `windowing.rs`, `timing.rs` | Memory modes, window placement and width (wider for more columns), speed numbers |
-| `updates.rs`, `notify.rs`, `logging.rs`, `cli.rs` | Updates, notifications, logs (no content), command line |
+| `updates.rs`, `notify.rs`, `logging.rs`, `cli.rs` | Updates (the daily check looks at the clock every hour), notifications, logs (no content), command line |
+| `state.rs` | What the program holds while it runs; the shortcuts CargoFrame watches itself (`set_combos`) |
 
 </details>
 
@@ -180,14 +182,15 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 |--------|-----|
 | `settings/nav.ts` | The pages, their groups and icons, and the old addresses that lead to them |
 | `settings/pages` | One component per page: Connections; Layouts (with Fill fields), Shortcuts (`Triggers.svelte`), Data parsing (`DataFields.svelte`: Values and Files), Recording; Preferences, Files & backup (`FilesPage.svelte`), System (`System.svelte`: the apps on this computer, updates, windows kept ready, speed) |
-| `settings/layout` | The layout builder: grid (with its column count), block inspector, the starting-text editor with its list of values (`TextAutomation.svelte`), sharing routes |
+| `settings/layout` | The layout builder: grid (with its column count), block inspector, the starting-text editor with its list of values (`TextAutomation.svelte`), sharing routes, what each block does to an issue that is there and the blocks a button waits for (`updates.ts`, `SharingPanel.svelte`) |
 | `settings/connections` | The connection form (a section per service, shown only if the build has it), Discord and Custom API forms, secret inputs |
 | `settings/guide` | Data-driven tours (`tours.ts`): `{page, field, sentence}` steps, found by `data-tour` attributes; the tour of CargoFrame (`basics`) starts when the program opens Settings with `&tour=basics` |
 | `settings/search.ts` | What the settings search finds: each setting's page, section title or `data-tour` name, and the words it is found by (checked against the pages' code by `search.test.ts`) |
 | `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`; texts over the clip: `TextOverlay.svelte`, `keyLayer.ts`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`), Dropdown (path steps), Files (＋ to add by hand), Tags, Log viewer (`logLines.ts`, `logTimes.ts`, `logFormat.ts` for the formats people write, `logInfer.ts` for a format worked out from a time selected in a line, `logFormats.ts` for the ones kept; `../playhead.svelte.ts` is where the clip is, for the lines to follow it), Tabs (`TabsBlock.svelte`: the names; the window draws the page), Sharing |
 | `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
-| `capture/*.ts` | Values, the sharing dots (`ticks.ts`), what each button will send, remembered choices, row heights (`rows.ts`) |
-| `lib/` | `ipc.ts` (real and in-memory API), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links), `icons.ts` with `Icon.svelte` (the line icons, the Settings pages' included), `tabs.ts` (which tab a block is in, shared by the builder and the window), `i18n/` (`t`, `tn`, `msg`, `Tr`, the packs) |
+| `capture/*.ts` | Values, the sharing dots (`ticks.ts`), what each button will send and what it still waits for (`willSend.ts`: `missing`), remembered choices, row heights (`rows.ts`) |
+| `settings/data` | Data parsing's file viewer and value editor; the files opened and closed kept until Settings closes (`files.ts`) |
+| `lib/` | `ipc.ts` (real and in-memory API), `shortcut.ts` (keys held and let go, named by their place, and which ones CargoFrame watches), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links), `icons.ts` with `Icon.svelte` (the line icons, the Settings pages' included), `tabs.ts` (which tab a block is in, shared by the builder and the window), `i18n/` (`t`, `tn`, `msg`, `Tr`, the packs) |
 
 </details>
 
@@ -223,9 +226,9 @@ flowchart LR
 | **5 · Network and connectors** | `net` and its mock server; `Connector` trait, OAuth with PKCE, the secret store; Jira first (densest), then the others; text converted per service, pictures in the text | Every connector passes its tests against a mock of its documented API |
 | **6 · Share and safety** | `share.rs`, the sharing dots, `safe` (retry, fallback ladder), `bundle` (zip), Save locally | A failed send leaves a zip; a repeated send never posts twice |
 | **7 · Settings** | `settings.html`: the pages in three groups with an icon each (Connections; Layouts, Shortcuts, Data parsing, Recording; Preferences, Files & backup, System), the layout builder, connection forms with their get-token links, the search, the guides and the tour that starts after an install or an update; a minimum window size, so no page scrolls sideways | A new person goes from empty to a first share without editing a file; every guide step is walked by a test |
-| **8 · Recording** | `video` (ring of segments, edits, ffmpeg), the cheapest capture and encoder that work (Desktop Duplication then GDI, a hardware encoder tried on a test picture then x264, ffmpeg below normal priority, a fall back when ffmpeg refuses at once), sound (PulseAudio, WASAPI loopback), the sign (`indicator`), the keys and the time over a clip, continuous recording, a recording that follows a window | A layout with a Video block records, trims and sends; a refused graphics-card capture or encoder records with GDI or software; a continuous recording hands out two clips |
+| **8 · Recording** | `video` (ring of segments, edits, ffmpeg, and ffmpeg downloaded into CargoFrame's folder from System), the cheapest capture and encoder that work (Desktop Duplication then GDI, a hardware encoder tried on a test picture then x264, ffmpeg below normal priority, a fall back when ffmpeg refuses at once), sound (PulseAudio, WASAPI loopback), the sign (`indicator`), the keys and the time over a clip, continuous recording, a recording that follows a window | A layout with a Video block records, trims and sends; a refused graphics-card capture or encoder records with GDI or software; a continuous recording hands out two clips |
 | **9 · Logs and time** | The Log viewer: lines by words, by time (during the recording, around the capture, between two times or from a line picked), a format worked out from a time the person selects (`logInfer.ts`) or written by hand or by a data rule, the lines following the clip as it plays | Each way of writing a time has a test; a selected time reads every line; the lines shown follow the playhead |
-| **10 · Installers and updates** | NSIS one-button installer, AppImage, `update` with SHA-256, the release workflow | CI installs, upgrades, uninstalls and clicks the real installer |
+| **10 · Installers and updates** | NSIS one-button installer, AppImage, `update` with SHA-256, the release workflow (which uploads the installer under its fixed and its versioned name) | CI installs, upgrades, uninstalls and clicks the real installer; the update check finds a release's installer under either name |
 | **11 · Wayland** | Compositor focus (sway, Hyprland, KWin script, XWayland), `grim` and portal screenshots, the `shortcuts` crate, screen sharing read by GStreamer (made smaller before it reaches ffmpeg), clipboard hand-over for Claude | The Wayland end-to-end test passes on headless sway |
 | **12 · Companies** | A Cargo feature per connector and `CF_SERVICES`; `cargoframe open`; system certificates and proxy | A build with only `jira` has no other service's code; a script fills a layout |
 | **13 · Languages** | French, Spanish, Italian and German packs for the UI and the program, with a glossary of modern technical terms (`docs/i18n.md`); Preferences › Language (the computer's by default); kept windows let go on a change | The check passes in every language; Rust and UI tests speak French, Spanish and German; every page looked at in each language |
@@ -268,6 +271,8 @@ pub trait Connector {
 | `prompt` | The prompt, for services that use one |
 | `fields` | Mapped block values, in layout order |
 | `vars` | Every variable of the capture (`app.title`, `rule.version`…) |
+| `fields[].update` | What each field does to an issue that is there (replace, append, append a line, add, increment, skip); none for every field and no `comment`: a layout of 0.7.0 or before |
+| `react` | Vote for (Jira) or 👍 (GitHub) an issue that is there |
 
 </details>
 
@@ -283,7 +288,7 @@ Secrets go only to the credential store, keyed by connection. The web view never
 <details>
 <summary><b>Commands and windows</b></summary>
 
-About 65 Tauri commands (`app/build.rs`). `ui/src/lib/ipc.ts` has one `Api` type with two implementations: the real
+About 80 Tauri commands (`app/build.rs`). `ui/src/lib/ipc.ts` has one `Api` type with two implementations: the real
 one (Tauri `invoke`) and `memoryApi` (in memory, for tests and the browser demos `?demo=…`). A test
 (`shipped_config_tests`) fails if a command is not registered, not listed, or not granted to a window.
 

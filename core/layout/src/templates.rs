@@ -9,7 +9,7 @@
 use crate::model::{
     Block, BlockKind, Deeper, DropdownBlock, DropdownSource, FilesBlock, InfoMapping, Layout,
     LogViewBlock, OnSuccess, Rect, SharingButton, Tab, TabSide, TabsBlock, TagList, TagsBlock,
-    TextBlock, TextRole, TitlePlacement, ValueSource, VideoBlock,
+    TextBlock, TextRole, TitlePlacement, UpdateMode, ValueSource, VideoBlock, VideoSubject,
 };
 use crate::validate::ConnectionKind;
 use cargoframe_i18n::{msg, t};
@@ -26,17 +26,17 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 20] = [
+pub const TEMPLATES: [TemplateInfo; 22] = [
     TemplateInfo {
         key: "local-capture",
         name: msg!("Save a capture locally"),
-        description: msg!("The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. No account needed."),
+        description: msg!("The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. A Logs tab beside the screenshot reads the logs. No account needed."),
         service: None,
     },
     TemplateInfo {
         key: "local-video",
         name: msg!("Save a recording locally"),
-        description: msg!("The recording, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the screen. No account needed."),
+        description: msg!("The recording of the window in focus, the screenshot taken from it, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the window in focus. No account needed."),
         service: None,
     },
     TemplateInfo {
@@ -48,13 +48,13 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "jira-video",
         name: msg!("Jira bug report with a recording"),
-        description: msg!("Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen."),
+        description: msg!("Like the Jira bug report, with the recording of the window in focus attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
-        key: "jira-comment",
-        name: msg!("Jira comment on an issue"),
-        description: msg!("Pick one of your recent issues and add a comment with the screenshot and files."),
+        key: "jira-update",
+        name: msg!("Jira issue: create or update"),
+        description: msg!("Pick one of your recent issues to update it, or leave it empty for a new one. An update keeps the summary, adds the description below the one there and adds the labels; a comment can go with either. The screenshot and files are attached."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
@@ -64,21 +64,27 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
-        key: "github-comment",
-        name: msg!("GitHub comment on an issue"),
-        description: msg!("Pick an open issue of the repository and add a comment with the screenshot and files."),
+        key: "github-video",
+        name: msg!("GitHub issue with a recording"),
+        description: msg!("Like the GitHub issue, with the recording of the window in focus linked from it beside the screenshot taken from it; tabs hold the recording, the screenshot and the logs. A shortcut that opens it records the window in focus."),
+        service: Some(ConnectionKind::Github),
+    },
+    TemplateInfo {
+        key: "github-update",
+        name: msg!("GitHub issue: create or update"),
+        description: msg!("Pick an open issue to update it, or leave it empty for a new one. An update keeps the title, adds the description below the one there and adds the labels; a comment can go with either. The screenshot and files are shown in it."),
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
         key: "google-drive",
         name: msg!("Google Drive upload"),
-        description: msg!("Upload the screenshot and a zip of the ticked files to a Drive folder you pick."),
+        description: msg!("Upload the screenshot and a zip of the ticked files to a Drive folder you pick. A Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
         key: "google-drive-video",
         name: msg!("Google Drive upload of a recording"),
-        description: msg!("Upload the recording and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the screen."),
+        description: msg!("Upload the recording of the window in focus, the screenshot taken from it and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::Google),
     },
     TemplateInfo {
@@ -108,13 +114,19 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "slack-video",
         name: msg!("Slack message with a recording"),
-        description: msg!("Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen."),
+        description: msg!("Post a message with the recording of the window in focus and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::Slack),
     },
     TemplateInfo {
         key: "discord-message",
         name: msg!("Discord message"),
         description: msg!("Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged. A Logs tab beside the screenshot reads the logs."),
+        service: Some(ConnectionKind::Discord),
+    },
+    TemplateInfo {
+        key: "discord-video",
+        name: msg!("Discord message with a recording"),
+        description: msg!("Post a message with the recording of the window in focus and a zip of the ticked files into a channel, or start a post in a forum, within the server's upload limit; tabs hold the recording, the screenshot taken from it and the logs. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::Discord),
     },
     TemplateInfo {
@@ -176,6 +188,18 @@ fn text(title: &str, role: TextRole, default_text: &str) -> BlockKind {
     })
 }
 
+/// A text whose default is built here (from translated parts) rather than one message.
+fn text_of(title: &str, default_text: String) -> BlockKind {
+    BlockKind::Text(TextBlock {
+        title: t(title).to_string(),
+        placement: TitlePlacement::Above,
+        role: TextRole::Plain,
+        default_text,
+        formatting: true,
+        one_line: false,
+    })
+}
+
 /// A text of one line: a title, a link. Services do not format those.
 fn line(title: &str, default_text: &str) -> BlockKind {
     BlockKind::Text(TextBlock {
@@ -220,6 +244,8 @@ fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
             "clip",
             whole,
             BlockKind::Video(VideoBlock {
+                // the window in focus, whose program the capture's values come from
+                subject: VideoSubject::FocusedWindow,
                 screenshot_at_end: true,
                 // the time of each moment, to match the lines of the logs
                 clock: true,
@@ -301,7 +327,24 @@ fn from_block(field: &str, block_id: &str) -> InfoMapping {
     InfoMapping {
         field: field.to_string(),
         source: ValueSource::Block(block_id.to_string()),
+        update: None,
     }
+}
+
+/// A mapping that says what it does to an issue that is there.
+fn updating(field: &str, block_id: &str, how: UpdateMode) -> InfoMapping {
+    InfoMapping {
+        update: Some(how),
+        ..from_block(field, block_id)
+    }
+}
+
+/// The sharing button of `button`, with the blocks that must be filled before sharing.
+fn requiring(mut b: Block, required: &[&str]) -> Block {
+    if let BlockKind::SharingButton(s) = &mut b.kind {
+        s.required = required.iter().map(|r| r.to_string()).collect();
+    }
+    b
 }
 
 fn button(
@@ -321,6 +364,8 @@ fn button(
             mappings,
             on_success: OnSuccess::CloseWindow,
             send: Default::default(),
+            required: Vec::new(),
+            react: false,
         }),
     )
 }
@@ -330,6 +375,24 @@ const WHERE: &str = "{app.title}";
 /// Written with formatting: the templates that use it send it where formatting is shown.
 const SEEN_IN: &str =
     msg!("Seen in `{app.exe}` **({project.name})** on *{capture.date}* at *{capture.time}*.");
+
+/// The default text of a report where pictures show inside the text (Jira, GitHub): where it
+/// was seen, then a table that shows the recording beside the screenshot, or the screenshot.
+fn report(video: bool) -> String {
+    let table = if video {
+        format!(
+            "| {} | {} |\n| --- | --- |\n| {{capture.recording}} | {{capture.screenshot}} |",
+            t("Recording"),
+            t("Screenshot")
+        )
+    } else {
+        format!(
+            "| {} |\n| --- |\n| {{capture.screenshot}} |",
+            t("Screenshot")
+        )
+    };
+    format!("{}\n\n{table}", t(SEEN_IN))
+}
 
 /// Build the template `key` as a layout, for the connection `connection_id`. Templates made for
 /// a service need one (`None` gives no template); the one that saves locally takes none. The
@@ -341,8 +404,10 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
     let (key, is_video) = match key {
         "local-video" => ("local-capture", true),
         "jira-video" => ("jira-bug", true),
+        "github-video" => ("github-issue", true),
         "google-drive-video" => ("google-drive", true),
         "slack-video" => ("slack-message", true),
+        "discord-video" => ("discord-message", true),
         other => (other, false),
     };
     let c = match (
@@ -355,22 +420,24 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
     };
     let shot = |h| block("shot", rect(0, 0, 7, h), BlockKind::Screenshot);
     let blocks = match (key, c) {
-        ("local-capture", _) => vec![
-            shot(7),
-            block(
-                "note",
-                rect(7, 0, 5, 3),
-                text(msg!("Note"), TextRole::Plain, WHERE),
-            ),
-            block("files", rect(7, 3, 5, 3), files(msg!("Files to keep"))),
-            button(
-                rect(7, 6, 5, 1),
-                msg!("Save locally"),
-                None,
-                None,
-                vec![from_block("note", "note")],
-            ),
-        ],
+        ("local-capture", _) => [
+            capture_tabs(8, is_video, msg!("Files to keep")),
+            vec![
+                block(
+                    "note",
+                    rect(7, 0, 5, 7),
+                    text(msg!("Note"), TextRole::Plain, SEEN_IN),
+                ),
+                button(
+                    rect(7, 7, 5, 1),
+                    msg!("Save locally"),
+                    None,
+                    None,
+                    vec![from_block("note", "note")],
+                ),
+            ],
+        ]
+        .concat(),
         ("jira-bug", Some(c)) => [
             capture_tabs(9, is_video, msg!("Attach files")),
             vec![
@@ -388,53 +455,93 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 block(
                     "description",
                     rect(7, 3, 5, 4),
-                    text(msg!("Description"), TextRole::Plain, SEEN_IN),
+                    text_of(msg!("Description"), report(is_video)),
                 ),
                 block(
                     "labels",
                     rect(7, 7, 5, 1),
                     tags(msg!("Labels"), c, "labels"),
                 ),
-                button(
-                    rect(7, 8, 5, 1),
-                    msg!("Create issue"),
-                    Some(c),
-                    None,
-                    vec![
-                        from_block("project", "project"),
-                        from_block("issuetype", "type"),
-                        from_block("summary", "summary"),
-                        from_block("description", "description"),
-                        from_block("labels", "labels"),
-                    ],
+                requiring(
+                    button(
+                        rect(7, 8, 5, 1),
+                        msg!("Create issue"),
+                        Some(c),
+                        None,
+                        vec![
+                            from_block("project", "project"),
+                            from_block("issuetype", "type"),
+                            from_block("summary", "summary"),
+                            from_block("description", "description"),
+                            from_block("labels", "labels"),
+                        ],
+                    ),
+                    &["project", "type", "summary"],
                 ),
             ],
         ]
         .concat(),
-        ("jira-comment", Some(c)) => vec![
-            shot(8),
-            block(
-                "issue",
-                rect(7, 0, 5, 1),
-                web_list(msg!("Issue"), c, "recent_issues"),
-            ),
-            block(
-                "comment",
-                rect(7, 1, 5, 4),
-                text(msg!("Comment"), TextRole::Plain, SEEN_IN),
-            ),
-            block("files", rect(7, 5, 5, 3), files(msg!("Attach files"))),
-            button(
-                rect(7, 8, 5, 1),
-                msg!("Add comment"),
-                Some(c),
-                None,
-                vec![
-                    from_block("issue", "issue"),
-                    from_block("description", "comment"),
-                ],
-            ),
-        ],
+        ("jira-update", Some(c)) => [
+            capture_tabs(11, false, msg!("Attach files")),
+            vec![
+                block("issue", rect(7, 0, 5, 1), {
+                    let BlockKind::Dropdown(mut d) = web_list(
+                        msg!("Issue to update (empty: a new one)"),
+                        c,
+                        "recent_issues",
+                    ) else {
+                        unreachable!("web_list makes a dropdown")
+                    };
+                    d.optional = true;
+                    BlockKind::Dropdown(d)
+                }),
+                block(
+                    "project",
+                    rect(7, 1, 5, 1),
+                    web_list(msg!("Project (for a new issue)"), c, "projects"),
+                ),
+                block(
+                    "type",
+                    rect(7, 2, 5, 1),
+                    web_list(msg!("Issue type (for a new issue)"), c, "issue_types"),
+                ),
+                block("summary", rect(7, 3, 5, 1), line(msg!("Summary"), WHERE)),
+                block(
+                    "description",
+                    rect(7, 4, 5, 3),
+                    text_of(msg!("Description"), report(false)),
+                ),
+                block(
+                    "labels",
+                    rect(7, 7, 5, 1),
+                    tags(msg!("Labels"), c, "labels"),
+                ),
+                block(
+                    "comment",
+                    rect(7, 8, 5, 2),
+                    text(msg!("Comment (optional)"), TextRole::Plain, ""),
+                ),
+                requiring(
+                    button(
+                        rect(7, 10, 5, 1),
+                        msg!("Create or update"),
+                        Some(c),
+                        None,
+                        vec![
+                            from_block("issue", "issue"),
+                            from_block("project", "project"),
+                            from_block("issuetype", "type"),
+                            updating("summary", "summary", UpdateMode::Skip),
+                            updating("description", "description", UpdateMode::Append),
+                            updating("labels", "labels", UpdateMode::Add),
+                            from_block("comment", "comment"),
+                        ],
+                    ),
+                    &["summary"],
+                ),
+            ],
+        ]
+        .concat(),
         ("github-issue", Some(c)) => [
             capture_tabs(8, is_video, msg!("Attach files")),
             vec![
@@ -447,59 +554,92 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 block(
                     "description",
                     rect(7, 2, 5, 5),
-                    text(msg!("Description"), TextRole::Plain, SEEN_IN),
+                    text_of(msg!("Description"), report(is_video)),
                 ),
-                button(
-                    rect(7, 7, 5, 1),
-                    msg!("Open issue"),
-                    Some(c),
-                    None,
-                    vec![
-                        from_block("title", "title"),
-                        from_block("labels", "labels"),
-                        from_block("body", "description"),
-                    ],
+                requiring(
+                    button(
+                        rect(7, 7, 5, 1),
+                        msg!("Open issue"),
+                        Some(c),
+                        None,
+                        vec![
+                            from_block("title", "title"),
+                            from_block("labels", "labels"),
+                            from_block("body", "description"),
+                        ],
+                    ),
+                    &["title"],
                 ),
             ],
         ]
         .concat(),
-        ("github-comment", Some(c)) => vec![
-            shot(8),
-            block(
-                "issue",
-                rect(7, 0, 5, 1),
-                web_list(msg!("Issue"), c, "recent_issues"),
-            ),
-            block(
-                "comment",
-                rect(7, 1, 5, 4),
-                text(msg!("Comment"), TextRole::Plain, SEEN_IN),
-            ),
-            block("files", rect(7, 5, 5, 3), files(msg!("Attach files"))),
-            button(
-                rect(7, 8, 5, 1),
-                msg!("Add comment"),
-                Some(c),
-                None,
-                vec![from_block("issue", "issue"), from_block("body", "comment")],
-            ),
-        ],
-        ("google-drive", Some(c)) => vec![
-            shot(7),
-            block(
-                "folder",
-                rect(7, 0, 5, 1),
-                web_list(msg!("Drive folder"), c, "folders"),
-            ),
-            block("files", rect(7, 1, 5, 4), files(msg!("Files to upload"))),
-            button(
-                rect(7, 5, 5, 1),
-                msg!("Upload to Drive"),
-                Some(c),
-                None,
-                vec![from_block("folder", "folder")],
-            ),
-        ],
+        ("github-update", Some(c)) => [
+            capture_tabs(9, false, msg!("Attach files")),
+            vec![
+                block("issue", rect(7, 0, 5, 1), {
+                    let BlockKind::Dropdown(mut d) = web_list(
+                        msg!("Issue to update (empty: a new one)"),
+                        c,
+                        "recent_issues",
+                    ) else {
+                        unreachable!("web_list makes a dropdown")
+                    };
+                    d.optional = true;
+                    BlockKind::Dropdown(d)
+                }),
+                block("title", rect(7, 1, 5, 1), line(msg!("Title"), WHERE)),
+                block(
+                    "labels",
+                    rect(7, 2, 5, 1),
+                    tags(msg!("Labels"), c, "labels"),
+                ),
+                block(
+                    "description",
+                    rect(7, 3, 5, 3),
+                    text_of(msg!("Description"), report(false)),
+                ),
+                block(
+                    "comment",
+                    rect(7, 6, 5, 2),
+                    text(msg!("Comment (optional)"), TextRole::Plain, ""),
+                ),
+                requiring(
+                    button(
+                        rect(7, 8, 5, 1),
+                        msg!("Create or update"),
+                        Some(c),
+                        None,
+                        vec![
+                            from_block("issue", "issue"),
+                            updating("title", "title", UpdateMode::Skip),
+                            updating("labels", "labels", UpdateMode::Add),
+                            updating("body", "description", UpdateMode::Append),
+                            from_block("comment", "comment"),
+                        ],
+                    ),
+                    &["title"],
+                ),
+            ],
+        ]
+        .concat(),
+        ("google-drive", Some(c)) => [
+            capture_tabs(7, is_video, msg!("Files to upload")),
+            vec![
+                block(
+                    "folder",
+                    rect(7, 0, 5, 1),
+                    web_list(msg!("Drive folder"), c, "folders"),
+                ),
+                button(
+                    rect(7, 1, 5, 1),
+                    msg!("Upload to Drive"),
+                    Some(c),
+                    None,
+                    vec![from_block("folder", "folder")],
+                ),
+            ],
+        ]
+        .concat(),
         ("google-sheet", Some(c)) => vec![
             shot(7),
             block(
@@ -787,22 +927,6 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         _ => return None,
     };
-    // a template with tabs drew its recording itself (`capture_tabs`)
-    let tabbed = blocks.iter().any(|b| matches!(b.kind, BlockKind::Tabs(_)));
-    let blocks = if is_video && !tabbed {
-        blocks
-            .into_iter()
-            .map(|mut b| {
-                if matches!(b.kind, BlockKind::Screenshot) {
-                    b.id = "clip".to_string();
-                    b.kind = BlockKind::Video(Default::default());
-                }
-                b
-            })
-            .collect()
-    } else {
-        blocks
-    };
     Some(Layout {
         accepts_input: false,
         columns: crate::GRID_COLUMNS,
@@ -851,6 +975,8 @@ mod tests {
                 "project.name",
                 "capture.date",
                 "capture.time",
+                "capture.screenshot",
+                "capture.recording",
             ]
             .contains(&name)
         }
@@ -923,7 +1049,7 @@ mod tests {
             let (videos, pictures) = (count(true), count(false));
             match (t.key.ends_with("-video"), tabbed) {
                 (true, true) => assert_eq!((videos, pictures), (1, 1), "{}", t.key),
-                (true, false) => assert_eq!((videos, pictures), (1, 0), "{}", t.key),
+                (true, false) => panic!("{}: a recording without its screenshot", t.key),
                 (false, _) => assert_eq!((videos, pictures), (0, 1), "{}", t.key),
             }
             let BlockKind::SharingButton(b) = &l.block("send").unwrap().kind else {
@@ -944,39 +1070,75 @@ mod tests {
     }
 
     #[test]
-    fn a_template_for_a_recording_has_a_video_block_where_the_picture_would_be() {
-        for (video, picture) in [
-            ("local-video", "local-capture"),
-            ("google-drive-video", "google-drive"),
-        ] {
-            let v = build(video, Some("c")).unwrap();
-            let p = build(picture, Some("c")).unwrap();
-            assert_eq!(v.blocks.len(), p.blocks.len(), "{video}");
-            assert!(
-                !v.blocks
-                    .iter()
-                    .any(|b| matches!(b.kind, BlockKind::Screenshot)),
-                "{video} still has a picture"
-            );
-            let clip = v
-                .block("clip")
-                .unwrap_or_else(|| panic!("{video}: no video block"));
-            assert!(matches!(clip.kind, BlockKind::Video(_)));
-            // same place, same size, as the picture had
-            assert_eq!(clip.rect, p.block("shot").unwrap().rect, "{video}");
-            // everything else is the same as the picture's template
-            for (a, b) in v.blocks.iter().zip(&p.blocks) {
-                if a.id != "clip" {
-                    assert_eq!(a, b, "{video}");
-                }
+    fn a_template_for_a_recording_records_the_window_in_focus_beside_its_screenshot() {
+        for t in TEMPLATES.iter().filter(|t| t.key.ends_with("-video")) {
+            let l = build(t.key, Some("c")).unwrap();
+            let Some(BlockKind::Video(v)) = l.block("clip").map(|b| &b.kind) else {
+                panic!("{}: no recording", t.key)
+            };
+            assert_eq!(v.subject, VideoSubject::FocusedWindow, "{}", t.key);
+            assert!(v.screenshot_at_end, "{}", t.key);
+            assert!(l.block("shot").is_some(), "{}: no screenshot", t.key);
+            // the connection takes a video
+            if let Some(kind) = t.service {
+                let caps = crate::capabilities::Capabilities::for_kind(kind, true);
+                assert_ne!(
+                    caps.video.support,
+                    crate::capabilities::Support::No,
+                    "{}",
+                    t.key
+                );
             }
-            assert_eq!(v.name, info(video).unwrap().name);
         }
-        // A picture template is not changed by this.
-        assert!(build("slack-message", Some("c"))
-            .unwrap()
-            .block("shot")
-            .is_some());
+    }
+
+    #[test]
+    fn a_report_shows_the_recording_and_the_screenshot_in_a_table_and_says_where_it_was_seen() {
+        let default =
+            |key: &str, id: &str| match &build(key, Some("c")).unwrap().block(id).unwrap().kind {
+                BlockKind::Text(tb) => tb.default_text.clone(),
+                _ => panic!("{key}: {id} is not a text"),
+            };
+        let d = default("jira-video", "description");
+        assert!(d.starts_with("Seen in `{app.exe}`"), "{d}");
+        assert!(d.ends_with("| Recording | Screenshot |\n| --- | --- |\n| {capture.recording} | {capture.screenshot} |"), "{d}");
+        let d = default("github-issue", "description");
+        assert!(
+            d.ends_with("| Screenshot |\n| --- |\n| {capture.screenshot} |"),
+            "{d}"
+        );
+    }
+
+    #[test]
+    fn create_or_update_keeps_the_title_adds_below_and_adds_labels_and_says_what_must_be_filled() {
+        for (key, title, body) in [
+            ("jira-update", "summary", "description"),
+            ("github-update", "title", "body"),
+        ] {
+            let l = build(key, Some("c")).unwrap();
+            let BlockKind::SharingButton(b) = &l.block("send").unwrap().kind else {
+                panic!("{key}: no button")
+            };
+            let how = |f: &str| {
+                b.mappings
+                    .iter()
+                    .find(|m| m.field == f)
+                    .and_then(|m| m.update)
+            };
+            assert_eq!(how(title), Some(UpdateMode::Skip), "{key}");
+            assert_eq!(how(body), Some(UpdateMode::Append), "{key}");
+            assert_eq!(how("labels"), Some(UpdateMode::Add), "{key}");
+            assert!(b.mappings.iter().any(|m| m.field == "comment"), "{key}");
+            // no issue picked is a new one: the list may stay empty
+            let Some(BlockKind::Dropdown(d)) = l.block("issue").map(|b| &b.kind) else {
+                panic!("{key}: no issue list")
+            };
+            assert!(d.optional, "{key}");
+            assert!(!b.required.is_empty(), "{key}");
+            for r in &b.required {
+                assert!(l.block(r).is_some(), "{key}: {r}");
+            }
+        }
     }
 
     #[test]
@@ -996,8 +1158,12 @@ mod tests {
             )
         };
         for key in [
+            "local-capture",
             "jira-bug",
+            "jira-update",
             "github-issue",
+            "github-update",
+            "google-drive",
             "slack-message",
             "discord-message",
             "claude-ask",
@@ -1014,7 +1180,14 @@ mod tests {
                 l.block("capture").unwrap().rect
             );
         }
-        for key in ["jira-video", "slack-video"] {
+        for key in [
+            "local-video",
+            "jira-video",
+            "github-video",
+            "google-drive-video",
+            "slack-video",
+            "discord-video",
+        ] {
             let l = build(key, Some("c")).unwrap();
             assert_eq!(
                 names(&l),
@@ -1035,13 +1208,7 @@ mod tests {
             ));
         }
         // a window with little to fill keeps it all in view
-        for key in [
-            "local-capture",
-            "google-drive",
-            "x-post",
-            "reddit-post",
-            "jira-comment",
-        ] {
+        for key in ["x-post", "reddit-post", "teams-message"] {
             assert!(
                 build(key, Some("c")).unwrap().block("capture").is_none(),
                 "{key}"

@@ -1,14 +1,18 @@
 //! Jira: the reference destination. Works with Jira Cloud (e-mail + API token) and Jira Server or
 //! Data Center (personal access token) through REST API v2, which both understand.
 //!
-//! A share creates an issue (or, when the `issue` field has a key, adds a comment to that issue)
-//! and attaches the screenshot and, if files were ticked, their zip. What it has already done is
-//! recorded in [`Progress`], so a retry after a failed upload never creates a second issue.
+//! A share creates an issue, or updates the one the `issue` field names, and attaches the
+//! screenshot and, if files were ticked, their zip. An update does to each field what its mapping
+//! says (replace it, add below it, add one line, add labels, count one more, leave it); a
+//! `comment` field adds a comment either way; `react` votes for an issue that was there. A layout
+//! of 0.7.0 or before says none of this: its description becomes a comment, as then. What it has
+//! already done is recorded in [`Progress`], so a retry after a failed upload never creates a
+//! second issue or updates twice.
 
 use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model::{self, JiraAuth};
-use crate::payload::{Field, FieldKind, OptionItem, Payload, SendOutcome};
+use crate::payload::{first_line, Field, FieldKind, OptionItem, Payload, SendOutcome, Update};
 use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
@@ -85,6 +89,59 @@ impl JiraConnector {
                 &[("what", &t(what))],
             ))
         })
+    }
+
+    /// Update the issue `key` as the mapped fields say: read what is there when something is
+    /// added below it or counted, then one PUT.
+    fn update(&self, ctx: &Ctx, key: &str, payload: &Payload) -> Result<(), SendError> {
+        let wanted: Vec<&str> = payload
+            .fields
+            .iter()
+            .filter(|f| {
+                matches!(
+                    f.update,
+                    Some(Update::Append | Update::AppendLine | Update::Increment)
+                )
+            })
+            .map(|f| f.key.as_str())
+            .collect();
+        let now = if wanted.is_empty() {
+            Map::new()
+        } else {
+            let req = self.request(
+                ctx,
+                Method::Get,
+                &format!(
+                    "/rest/api/2/issue/{}?fields={}",
+                    encode_component(key),
+                    encode_component(&wanted.join(","))
+                ),
+            )?;
+            let resp = self.call(ctx, req, &tf("read {key}", &[("key", &key)]))?;
+            resp.json()
+                .and_then(|v| v.get("fields").and_then(Value::as_object).cloned())
+                .unwrap_or_default()
+        };
+        let (set, ops) = build_update(payload, self.cloud(), &now)?;
+        if set.is_empty() && ops.is_empty() {
+            return Ok(());
+        }
+        let mut body = Map::new();
+        if !set.is_empty() {
+            body.insert("fields".into(), Value::Object(set));
+        }
+        if !ops.is_empty() {
+            body.insert("update".into(), Value::Object(ops));
+        }
+        let req = self
+            .request(
+                ctx,
+                Method::Put,
+                &format!("/rest/api/2/issue/{}", encode_component(key)),
+            )?
+            .body(Body::json(&Value::Object(body)));
+        self.call(ctx, req, &tf("update {key}", &[("key", &key)]))?;
+        Ok(())
     }
 
     fn attach(
@@ -259,7 +316,7 @@ fn shape(f: &Field, cloud: bool) -> Result<Value, String> {
 pub fn build_fields(payload: &Payload, cloud: bool) -> Result<Map<String, Value>, SendError> {
     let mut out = Map::new();
     for f in &payload.fields {
-        if f.key == "issue" || f.value.trim().is_empty() {
+        if f.key == "issue" || f.key == "comment" || f.value.trim().is_empty() {
             continue;
         }
         let v = shape(f, cloud).map_err(invalid)?;
@@ -285,6 +342,83 @@ pub fn build_fields(payload: &Payload, cloud: bool) -> Result<Map<String, Value>
         *d = with_media(d, payload);
     }
     Ok(out)
+}
+
+/// The fields a list of values is: an update adds to them.
+const LISTS: [&str; 4] = ["labels", "components", "fixVersions", "versions"];
+
+/// Jira's fields (or update operations), by key.
+type Fields = Map<String, Value>;
+
+/// What an update of an existing issue sends (`fields` set, `update` operations), from the
+/// mapped fields and the issue as it is (`now`, its fields, for what is added below or counted).
+pub fn build_update(
+    payload: &Payload,
+    cloud: bool,
+    now: &Map<String, Value>,
+) -> Result<(Fields, Fields), SendError> {
+    let mut set = Map::new();
+    let mut ops = Map::new();
+    for f in &payload.fields {
+        if matches!(
+            f.key.as_str(),
+            "issue" | "comment" | "project" | "issuetype"
+        ) {
+            continue;
+        }
+        let how = f.update.unwrap_or(Update::Replace);
+        if how == Update::Skip || (f.value.trim().is_empty() && how != Update::Increment) {
+            continue;
+        }
+        match how {
+            Update::Add if LISTS.contains(&f.key.as_str()) => {
+                let Value::Array(items) = shape(f, cloud).map_err(invalid)? else {
+                    continue;
+                };
+                let adds: Vec<Value> = items.into_iter().map(|i| json!({ "add": i })).collect();
+                ops.insert(f.key.clone(), Value::Array(adds));
+            }
+            Update::Append | Update::AppendLine => {
+                let text = if how == Update::AppendLine {
+                    first_line(&f.value).to_string()
+                } else {
+                    f.value.clone()
+                };
+                let mut added = render(&text, Style::Jira);
+                if f.key == "description" {
+                    added = with_media(&added, payload);
+                }
+                let before = now
+                    .get(&f.key)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim_end();
+                let joined = if before.is_empty() {
+                    added
+                } else if f.key == "summary" {
+                    clean_summary(&format!("{before} {added}"))
+                } else {
+                    format!("{before}\n\n{added}")
+                };
+                set.insert(f.key.clone(), Value::String(joined));
+            }
+            Update::Increment => {
+                let step: f64 = f.value.trim().replace(',', ".").parse().unwrap_or(1.0);
+                let before = now.get(&f.key).and_then(Value::as_f64).unwrap_or(0.0);
+                set.insert(f.key.clone(), json!(before + step));
+            }
+            _ => {
+                let mut v = shape(f, cloud).map_err(invalid)?;
+                if f.key == "description" {
+                    if let Value::String(d) = &mut v {
+                        *d = with_media(d, payload);
+                    }
+                }
+                set.insert(f.key.clone(), v);
+            }
+        }
+    }
+    Ok((set, ops))
 }
 
 fn issue_key_ok(k: &str) -> bool {
@@ -326,9 +460,15 @@ impl Connector for JiraConnector {
                 f("parent", msg!("Parent issue"), msg!("An issue key, for sub-tasks"), Some("recent_issues")),
                 f(
                     "issue",
-                    msg!("Add to an existing issue"),
-                    msg!("An issue key: adds a comment and the attachments instead of creating an issue"),
+                    msg!("Update an existing issue"),
+                    msg!("An issue key: updates that issue (each field as its mapping says) and attaches the files, instead of creating one. Empty: a new issue"),
                     Some("recent_issues"),
+                ),
+                f(
+                    "comment",
+                    msg!("Comment"),
+                    msg!("Added as a comment, on the new issue or on the one updated"),
+                    None,
                 ),
             ],
             lists: vec![
@@ -341,7 +481,7 @@ impl Connector for JiraConnector {
                 l("components", msg!("Components of a project"), Some(msg!("project key"))),
                 l("versions", msg!("Versions of a project"), Some(msg!("project key"))),
             ],
-            summary: msg!("Creates an issue and attaches the screenshot (and a zip of the ticked files). Custom fields use their key, such as customfield_10042.").into(),
+            summary: msg!("Creates an issue, or updates the one picked, and attaches the screenshot (and a zip of the ticked files); a comment can go with either. Custom fields use their key, such as customfield_10042.").into(),
         }
     }
 
@@ -575,14 +715,28 @@ impl Connector for JiraConnector {
             }
         };
 
-        // 2. a comment, when adding to an existing issue
-        if existing.is_some() && !ctx.progress.done("jira.comment") {
-            let text = payload
+        let modern = payload.says_how();
+        // 2. an update of the issue that was there, as each field says
+        if existing.is_some() && modern && !ctx.progress.done("jira.update") {
+            self.update(ctx, &key, payload)?;
+            ctx.progress.set("jira.update", "1");
+        }
+
+        // 3. a comment: the `comment` field, or (a layout of before) the description on an
+        // issue that was there
+        let comment = if modern {
+            payload.value("comment").map(str::to_string)
+        } else if existing.is_some() {
+            payload
                 .value("description")
                 .map(str::to_string)
                 .or_else(|| payload.prompt.clone().filter(|p| !p.trim().is_empty()))
-                // written in Jira's markup, the screenshot and recording in their places
-                .map(|t| with_media(&render(&t, Style::Jira), payload));
+        } else {
+            None
+        };
+        if comment.is_some() && !ctx.progress.done("jira.comment") {
+            // written in Jira's markup, the screenshot and recording in their places
+            let text = comment.map(|t| with_media(&render(&t, Style::Jira), payload));
             if let Some(text) = text {
                 let req = self
                     .request(
@@ -596,8 +750,22 @@ impl Connector for JiraConnector {
             ctx.progress.set("jira.comment", "1");
         }
 
-        // 3. attachments, each at most once
+        // a vote for an issue that was there (Jira refuses one on an issue you reported: said,
+        // not a failure)
         let mut notes = Vec::new();
+        if payload.react && existing.is_some() && !ctx.progress.done("jira.vote") {
+            let req = self.request(
+                ctx,
+                Method::Post,
+                &format!("/rest/api/2/issue/{}/votes", encode_component(&key)),
+            )?;
+            if self.call(ctx, req, msg!("vote for the issue")).is_err() {
+                notes.push(tf("Jira did not take your vote on {key}", &[("key", &key)]));
+            }
+            ctx.progress.set("jira.vote", "1");
+        }
+
+        // 4. attachments, each at most once
         let uploads = [
             ("jira.att.image", payload.image.as_ref()),
             ("jira.att.still", payload.still.as_ref()),
@@ -628,6 +796,8 @@ impl Connector for JiraConnector {
         Ok(SendOutcome {
             summary: if created {
                 tf("Created {key}", &[("key", &key)])
+            } else if modern {
+                tf("Updated {key}", &[("key", &key)])
             } else {
                 tf("Added to {key}", &[("key", &key)])
             },

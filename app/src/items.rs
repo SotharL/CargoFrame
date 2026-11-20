@@ -275,7 +275,7 @@ mod tests {
             (
                 ItemKind::Trigger,
                 "t",
-                json!({"name": "x", "shortcut": "F9+F10"}),
+                json!({"name": "x", "shortcut": "Ctrl+A+B+C+D"}),
                 "",
             ),
             (

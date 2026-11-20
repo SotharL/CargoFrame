@@ -2,7 +2,7 @@ import type {
   AppInfo, Block, ChatView, Cleaned, Connection, ConnectionsView, ConnectionView, DataReport, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
-  MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
+  FfmpegPhase, MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
   VideoTools, VideoTrial, AudioDevices, SetupReport, SetupItem, SetupInstall,
   ServiceKind, ShortcutStatus,
   TextReading,
@@ -178,6 +178,14 @@ export interface Api {
   setUpdateToken(value: string): Promise<void>;
   /** Called whenever the update view changed. Returns a function that stops listening. */
   onUpdateChanged(callback: () => void): Promise<() => void>;
+
+  // ----- ffmpeg, downloaded by CargoFrame -----
+  ffmpegStatus(): Promise<FfmpegPhase>;
+  /** Ask for the newest ffmpeg build and compare it with the one in use. */
+  ffmpegCheck(): Promise<FfmpegPhase>;
+  /** Download what the check offered. Returns at once; progress arrives as `onFfmpegChanged`. */
+  ffmpegDownload(): Promise<void>;
+  onFfmpegChanged(callback: () => void): Promise<() => void>;
 }
 
 /** Pieces in one body, each after its length (four bytes, big-endian), as `set_clip_layer` reads them. */
@@ -324,6 +332,13 @@ async function tauriApi(): Promise<Api> {
       const { listen } = await import('@tauri-apps/api/event');
       return listen('update-changed', callback);
     },
+    ffmpegStatus: () => invoke('ffmpeg_status'),
+    ffmpegCheck: () => invoke('ffmpeg_check'),
+    ffmpegDownload: () => invoke('ffmpeg_download'),
+    onFfmpegChanged: async (callback) => {
+      const { listen } = await import('@tauri-apps/api/event');
+      return listen('ffmpeg-changed', callback);
+    },
   };
 }
 
@@ -383,21 +398,23 @@ export interface MemoryOptions {
 
 // the same as core/layout/src/templates.rs (TEMPLATES), in the same order
 const TEMPLATE_CATALOG: LayoutTemplate[] = [
-  { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. No account needed.', service: null },
-  { key: 'local-video', name: 'Save a recording locally', description: 'The recording, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the screen. No account needed.', service: null },
+  { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. A Logs tab beside the screenshot reads the logs. No account needed.', service: null },
+  { key: 'local-video', name: 'Save a recording locally', description: 'The recording of the window in focus, the screenshot taken from it, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the window in focus. No account needed.', service: null },
   { key: 'jira-bug', name: 'Jira bug report', description: 'Project, issue type, summary and description, with the screenshot and any files attached to a new issue. A Logs tab beside the screenshot reads the logs, to copy lines from.', service: 'jira' },
-  { key: 'jira-video', name: 'Jira bug report with a recording', description: 'Like the Jira bug report, with the recording of your screen attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.', service: 'jira' },
-  { key: 'jira-comment', name: 'Jira comment on an issue', description: 'Pick one of your recent issues and add a comment with the screenshot and files.', service: 'jira' },
+  { key: 'jira-video', name: 'Jira bug report with a recording', description: 'Like the Jira bug report, with the recording of the window in focus attached to the new issue; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus.', service: 'jira' },
+  { key: 'jira-update', name: 'Jira issue: create or update', description: 'Pick one of your recent issues to update it, or leave it empty for a new one. An update keeps the summary, adds the description below the one there and adds the labels; a comment can go with either. The screenshot and files are attached.', service: 'jira' },
   { key: 'github-issue', name: 'GitHub issue', description: 'Open an issue in a repository with a title, labels and a description; the screenshot and the ticked files are shown in it. A Logs tab beside the screenshot reads the logs.', service: 'github' },
-  { key: 'github-comment', name: 'GitHub comment on an issue', description: 'Pick an open issue of the repository and add a comment with the screenshot and files.', service: 'github' },
-  { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and a zip of the ticked files to a Drive folder you pick.', service: 'google' },
-  { key: 'google-drive-video', name: 'Google Drive upload of a recording', description: 'Upload the recording and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the screen.', service: 'google' },
+  { key: 'github-video', name: 'GitHub issue with a recording', description: 'Like the GitHub issue, with the recording of the window in focus linked from it beside the screenshot taken from it; tabs hold the recording, the screenshot and the logs. A shortcut that opens it records the window in focus.', service: 'github' },
+  { key: 'github-update', name: 'GitHub issue: create or update', description: 'Pick an open issue to update it, or leave it empty for a new one. An update keeps the title, adds the description below the one there and adds the labels; a comment can go with either. The screenshot and files are shown in it.', service: 'github' },
+  { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and a zip of the ticked files to a Drive folder you pick. A Logs tab beside the screenshot reads the logs.', service: 'google' },
+  { key: 'google-drive-video', name: 'Google Drive upload of a recording', description: 'Upload the recording of the window in focus, the screenshot taken from it and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the window in focus.', service: 'google' },
   { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet: the date, two columns you fill, and links to the uploads.', service: 'google' },
   { key: 'reddit-post', name: 'Reddit post', description: 'Post the screenshot to a subreddit you follow, with a title and text.', service: 'reddit' },
   { key: 'claude-ask', name: 'Ask Claude about a capture', description: 'Write a prompt, choose a new or existing chat, and hand the screenshot and prompt to Claude. A Logs tab beside the screenshot reads the logs, to copy lines into the prompt.', service: 'claude' },
   { key: 'slack-message', name: 'Slack message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel the app is in, or reply in a thread. A Logs tab beside the screenshot reads the logs.', service: 'slack' },
-  { key: 'slack-video', name: 'Slack message with a recording', description: 'Post a message with the recording of your screen and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the screen.', service: 'slack' },
+  { key: 'slack-video', name: 'Slack message with a recording', description: 'Post a message with the recording of the window in focus and a zip of the ticked files into a channel the app is in, or reply in a thread; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus.', service: 'slack' },
   { key: 'discord-message', name: 'Discord message', description: 'Post a message with the screenshot and a zip of the ticked files into a channel, or start a post in a forum. Nobody is pinged. A Logs tab beside the screenshot reads the logs.', service: 'discord' },
+  { key: 'discord-video', name: 'Discord message with a recording', description: 'Post a message with the recording of the window in focus and a zip of the ticked files into a channel, or start a post in a forum, within the server\'s upload limit; tabs hold the recording, the screenshot taken from it and the logs. A shortcut that opens it records the window in focus.', service: 'discord' },
   { key: 'teams-message', name: 'Teams message', description: 'Post a message with the screenshot inside it into a chat, a channel or a channel thread, as you.', service: 'teams' },
   { key: 'x-post', name: 'X post', description: 'Post the screenshot to your X account with a short text (280 characters), hashtags and a description of the picture.', service: 'x' },
   { key: 'bluesky-post', name: 'Bluesky post', description: 'Post the screenshot to your Bluesky account with a short text (300 characters), hashtags and a description of the picture.', service: 'bluesky' },
@@ -521,6 +538,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   let updatePhase: UpdateView['phase'] = { state: 'idle' };
   let updateToken = false;
   const updateListeners = new Set<() => void>();
+  let ffmpegPhase: FfmpegPhase = { state: 'idle' };
+  const ffmpegListeners = new Set<() => void>();
   const updateView = (): UpdateView => ({
     current: '0.1.0-dev',
     repository: 'SotharL/CargoFrame',
@@ -969,7 +988,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           found: false, ffmpeg: null, version: null, encoders: [], captures: [], auto_capture: null,
           auto_encoder: null, os: 'windows', problem: v.ffmpeg
             ? `ffmpeg was not found in ${v.ffmpeg}.`
-            : 'ffmpeg was not found. Install it (on Windows: winget install Gyan.FFmpeg) or choose the folder it is in.',
+            : 'ffmpeg was not found. Download it from Settings, System, or choose the folder it is in under Recording.',
         };
       }
       return {
@@ -1074,6 +1093,21 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       updateListeners.add(callback);
       return () => {
         updateListeners.delete(callback);
+      };
+    },
+    ffmpegStatus: async () => ffmpegPhase,
+    ffmpegCheck: async () => {
+      ffmpegPhase = { state: 'offered', version: '9.0', size: 168 * 1024 * 1024 };
+      return ffmpegPhase;
+    },
+    ffmpegDownload: async () => {
+      ffmpegPhase = { state: 'done', version: '9.0' };
+      for (const f of ffmpegListeners) f();
+    },
+    onFfmpegChanged: async (callback) => {
+      ffmpegListeners.add(callback);
+      return () => {
+        ffmpegListeners.delete(callback);
       };
     },
   };

@@ -66,6 +66,9 @@ cargoframe-video = { path = "../core/video" }
 tauri-plugin-global-shortcut = "2"
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 
+# the ffmpeg CargoFrame downloads on Windows comes as a zip (Settings, System)
+zip = { version = "9", default-features = false, features = ["deflate"] }
+
 [target.'cfg(windows)'.dependencies]
 tauri-winrt-notification = "0.8"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
@@ -79,4 +82,3 @@ keyring = { version = "3", default-features = false, features = ["async-secret-s
 tempfile.workspace = true
 cargoframe-net = { path = "../core/net", features = ["mock"] }
 sha2 = "0.11"
-zip = { version = "9", default-features = false, features = ["deflate"] }

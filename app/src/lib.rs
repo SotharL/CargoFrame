@@ -11,6 +11,7 @@ mod commands;
 mod connections;
 mod desktop;
 mod desktop_keys;
+mod ffmpeg_get;
 mod hold;
 mod items;
 mod language;
@@ -179,6 +180,9 @@ pub fn run() {
             commands::get_memory_status,
             commands::get_update_view,
             commands::check_update,
+            commands::ffmpeg_status,
+            commands::ffmpeg_check,
+            commands::ffmpeg_download,
             commands::install_update,
             commands::set_update_token,
             commands::get_video,
@@ -286,14 +290,21 @@ fn check_for_updates_daily(app: tauri::AppHandle) {
                 updates::clear_downloads(&state.store.dirs().data().join("updates"));
             }
             std::thread::sleep(std::time::Duration::from_secs(60));
+            // Looked at every hour against the clock, not slept for a day: a computer that
+            // sleeps at night, or a setting turned on later, still gets its daily check.
+            let mut last: Option<std::time::SystemTime> = None;
             loop {
-                if let Some(state) = app.try_state::<AppState>() {
+                let due = last.and_then(|at| at.elapsed().ok()).map_or(true, |since| {
+                    since >= std::time::Duration::from_secs(24 * 3600)
+                });
+                if let (true, Some(state)) = (due, app.try_state::<AppState>()) {
                     let on = state
                         .store
                         .load_or_default::<cargoframe_config::General>()
                         .map(|g| g.check_updates)
                         .unwrap_or(false);
                     if on {
+                        last = Some(std::time::SystemTime::now());
                         state.updates.check();
                         let _ = tauri::Emitter::emit(&app, "update-changed", ());
                         if let Some(version) = state.updates.news() {
@@ -301,7 +312,7 @@ fn check_for_updates_daily(app: tauri::AppHandle) {
                         }
                     }
                 }
-                std::thread::sleep(std::time::Duration::from_secs(24 * 3600));
+                std::thread::sleep(std::time::Duration::from_secs(3600));
             }
         });
     if let Err(e) = spawned {

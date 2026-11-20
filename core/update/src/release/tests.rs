@@ -320,3 +320,66 @@ fn only_plain_file_names_pass() {
         assert!(!is_plain_name(bad), "{bad:?}");
     }
 }
+
+#[test]
+fn the_windows_installer_is_found_under_the_name_that_stays_the_same() {
+    // the releases up to 0.7.0 have only CargoFrame-Setup.exe on Windows
+    let server = serving(
+        "v0.2.0",
+        &[
+            "CargoFrame-0.2.0-linux-x64.tar.gz",
+            "CargoFrame-Setup.exe",
+            "SHA256SUMS.txt",
+        ],
+    );
+    let Check::Available(a) = run(&server, "0.1.0", Some(Platform::Windows)).unwrap() else {
+        panic!("an update is there")
+    };
+    assert_eq!(a.installer.name, "CargoFrame-Setup.exe");
+    // the name with the version comes first when both are there
+    let server = serving(
+        "v0.2.0",
+        &[
+            "CargoFrame-Setup.exe",
+            "CargoFrame-0.2.0-windows-x64-setup.exe",
+            "SHA256SUMS.txt",
+        ],
+    );
+    let Check::Available(a) = run(&server, "0.1.0", Some(Platform::Windows)).unwrap() else {
+        panic!("an update is there")
+    };
+    assert_eq!(a.installer.name, "CargoFrame-0.2.0-windows-x64-setup.exe");
+    // Linux has no such name
+    assert_eq!(
+        Platform::Linux.installer_names(&v("0.2.0")),
+        vec!["CargoFrame-0.2.0-linux-x64.tar.gz"]
+    );
+}
+
+#[test]
+fn a_token_that_no_longer_works_is_left_out_for_a_public_repository() {
+    let server = MockServer::start(move |rec| {
+        if rec.header("authorization").is_some() {
+            return MockResponse::text(401, "Bad credentials");
+        }
+        let host = rec.header("host").unwrap_or("127.0.0.1").to_string();
+        MockResponse::json(200, release_json(&host, "v0.2.0", &ALL))
+    });
+    let found = check(
+        &UreqHttp::new(),
+        &source(&server, Some("old-token")),
+        &v("0.1.0"),
+        Some(Platform::Windows),
+    )
+    .unwrap();
+    assert!(matches!(found, Check::Available(_)));
+    // a private repository still says the token is the problem
+    let closed = MockServer::start(|_| MockResponse::text(401, "Bad credentials"));
+    let refused = check(
+        &UreqHttp::new(),
+        &source(&closed, Some("old-token")),
+        &v("0.1.0"),
+        Some(Platform::Windows),
+    );
+    assert_eq!(refused.unwrap_err(), UpdateError::TokenRejected);
+}

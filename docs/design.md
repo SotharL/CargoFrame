@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.7.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.7.1. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -41,13 +41,13 @@ flowchart LR
 
 | Concept | One line | Stored as |
 |---------|----------|-----------|
-| **Shortcut** | Keys (or none: the tray menu only) and the layout they open; for a screenshot, what it shows (program, screen, all screens). Called a trigger in the code and the files | `triggers/<id>.json` |
+| **Shortcut** | Keys (or none: the tray menu only) and the layout they open; for a screenshot, what it shows (program, screen, all screens). Keys are Ctrl, Alt, Shift or Win with up to three other keys, any of them (or F1–F24, Pause or a media key alone), named by their place on the keyboard. Called a trigger in the code and the files | `triggers/<id>.json` |
 | **Layout** | Blocks on a 12-column grid. A **Video** block makes a press record; otherwise it takes a screenshot | `layouts/<id>.json` |
 | **Block** | Screenshot, Video, Text, Dropdown, Files, or a sharing button | inside its layout |
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
 | **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{<key>}` (or `{{rule.<key>}}`). The same key can be read by the rules of several files: the newest file's value wins, or every different value | `rules/<id>.json` |
 | **Field fill** | One field of a service and the steps that fill it on each share ("if `{gpu}` is found, add `gpu-{gpu}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
-| **Template** | A ready-made layout per service, never stored until saved. Those with much to fill in (Jira bug, GitHub issue, Slack, Discord, Ask Claude) hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording (the time of each moment shown over it, the log starting on the lines written while it recorded). Titles and links are one-line boxes, values are written `{app.title}`, and X, Bluesky and Instagram posts have a Hashtags block | in the code |
+| **Template** | A ready-made layout per service, never stored until saved. Most hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording (the time of each moment shown over it, the log starting on the lines written while it recorded). Every connection that takes a video has a recording variant, and a template's recording is of the **window in focus**. A report's starting text says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and, for Jira and GitHub, a table with the recording beside the screenshot. Jira and GitHub have **Create or update** (an optional issue: empty makes a new one). Titles and links are one-line boxes, and X, Bluesky and Instagram posts have a Hashtags block | in the code |
 
 ---
 
@@ -86,7 +86,7 @@ sequenceDiagram
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
 | Data parsing | If a file named like this is found (newest, or all): add it to the Files blocks, read values. A value is made by **selecting it in a file** (0.5.0, `Find::Pick`): in the lines with a text (the label just before the selection, or every line), right after it or from the start of the line, up to a text (the next sign, a space) or the end of the line; the most recent line, the first or all. Values from 0.4 (after a name, between two pieces, the line with a word; JSON, YAML, TOML, INI and XML read by key) keep working. **The same value in several files**: each file's rule reads it with the same key; the newest file (by its change time) wins, or every different value, the newest first; a value no file has is empty, or the text it says. A value can also be **made from other values**: choices tried from the top (`{stream}_{change}_{shelf}_{config}`, else without the shelf), with conditions when needed | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
-| Share | One `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices), handed to the connector | `app/src/share.rs` |
+| Share | The blocks the button says must be filled are checked first (the window greys the button and lists them; the share checks again). Then one `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices, and for each field what it does to an issue that is there), handed to the connector | `app/src/share.rs` |
 | Fallback | Retry with backoff; then a zip of everything is kept. A button with no connection is **Save locally** | `core/safe`, `core/bundle` |
 
 ### Where it sends
@@ -96,8 +96,8 @@ connect, test, list options, send), so the share flow never names a service.
 
 | Service | Sign-in | What it sends | Video |
 |---------|---------|---------------|:-----:|
-| Jira Cloud / Server | E-mail and API token / personal access token | An issue or a comment, with the picture, still, video and files | ✓ |
-| GitHub / Enterprise Server | A fine-grained token for the repository | An issue or a comment (with labels); the picture, video and zip go in a branch of the repository and are shown or linked in it, because GitHub's API cannot attach files | ✓ |
+| Jira Cloud / Server | E-mail and API token / personal access token | A new issue, or an update of one (each field as its mapping says, a comment, a vote), with the picture, still, video and files | ✓ |
+| GitHub / Enterprise Server | A fine-grained token for the repository | A new issue, or an update of one (each field as its mapping says, a comment, a 👍); the picture, video and zip go in a branch of the repository and are shown or linked in it, because GitHub's API cannot attach files | ✓ |
 | Google | OAuth with the person's own Desktop client | A Drive upload, optional Sheets row | ✓ |
 | Slack | Bot token (`xoxb-`) | A message with files, in a channel or thread | ✓ |
 | Discord | A webhook link per channel (a bot token as a last resort) | A message, a new forum post, a reply in a thread | ✓ |
@@ -108,6 +108,30 @@ connect, test, list options, send), so the share flow never names a service.
 | Bluesky | Handle and an app password | Text (300 characters), the screenshot, links marked | |
 | Instagram | Meta token; a picture server the person owns | A post with a caption; the picture is hosted first, because Instagram fetches from a web address | |
 | Custom API | Header or token | Any HTTPS endpoint, with the fields you define | |
+
+<details>
+<summary><b>Creating or updating an issue (Jira, GitHub)</b></summary>
+
+The `issue` field picks an issue that is there; left empty, a new one is made. For an update, each mapping of the
+sharing button says what its value does (`InfoMapping.update`, set in the builder beside where the block goes):
+
+| Choice | Does | Offered for |
+|--------|------|-------------|
+| Replace it | The field becomes the value | every field (the default) |
+| Add below what is there | The value under the field's text, a blank line between (the title: after it) | text blocks |
+| Add the first line below | Only the value's first line, the same way | text blocks |
+| Add to the list | Keeps what is there and adds (labels, components, versions, assignees) | lists |
+| Count up by the value | A number field plus the value (1 when empty) | text blocks on a custom field |
+| Leave it as it is | The field is not touched | every field |
+
+A `comment` field adds a comment, on the new issue or on the one updated. *Vote* (Jira) and *👍* (GitHub) can go
+with an update; one the service refuses (Jira refuses a vote on your own issue) is said, not a failure. The connector
+reads the issue once, and only the fields that are added to or counted, then sends one `PUT` (Jira, with `update`
+operations for lists) or `PATCH` (GitHub, with the labels and assignees added by their own call); the share's
+progress records it, so a retry does not add the text twice. A layout saved before 0.7.1 says none of this, and does
+what it did: the description becomes a comment on the issue picked.
+
+</details>
 
 <details>
 <summary><b>Formatting, tables and pictures in the text</b></summary>
@@ -173,7 +197,8 @@ the desktop for each. The program checks which desktop it is on and picks the wa
 | **Others** | Settings shows the command to add | XWayland programs only | Portal | Portal + GStreamer | Message left on the clipboard |
 
 - **Shortcut.** The desktop runs `cargoframe open --trigger <id>`, and the running copy takes it over. CargoFrame only
-  changes the shortcuts it made (GNOME: the ones under `cargoframe-`); uninstalling removes them.
+  changes the shortcuts it made (GNOME: the ones under `cargoframe-`); uninstalling removes them. A shortcut is what
+  the desktop takes: modifiers and one key (a combination of more keys is refused with that reason).
 - **Focus.** Window places are scaled from the desktop's logical pixels to the picture (scaled screens). Without a
   focused window the whole screen is captured, and the window says why.
 - **Recording.** The portal shares a screen (the desktop may ask which, once: the choice is remembered), GStreamer reads
@@ -234,10 +259,22 @@ found, its times are `[YYYY_MM_DD] HH:mm -`") or by the block; the last one used
 next time. **While the clip plays**, the lines follow it: those written up to the moment shown, the newest coming in
 at the bottom as it plays (a switch turns it off).
 
-**A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the whole
-screen is recorded and the window's place is noted ten times a second; the clip opens cropped to the window and the
-crop slides with it, in the window and in the sent clip. A crop set by hand stays put; *Follow window* follows again.
-It costs a larger picture to encode.
+**A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the screen
+the window is on is recorded and the window's place is noted ten times a second; the clip opens cropped to the window
+and the crop slides with it, in the window and in the sent clip. A crop set by hand stays put; *Follow window* follows
+again. The screens are read every five seconds, and the red outline is hidden while the window moves and drawn again
+once it is still (a quarter of a second), so following costs little beyond the larger picture to encode.
+
+**ffmpeg** can be downloaded from *System* (0.7.1): the build ffmpeg.org links to (BtbN on GitHub, GPL, the newest
+release branch for Windows or Linux), checked against the checksums published beside it, unpacked into CargoFrame's
+own folder (`tools/ffmpeg`, no administrator) and used before any other ffmpeg. The line offers the newer build when
+there is one.
+
+**Shortcuts of any keys** (0.7.1): the system shortcut library (`global-hotkey`) takes modifiers and one key it
+knows; a shortcut it can take still goes through it. Any other (several keys, the number pad, `<>`, media and
+browser keys…) is watched by CargoFrame: `core/keys` reads the keys' state every 25 ms (`GetAsyncKeyState`, or the X
+keymap) on a thread that exists only while such a shortcut does, and fires once when the last key goes down with
+the modifiers it does not name up.
 
 </details>
 
@@ -274,13 +311,13 @@ service are grouped under *Connect a service*, below the others.
 | Group | Page | What it holds |
 |-------|------|---------------|
 | Get started | **Connections** | The services captures go to, each with its sign-in or token, a test, and *Add a connection*; Claude's pinned and recent chats |
-| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends, with a *Fill fields* tab (steps that fill a field of the service on each share); a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
-| | **Shortcuts** | The keys and the layout each opens; what a press makes (a screenshot of the program, the screen or all screens, or a recording) |
-| | **Data parsing** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or one opened or dropped on it), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives (the panel beside the file always stays in sight); a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read (one dropped on the page starts a new value in it), each added to the window's files or not, with its lines' time format and its values |
+| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends (for Jira and GitHub, what each block does to an issue that is there, and a vote or 👍; for every button, the blocks that must be filled before sharing), with a *Fill fields* tab (steps that fill a field of the service on each share); a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
+| | **Shortcuts** | The keys and the layout each opens (held together in the box: Ctrl, Alt, Shift or Win with up to three others, any of them; the box says when a key cannot be used); what a press makes (a screenshot of the program, the screen or all screens, or a recording) |
+| | **Data parsing** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or ones opened or dropped on it; a tab's × closes it, and what is opened or closed stays so until Settings closes), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives (the panel beside the file always stays in sight); a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read (one dropped on the page starts a new value in it), each added to the window's files or not, with its lines' time format and its values |
 | | **Recording** | What shows on screen while recording (the outline and dot), how long a clip is, continuous recording, following a window that is moved, where ffmpeg is, capture and compression (Automatic picks the cheapest that works), a 5-second test |
 | CargoFrame | **Preferences** | Language (its dropdown on the title's line; the computer's by default; English, French, Spanish, Italian, German), appearance (theme, accent colour), notifications (each kind on or off, with a link to the recording sign), starting with the computer |
 | | **Files & backup** | When a share fails (the folder for saved zips, retries), export and import, what is kept on this computer (clear each kind, forget the remembered choices) and *Reset CargoFrame* |
-| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing), updates and the version, windows kept ready, speed and memory |
+| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing) and ffmpeg's own *Download* / *Update* button, updates and the version (checked against the installer under either of its names, once a day after a day has passed when that is on), windows kept ready, speed and memory |
 
 | Connections | Layout builder | Shortcut |
 |:---:|:---:|:---:|
@@ -298,7 +335,7 @@ service are grouped under *Connect a service*, below the others.
 | **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
 | **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown; the expand icon opens it large, in the middle of the window over a dimmed one (the cross, Escape or a click outside closes it). It has no background of its own until opened large. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (typed, or set from a line picked: *Start here*, *End here*; UTC when the block says); the time of each line is found by itself, or read the way a time **selected in a line** is written (the format is worked out from it; selected in the text search, it is offered), or a format written by hand (behind the button that shows how times are read), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. While the clip plays, the lines written up to the moment shown are shown, the newest coming in at the bottom. Nothing of it is sent |
 | **Tabs** | Like a binder: the names on the top (or the bottom, left or right), the blocks of the open tab under them. A click (or the arrow keys) opens a tab; the blocks of the others are only hidden, so what is typed or edited in them stays and is sent. A tab's name lights up while a hovered button sends something in it |
-| **Sharing buttons** | Up to five, in the service's colour; a label too long for its button is cut with an ellipsis and is whole on hover. One dot per button at the end of each block's first row (its title, or its tools) says which button sends it: full = sent, an empty ring in the button's colour = left out (a click switches it), dashed = cannot take it, an outer ring = required, a number when two buttons go to the same kind of service. A block with no first row has them on its top edge. Hovering a button or a dot rings what each block it sends holds: the picture of a screenshot or a recording, the box of a text, not the block's title or tools |
+| **Sharing buttons** | Up to five, in the service's colour; a button with blocks that must be filled stays grey and lists those still empty; a label too long for its button is cut with an ellipsis and is whole on hover. One dot per button at the end of each block's first row (its title, or its tools) says which button sends it: full = sent, an empty ring in the button's colour = left out (a click switches it), dashed = cannot take it, an outer ring = required, a number when two buttons go to the same kind of service. A block with no first row has them on its top edge. Hovering a button or a dot rings what each block it sends holds: the picture of a screenshot or a recording, the box of a text, not the block's title or tools |
 
 <img alt="The CargoFrame window with a recording" src="images/capture-recording.png" width="640">
 
@@ -442,5 +479,9 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   itself after 12 hours.
 - The keys pressed and following a moved window: Windows and X11, not Wayland. A key tapped faster than the keyboard is
   looked at (20 ms) can be missed on X11. Every key typed while recording shows, passwords too.
+- Shortcuts of more than one key besides the modifiers are watched by CargoFrame (Windows, X11): a key tapped faster
+  than 25 ms can be missed, and the keys still reach the program in use. On Wayland a shortcut is modifiers and one key.
+- An update of an issue changes the fields the layout maps; Jira fields with their own update operations beyond lists
+  (worklogs, links) are not offered.
 - Next for the connectors (required fields shown before sending, company sign-in):
   [connectors.md](connectors.md).

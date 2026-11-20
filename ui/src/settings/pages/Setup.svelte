@@ -1,4 +1,5 @@
 <script lang="ts">
+  import FfmpegGet from './FfmpegGet.svelte';
   import { t, tn } from '../../lib/i18n/index.svelte';
   import Tr from '../../lib/i18n/Tr.svelte';
   // The apps CargoFrame uses, whether they are on this computer, and one button for what is
@@ -131,6 +132,9 @@
             <div class="body">
               <p class="quiet what">{i.what_for}</p>
               <p class="detail selectable">{i.detail}</p>
+              {#if i.id === 'ffmpeg'}
+                <FfmpegGet missing={i.status === 'missing'} ondone={() => void refresh()} />
+              {/if}
               {#if i.action === 'sound_settings'}
                 <button type="button" onclick={openSound}>{t('Open the Windows sound settings')}</button>
               {/if}

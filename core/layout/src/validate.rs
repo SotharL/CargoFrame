@@ -773,6 +773,8 @@ mod tests {
             mappings: vec![],
             on_success: OnSuccess::CloseWindow,
             send: Default::default(),
+            required: Vec::new(),
+            react: false,
         })
     }
 
@@ -1182,14 +1184,18 @@ mod tests {
                     InfoMapping {
                         field: "summary".into(),
                         source: ValueSource::Block("gone".into()),
+                        update: None,
                     },
                     InfoMapping {
                         field: "build".into(),
                         source: ValueSource::Rule("nope".into()),
+                        update: None,
                     },
                 ],
                 on_success: OnSuccess::KeepOpen,
                 send: Default::default(),
+                required: Vec::new(),
+                react: false,
             }),
         )]);
         let issues = validate(&l, &reg);

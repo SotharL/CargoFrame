@@ -43,6 +43,7 @@ fn payload() -> Payload {
             Field::text("labels", "bug, crash"),
         ],
         vars: Default::default(),
+        react: false,
     }
 }
 
@@ -79,6 +80,15 @@ fn happy(branch_made: Arc<AtomicU32>) -> MockServer {
         ),
         ("POST", "/repos/octo/app/issues/12/comments") => MockResponse::json(201, json!({"id": 1})),
         ("POST", "/repos/octo/app/issues/12/labels") => MockResponse::json(200, json!([])),
+        ("GET", "/repos/octo/app/issues/12") => MockResponse::json(
+            200,
+            json!({"title": "It crashes", "body": "First seen Monday"}),
+        ),
+        ("PATCH", "/repos/octo/app/issues/12") => MockResponse::json(200, json!({"number": 12})),
+        ("POST", "/repos/octo/app/issues/12/reactions") => {
+            MockResponse::json(201, json!({"id": 3}))
+        }
+        ("POST", "/repos/octo/app/issues/7/comments") => MockResponse::json(201, json!({"id": 2})),
         ("GET", "/user") => MockResponse::json(200, json!({"login": "jane"})),
         _ => MockResponse::new(404),
     })
@@ -177,6 +187,68 @@ fn an_issue_number_adds_a_comment_and_the_labels_instead() {
         json!({"labels": ["bug", "crash"]})
     );
     assert!(server.requests_to("/repos/octo/app/issues").is_empty());
+}
+
+fn how(key: &str, value: &str, update: Update) -> Field {
+    let mut f = Field::text(key, value);
+    f.update = Some(update);
+    f
+}
+
+#[test]
+fn an_update_does_to_each_field_what_its_mapping_says_then_comments_and_reacts() {
+    let server = happy(Arc::new(AtomicU32::new(1)));
+    let c = connector(&server, GithubFiles::None);
+    let mut p = payload();
+    p.react = true;
+    p.fields = vec![
+        Field::text("issue", "#12"),
+        how("title", "still", Update::Skip),
+        how("body", "Seen again\nand more", Update::AppendLine),
+        how("labels", "regression", Update::Add),
+        how("assignees", "@jane", Update::Replace),
+        Field::text("comment", "Still there"),
+    ];
+    let out = world().with("gh", |ctx| c.send(ctx, &p)).unwrap();
+    assert_eq!(out.summary, "Updated #12 in octo/app");
+    assert_eq!(
+        server.requests_to("/repos/octo/app/issues/12/labels")[0].json(),
+        json!({"labels": ["regression"]})
+    );
+    let patch = server
+        .requests_to("/repos/octo/app/issues/12")
+        .into_iter()
+        .find(|r| r.method == "PATCH")
+        .unwrap();
+    assert_eq!(
+        patch.json(),
+        json!({"body": "First seen Monday\n\nSeen again", "assignees": ["jane"]})
+    );
+    let comment = server.requests_to("/repos/octo/app/issues/12/comments")[0].json();
+    assert_eq!(comment, json!({"body": "Still there"}));
+    assert_eq!(
+        server.requests_to("/repos/octo/app/issues/12/reactions")[0].json(),
+        json!({"content": "+1"})
+    );
+    assert!(server.requests_to("/repos/octo/app/issues").is_empty());
+}
+
+#[test]
+fn a_new_issue_gets_the_comment_after_it_is_opened() {
+    let server = happy(Arc::new(AtomicU32::new(1)));
+    let c = connector(&server, GithubFiles::None);
+    let mut p = payload();
+    p.fields.push(Field::text("comment", "Found while testing"));
+    let out = world().with("gh", |ctx| c.send(ctx, &p)).unwrap();
+    assert_eq!(out.summary, "Opened #7 in octo/app");
+    assert!(server.requests_to("/repos/octo/app/issues")[0]
+        .json()
+        .get("comment")
+        .is_none());
+    assert_eq!(
+        server.requests_to("/repos/octo/app/issues/7/comments")[0].json(),
+        json!({"body": "Found while testing"})
+    );
 }
 
 #[test]

@@ -727,6 +727,7 @@ fn with_a_path(w: &mut World) {
     button.mappings.push(cargoframe_layout::InfoMapping {
         field: "where".into(),
         source: ValueSource::Block("where".into()),
+        update: None,
     });
 }
 
@@ -2308,4 +2309,35 @@ fn two_local_saves_in_the_same_second_keep_both() {
     };
     assert_ne!(a, b);
     assert_eq!(fs::read_dir(&dir).unwrap().count(), 2);
+}
+
+#[test]
+fn a_button_waits_for_the_blocks_it_says_must_be_filled() {
+    let mut w = world(|_| MockResponse::json(200, json!({"url": "https://x/1"})));
+    set_safe(&w, None, 0);
+    let layout = w.session.view.layout.as_mut().unwrap();
+    for b in &mut layout.blocks {
+        if let BlockKind::SharingButton(btn) = &mut b.kind {
+            btn.required = vec!["note".into(), "logs".into()];
+        }
+    }
+    // the note emptied, no file ticked: blocked, by name, nothing sent
+    let mut req = request();
+    req.texts.insert("note".into(), "  ".into());
+    req.files.clear();
+    let (r, _) = go(&w, &req, vec![]);
+    let ShareResult::Blocked { reasons } = r else {
+        panic!("{r:?}")
+    };
+    assert_eq!(reasons.len(), 2, "{reasons:?}");
+    assert!(
+        reasons
+            .iter()
+            .all(|r| r.ends_with("must be filled before sharing")),
+        "{reasons:?}"
+    );
+    assert!(w.server.requests().is_empty());
+    // filled: it goes
+    let (r, _) = go(&w, &request(), vec![]);
+    assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
 }

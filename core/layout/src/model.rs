@@ -398,6 +398,28 @@ pub struct InfoMapping {
     /// Field name from the connection's info type.
     pub field: String,
     pub source: ValueSource,
+    /// What it does to an issue that already exists (a share that updates one). `None`: what
+    /// the service did before 0.7.1 (Jira, GitHub: the description becomes a comment).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub update: Option<UpdateMode>,
+}
+
+/// What a value does to an issue that already exists.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum UpdateMode {
+    /// Takes the place of what is there.
+    Replace,
+    /// Is added below what is there (a text).
+    Append,
+    /// Only its first line is added below what is there: the issue stays short.
+    AppendLine,
+    /// Is added to what is there (labels, components: each one once).
+    Add,
+    /// Adds 1 to the number there (or the number it holds): a count of times seen.
+    Increment,
+    /// Leaves the issue as it is.
+    Skip,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -484,6 +506,13 @@ pub struct SharingButton {
     /// Whether the picture and the files go with it. Absent from the file when untouched.
     #[serde(default, skip_serializing_if = "SendRules::is_default")]
     pub send: SendRules,
+    /// Blocks that must be filled before it shares (a text written, a choice made, a tag, a
+    /// file ticked, the picture there): the button waits until they are.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub required: Vec<String>,
+    /// On an issue that already exists, also react to it: a vote (Jira), a 👍 (GitHub).
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub react: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -774,9 +803,12 @@ mod serde_tests {
                         mappings: vec![InfoMapping {
                             field: "summary".into(),
                             source: ValueSource::Rule("version".into()),
+                            update: None,
                         }],
                         on_success: OnSuccess::KeepOpen,
                         send: Default::default(),
+                        required: Vec::new(),
+                        react: false,
                     }),
                 },
                 Block {

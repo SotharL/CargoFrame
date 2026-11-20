@@ -7,7 +7,7 @@
   import ShortcutInput from '../../lib/components/ShortcutInput.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
-  import { keycaps } from '../../lib/shortcut';
+  import { keyLabel, keycaps, watchedByCargoFrame } from '../../lib/shortcut';
   import type { CaptureMode, Layout, ShortcutStatus, Trigger } from '../../lib/types';
   import { go } from '../route.svelte';
 
@@ -118,7 +118,7 @@
         <div class="head">
           <h2>{item.name}</h2>
           {#if item.shortcut}
-            <span class="keys">{#each keycaps(item.shortcut) as k, i (i)}<kbd>{k}</kbd>{/each}</span>
+            <span class="keys">{#each keycaps(item.shortcut) as k, i (i)}<kbd>{keyLabel(k)}</kbd>{/each}</span>
           {:else}
             <span class="quiet">{t('Tray menu only')}</span>
           {/if}
@@ -168,7 +168,10 @@
       <div class="field" data-tour="triggers.shortcut">
         <span class="label">{t('Keys')}</span>
         <ShortcutInput bind:value={draft.value.shortcut} label={t('Keys')} />
-        <p class="quiet hint">{t('Click the box, then press the keys. Leave it empty to start this shortcut from the tray menu only.')}</p>
+        <p class="quiet hint">{t('Click the box, then hold the keys together and let go: Ctrl, Alt, Shift or Win with up to three other keys, any of them (the number pad, the <> key, the sound keys). Leave it empty to start this shortcut from the tray menu only.')}</p>
+        {#if draft.value.shortcut && watchedByCargoFrame(draft.value.shortcut)}
+          <p class="quiet hint">{t('CargoFrame watches these keys itself: they still reach the program in use. On Wayland a shortcut is modifiers and one key.')}</p>
+        {/if}
       </div>
       <Field label={t('Layout')} hint={t('The window this shortcut opens. It also says what a press does.')} tour="triggers.layout">
         <select bind:value={draft.value.layout_id}>

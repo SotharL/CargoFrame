@@ -30,6 +30,9 @@ pub struct Watched {
     /// The keys pressed, when they were read.
     pub presses: Vec<cargoframe_keys::Press>,
     pub ran_ms: u64,
+    /// What the recording covers, on the desktop, when it is one screen and not the whole
+    /// desktop (a window followed is recorded with the screen it is on).
+    pub frame: Option<Rect>,
 }
 
 pub struct Watch {
@@ -42,6 +45,7 @@ pub struct Watch {
     keys: Option<cargoframe_keys::Tracker>,
     keys_problem: Option<String>,
     began: Instant,
+    frame: Option<Rect>,
 }
 
 fn rect_of(b: cargoframe_capture::PixelRect) -> Rect {
@@ -68,16 +72,28 @@ pub fn look_of(sign: &RecordingSign) -> Look {
 
 /// The monitors as one rectangle, and the one that holds `area` (by its middle).
 fn screens(app: &AppHandle, area: Option<Rect>) -> Option<(Rect, Rect)> {
-    let monitors = app.available_monitors().ok()?;
-    let rects: Vec<Rect> = monitors
-        .iter()
-        .map(|m| Rect {
-            x: m.position().x,
-            y: m.position().y,
-            w: m.size().width,
-            h: m.size().height,
+    screens_in(&monitors(app), area)
+}
+
+/// The screens, each where it is on the desktop. Asking goes through the program's main thread,
+/// so a watch asks once and again every few seconds, not at each look.
+fn monitors(app: &AppHandle) -> Vec<Rect> {
+    app.available_monitors()
+        .map(|ms| {
+            ms.iter()
+                .map(|m| Rect {
+                    x: m.position().x,
+                    y: m.position().y,
+                    w: m.size().width,
+                    h: m.size().height,
+                })
+                .collect()
         })
-        .collect();
+        .unwrap_or_default()
+}
+
+/// The whole desktop, and the screen `area` is on (the desktop when it is on none, or `None`).
+fn screens_in(rects: &[Rect], area: Option<Rect>) -> Option<(Rect, Rect)> {
     let first = *rects.first()?;
     let (mut x0, mut y0, mut x1, mut y1) = (
         first.x,
@@ -85,7 +101,7 @@ fn screens(app: &AppHandle, area: Option<Rect>) -> Option<(Rect, Rect)> {
         first.x + first.w as i32,
         first.y + first.h as i32,
     );
-    for r in &rects {
+    for r in rects {
         x0 = x0.min(r.x);
         y0 = y0.min(r.y);
         x1 = x1.max(r.x + r.w as i32);
@@ -114,6 +130,11 @@ fn screens(app: &AppHandle, area: Option<Rect>) -> Option<(Rect, Rect)> {
 /// The whole desktop (every monitor as one rectangle).
 pub fn desktop_of(app: &AppHandle) -> Option<Rect> {
     screens(app, None).map(|(desktop, _)| desktop)
+}
+
+/// The screen `area` is on (the one holding its middle).
+pub fn screen_of(app: &AppHandle, area: Rect) -> Option<Rect> {
+    screens(app, Some(area)).map(|(_, screen)| screen)
 }
 
 /// How desktop pixels map to a recording of the whole screen (`size`, in its pixels): the
@@ -301,6 +322,8 @@ pub struct Plan {
     pub keys: bool,
     /// Note where a window is, ten times a second, so the clip can follow it as it is moved.
     pub places: Places,
+    /// What the recording covers when it is one screen (see [`Watched::frame`]).
+    pub frame: Option<Rect>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -387,12 +410,22 @@ impl Watch {
                 let mut followed: Option<Rect> = area;
                 let mut last_sample: Option<Place> = None;
                 let mut next = Duration::ZERO;
+                let mut rects = monitors(&app);
+                let mut rects_at = began.elapsed();
+                // While a window is dragged its outline is taken down, and put up again where it
+                // stopped: drawing it again at each look (ten times a second) made the program
+                // being recorded stutter.
+                let mut moving: Option<(Rect, Duration)> = None;
                 loop {
                     if flag.load(Ordering::SeqCst) {
                         break;
                     }
                     let ran = began.elapsed();
                     let now_ms = ran.as_millis() as u64;
+                    if ran.saturating_sub(rects_at) >= Duration::from_secs(5) {
+                        rects = monitors(&app);
+                        rects_at = ran;
+                    }
                     if ran >= next {
                         next = ran + Duration::from_secs(1);
                         // the recording stopped by itself: the sign goes at once
@@ -412,7 +445,7 @@ impl Watch {
                                 if follow_focus && !wayland && followed != Some(at) {
                                     followed = Some(at);
                                     shown = Indicator::none();
-                                    if let Some((_, screen)) = screens(&app, Some(at)) {
+                                    if let Some((_, screen)) = screens_in(&rects, Some(at)) {
                                         shown = Indicator::show(at, screen, look);
                                     }
                                 }
@@ -448,12 +481,13 @@ impl Watch {
                                     places.push(before);
                                 }
                                 places.push(here);
-                                // the outline goes with it (a window followed by itself only)
+                                // the outline goes with it (a window followed by itself only),
+                                // once it stands still
                                 if matches!(plan.places, Places::Window(_)) && !follow_focus {
-                                    shown = Indicator::none();
-                                    if let Some((_, screen)) = screens(&app, Some(here.rect)) {
-                                        shown = Indicator::show(here.rect, screen, look);
+                                    if shown.showing() {
+                                        shown = Indicator::none();
                                     }
+                                    moving = Some((here.rect, ran));
                                 }
                                 if let Some(keep) = plan.keep_ms {
                                     prune(&mut places, now_ms.saturating_sub(keep * 2));
@@ -464,6 +498,14 @@ impl Watch {
                                 }
                             }
                             last_sample = Some(here);
+                        }
+                    }
+                    if let Some((at, since)) = moving {
+                        if ran.saturating_sub(since) >= Duration::from_millis(250) {
+                            moving = None;
+                            if let Some((_, screen)) = screens_in(&rects, Some(at)) {
+                                shown = Indicator::show(at, screen, look);
+                            }
                         }
                     }
                     std::thread::sleep(Duration::from_millis(100));
@@ -477,6 +519,7 @@ impl Watch {
                     seen,
                     places,
                     presses: Vec::new(),
+                    frame: plan.frame,
                     ran_ms: began.elapsed().as_millis() as u64,
                 }
             })
@@ -489,6 +532,7 @@ impl Watch {
             keys,
             keys_problem,
             began,
+            frame: plan.frame,
         }
     }
 
@@ -508,6 +552,7 @@ impl Watch {
                 .clone(),
             presses: self.keys.as_ref().map(|k| k.presses()).unwrap_or_default(),
             ran_ms: self.began.elapsed().as_millis() as u64,
+            frame: self.frame,
         }
     }
 
@@ -785,6 +830,37 @@ mod tests {
         assert!(path.is_empty());
         // a window never seen is not followed
         assert!(follow_path(&places, 8, span, Some(&desktop), (1920, 1080)).is_none());
+    }
+
+    #[test]
+    fn a_window_followed_is_recorded_with_its_screen_and_cropped_in_it() {
+        let left = Rect {
+            x: 0,
+            y: 0,
+            w: 1920,
+            h: 1080,
+        };
+        let right = Rect {
+            x: 1920,
+            y: 0,
+            w: 2560,
+            h: 1440,
+        };
+        let window = Rect {
+            x: 2000,
+            y: 100,
+            w: 800,
+            h: 600,
+        };
+        // the screen that holds the window's middle
+        let (desktop, screen) = screens_in(&[left, right], Some(window)).unwrap();
+        assert_eq!(screen, right);
+        assert_eq!((desktop.w, desktop.h), (4480, 1440));
+        // recorded at 1080 lines: the crop is in that screen's picture, made smaller
+        let places = vec![place(0, 7, 2000, 100)];
+        let span = Span::ending(4_000, 2_000);
+        let (crop, _) = follow_path(&places, 7, span, Some(&right), (1920, 1080)).unwrap();
+        assert_eq!((crop.x, crop.y), (60, 74));
     }
 
     #[test]

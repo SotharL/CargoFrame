@@ -144,8 +144,10 @@ export function newBlockId(blocks: readonly Block[], type: BlockType): string {
 function content(type: BlockType): BlockContent {
   switch (type) {
     case 'screenshot':
-    case 'video':
       return { type };
+    case 'video':
+      // the window in focus: the program the capture's values come from
+      return { type, subject: 'focused_window' };
     case 'text':
       return { type, title: t('Notes'), placement: 'above', role: 'plain', default_text: '' };
     case 'dropdown':

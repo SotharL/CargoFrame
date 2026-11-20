@@ -419,6 +419,7 @@ mod tests {
             prompt: Some("line1\nline2 \"q\"".into()),
             fields: vec![Field::text("channel", "dev ops"), Field::text("empty", "")],
             vars: [("rule.version".to_string(), "1.2.3".to_string())].into(),
+            react: false,
         }
     }
 

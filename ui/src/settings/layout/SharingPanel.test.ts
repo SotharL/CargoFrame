@@ -53,6 +53,29 @@ describe('SharingPanel', () => {
     expect(screen.getByText(/Cannot be sent: Reddit cannot take files on a post/)).toBeTruthy();
   });
 
+  it('says, for Jira, what each mapped block does to an issue that is there, what must be filled, and the vote', async () => {
+    const s = setup('jira', { prompt_block_id: null, mappings: [{ field: 'description', source: { kind: 'block', value: 'prompt' } }] });
+    s.reach = demoReach({ id: 'l', name: 'L', blocks: s.blocks }, s.button, demoCapabilities('jira'), 'jira');
+    const seen = live(s, 'jira');
+    const when = screen.getByLabelText('What happened: what it does to an issue that is there') as HTMLSelectElement;
+    expect(when.value).toBe('replace');
+    await fireEvent.change(when, { target: { value: 'append' } });
+    await waitFor(() => expect(seen.now.mappings[0]!.update).toBe('append'));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'What happened' }));
+    await waitFor(() => expect(seen.now.required).toEqual(['prompt']));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'Also vote for the issue' }));
+    await waitFor(() => expect(seen.now.react).toBe(true));
+  });
+
+  it('offers no update choices where a share cannot update', () => {
+    const { button, blocks, reach } = setup('reddit');
+    render(SharingPanel, { block: button, blocks, kind: 'reddit', reach });
+    expect(screen.queryByText('On an issue that is there')).toBeNull();
+    expect(screen.queryByText('Also vote for the issue')).toBeNull();
+    // what must be filled is for every button
+    expect(screen.getByText('Must be filled')).toBeTruthy();
+  });
+
   describe('choosing where a block goes', () => {
     const fields = [{ key: 'summary', label: 'Summary' }, { key: 'description', label: 'Description' }];
     function withNote(kind: ServiceKind | null) {

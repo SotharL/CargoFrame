@@ -124,6 +124,14 @@ pub fn search_dirs(setting: Option<&str>, beside_app: Option<&Path>) -> (Vec<Pat
     )
 }
 
+/// Where CargoFrame puts the ffmpeg it downloads (System page): looked in first, unless the
+/// person chose a folder under Recording.
+static OWN_FFMPEG: std::sync::OnceLock<PathBuf> = std::sync::OnceLock::new();
+
+pub fn set_own_ffmpeg_dir(dir: PathBuf) {
+    let _ = OWN_FFMPEG.set(dir);
+}
+
 pub fn program_beside_app() -> Option<PathBuf> {
     std::env::current_exe()
         .ok()
@@ -134,6 +142,10 @@ pub fn program_beside_app() -> Option<PathBuf> {
 pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String> {
     let (mut dirs, chosen) = search_dirs(setting.ffmpeg.as_deref(), beside_app);
     if !chosen {
+        // the one CargoFrame downloaded, first: it is there because it is the newest
+        if let Some(own) = OWN_FFMPEG.get().filter(|d| d.is_dir()) {
+            dirs.insert(0, own.clone());
+        }
         // where winget leaves ffmpeg: a program that was already running does not have it on its
         // search path yet
         dirs.extend(crate::setup::winget_links());
@@ -154,7 +166,7 @@ pub fn find(setting: &Video, beside_app: Option<&Path>) -> Result<Found, String>
         return Err(if chosen {
             tf("ffmpeg was not found in {place}.", &[("place", &place())])
         } else {
-            t("ffmpeg was not found. Install it (on Windows: winget install Gyan.FFmpeg) or choose the folder it is in.").into()
+            t("ffmpeg was not found. Download it from Settings, System, or choose the folder it is in under Recording.").into()
         });
     };
     let Some(ffprobe) = locate("ffprobe") else {
@@ -375,7 +387,7 @@ pub fn choose(setting: &Video, found: &Found, os: Os, session: &Session) -> Resu
             Os::Windows => [VideoCapture::Ddagrab, VideoCapture::Gdigrab]
                 .into_iter()
                 .find(|c| found.captures.contains(c))
-                .ok_or(t("This ffmpeg cannot capture the Windows screen (it has neither gdigrab nor ddagrab). Use a full build, for example winget install Gyan.FFmpeg."))?,
+                .ok_or(t("This ffmpeg cannot capture the Windows screen (it has neither gdigrab nor ddagrab). Download a full build from Settings, System."))?,
             Os::Linux => {
                 if session.wayland {
                     if !found.captures.contains(&VideoCapture::Wayland) {
@@ -429,7 +441,9 @@ fn choose_encoder(setting: &Video, found: &Found) -> Result<VideoEncoder, String
             ]
             .into_iter()
             .find(|e| found.encoders.contains(e))
-            .ok_or(t("This ffmpeg has no H.264 encoder. Use a full build, for example winget install Gyan.FFmpeg."))?
+            .ok_or(t(
+                "This ffmpeg has no H.264 encoder. Download a full build from Settings, System.",
+            ))?
         }
         explicit => {
             if !found.encoders.contains(&explicit) {

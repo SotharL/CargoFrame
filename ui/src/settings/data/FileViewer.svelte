@@ -33,6 +33,7 @@
     oncancel,
     onselect,
     onopen,
+    onclose,
   }: {
     files: ViewFile[];
     current: string;
@@ -42,6 +43,8 @@
     oncancel?: () => void;
     onselect: (file: string, line: number, s: number, e: number) => void;
     onopen: (files: File[]) => void;
+    /** The × of a tab: the file is closed. */
+    onclose?: (id: string) => void;
   } = $props();
 
   const ROW = 20;
@@ -213,13 +216,18 @@
 >
   <div class="tabs" role="tablist" aria-label={t('Files of the last capture')}>
     {#each files as f (f.id)}
-      <button
-        type="button"
-        role="tab"
-        aria-selected={file?.id === f.id}
-        title={f.id}
-        onclick={() => { current = f.id; hit = 0; top = 0; if (scroller) scroller.scrollTop = 0; }}
-      ><span class="tabname">{f.name}</span>{#if q}<span class="count" class:none={!counts(f)}>{counts(f)}</span>{/if}</button>
+      <span class="tab" class:on={file?.id === f.id}>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={file?.id === f.id}
+          title={f.id}
+          onclick={() => { current = f.id; hit = 0; top = 0; if (scroller) scroller.scrollTop = 0; }}
+        ><span class="tabname">{f.name}</span>{#if q}<span class="count" class:none={!counts(f)}>{counts(f)}</span>{/if}</button>
+        {#if onclose}
+          <button type="button" class="close" aria-label={t('Close {name}', { name: f.name })} title={t('Close {name}', { name: f.name })} onclick={() => onclose(f.id)}>×</button>
+        {/if}
+      </span>
     {/each}
     <button type="button" class="open" onclick={() => picker?.click()}>{t('＋ Open or drop a file')}</button>
     <input bind:this={picker} type="file" multiple hidden onchange={(e) => { const l = [...(e.currentTarget.files ?? [])]; e.currentTarget.value = ''; if (l.length) onopen(l); }} />
@@ -280,13 +288,22 @@
   .viewer { min-width: 0; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; display: flex; flex-direction: column; }
   .viewer.over { outline: 2px dashed var(--accent); outline-offset: -4px; }
   .tabs { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 2px; padding: 8px 8px 0; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+  .tab {
+    display: inline-flex; align-items: center; border: 1px solid transparent; border-radius: 6px 6px 0 0;
+    margin-bottom: -1px; max-width: 280px; min-width: 0;
+  }
+  .tab.on { background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface); }
   [role='tab'] {
-    font-size: 13px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border: 1px solid transparent;
-    border-radius: 6px 6px 0 0; background: none; color: var(--quiet); margin-bottom: -1px;
-    max-width: 260px; min-width: 0;
+    font-size: 13px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 4px 5px 12px; border: 0;
+    background: none; color: var(--quiet); min-width: 0;
   }
   .tabname { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  [role='tab'][aria-selected='true'] { background: var(--surface); border-color: var(--border); border-bottom-color: var(--surface); color: var(--text); font-weight: 600; }
+  [role='tab'][aria-selected='true'] { color: var(--text); font-weight: 600; }
+  .close {
+    border: 0; background: none; color: var(--quiet); font-size: 14px; line-height: 1; padding: 2px 6px; margin-right: 4px;
+    border-radius: var(--radius-sm);
+  }
+  .close:hover, .close:focus-visible { color: var(--text); background: var(--border); }
   .count { font-size: 11.5px; font-weight: 600; padding: 0 6px; border-radius: 99px; background: color-mix(in srgb, var(--dbg) 22%, transparent); }
   .count.none { background: var(--border); color: var(--quiet); }
   .open { font-size: 13px; padding: 4px 12px; border: 1px dashed var(--border-strong); background: none; margin: 0 0 6px auto; }

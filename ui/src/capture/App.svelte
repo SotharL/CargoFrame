@@ -25,7 +25,7 @@
   import ResultPanel from './ResultPanel.svelte';
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, cornerWidth, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
-  import { chatToOpen, pairedWithRecording, willSend } from './willSend';
+  import { chatToOpen, missing, pairedWithRecording, willSend } from './willSend';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
   import { applyAccent, applyTheme } from '../lib/theme';
@@ -401,11 +401,12 @@
           {:else if b.type === 'log_view'}
             <LogViewBlock block={b} {view} files={values.files} api={api ?? null} />
           {:else if b.type === 'sharing_button'}
+            {@const unfilled = missing(view, b, values, !pairedWithRecording(view) || still !== null)}
             <SharingBlock
               block={b}
-              enabled={(view.sharing[b.id]?.enabled ?? false) && sending === null}
+              enabled={(view.sharing[b.id]?.enabled ?? false) && unfilled.length === 0 && sending === null}
               sending={sending === b.id}
-              reasons={view.sharing[b.id]?.reasons ?? []}
+              reasons={[...(view.sharing[b.id]?.reasons ?? []), ...unfilled]}
               mode={nowhereToPost(view, b) ? 'save_locally' : (view.sharing[b.id]?.mode ?? 'send')}
               note={view.sharing[b.id]?.note ?? null}
               kind={view.sharing[b.id]?.kind ?? null}

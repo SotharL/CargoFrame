@@ -66,3 +66,34 @@ export async function readDropped(file: File): Promise<ViewFile> {
     return { ...base, lines: [], problem: String(e) };
   }
 }
+
+/**
+ * What stays open while the Settings window is: the files opened or dropped (already read), and
+ * the capture's files closed with their ×. Leaving a value and coming back finds them as they
+ * were; closing the window forgets them.
+ */
+const kept = { opened: [] as ViewFile[], closed: new Set<string>() };
+
+/** The files to show: those opened before first, then the capture's files not closed. */
+export function withKept(capture: ViewFile[]): ViewFile[] {
+  const opened = kept.opened.filter((f) => !capture.some((c) => c.id === f.id));
+  return [...opened, ...capture.filter((f) => !kept.closed.has(f.id))];
+}
+
+/** Keep files just opened or dropped (a file of the same name is replaced). */
+export function keepOpened(read: ViewFile[]) {
+  kept.opened = [...read, ...kept.opened.filter((f) => !read.some((r) => r.id === f.id))];
+  for (const r of read) kept.closed.delete(r.id);
+}
+
+/** Close a file: an opened one is let go, a capture's file is hidden until the window closes. */
+export function closeKept(id: string) {
+  kept.opened = kept.opened.filter((f) => f.id !== id);
+  if (!id.startsWith('dropped:')) kept.closed.add(id);
+}
+
+/** For tests: as when the Settings window opens. */
+export function forgetKept() {
+  kept.opened = [];
+  kept.closed.clear();
+}

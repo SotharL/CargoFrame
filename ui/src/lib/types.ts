@@ -105,9 +105,14 @@ export interface Rect {
   h: number;
 }
 
+/** What a value does to an issue that is there already (mirrors core/layout UpdateMode). */
+export type UpdateMode = 'replace' | 'append' | 'append_line' | 'add' | 'increment' | 'skip';
+
 export interface InfoMapping {
   field: string;
   source: { kind: 'block' | 'rule' | 'fixed'; value: string };
+  /** Only for a field of a connection that updates issues; none: replace. */
+  update?: UpdateMode;
 }
 
 export type DropdownSource =
@@ -207,7 +212,10 @@ export type BlockContent =
       mappings: InfoMapping[];
       on_success: 'close_window' | 'keep_open';
       /** What goes with the text. Absent while it is the default (picture, files attached). */
-      send?: SendRules;
+      send?: SendRules;      /** Blocks that must be filled before the button shares (ids). Absent: none. */
+      required?: string[];
+      /** A connection that updates issues also votes / reacts 👍 on the one picked. */
+      react?: boolean;
     }
   | {
       type: 'dropdown';
@@ -1055,6 +1063,17 @@ export type UpdateLast =
       published: string | null;
     }
   | { state: 'failed'; message: string; needs_token: boolean };
+
+/** Getting ffmpeg into CargoFrame's own folder (System page). */
+export type FfmpegPhase =
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'offered'; version: string; size: number }
+  | { state: 'current'; version: string }
+  | { state: 'downloading'; done: number; total: number | null }
+  | { state: 'unpacking' }
+  | { state: 'done'; version: string }
+  | { state: 'failed'; message: string };
 
 export interface UpdateView {
   current: string;

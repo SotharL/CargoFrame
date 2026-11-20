@@ -91,6 +91,7 @@ pub fn effective_mappings(
             out.push(InfoMapping {
                 field: "chat".into(),
                 source: ValueSource::Block(b.id.clone()),
+                update: None,
             });
         }
     }
@@ -551,6 +552,7 @@ mod tests {
             mappings: vec![InfoMapping {
                 field: "summary".into(),
                 source: ValueSource::Block("t".into()),
+                update: None,
             }],
             ..to("j")
         };
@@ -727,6 +729,7 @@ mod tests {
             mappings: vec![InfoMapping {
                 field: "chat".into(),
                 source: ValueSource::Block("other".into()),
+                update: None,
             }],
             ..to("c")
         };
@@ -810,6 +813,7 @@ mod tests {
         InfoMapping {
             field: field.into(),
             source: ValueSource::Block(block.into()),
+            update: None,
         }
     }
 

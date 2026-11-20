@@ -1,5 +1,6 @@
-//! GitHub (and GitHub Enterprise Server): a share opens an issue in a repository, or comments on
-//! one, with a fine-grained personal access token.
+//! GitHub (and GitHub Enterprise Server): a share opens an issue in a repository, or updates one
+//! (each field as its mapping says, a comment, a 👍), with a fine-grained personal access token.
+//! A layout of 0.7.0 or before says none of this: its text becomes a comment, as then.
 //!
 //! GitHub's API cannot attach a file to an issue. So, unless the connection says not to, the
 //! screenshot (or recording) and the zip of the ticked files are first put in a branch of the
@@ -10,7 +11,7 @@
 use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model::{self, repository_ok, GithubFiles};
-use crate::payload::{Attachment, OptionItem, Payload, SendOutcome};
+use crate::payload::{first_line, Attachment, OptionItem, Payload, SendOutcome, Update};
 use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
@@ -341,9 +342,15 @@ impl Connector for GithubConnector {
                 f("type", msg!("Issue type"), msg!("For organisations that use issue types: Bug, Task…"), None),
                 f(
                     "issue",
-                    msg!("Add to an existing issue"),
-                    msg!("An issue number: adds a comment (and the labels) instead of opening an issue"),
+                    msg!("Update an existing issue"),
+                    msg!("An issue number: updates that issue (each field as its mapping says) instead of opening one. Empty: a new issue"),
                     Some("recent_issues"),
+                ),
+                f(
+                    "comment",
+                    msg!("Comment"),
+                    msg!("Added as a comment, on the new issue or on the one updated"),
+                    None,
                 ),
             ],
             lists: vec![
@@ -498,6 +505,9 @@ impl Connector for GithubConnector {
             })?),
             None => None,
         };
+        if let Some(n) = existing.filter(|_| payload.says_how()) {
+            return self.update(ctx, &repo, n, payload);
+        }
         let labels = payload.value("labels").map(split_list).unwrap_or_default();
 
         // 1. the text, written the way GitHub shows it
@@ -637,6 +647,19 @@ impl Connector for GithubConnector {
                 (n, url)
             }
         };
+        if let Some(c) = payload.value("comment") {
+            if !ctx.progress.done("github.comment") {
+                let req = self
+                    .request(
+                        ctx,
+                        Method::Post,
+                        &format!("{}/comments", web(&number.to_string())),
+                    )?
+                    .body(Body::json(&json!({ "body": render(c, Style::Github) })));
+                self.call(ctx, req, &tf("comment on #{n}", &[("n", &number)]))?;
+                ctx.progress.set("github.comment", "1");
+            }
+        }
         Ok(SendOutcome {
             summary: tf(
                 "Opened #{number} in {repo}",
@@ -650,6 +673,157 @@ impl Connector for GithubConnector {
 }
 
 impl GithubConnector {
+    /// Update issue `n` as the mapped fields say. The pictures and files go with the description
+    /// when it is written, otherwise with the comment.
+    fn update(
+        &self,
+        ctx: &Ctx,
+        repo: &str,
+        n: u64,
+        payload: &Payload,
+    ) -> Result<SendOutcome, SendError> {
+        let path = format!("/repos/{repo}/issues/{n}");
+        let body_how = payload.update_of("body");
+        let line = |s: &str, how| {
+            if how == Update::AppendLine {
+                first_line(s).to_string()
+            } else {
+                s.to_string()
+            }
+        };
+        let host = match body_how {
+            Some(how) => render(
+                &line(payload.value("body").unwrap_or(""), how),
+                Style::Github,
+            ),
+            None => payload
+                .value("comment")
+                .map(|c| render(c, Style::Github))
+                .unwrap_or_default(),
+        };
+        let mut notes = Vec::new();
+        let (placed, files) = match self.settings.files {
+            GithubFiles::Branch => self.files_part(ctx, repo, payload, &host)?,
+            GithubFiles::None => {
+                if payload.image.is_some() || payload.files_zip.is_some() {
+                    notes.push(
+                        t("The picture and files were not sent: the connection sends text only")
+                            .to_string(),
+                    );
+                }
+                (crate::payload::place_media(&host, "", ""), Vec::new())
+            }
+        };
+        let placed = [placed.trim().to_string(), files.join("\n\n")]
+            .into_iter()
+            .filter(|p| !p.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let (added, comment) = match body_how {
+            Some(_) => (
+                placed,
+                payload
+                    .value("comment")
+                    .map(|c| render(c, Style::Github))
+                    .unwrap_or_default(),
+            ),
+            None => (String::new(), placed),
+        };
+
+        if !ctx.progress.done("github.update") {
+            let appends =
+                |h: Option<Update>| matches!(h, Some(Update::Append | Update::AppendLine));
+            let now = if appends(payload.update_of("title")) || appends(body_how) {
+                self.get_json(ctx, &path, &tf("read #{n}", &[("n", &n)]))?
+            } else {
+                Value::Null
+            };
+            let before = |k: &str| {
+                now.get(k)
+                    .and_then(Value::as_str)
+                    .unwrap_or("")
+                    .trim_end()
+                    .to_string()
+            };
+            let mut patch = Map::new();
+            if let Some(how) = payload.update_of("title") {
+                let v = line(payload.value("title").unwrap_or(""), how);
+                let title = match how {
+                    Update::Append | Update::AppendLine => format!("{} {v}", before("title")),
+                    _ => v,
+                };
+                patch.insert("title".into(), Value::String(clean_title(&title)));
+            }
+            if let Some(how) = body_how {
+                let was = before("body");
+                let body = match how {
+                    Update::Append | Update::AppendLine if !was.is_empty() => {
+                        format!("{was}\n\n{added}")
+                    }
+                    _ => added,
+                };
+                patch.insert("body".into(), Value::String(body));
+            }
+            // labels and people are added one call each (they keep what is there), or set
+            for (key, what) in [
+                ("labels", msg!("label #{n}")),
+                ("assignees", msg!("assign #{n}")),
+            ] {
+                let Some(how) = payload.update_of(key) else {
+                    continue;
+                };
+                let items = split_list(payload.value(key).unwrap_or(""));
+                if how == Update::Add {
+                    let req = self
+                        .request(ctx, Method::Post, &format!("{path}/{key}"))?
+                        .body(Body::json(&json!({ key: items })));
+                    self.call(ctx, req, &tf(what, &[("n", &n)]))?;
+                } else {
+                    patch.insert(key.into(), json!(items));
+                }
+            }
+            if payload.update_of("milestone").is_some() {
+                let m = payload.value("milestone").unwrap_or("");
+                let number = issue_number(m).ok_or_else(|| {
+                    invalid(tf(
+                        "\"{m}\" is not a milestone number: pick it from the list",
+                        &[("m", &m)],
+                    ))
+                })?;
+                patch.insert("milestone".into(), json!(number));
+            }
+            if !patch.is_empty() {
+                let req = self
+                    .request(ctx, Method::Patch, &path)?
+                    .body(Body::json(&Value::Object(patch)));
+                self.call(ctx, req, &tf("update #{n}", &[("n", &n)]))?;
+            }
+            ctx.progress.set("github.update", "1");
+        }
+        if !comment.trim().is_empty() && !ctx.progress.done("github.comment") {
+            let req = self
+                .request(ctx, Method::Post, &format!("{path}/comments"))?
+                .body(Body::json(&json!({ "body": comment })));
+            self.call(ctx, req, &tf("comment on #{n}", &[("n", &n)]))?;
+            ctx.progress.set("github.comment", "1");
+        }
+        if payload.react && !ctx.progress.done("github.react") {
+            let req = self
+                .request(ctx, Method::Post, &format!("{path}/reactions"))?
+                .body(Body::json(&json!({ "content": "+1" })));
+            if self.call(ctx, req, msg!("react")).is_err() {
+                notes.push(tf("GitHub did not take your 👍 on #{n}", &[("n", &n)]));
+            }
+            ctx.progress.set("github.react", "1");
+        }
+        Ok(SendOutcome {
+            summary: tf("Updated #{n} in {repo}", &[("n", &n), ("repo", &repo)]),
+            url: Some(self.html(repo, n)),
+            notes,
+            place: None,
+        })
+    }
+
     /// The web site that goes with the API: github.com, or a company's own server.
     fn web(&self) -> String {
         self.settings
