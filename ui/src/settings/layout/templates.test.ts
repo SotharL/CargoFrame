@@ -5,8 +5,8 @@ import { demoCapabilities } from '../../lib/demoReach';
 
 const templates: LayoutTemplate[] = [
   { key: 'local-capture', name: 'Save a capture locally', description: '', service: null },
-  { key: 'jira-bug', name: 'Jira bug report', description: '', service: 'jira' },
-  { key: 'jira-update', name: 'Jira create or update', description: '', service: 'jira' },
+  { key: 'jira-ticket', name: 'Jira ticket', description: '', service: 'jira' },
+  { key: 'jira-video', name: 'Jira ticket with recording', description: '', service: 'jira' },
   { key: 'reddit-post', name: 'Reddit post', description: '', service: 'reddit' },
 ];
 
@@ -38,8 +38,8 @@ describe('offersFor', () => {
     const groups = offersFor(templates, [conn('work', 'Work', 'jira', 'connected')]);
     const jira = groups.find((g) => g.id === 'work')!;
     expect(jira.offers.map((o) => [o.key, o.connectionId])).toEqual([
-      ['jira-bug', 'work'],
-      ['jira-update', 'work'],
+      ['jira-ticket', 'work'],
+      ['jira-video', 'work'],
     ]);
   });
 

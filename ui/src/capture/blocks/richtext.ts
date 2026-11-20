@@ -180,6 +180,26 @@ export function tableText(t: Table): string {
   return [line(t.head), `| ${t.head.map(() => '---').join(' | ')} |`, ...t.rows.map(line)].join('\n');
 }
 
+/**
+ * The table after its × of `what` was pressed: column `n`, line `n` of the body, or the header
+ * line (the next line takes its place). Null when nothing would be left: the last column or the
+ * last line takes the table away, the same way as any other.
+ */
+export function removeFromTable(t: Table, what: 'col' | 'row' | 'head', n: number): Table | null {
+  switch (what) {
+    case 'col': {
+      if (t.head.length <= 1) return null;
+      return { head: t.head.filter((_, k) => k !== n), rows: t.rows.map((r) => r.filter((_, k) => k !== n)) };
+    }
+    case 'row':
+      return { head: [...t.head], rows: t.rows.filter((_, i) => i !== n) };
+    case 'head': {
+      const [next, ...rest] = t.rows;
+      return next ? { head: [...next], rows: rest } : null;
+    }
+  }
+}
+
 /** The table that `lines` (the head, the rule, the rows) are. */
 export function tableOf(lines: string[]): Table {
   const head = cellsOf(lines[0] ?? '');
@@ -227,14 +247,16 @@ function tableHtml(t: Table, raw: string): string {
     `<span class="cell" contenteditable="true" data-r="${r}" data-c="${k}" spellcheck="true">${esc(c)}</span>`;
   const x = (act: string, n: number, title: string) =>
     `<button type="button" class="tw-x" data-act="${act}" data-n="${n}" title="${title}" aria-label="${title}" tabindex="-1">×</button>`;
-  const tops = t.head.map((_, k) => `<th class="tw-top">${t.head.length > 1 ? x('col', k, tx('Remove column {n}', { n: k + 1 })) : ''}</th>`).join('');
+  // every column and every line has its ×, the last ones too (they take the table away)
+  const tops = t.head.map((_, k) => `<th class="tw-top">${x('col', k, tx('Remove column {n}', { n: k + 1 }))}</th>`).join('');
+  const addCol = `<button type="button" class="tw-add" data-act="addcol" title="${tx('Add a column')}" aria-label="${tx('Add a column')}" tabindex="-1">+</button>`;
   const head = t.head.map((c, k) => `<th>${cell(c, 0, k)}</th>`).join('');
   const rows = t.rows
     .map((r, ri) => `<tr>${r.map((c, k) => `<td>${cell(c, ri + 1, k)}</td>`).join('')}<td class="tw-side">${x('row', ri, tx('Remove row {n}', { n: ri + 1 }))}</td></tr>`)
     .join('');
   return (
     `<div class="ln tw" contenteditable="false" data-text="${escAttr(raw)}">` +
-    `<table><thead><tr>${tops}<th class="tw-side"></th></tr><tr>${head}<td class="tw-side"><button type="button" class="tw-add" data-act="addcol" title="${tx('Add a column')}" aria-label="${tx('Add a column')}" tabindex="-1">+</button></td></tr></thead>` +
+    `<table><thead><tr>${tops}<th class="tw-side">${addCol}</th></tr><tr>${head}<td class="tw-side">${x('head', 0, tx('Remove the header row'))}</td></tr></thead>` +
     `<tbody>${rows}</tbody></table>` +
     `<button type="button" class="tw-add row" data-act="addrow" title="${tx('Add a row')}" aria-label="${tx('Add a row')}" tabindex="-1">+</button>` +
     `</div>`

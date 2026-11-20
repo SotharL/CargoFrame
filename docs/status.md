@@ -17,8 +17,9 @@ those is true for each piece.
   GitHub release and the version compare (`ffmpeg_get.rs`; the download is the update's own checked download); Jira
   and GitHub updates (fields replaced, added below, one line, labels added, counted, left; comment; vote and 👍,
   one refused) and the old behaviour of a 0.7.0 layout against their mock servers; templates (every recording
-  template records the window in focus beside its screenshot, the report table, create or update with what must be
-  filled) in `templates.rs`; the required blocks in the share (`share_tests.rs`) and in the window (`willSend.test.ts`);
+  template records the window in focus beside its screenshot, the report table, one create-or-update template with a
+  screenshot and one with a recording for Jira and GitHub, *Send to Jira* / *Send to GitHub*, what must be filled) in
+  `templates.rs`; the last column, row and header row of a table removed (`TextBlock.test.ts`, `richtext.test.ts`); the required blocks in the share (`share_tests.rs`) and in the window (`willSend.test.ts`);
   the update choices and the checklist in the builder (`SharingPanel.test.ts`, `updates.test.ts`); the file tabs kept
   and closed (`files.test.ts`). The System ffmpeg line, the sharing panel and the Data parsing tabs (closed, then
   found again after leaving the value) were looked at in a browser with demo data. **Not yet tried on a real PC:**
