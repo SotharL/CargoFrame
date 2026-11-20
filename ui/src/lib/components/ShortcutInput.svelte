@@ -1,33 +1,61 @@
 <script lang="ts">
   import { t } from '../i18n/index.svelte';
-  import { describePress, keycaps } from '../shortcut';
+  import { Combination, keyLabel, keycaps } from '../shortcut';
 
+  // Any keys held together make the shortcut (Ctrl+A+S, the <> key, the number pad): it is
+  // taken when they have all been let go.
   let { value = $bindable(''), label }: { value: string; label: string } = $props();
   let listening = $state(false);
   let live = $state('');
+  let unknown = $state('');
+  let combo = new Combination();
+
+  function reset() {
+    combo = new Combination();
+    live = '';
+  }
 
   function onkeydown(e: KeyboardEvent) {
     // Tab and Escape keep their normal job so the keyboard is never trapped here.
-    if (e.code === 'Tab') return;
-    if (e.code === 'Escape') {
+    if (e.code === 'Tab' && !live) return;
+    if (e.code === 'Escape' && !live) {
       listening = false;
-      live = '';
+      reset();
       return;
     }
-    if ((e.code === 'Backspace' || e.code === 'Delete') && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    if ((e.code === 'Backspace' || e.code === 'Delete') && !live && !e.ctrlKey && !e.altKey && !e.metaKey) {
       e.preventDefault();
       value = '';
-      live = '';
+      reset();
       return;
     }
     e.preventDefault();
-    const p = describePress(e);
-    live = p.text;
-    if (p.complete) {
-      value = p.text;
-      listening = false;
-      live = '';
+    if (e.repeat) return;
+    combo.press(e);
+    unknown = combo.unknown;
+    live = combo.text;
+  }
+
+  function onkeyup(e: KeyboardEvent) {
+    if (!listening) return;
+    if (!live) {
+      // a key whose press the system keeps (Print Screen) only comes up: it is taken alone
+      const single = new Combination();
+      single.press(e);
+      if (single.complete) {
+        e.preventDefault();
+        value = single.text;
+        listening = false;
+      }
+      return;
     }
+    e.preventDefault();
+    if (!combo.release(e.code)) return;
+    if (combo.complete) {
+      value = combo.text;
+      listening = false;
+    }
+    reset();
   }
 
   const shown = $derived(listening ? live : value);
@@ -41,16 +69,18 @@
     aria-label={label}
     onclick={() => { listening = true; live = ''; }}
     onfocus={() => (listening = true)}
-    onblur={() => { listening = false; live = ''; }}
+    onblur={() => { listening = false; reset(); }}
     {onkeydown}
+    {onkeyup}
   >
     {#if shown}
-      {#each keycaps(shown) as k, i (i)}<kbd>{k}</kbd>{/each}
+      {#each keycaps(shown) as k, i (i)}<kbd>{keyLabel(k)}</kbd>{/each}
       {#if listening && live.endsWith('+')}<span class="quiet">…</span>{/if}
     {:else}
       <span class="quiet">{listening ? t('Press the keys…') : t('No keys (tray menu only)')}</span>
     {/if}
   </button>
+  {#if unknown && listening}<span class="quiet small" role="status">{t('{key} cannot be used in a shortcut', { key: unknown })}</span>{/if}
   {#if value}
     <button type="button" class="clear" onclick={() => (value = '')} aria-label={t('Clear the keys')}>{t('Clear')}</button>
   {/if}
@@ -69,4 +99,5 @@
     border-bottom-width: 2px;
   }
   .clear { padding: 3px 10px; font-size: 12.5px; }
+  .small { font-size: 12px; }
 </style>

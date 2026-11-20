@@ -1591,6 +1591,44 @@ pub async fn install_update(app: AppHandle) -> Result<(), String> {
     })
 }
 
+// ----- ffmpeg, downloaded by CargoFrame (Settings, System) -----
+
+/// Where getting ffmpeg is: nothing asked yet, a build offered, a download going, done.
+#[tauri::command]
+pub async fn ffmpeg_status(app: AppHandle) -> Result<crate::ffmpeg_get::Phase, String> {
+    Ok(app.state::<AppState>().ffmpeg.phase())
+}
+
+/// Ask for the newest ffmpeg build and compare it with the one in use.
+#[tauri::command]
+pub async fn ffmpeg_check(app: AppHandle) -> Result<crate::ffmpeg_get::Phase, String> {
+    blocking(move || {
+        let state = app.state::<AppState>();
+        let video = state
+            .store
+            .load_or_default::<cargoframe_config::Video>()
+            .unwrap_or_default();
+        let have = crate::video::find(&video, crate::video::program_beside_app().as_deref())
+            .ok()
+            .map(|f| f.version);
+        let phase = state.ffmpeg.check(have.as_deref());
+        let _ = app.emit("ffmpeg-changed", ());
+        phase
+    })
+    .await
+}
+
+/// Download what the check offered; progress arrives as `ffmpeg-changed`, and Setup is read
+/// again when it is done.
+#[tauri::command]
+pub async fn ffmpeg_download(app: AppHandle) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let handle = app.clone();
+    state.ffmpeg.begin(move || {
+        let _ = handle.emit("ffmpeg-changed", ());
+    })
+}
+
 /// Keep (or, empty, remove) the read-only GitHub token. It is never read back to the window.
 #[tauri::command]
 pub async fn set_update_token(app: AppHandle, value: String) -> Result<(), String> {

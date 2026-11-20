@@ -36,6 +36,8 @@ pub struct AppState {
     pub holds: crate::hold::Holds,
     /// Looking for, downloading and installing a newer version.
     pub updates: std::sync::Arc<Updates>,
+    /// Downloading ffmpeg into CargoFrame's own folder (System page).
+    pub ffmpeg: std::sync::Arc<crate::ffmpeg_get::FfmpegGet>,
     /// The program that had focus at the last capture, so the layout builder can show what a
     /// Files block would find without asking again. Kept in memory only.
     last_program: Mutex<Option<String>>,
@@ -48,6 +50,9 @@ pub struct AppState {
     share_cancelled: Mutex<BTreeSet<u64>>,
     /// How the shortcuts work here, and the ones that could not be set, by trigger id.
     shortcut_status: Mutex<cargoframe_shortcuts::Status>,
+    /// The shortcuts the system cannot hold (several keys, or a key it does not know), watched
+    /// by CargoFrame while any exist.
+    combos: Mutex<Option<cargoframe_keys::Combos>>,
     /// What was handed to a Wayland desktop (Linux only).
     #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub desktop_keys: crate::desktop_keys::DesktopKeys,
@@ -78,7 +83,13 @@ impl AppState {
 
     pub fn new(store: Store, tray_available: bool, connections: Connections) -> Self {
         let workspace = Workspace::new(store.dirs().data().join("captures"));
+        let ffmpeg_dir = store.dirs().data().join("tools").join("ffmpeg");
+        crate::video::set_own_ffmpeg_dir(ffmpeg_dir.clone());
         Self {
+            ffmpeg: std::sync::Arc::new(crate::ffmpeg_get::FfmpegGet::new(
+                std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
+                ffmpeg_dir,
+            )),
             workspace,
             store,
             connections,
@@ -99,6 +110,7 @@ impl AppState {
             sharing: Mutex::new(BTreeSet::new()),
             share_cancelled: Mutex::new(BTreeSet::new()),
             shortcut_status: Mutex::new(cargoframe_shortcuts::Status::default()),
+            combos: Mutex::new(None),
             desktop_keys: crate::desktop_keys::DesktopKeys::default(),
             pending_import: Mutex::new(None),
         }
@@ -185,6 +197,15 @@ impl AppState {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .take()
+    }
+
+    /// Watch these shortcuts (or none), in place of the ones watched before.
+    pub fn set_combos(&self, combos: Option<cargoframe_keys::Combos>) {
+        let old = std::mem::replace(
+            &mut *self.combos.lock().unwrap_or_else(|e| e.into_inner()),
+            combos,
+        );
+        drop(old);
     }
 
     pub fn set_shortcut_status(&self, status: cargoframe_shortcuts::Status) {

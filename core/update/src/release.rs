@@ -84,6 +84,19 @@ impl Platform {
             Platform::Linux => "-linux-x64.tar.gz",
         }
     }
+
+    /// The names this computer's installer may have in the release of `version`, in the order
+    /// they are looked for: the name with the version, then the one name that stays the same
+    /// from release to release (`CargoFrame-Setup.exe`, the download link people are given).
+    /// Up to 0.7.0 the releases had only the second on Windows, and the check looked only for
+    /// the first, so it never found an installer there.
+    pub fn installer_names(self, version: &Version) -> Vec<String> {
+        let mut names = vec![format!("CargoFrame-{version}{}", self.installer_suffix())];
+        if self == Platform::Windows {
+            names.push("CargoFrame-Setup.exe".into());
+        }
+        names
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -162,8 +175,20 @@ pub fn check(
     current: &Version,
     platform: Option<Platform>,
 ) -> Result<Check, UpdateError> {
-    let response =
+    let mut response =
         http.send(&source.request(&source.latest_url(), "application/vnd.github+json"))?;
+    // A token that expired or was revoked is refused even where none is needed (a public
+    // repository): ask again without it before saying the token is the problem.
+    if matches!(response.status, 401 | 403) && source.token.is_some() {
+        let open = Source {
+            token: None,
+            ..source.clone()
+        };
+        let again = http.send(&open.request(&open.latest_url(), "application/vnd.github+json"))?;
+        if again.is_success() {
+            response = again;
+        }
+    }
     match response.status {
         200..=299 => {}
         401 => return Err(UpdateError::TokenRejected),
@@ -200,7 +225,6 @@ pub fn check(
     let platform = platform.ok_or_else(|| UpdateError::NoInstaller {
         tag: raw.tag_name.clone(),
     })?;
-    let wanted = format!("CargoFrame-{latest}{}", platform.installer_suffix());
     let pick = |name: &str| -> Option<Asset> {
         raw.assets
             .iter()
@@ -211,9 +235,13 @@ pub fn check(
                 url: a.url.clone(),
             })
     };
-    let installer = pick(&wanted).ok_or_else(|| UpdateError::NoInstaller {
-        tag: raw.tag_name.clone(),
-    })?;
+    let installer = platform
+        .installer_names(&latest)
+        .iter()
+        .find_map(|name| pick(name))
+        .ok_or_else(|| UpdateError::NoInstaller {
+            tag: raw.tag_name.clone(),
+        })?;
     let sums = pick(SUMS_NAME).ok_or_else(|| UpdateError::NoChecksums {
         tag: raw.tag_name.clone(),
     })?;

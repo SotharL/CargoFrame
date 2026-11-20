@@ -33,6 +33,8 @@ pub fn reload(app: &AppHandle) {
     }
     let mut claimed: BTreeMap<String, String> = BTreeMap::new();
     let mut for_desktop = Vec::new();
+    // the shortcuts the system cannot hold, watched by CargoFrame (see `cargoframe_keys::combo`)
+    let mut watched: Vec<cargoframe_keys::Combo> = Vec::new();
     for (id, trigger) in &loaded.items {
         if !trigger.enabled || trigger.shortcut.trim().is_empty() {
             continue;
@@ -55,13 +57,37 @@ pub fn reload(app: &AppHandle) {
             continue;
         }
         if wayland {
-            // The plugin only hears keys pressed in X11 programs: the desktop takes them.
+            // The plugin only hears keys pressed in X11 programs: the desktop takes them, and a
+            // desktop's shortcut is modifiers and one key.
+            if !shortcut::desktop_ready(&canonical) {
+                errors.insert(id.clone(), t(cargoframe_keys::WAYLAND_SHORTCUTS).into());
+                continue;
+            }
             claimed.insert(canonical.clone(), id.clone());
             for_desktop.push(cargoframe_shortcuts::Binding {
                 id: id.clone(),
                 name: trigger.name.clone(),
                 shortcut: canonical,
             });
+            continue;
+        }
+        if !shortcut::held_by_system(&canonical) {
+            match cargoframe_keys::Combo::new(id, &shortcut::key_codes(&canonical)) {
+                Some(c) => {
+                    tracing::info!(trigger = %id, shortcut = %canonical, "shortcut watched");
+                    claimed.insert(canonical, id.clone());
+                    watched.push(c);
+                }
+                None => {
+                    errors.insert(
+                        id.clone(),
+                        tf(
+                            "{canonical} is not supported here",
+                            &[("canonical", &canonical)],
+                        ),
+                    );
+                }
+            }
             continue;
         }
         let parsed: Shortcut = match canonical.parse() {
@@ -90,6 +116,15 @@ pub fn reload(app: &AppHandle) {
                 tracing::warn!(trigger = %id, "shortcut not registered: {e}");
                 errors.insert(id.clone(), e.to_string());
             }
+        }
+    }
+    // the watcher of the last load stops; a new one starts only when a shortcut needs it
+    state.set_combos(None);
+    if !watched.is_empty() {
+        let handle = app.clone();
+        match cargoframe_keys::Combos::start(watched, move |id, down| key(&handle, id, down)) {
+            Ok(c) => state.set_combos(Some(c)),
+            Err(e) => tracing::warn!("the shortcuts of several keys cannot be watched: {e}"),
         }
     }
     if wayland {
@@ -229,6 +264,7 @@ pub fn start_continuous(app: &AppHandle, trigger_id: &str) {
                     } else {
                         crate::watch::Places::None
                     },
+                    frame: None,
                 },
             );
             notes.extend(watch.keys_problem().map(str::to_string));
@@ -524,8 +560,17 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
     let followed = wish
         .window
         .filter(|_| settings.follow_window && !wayland && window);
+    // A window followed is recorded with the screen it is on, not the whole desktop: a smaller
+    // picture to copy and encode, and on Windows the main screen is copied by the graphics card.
+    let mut frame = None;
     if followed.is_some() {
-        wish.area = None;
+        frame = outline.and_then(|o| crate::watch::screen_of(app, o));
+        wish.area = frame.map(|f| cargoframe_video::recorder::Area {
+            x: f.x,
+            y: f.y,
+            w: f.w,
+            h: f.h,
+        });
     }
     let started = state.recording.start_for_trigger(
         &settings,
@@ -549,6 +594,7 @@ fn start_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
                     keys: wish.keys,
                     places: followed
                         .map_or(crate::watch::Places::None, crate::watch::Places::Window),
+                    frame,
                 },
             );
             notes.extend(watch.keys_problem().map(str::to_string));
@@ -718,7 +764,8 @@ fn with_watched(
         video.keys = crate::watch::key_lines(&w.presses, span);
     }
     if let Some(window) = followed.filter(|_| !w.places.is_empty()) {
-        let desktop = crate::watch::desktop_of(app);
+        // what the recording covers: the window's screen, or (before 0.7.1) the whole desktop
+        let desktop = w.frame.or_else(|| crate::watch::desktop_of(app));
         if let Some((crop, path)) = crate::watch::follow_path(
             &w.places,
             window,

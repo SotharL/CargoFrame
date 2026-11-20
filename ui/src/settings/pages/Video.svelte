@@ -327,9 +327,9 @@
     </label>
     <p class="quiet said">
       {#if video.follow_window}
-        {t('The whole screen is recorded, and the clip opens cropped to where the window is, moment by moment (“Follow window” over the recording turns it off). Recording the whole screen uses more of the computer than one window. Not on Wayland, where the desktop shares the window itself.')}
+        {t('The screen the window is on is recorded, and the clip opens cropped to where the window is, moment by moment (“Follow window” over the recording turns it off). A whole screen uses more of the computer than one window; while the window is dragged, the red outline waits until it stops. Not on Wayland, where the desktop shares the window itself.')}
       {:else}
-        {t('Off, the recording keeps the place and size the window had when it started. On, it records the whole screen and follows the window, which uses more of the computer.')}
+        {t('Off, the recording keeps the place and size the window had when it started. On, it records the screen the window is on and follows the window, which uses more of the computer.')}
       {/if}
     </p>
   </Section>

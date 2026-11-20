@@ -8,7 +8,9 @@
   import type { Block, Capabilities, Reach, ServiceKind } from '../../lib/types';
   import { DEFAULT_SEND_RULES, MAX_INLINE_KB } from '../../lib/types';
   import { blockName, CAPABILITY_ROWS, lineFor, SUPPORT_ICON, SUPPORT_WORD } from './reach';
-  import { applyRoute, currentRoute, isAutomatic, routeOptions, type RouteField } from './routes';
+  import { applyRoute, currentRoute, isAutomatic, NOT_SENT, PROMPT, routeOptions, type RouteField } from './routes';
+  import { canUpdate, fillable, setRequired, setUpdate, updateOf, updateOptions } from './updates';
+  import type { UpdateMode } from '../../lib/types';
 
   type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
   let {
@@ -44,6 +46,10 @@
     block.prompt_block_id = next.prompt_block_id;
     block.mappings = next.mappings;
   }
+
+  const updates = $derived(canUpdate(kind));
+  const required = $derived(new Set(block.required ?? []));
+  const waitable = $derived(fillable(blocks));
 
   function setRules(patch: Partial<typeof rules>) {
     block.send = { ...rules, ...patch };
@@ -97,6 +103,21 @@
                     {/each}
                   </select>
                 </label>
+                {#if updates && current !== NOT_SENT && current !== PROMPT}
+                  {@const modes = updateOptions(v.b, current)}
+                  {#if modes.length > 0}
+                    <label class="when">
+                      <span class="quiet">{t('On an issue that is there')}</span>
+                      <select
+                        aria-label={t('{blockName}: what it does to an issue that is there', { blockName: blockName(v.b) })}
+                        value={updateOf(block, current)}
+                        onchange={(e) => (block.mappings = setUpdate(block, current, e.currentTarget.value as UpdateMode))}
+                      >
+                        {#each modes as m (m.value)}<option value={m.value}>{m.label}</option>{/each}
+                      </select>
+                    </label>
+                  {/if}
+                {/if}
                 {#if v.line.state === 'cannot_send'}
                   <span class="quiet note">{l.text}</span>
                 {:else if automatic}
@@ -110,6 +131,42 @@
         {/if}
       {/each}
     </ul>
+  {/if}
+
+  {#if waitable.length > 0}
+    <h3>{t('Before sharing')}</h3>
+    <fieldset class="musts">
+      <legend class="label">{t('Must be filled')}</legend>
+      <span class="boxes">
+        {#each waitable as b (b.id)}
+          <label class="check">
+            <input
+              type="checkbox"
+              checked={required.has(b.id)}
+              onchange={(e) => { const r = setRequired(block, blocks, b.id, e.currentTarget.checked); block.required = r.length > 0 ? r : undefined; }}
+            />
+            {blockName(b)}
+          </label>
+        {/each}
+      </span>
+      <p class="hint quiet">{t('The button waits until these are filled, and the window says which are not.')}</p>
+    </fieldset>
+  {/if}
+  {#if updates}
+    <Field
+      label={kind === 'jira' ? t('Vote') : t('React')}
+      hint={t('Only when an issue that is there is picked. Leave a block’s choice above on “Leave it as it is” to keep what the issue says.')}
+    >
+      <span class="check">
+        <input
+          type="checkbox"
+          aria-label={kind === 'jira' ? t('Also vote for the issue') : t('Also react to the issue with 👍')}
+          checked={block.react ?? false}
+          onchange={(e) => (block.react = e.currentTarget.checked || undefined)}
+        />
+        {kind === 'jira' ? t('Also vote for the issue') : t('Also react to the issue with 👍')}
+      </span>
+    </Field>
   {/if}
 
   <h3>{t('Send rules')}</h3>
@@ -179,4 +236,9 @@
   .choose label { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; }
   .choose select { min-width: 0; max-width: 100%; }
   .check { display: flex; gap: 6px; align-items: center; font-size: 13px; }
+  .musts { border: 0; margin: 0; padding: 0; display: grid; gap: 4px; min-width: 0; }
+  .musts .label { font-weight: 600; font-size: 13px; padding: 0; }
+  .musts .hint { font-size: 12.5px; margin: 0; }
+  .boxes { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .when { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; font-size: 12px; }
 </style>

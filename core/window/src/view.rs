@@ -596,6 +596,8 @@ mod tests {
                         mappings: vec![],
                         on_success: OnSuccess::CloseWindow,
                         send: Default::default(),
+                        required: Vec::new(),
+                        react: false,
                     }),
                 },
             ],
@@ -774,6 +776,8 @@ mod tests {
                     mappings: vec![],
                     on_success: OnSuccess::KeepOpen,
                     send: Default::default(),
+                    required: Vec::new(),
+                    react: false,
                 }),
             }],
         }

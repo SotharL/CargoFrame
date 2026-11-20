@@ -273,14 +273,18 @@ mod tests {
                             InfoMapping {
                                 field: "f".into(),
                                 source: ValueSource::Rule("owner".into()),
+                                update: None,
                             },
                             InfoMapping {
                                 field: "g".into(),
                                 source: ValueSource::Fixed("rule.nope".into()),
+                                update: None,
                             },
                         ],
                         on_success: OnSuccess::KeepOpen,
                         send: Default::default(),
+                        required: Vec::new(),
+                        react: false,
                     }),
                 },
             ],

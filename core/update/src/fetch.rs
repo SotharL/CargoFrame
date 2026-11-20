@@ -42,7 +42,21 @@ pub fn fetch(
     }
 
     // The list of fingerprints first: with no fingerprint there is nothing to download for.
-    let listed = http.send(&source.request(&available.sums.url, "application/octet-stream"))?;
+    let mut listed = http.send(&source.request(&available.sums.url, "application/octet-stream"))?;
+    // A token that no longer works is left out where none is needed (a public repository), for
+    // this file and the installer: the check did the same.
+    let open = Source {
+        token: None,
+        ..source.clone()
+    };
+    let mut source = source;
+    if matches!(listed.status, 401 | 403) && source.token.is_some() {
+        let again = http.send(&open.request(&available.sums.url, "application/octet-stream"))?;
+        if again.is_success() {
+            listed = again;
+            source = &open;
+        }
+    }
     if !listed.is_success() {
         return Err(UpdateError::DownloadRefused {
             status: listed.status,

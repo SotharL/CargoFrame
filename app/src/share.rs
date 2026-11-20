@@ -235,6 +235,59 @@ pub fn options_asked(
     }
 }
 
+/// The name of block `id` when it is not filled yet: no text, no choice, no tag, no file
+/// ticked, no picture or recording. A block that is gone, or that holds nothing to fill (a log
+/// viewer), counts as filled.
+fn unfilled(layout: &Layout, session: &Session, req: &Request, id: &str) -> Option<String> {
+    let block = layout.block(id)?;
+    let view = &session.view;
+    let (empty, title) = match &block.kind {
+        BlockKind::Text(tb) => (
+            text_value(view, req, id).trim().is_empty(),
+            tb.title.clone(),
+        ),
+        BlockKind::Tags(tb) => (tags_value(view, req, id).is_empty(), tb.title.clone()),
+        BlockKind::Dropdown(d) => (
+            req.dropdowns
+                .get(id)
+                .cloned()
+                .flatten()
+                .map_or(true, |v| v.trim().is_empty()),
+            d.title.clone(),
+        ),
+        BlockKind::Files(f) => (
+            req.files.get(id).map_or(true, |v| v.is_empty()),
+            f.title.clone(),
+        ),
+        BlockKind::Screenshot => (
+            session.clip.is_some() && !req.still,
+            t("Screenshot").to_string(),
+        ),
+        BlockKind::Video(_) => (session.clip.is_none(), t("Recording").to_string()),
+        _ => (false, String::new()),
+    };
+    empty.then(|| {
+        if title.trim().is_empty() {
+            id.to_string()
+        } else {
+            title
+        }
+    })
+}
+
+fn update_of(m: cargoframe_layout::UpdateMode) -> cargoframe_connectors::Update {
+    use cargoframe_connectors::Update as U;
+    use cargoframe_layout::UpdateMode as M;
+    match m {
+        M::Replace => U::Replace,
+        M::Append => U::Append,
+        M::AppendLine => U::AppendLine,
+        M::Add => U::Add,
+        M::Increment => U::Increment,
+        M::Skip => U::Skip,
+    }
+}
+
 fn field_kind(k: InfoKind) -> FieldKind {
     match k {
         InfoKind::Text => FieldKind::Text,
@@ -439,6 +492,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             value,
             kind,
             from_list,
+            update: mapping.update.map(update_of),
         });
     }
     // The second step of a dropdown that goes deeper fills a field of its own, by itself.
@@ -460,6 +514,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
                 value,
                 kind: FieldKind::Choice,
                 from_list: true,
+                update: None,
             });
         }
     }
@@ -525,6 +580,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
                     value,
                     kind: field_kind(t.kind),
                     from_list: matches!(t.options, InfoOptions::Api { .. }),
+                    update: None,
                 }),
                 None => {}
             }
@@ -566,6 +622,15 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
             } else if seen.insert(path.clone()) {
                 selected.push(path.clone());
             }
+        }
+    }
+    // The blocks the button asks to be filled first (the window waits too; checked again here).
+    for id in &button.required {
+        if let Some(name) = unfilled(layout, session, req, id) {
+            reasons.push(tf(
+                "\u{201c}{name}\u{201d} must be filled before sharing",
+                &[("name", &name)],
+            ));
         }
     }
     let added_by_hand = |p: &String| p.starts_with(&format!("{}/", crate::session::ADDED));
@@ -646,6 +711,7 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
         prompt,
         fields,
         vars: view.variables.clone(),
+        react: button.react,
     };
     // the screenshot and the recording can be put in the text only where the service shows
     // them there; elsewhere their places are taken out, and the files go the usual way

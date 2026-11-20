@@ -7,7 +7,7 @@
   import type { RuleAcross, RuleValue, RuleWhich } from '../../lib/types';
   import Choices from './Choices.svelte';
   import FileViewer, { type Sel } from './FileViewer.svelte';
-  import { baseName, captureFiles, changedAt, readCaptureFile, readDropped, type ViewFile } from './files';
+  import { baseName, captureFiles, changedAt, closeKept, keepOpened, readCaptureFile, readDropped, withKept, type ViewFile } from './files';
   import { after, choose, hits, labelBefore, signAfter, snap, suggest, valueOf, type Hit, type Pick } from './pick';
   import { keyOf, nameProblem, type Source } from './values';
 
@@ -57,7 +57,8 @@
 
   onMount(async () => {
     const got = await captureFiles();
-    files = got.files;
+    // the files opened before, and not those closed, while the Settings window is open
+    files = withKept(got.files);
     // when changing a value, its file first
     const mine = fixedFile ? files.find((f) => f.name === fixedFile) : undefined;
     current = mine?.id ?? files[0]?.id ?? '';
@@ -99,8 +100,19 @@
 
   async function open(list: File[]) {
     const read = await Promise.all(list.map(readDropped));
+    keepOpened(read);
     files = [...read, ...files.filter((f) => !read.some((r) => r.id === f.id))];
     current = read[0]!.id;
+  }
+
+  /** Close a file's tab: the one beside it is shown, and a selection in it is let go. */
+  function close(id: string) {
+    const at = files.findIndex((f) => f.id === id);
+    closeKept(id);
+    files = files.filter((f) => f.id !== id);
+    if (current === id) current = (files[at] ?? files[at - 1])?.id ?? '';
+    if (sel?.file === id) sel = null;
+    delete ticks[id];
   }
 
   const fileOf = (id: string | undefined) => files.find((f) => f.id === id);
@@ -260,6 +272,7 @@
         oncancel={() => (editing = null)}
         {onselect}
         onopen={open}
+        onclose={close}
       />
     {:else}
       <p class="quiet viewer-wait">{t('Reading the last capture\'s files…')}</p>

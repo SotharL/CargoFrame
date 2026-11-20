@@ -110,6 +110,10 @@ jobs:
           $name = 'CargoFrame-Setup.exe'
           Copy-Item $built.FullName (Join-Path dist $name)
           ./scripts/windows/sign.ps1 -Files (Join-Path (Resolve-Path dist) $name)
+          # The same installer with its version in the name, which the program's update check
+          # looks for first (0.7.0 and older look for nothing else).
+          $versioned = 'CargoFrame-${{ needs.check.outputs.version }}-windows-x64-setup.exe'
+          Copy-Item (Join-Path dist $name) (Join-Path dist $versioned)
           "path=$((Resolve-Path (Join-Path dist $name)).Path)" >> $env:GITHUB_OUTPUT
       - name: Silent install, upgrade, uninstall
         shell: bash

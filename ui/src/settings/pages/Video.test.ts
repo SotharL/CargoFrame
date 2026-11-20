@@ -69,7 +69,7 @@ describe('Video settings', () => {
   it('says plainly when ffmpeg is not there and does not offer a test recording', async () => {
     open({ noFfmpeg: true });
     await screen.findByText('ffmpeg not found');
-    expect(screen.getByRole('alert').textContent).toContain('winget install Gyan.FFmpeg');
+    expect(screen.getByRole('alert').textContent).toContain('Download it from Settings, System');
     expect((screen.getByRole('button', { name: 'Try a 5-second recording' }) as HTMLButtonElement).disabled).toBe(true);
   });
 

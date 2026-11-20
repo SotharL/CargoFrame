@@ -51,6 +51,7 @@ fn payload() -> Payload {
             Field::text("summary", "It crashes"),
         ],
         vars: Default::default(),
+        react: false,
     }
 }
 
@@ -77,6 +78,7 @@ fn field_shapes_follow_jiras_api() {
         value: value.into(),
         kind,
         from_list,
+        update: None,
     };
     let s = |x: &Field, cloud| shape(x, cloud).unwrap();
     assert_eq!(
@@ -395,6 +397,105 @@ fn naming_an_existing_issue_adds_a_comment_and_attachments_only() {
         .unwrap_err();
     assert!(err.message.contains("not an issue key"));
     assert!(server.requests().is_empty());
+}
+
+fn updating() -> MockServer {
+    MockServer::start(|req| match (req.method.as_str(), req.path()) {
+        ("GET", "/rest/api/2/issue/PROJ-99") => MockResponse::json(
+            200,
+            json!({"fields":{"description":"First seen on Monday","customfield_1":2.0}}),
+        ),
+        ("PUT", "/rest/api/2/issue/PROJ-99") => MockResponse::new(204),
+        ("POST", "/rest/api/2/issue/PROJ-99/votes") => MockResponse::text(404, "own issue"),
+        ("POST", p) if p.ends_with("/attachments") => MockResponse::json(200, json!([{"id":"1"}])),
+        ("POST", p) if p.ends_with("/comment") => MockResponse::json(201, json!({"id":"5"})),
+        _ => MockResponse::new(404),
+    })
+}
+
+fn how(key: &str, value: &str, update: Update) -> Field {
+    let mut f = Field::text(key, value);
+    f.update = Some(update);
+    f
+}
+
+#[test]
+fn an_update_does_to_each_field_what_its_mapping_says() {
+    let server = updating();
+    let w = world();
+    let mut p = payload();
+    p.react = true;
+    let labels = how("labels", "crash, ui", Update::Add);
+    p.fields = vec![
+        Field::text("issue", "PROJ-99"),
+        how("summary", "It crashes again", Update::Replace),
+        how(
+            "description",
+            "Seen again today\nand more",
+            Update::AppendLine,
+        ),
+        labels,
+        how("customfield_1", "", Update::Increment),
+        how("priority", "High", Update::Skip),
+        Field::text("comment", "Still there"),
+    ];
+    let out = w.with("jira", |ctx| cloud(&server).send(ctx, &p)).unwrap();
+    assert_eq!(out.summary, "Updated PROJ-99");
+    // nothing created; what is added below or counted is read first, only those fields
+    assert!(server.requests_to("/rest/api/2/issue").is_empty());
+    let read = &server.requests_to("/rest/api/2/issue/PROJ-99")[0];
+    assert_eq!(read.method, "GET");
+    assert_eq!(
+        read.query_param("fields").as_deref(),
+        Some("description,customfield_1")
+    );
+    let put = server
+        .requests_to("/rest/api/2/issue/PROJ-99")
+        .into_iter()
+        .find(|r| r.method == "PUT")
+        .unwrap();
+    assert_eq!(
+        put.json(),
+        json!({
+            "fields": {
+                "summary": "It crashes again",
+                "description": "First seen on Monday\n\nSeen again today",
+                "customfield_1": 3.0
+            },
+            "update": {"labels": [{"add": "crash"}, {"add": "ui"}]}
+        })
+    );
+    let comment = &server.requests_to("/rest/api/2/issue/PROJ-99/comment")[0];
+    assert_eq!(comment.json(), json!({"body":"Still there"}));
+    // the vote was refused (your own issue): said, the share still went
+    assert_eq!(
+        server.requests_to("/rest/api/2/issue/PROJ-99/votes").len(),
+        1
+    );
+    assert!(
+        out.notes.iter().any(|n| n.contains("vote")),
+        "{:?}",
+        out.notes
+    );
+}
+
+#[test]
+fn a_new_issue_gets_its_comment_and_no_comment_field() {
+    let server = happy();
+    let w = world();
+    let mut p = payload();
+    p.react = true;
+    p.fields.push(Field::text("comment", "Found while testing"));
+    let out = w.with("jira", |ctx| cloud(&server).send(ctx, &p)).unwrap();
+    assert_eq!(out.summary, "Created PROJ-1");
+    let create = &server.requests_to("/rest/api/2/issue")[0];
+    assert!(create.json()["fields"].get("comment").is_none());
+    let comment = &server.requests_to("/rest/api/2/issue/PROJ-1/comment")[0];
+    assert_eq!(comment.json(), json!({"body":"Found while testing"}));
+    // no vote on an issue just created
+    assert!(server
+        .requests_to("/rest/api/2/issue/PROJ-1/votes")
+        .is_empty());
 }
 
 #[test]

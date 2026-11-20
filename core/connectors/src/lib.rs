@@ -49,7 +49,7 @@ pub use ctx::{Browser, Ctx};
 pub use model::{Connection, Kind, Settings};
 pub use payload::{
     media_places, place_media, Attachment, Field, FieldKind, InlineFile, LocalCopies, OptionItem,
-    Payload, Progress, SendOutcome, RECORDING_TOKEN, SCREENSHOT_TOKEN,
+    Payload, Progress, SendOutcome, Update, RECORDING_TOKEN, SCREENSHOT_TOKEN,
 };
 pub use secrets::{MemorySecrets, SecretError, SecretStore};
 

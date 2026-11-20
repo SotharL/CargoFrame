@@ -104,6 +104,17 @@ Measured on the cloud machine with ffmpeg on a virtual 2560×1440 screen at 30 f
 the screen 0.1 of a core, scaling and converting 0.4, x264 ultrafast at 1080 lines about 0.4, superfast 1.2, veryfast
 3.2. The cost on a real Windows PC, with Desktop Duplication and a hardware encoder, is still to be measured.
 
+**Following a window (0.7.1).** With *follow the window* on, the outline round the window was taken down and drawn
+again ten times a second while the window moved, and the screens were asked for each time; the recording was of the
+whole desktop. Now the screens are read every five seconds, the outline is hidden while the window moves and drawn
+again once it has been still for 250 ms, and only the screen the window is on is recorded (then cut to the window),
+which on two 1440p screens halves what is copied and converted.
+
+**Shortcuts of any keys (0.7.1).** A shortcut the system can take costs nothing while waiting. Only when one cannot
+(more than one key besides the modifiers, a number-pad or media key…) does CargoFrame read the keys' state, every
+25 ms on a thread of its own (`GetAsyncKeyState` or the X keymap: a few microseconds each); the thread stops when no
+such shortcut is left.
+
 ## If a gate fails
 
 1. Read the failing line: each gate prints the measured time next to its budget.

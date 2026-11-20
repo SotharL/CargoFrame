@@ -41,6 +41,25 @@ pub enum FieldKind {
     Flag,
 }
 
+/// The first line of a text that says something (an update's "add one line").
+pub fn first_line(s: &str) -> &str {
+    s.lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .unwrap_or("")
+}
+
+/// What a value does to an issue that already exists (the layout's `UpdateMode`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Update {
+    Replace,
+    Append,
+    AppendLine,
+    Add,
+    Increment,
+    Skip,
+}
+
 /// One value for a field of the destination service (`priority`, `subreddit`, `col1`...).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Field {
@@ -50,6 +69,8 @@ pub struct Field {
     /// The value was picked from a list the service itself supplied (so it is an id, not a
     /// label the person typed).
     pub from_list: bool,
+    /// What it does to an issue that already exists; `None` is the way of 0.7.0 and before.
+    pub update: Option<Update>,
 }
 
 impl Field {
@@ -59,6 +80,7 @@ impl Field {
             value: value.into(),
             kind: FieldKind::Text,
             from_list: false,
+            update: None,
         }
     }
 
@@ -68,6 +90,7 @@ impl Field {
             value: value.into(),
             kind: FieldKind::Choice,
             from_list,
+            update: None,
         }
     }
 }
@@ -94,6 +117,8 @@ pub struct Payload {
     pub fields: Vec<Field>,
     /// Every variable of the capture (`app.title`, `rule.version`...), for templates.
     pub vars: BTreeMap<String, String>,
+    /// On an issue that already exists, also react to it (a vote, a 👍).
+    pub react: bool,
 }
 
 /// Where the person put the screenshot in a text, for services that can show it there.
@@ -179,6 +204,22 @@ impl Payload {
             }
         }
         out
+    }
+
+    /// Does this share say how to update an issue (0.7.1 and later: a mapping with an update
+    /// mode, or a `comment` field), or is it a layout of before, whose text became a comment?
+    pub fn says_how(&self) -> bool {
+        self.fields
+            .iter()
+            .any(|f| f.update.is_some() || f.key == "comment")
+    }
+
+    /// What the field `key` does to an issue that is there: none when it is empty or left as it
+    /// is, replace when its mapping says nothing.
+    pub fn update_of(&self, key: &str) -> Option<Update> {
+        self.field(key)
+            .map(|f| f.update.unwrap_or(Update::Replace))
+            .filter(|u| *u != Update::Skip)
     }
 
     pub fn field(&self, key: &str) -> Option<&Field> {

@@ -113,3 +113,49 @@ export function chatToOpen(view: SessionView, button: SharingBlock, values: Form
   if (!value || value === 'new') return t('a new chat');
   return option?.label ?? t('the chat you picked');
 }
+
+/**
+ * The blocks the button must have filled before it shares (its `required`), that are not yet:
+ * "“Summary” must be filled", in the order of the window. The same check is made again when the
+ * share is sent, so a window that is out of date cannot get past it.
+ */
+export function missing(
+  view: SessionView,
+  button: SharingBlock,
+  values: FormValues,
+  /** With a recording and a screenshot block: the block holds a picture. */
+  stillTaken = true,
+): string[] {
+  const want = new Set(button.required ?? []);
+  if (want.size === 0) return [];
+  const out: string[] = [];
+  for (const b of view.layout?.blocks ?? []) {
+    if (!want.has(b.id)) continue;
+    let empty = false;
+    let name = titleOf(b);
+    switch (b.type) {
+      case 'text':
+        empty = (values.texts[b.id] ?? '').trim() === '';
+        break;
+      case 'dropdown':
+        empty = (values.dropdowns[b.id] ?? '').trim() === '';
+        break;
+      case 'tags':
+        empty = (values.tags[b.id] ?? []).length === 0;
+        break;
+      case 'files':
+        empty = (values.files[b.id] ?? []).length === 0;
+        break;
+      case 'screenshot':
+        empty = !stillTaken;
+        name = t('Screenshot');
+        break;
+      case 'video':
+        empty = view.video == null;
+        name = t('Recording');
+        break;
+    }
+    if (empty) out.push(t('“{name}” must be filled before sharing', { name }));
+  }
+  return out;
+}

@@ -5,7 +5,7 @@
 use crate::{names, Key, Mods, Poll};
 use windows::Win32::UI::Input::KeyboardAndMouse::{
     GetAsyncKeyState, GetKeyState, GetKeyboardLayout, MapVirtualKeyW, ToUnicodeEx,
-    MAPVK_VK_TO_CHAR, MAPVK_VK_TO_VSC,
+    MAPVK_VK_TO_CHAR, MAPVK_VK_TO_VSC, MAPVK_VSC_TO_VK_EX,
 };
 use windows::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
 
@@ -154,5 +154,43 @@ impl Poll for Keyboard {
             }
         }
         out
+    }
+}
+
+/// The keys of the shortcuts CargoFrame watches itself (see `combo.rs`).
+pub struct Board {
+    /// The virtual-key code of each key of `CODES`, found once (the keys that write by their
+    /// place on the keyboard, in the layout in use when watching starts).
+    vks: Vec<i32>,
+}
+
+impl Board {
+    pub fn new() -> Self {
+        let vks = crate::CODES
+            .iter()
+            .map(|c| match c.win {
+                crate::WinKey::Vk(v) => i32::from(v),
+                crate::WinKey::Scan(s) => {
+                    // SAFETY: MapVirtualKeyW takes any number and has no other precondition.
+                    let vk = unsafe { MapVirtualKeyW(u32::from(s), MAPVK_VSC_TO_VK_EX) };
+                    vk as i32
+                }
+            })
+            .collect();
+        Self { vks }
+    }
+}
+
+impl Default for Board {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+impl crate::combo::Board for Board {
+    fn down(&mut self, keys: &[usize]) -> Vec<bool> {
+        keys.iter()
+            .map(|&k| self.vks.get(k).is_some_and(|&vk| vk != 0 && state(vk).0))
+            .collect()
     }
 }
