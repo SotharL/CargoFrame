@@ -76,6 +76,9 @@ pub struct ListSpec {
     /// What can be chosen *inside* each choice of this list (the threads of a Discord channel),
     /// so one dropdown can go as deep as the person wants.
     pub inside: Option<InsideSpec>,
+    /// The service searches this list for what is typed (people, teams): too long to list whole.
+    /// It is asked for as `<list>[:<param>]?<typed>`; with nothing typed, the first few.
+    pub search: bool,
 }
 
 /// A list of what is inside a choice of another list, and the field that takes the choice.

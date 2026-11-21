@@ -9,6 +9,16 @@
 //! | `project.name`   | that folder's name                                  |
 //! | `capture.date`   | `YYYY-MM-DD`, local time                            |
 //! | `capture.time`   | `HH:MM:SS`, local time                              |
+//! | `system.os`      | the system and its version (`Windows 11 Pro 24H2 (26100)`) |
+//! | `system.cpu`     | the processor, with its threads                     |
+//! | `system.ram`     | the memory (`32 GB`)                                |
+//! | `system.gpu`     | the graphics cards                                  |
+//! | `system.gpu_driver` | their drivers' versions                          |
+//! | `system.screens` | the screens and their sizes, the main one first     |
+//! | `system.computer`| the computer's name                                 |
+//!
+//! The `system.*` values are filled in by the program (they are read from the computer once,
+//! the screens at each capture).
 //!
 //! Values that cannot be known (no program in focus, no folder found) are left out, so a
 //! `{{name}}` that depends on them shows as unresolved instead of as an empty string.
@@ -20,7 +30,7 @@ use cargoframe_layout::{BlockKind, Layout, ValueSource};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// Every built-in name, for the builder's variable picker and for validation.
-pub const NAMES: [&str; 9] = [
+pub const NAMES: [&str; 16] = [
     "app.exe",
     "app.path",
     "app.title",
@@ -30,6 +40,13 @@ pub const NAMES: [&str; 9] = [
     "capture.time",
     "capture.screenshot",
     "capture.recording",
+    "system.os",
+    "system.cpu",
+    "system.ram",
+    "system.gpu",
+    "system.gpu_driver",
+    "system.screens",
+    "system.computer",
 ];
 
 /// A short description of each built-in variable, for the builder's variable picker.
@@ -48,6 +65,13 @@ pub fn describe_name(name: &str) -> &'static str {
         "capture.recording" => {
             cargoframe_i18n::t("The recording, shown here in the text (Jira, GitHub)")
         }
+        "system.os" => cargoframe_i18n::t("The system and its version"),
+        "system.cpu" => cargoframe_i18n::t("The processor"),
+        "system.ram" => cargoframe_i18n::t("The memory"),
+        "system.gpu" => cargoframe_i18n::t("The graphics cards"),
+        "system.gpu_driver" => cargoframe_i18n::t("The versions of their drivers"),
+        "system.screens" => cargoframe_i18n::t("The screens and their sizes, the main one first"),
+        "system.computer" => cargoframe_i18n::t("The computer's name"),
         _ => "",
     }
 }
@@ -223,8 +247,9 @@ mod tests {
     #[test]
     fn every_documented_name_can_be_produced() {
         let b = builtins(Some("/opt/App/bin/App"), Some("t"), NOW);
-        for name in NAMES {
-            assert!(b.values.contains_key(name), "{name} missing");
+        // the computer's values are added by the app, from what it read at start
+        for name in NAMES.iter().filter(|n| !n.starts_with("system.")) {
+            assert!(b.values.contains_key(*name), "{name} missing");
         }
     }
 

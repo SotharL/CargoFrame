@@ -181,8 +181,8 @@ impl Connector for RedditConnector {
                 f("spoiler", msg!("Spoiler"), msg!("true to mark it"), None),
             ],
             lists: vec![
-                ListSpec { id: "subscribed".into(), label: msg!("My subscribed subreddits").into(), param: None, inside: None },
-                ListSpec { id: "flairs".into(), label: msg!("Flairs of a subreddit").into(), param: Some("subreddit"), inside: None },
+                ListSpec { id: "subscribed".into(), label: msg!("My subscribed subreddits").into(), param: None, inside: None , search: false },
+                ListSpec { id: "flairs".into(), label: msg!("Flairs of a subreddit").into(), param: Some("subreddit"), inside: None , search: false },
             ],
             summary: msg!("Posts the screenshot as an image post, or the text as a self post, or a link. Files cannot be attached on Reddit.").into(),
         }

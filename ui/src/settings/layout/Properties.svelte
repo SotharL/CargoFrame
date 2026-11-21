@@ -14,7 +14,7 @@
   import { blockName, lineFor } from './reach';
   import { roleHint } from '../../lib/roles';
   import type { Block, ConnectionView, InfoType, IssueView, ItemEntry, Reach, Rect, Rule, VariableInfo } from '../../lib/types';
-  import { COLUMNS, typeLabel } from './model';
+  import { COLUMNS, isLocked, typeLabel } from './model';
   import { MAX_TAGS, type TabSide } from '../../lib/types';
   import { MAX_TABS, MIN_TABS } from '../../lib/tabs';
   import { stepLines } from '../fills';
@@ -317,12 +317,27 @@
     </Field>
     {#if tagsBlock.suggest && suggestConn}
       {@const sug = tagsBlock.suggest}
-      <Field label={t('List')}>
-        <select aria-label={t('List the tags come from')} bind:value={sug.options_id}>
+      {@const [sugList, sugParam] = splitList(sug.options_id)}
+      {@const sugSpec = suggestConn.describe.lists.find((l) => l.id === sugList)}
+      <Field label={t('List')} hint={t('Its entries are offered when the box is clicked, to pick several (Jira\'s components, versions or labels).')}>
+        <select
+          aria-label={t('List the tags come from')}
+          value={sugList}
+          onchange={(e) => (sug.options_id = e.currentTarget.value)}
+        >
           <option value="">{t('Choose…')}</option>
-          {#each suggestConn.describe.lists.filter((l) => !l.param) as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
+          {#each suggestConn.describe.lists.filter((l) => !l.inside && !l.search) as l (l.id)}<option value={l.id}>{l.label}</option>{/each}
         </select>
       </Field>
+      {#if sugSpec?.param}
+        <Field label={sugSpec.param[0]!.toUpperCase() + sugSpec.param.slice(1)} hint={t('The list is read for this value.')}>
+          <input
+            type="text"
+            value={sugParam}
+            oninput={(e) => (sug.options_id = `${sugList}:${e.currentTarget.value.trim()}`)}
+          />
+        </Field>
+      {/if}
     {/if}
     {@render sentIn(tagsBlock.id, true)}
   {:else if block.type === 'log_view'}
@@ -495,7 +510,11 @@
   </fieldset>
   {#if rectError}<p class="error" role="alert">{rectError}</p>{/if}
 
-  <button type="button" class="remove" onclick={onremove}>{t('Remove this block')}</button>
+  {#if isLocked(blocks, block.id)}
+    <p class="quiet hint">{t('This block is in a locked tab: unlock the tab (the lock beside its name) to move or remove it.')}</p>
+  {:else}
+    <button type="button" class="remove" onclick={onremove}>{t('Remove this block')}</button>
+  {/if}
 </div>
 
 {#snippet sentIn(blockId: string, several: boolean)}

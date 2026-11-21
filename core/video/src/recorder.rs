@@ -24,6 +24,34 @@ pub const MAX_FPS: u32 = 60;
 pub const DEFAULT_FPS: u32 = 30;
 /// One hour.
 pub const DEFAULT_MAX_RUN_SECS: u32 = 3600;
+/// The widest and tallest picture recorded. Every H.264 hardware encoder (NVENC, Quick Sync,
+/// AMF) refuses more than 4096 pixels a side, and so does the decoder of Windows that plays the
+/// clip in the window; 4K stays inside it with room.
+pub const MAX_WIDTH: u32 = 3840;
+pub const MAX_HEIGHT: u32 = 2160;
+/// The most pixels recorded when the main screen's size is not known: 1440p's.
+pub const DEFAULT_MAX_PIXELS: u64 = 2560 * 1440;
+
+/// The most pixels to record: those of the main screen (kept between 720p and 4K), so a
+/// recording of three screens costs what one does, on a fast PC or a slow one.
+pub fn pixels_for(main_screen: Option<(u32, u32)>) -> u64 {
+    main_screen
+        .filter(|(w, h)| *w > 0 && *h > 0)
+        .map_or(DEFAULT_MAX_PIXELS, |(w, h)| {
+            (u64::from(w) * u64::from(h))
+                .clamp(1280 * 720, u64::from(MAX_WIDTH) * u64::from(MAX_HEIGHT))
+        })
+}
+
+/// The filter that makes a picture no larger than the settings and the limits allow: at most
+/// `max_height` tall (the setting), [`MAX_WIDTH`] × [`MAX_HEIGHT`], and `max_pixels` in all,
+/// keeping its shape and even sides, never enlarged. One scale, with the cheaper bilinear
+/// filter: on a slow PC it is the costliest step after the encoder.
+pub fn fit_filter(max_height: Option<u32>, max_pixels: u64) -> String {
+    let h = max_height.map_or(MAX_HEIGHT, |h| h.clamp(2, MAX_HEIGHT));
+    let s = format!("min(1\\,min({MAX_WIDTH}/iw\\,min({h}/ih\\,sqrt({max_pixels}/(iw*ih)))))");
+    format!("scale=w=trunc(iw*{s}/2)*2:h=trunc(ih*{s}/2)*2:flags=bilinear")
+}
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Capture {
@@ -256,6 +284,9 @@ pub struct Config {
     pub max_bytes: usize,
     /// Larger pictures are scaled down to this height before encoding.
     pub max_height: Option<u32>,
+    /// The most pixels a picture keeps (see [`pixels_for`]): a desktop of several screens is
+    /// made smaller to about one screen's worth.
+    pub max_pixels: u64,
     /// ffmpeg ends the recording by itself after this long. A backstop: if CargoFrame is killed
     /// in the middle of a recording nobody is left to delete old pieces, and this keeps the
     /// leftovers from growing for ever.
@@ -289,6 +320,7 @@ impl Config {
             dir,
             max_bytes: 400 * 1024 * 1024,
             max_height: Some(1080),
+            max_pixels: DEFAULT_MAX_PIXELS,
             max_run_secs: DEFAULT_MAX_RUN_SECS,
             area: None,
             audio: Vec::new(),
@@ -371,10 +403,8 @@ pub fn args(cfg: &Config, ring: &Ring) -> Vec<OsString> {
             }
         }
     }
-    if let Some(h) = cfg.max_height {
-        // never enlarge; keep the width even (-2) and the aspect ratio
-        filters.push(format!("scale=-2:min(ih\\,{h})"));
-    }
+    // never enlarged; small enough for every encoder and for the window that plays it
+    filters.push(fit_filter(cfg.max_height, cfg.max_pixels));
     filters.push(cfg.encoder.picture_format().into());
     // the sounds: each is one more input, after the picture
     let sounds = cfg.sounds().count();

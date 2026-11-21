@@ -1570,3 +1570,58 @@ parsing that close and stay open while Settings is open.
   of a table could not be removed the way the rest was. Every column and row now has its ×; the header row's makes
   the next row the header; the last one left removes the table from the text. *Add a column* moved to the grid's top
   right corner, where the header row's × used to have no room.
+
+### 0.7.2, 21 Nov 2026: people found by name, a text box that takes Enter and a paste, three screens recorded safely
+
+Asked for: Jira's assignee and team lists that find anyone, a formatted text box that works in the window
+(Enter, a paste), recording three screens without a crash on a fast or a slow PC (sized from the main screen),
+several Jira components picked in a Tags block from the service's list, delete and copy/paste in the layout
+builder, tabs that can be locked, the Jira template assigning a new ticket to you, the computer's details as
+values like the time, and deleting several items at once in *Files & backup*.
+
+- **People and teams are searched, not listed.** The assignee list asked Jira once for at most 100 people, and
+  only with a project key, so most names could never be picked (the person saw the newest ones, or none). A
+  connector now says which of its lists the service searches (`ListSpec::search`); the window asks again as the
+  person types (after a quarter-second pause, `<list>?<typed>`, never kept in the list cache), shows what came
+  back as it is (found by e-mail too), and keeps the choice listed. Jira: `users` (anyone; *Me* first, sent as
+  `@me` and turned into the person signed in when the ticket is made), `assignable_users` (in a project; without
+  a key it searches everyone instead of failing), and `teams`, through the Team field's own search (the
+  suggestions Jira gives a query that names the field), whose value is the team's id.
+- **Why Enter and a paste broke the formatted box.** The capture window wraps each block in an element of class
+  `cell`, and a table's cells had the same class. The box looked for the nearest `.cell` to know whether the
+  cursor was in a table, found the block's own wrapper, and treated the whole box as a table cell: Enter tried to
+  go to the cell below (and did nothing), a paste set the "cell's" text, which wiped the block. Table cells are
+  now `tw-cell`, and only a cell of one of the box's own tables counts. Nothing else of the box needed to change;
+  a paste now goes through the paste event (which always has the clipboard) as plain text, and Escape in a
+  formatted box no longer closes the window.
+- **Three screens, sized from the main one.** A recording of the whole desktop was only made smaller to the
+  height setting, so three 1080p screens were recorded 5760 wide: more than every hardware encoder and Windows'
+  own video player (which plays the clip in the window) take (4096 a side), and three times the work of one
+  screen. The recorder now keeps the picture at about the main screen's pixels (between 720p and 4K; 1440p when
+  the main screen is not known), never wider than 3840 or taller than 2160, its shape kept, never enlarged, with
+  the cheaper bilinear scaler. Measured on a 2-core Linux machine recording a busy 5760 × 1080 picture for 10 s:
+  before, 18 s of processor on one core (it fell behind) and a 353 MB clip; after, 6 s, kept up on one core, and
+  15 MB. A window followed across the screens is still placed right in the smaller picture (its shape is compared
+  within 2 % rather than 0.01).
+- **Tags from the service's list.** The builder only offered lists that need no value, so Jira's components
+  (which need a project key) could not be chosen; it now takes the key. In the window the box opens the list when
+  clicked: several are picked one after the other, typing narrows it, the arrows and Enter pick, and the tag is
+  the entry's name (a component's, not its id).
+- **The builder.** Copy, Paste, Duplicate and Delete for the block chosen, as buttons over the grid and as Ctrl+C,
+  Ctrl+V, Ctrl+D and Delete; a copy is kept while Settings is open, so it can be pasted in another layout; a Tabs
+  block is copied with its blocks, and what the copied blocks name among themselves names the new ones. A tab is
+  locked by the lock beside its name: its blocks are not moved, resized or removed, and nothing is dropped in it;
+  the window is not changed by it.
+- **Jira ticket assigned to you.** The Jira templates have an *Assignee* list (the searched people) that starts on
+  *Me* each time; an update keeps the ticket's assignee.
+- **The computer's details as values.** `{system.os}`, `{system.cpu}`, `{system.ram}`, `{system.gpu}`,
+  `{system.gpu_driver}`, `{system.screens}` and `{system.computer}`, like `{capture.date}`. Read once, in the
+  background after the program starts (Windows: the registry and the system; Linux: `/etc/os-release`, `/proc`,
+  `/sys`), the screens at each capture. *Data parsing* lists them with what they are on this computer. Nothing is
+  sent unless a layout puts one in a text.
+- **Deleting several at once.** *Files & backup* has *Delete N items…* beside *Export*: it names what goes and the
+  shortcuts that would be left with no layout, says it cannot be undone (export first), and deletes only after
+  *Delete for good*.
+- **Found on the way.** The language check read only the plural of `tn(one, t('other'), n)`, so ten singular
+  texts ("Export 1 item…") were never translated; it now reads both. Copying a block used `structuredClone`, which
+  cannot copy the builder's live state: a JSON copy is used (blocks are plain data).

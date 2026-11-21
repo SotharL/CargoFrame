@@ -596,7 +596,7 @@ fn the_dropdown_lists_are_read_from_the_right_endpoints() {
     );
     assert_eq!(
         pairs(list("assignable_users:PROJ")),
-        vec![("a1".into(), "Ann".into())]
+        vec![(ME.into(), "Me".into()), ("a1".into(), "Ann".into())]
     );
     assert_eq!(
         pairs(list("recent_issues")),
@@ -640,12 +640,112 @@ fn server_uses_the_old_project_list_search_and_user_names() {
     let users = w
         .with("jira", |ctx| c.options(ctx, "assignable_users:OLD"))
         .unwrap();
-    assert_eq!(users[0].value, "jdoe");
+    // "Me" first, then the people found
+    assert_eq!(users[0].value, ME);
+    assert_eq!(users[1].value, "jdoe");
     assert!(w
         .with("jira", |ctx| c.options(ctx, "recent_issues"))
         .unwrap()
         .is_empty());
     assert!(!server.requests_to("/rest/api/2/search").is_empty());
+}
+
+#[test]
+fn people_are_searched_for_what_is_typed_anyone_or_in_a_project() {
+    let server = MockServer::start(|req| match req.path() {
+        "/rest/api/2/user/search"
+        | "/rest/api/2/user/assignable/search"
+        | "/rest/api/2/users/search" => MockResponse::json(
+            200,
+            json!([
+                {"accountId":"a1","displayName":"Ana Lopez","emailAddress":"ana@x.io","accountType":"atlassian"},
+                {"accountId":"bot","displayName":"Automation","accountType":"app"},
+                {"accountId":"old","displayName":"Gone","accountType":"atlassian","active":false}
+            ]),
+        ),
+        _ => MockResponse::new(404),
+    });
+    let w = world();
+    let c = cloud(&server);
+    let found = w.with("jira", |ctx| c.options(ctx, "users?ana")).unwrap();
+    // what is typed goes to Jira; apps and people gone are left out; "Me" only when it matches
+    assert_eq!(
+        found.iter().map(|o| o.value.as_str()).collect::<Vec<_>>(),
+        ["a1"]
+    );
+    assert_eq!(found[0].label, "Ana Lopez (ana@x.io)");
+    assert_eq!(
+        server.requests_to("/rest/api/2/user/search")[0]
+            .query_param("query")
+            .as_deref(),
+        Some("ana")
+    );
+    // nothing typed: Me, then the first page of everyone
+    let first = w.with("jira", |ctx| c.options(ctx, "users")).unwrap();
+    assert_eq!(first[0].value, ME);
+    assert_eq!(server.requests_to("/rest/api/2/users/search").len(), 1);
+    // in a project: who can be assigned there
+    w.with("jira", |ctx| c.options(ctx, "assignable_users:CF?an"))
+        .unwrap();
+    let r = &server.requests_to("/rest/api/2/user/assignable/search")[0];
+    assert_eq!(r.query_param("project").as_deref(), Some("CF"));
+    assert_eq!(r.query_param("query").as_deref(), Some("an"));
+    // without a project key it searches everyone instead of failing
+    assert!(w
+        .with("jira", |ctx| c.options(ctx, "assignable_users?an"))
+        .is_ok());
+}
+
+#[test]
+fn teams_are_searched_through_the_team_field() {
+    let server = MockServer::start(|req| match req.path() {
+        "/rest/api/2/field" => MockResponse::json(
+            200,
+            json!([
+                {"id":"summary","clauseNames":["summary"]},
+                {"id":"customfield_10001","clauseNames":["cf[10001]","Team"],
+                 "schema":{"custom":"com.atlassian.jira.plugin.system.customfieldtypes:atlassian-team"}}
+            ]),
+        ),
+        "/rest/api/2/jql/autocompletedata/suggestions" => MockResponse::json(
+            200,
+            json!({"results":[{"value":"36885b3c-1bf0","displayName":"<b>Pla</b>tform &amp; tools"}]}),
+        ),
+        _ => MockResponse::new(404),
+    });
+    let w = world();
+    let c = cloud(&server);
+    let teams = w.with("jira", |ctx| c.options(ctx, "teams?pla")).unwrap();
+    assert_eq!(teams.len(), 1);
+    assert_eq!(teams[0].value, "36885b3c-1bf0");
+    assert_eq!(teams[0].label, "Platform & tools");
+    let r = &server.requests_to("/rest/api/2/jql/autocompletedata/suggestions")[0];
+    assert_eq!(r.query_param("fieldName").as_deref(), Some("cf[10001]"));
+    assert_eq!(r.query_param("fieldValue").as_deref(), Some("pla"));
+}
+
+#[test]
+fn me_as_the_assignee_is_the_person_signed_in() {
+    let server = MockServer::start(|req| match (req.method.as_str(), req.path()) {
+        ("GET", "/rest/api/2/myself") => MockResponse::json(200, json!({"accountId":"me-42"})),
+        ("POST", "/rest/api/2/issue") => MockResponse::json(201, json!({"key":"PROJ-1"})),
+        ("POST", p) if p.ends_with("/attachments") => MockResponse::json(200, json!([{"id":"1"}])),
+        _ => MockResponse::new(404),
+    });
+    let w = world();
+    let mut p = payload();
+    p.fields.push(Field::text("assignee", ME));
+    w.with("jira", |ctx| cloud(&server).send(ctx, &p)).unwrap();
+    let create = &server.requests_to("/rest/api/2/issue")[0];
+    assert_eq!(
+        create.json()["fields"]["assignee"],
+        json!({"accountId":"me-42"})
+    );
+    // no "Me": nobody is asked who they are
+    let server2 = happy();
+    w.with("jira", |ctx| cloud(&server2).send(ctx, &payload()))
+        .unwrap();
+    assert!(server2.requests_to("/rest/api/2/myself").is_empty());
 }
 
 #[test]

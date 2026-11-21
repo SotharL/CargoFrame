@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { Block, Layout } from '../../lib/types';
 import {
   addBlock, canPlace, cellAt, COLUMNS, firstFree, fits, makeBlock, MAX_SHARING_BUTTONS, moveTo, newBlockId, overlaps, removeBlock,
-  resizeTo, rowsNeeded, tidy, columnsOf, usedColumns,
+  resizeTo, rowsNeeded, tidy, columnsOf, usedColumns, copyOf, pasteBlocks, isLocked, lockTab,
 } from './model';
 
 const text = (id: string, x: number, y: number, w = 4, h = 2): Block => ({
@@ -215,5 +215,80 @@ describe('tabs, like a binder', () => {
 
   it('tabs do not go inside tabs', () => {
     expect(canPlace([tabs()], { x: 0, y: 0, w: 4, h: 2 }, undefined, COLUMNS, { type: 'tabs' })).toBe(false);
+  });
+});
+
+
+describe('copy, paste, duplicate', () => {
+  type Tabs = Extract<Block, { type: 'tabs' }>;
+  type Button = Extract<Block, { type: 'sharing_button' }>;
+  const button = (id: string, from: string): Button => ({
+    id, rect: { x: 8, y: 0, w: 4, h: 1 }, type: 'sharing_button', label: 'Share', connection_id: 'c', prompt_block_id: from,
+    on_success: 'close_window', mappings: [{ field: 'summary', source: { kind: 'block', value: from } }], required: [from],
+  });
+
+  it('pastes a copy with a new id at the first free place, the original left as it is', () => {
+    const blocks = [text('text-1', 0, 0)];
+    const done = pasteBlocks(blocks, copyOf(blocks, 'text-1'))!;
+    expect(done.blocks).toHaveLength(2);
+    expect(done.block.id).toBe('text-2');
+    expect(done.block.rect).toEqual({ x: 4, y: 0, w: 4, h: 2 });
+    expect(done.blocks[0]).toEqual(blocks[0]);
+  });
+
+  it('copies a Tabs block with the blocks of its tabs, all renamed and moved together', () => {
+    const tabs: Tabs = { id: 'tabs', rect: { x: 0, y: 0, w: 6, h: 4 }, type: 'tabs', tabs: [{ name: 'A', blocks: ['in'] }, { name: 'B', locked: true }] };
+    const blocks = [tabs, text('in', 1, 1, 3, 2)];
+    const done = pasteBlocks(blocks, copyOf(blocks, 'tabs'))!;
+    const copy = done.block as Tabs;
+    expect(copy.id).toBe('tabs-1');
+    expect(copy.rect).toEqual({ x: 6, y: 0, w: 6, h: 4 });
+    const inner = copy.tabs[0]!.blocks![0]!;
+    expect(inner).not.toBe('in');
+    // inside the copy, where it was inside the original
+    expect(done.blocks.find((b) => b.id === inner)!.rect).toEqual({ x: 7, y: 1, w: 3, h: 2 });
+    expect(copy.tabs[1]!.locked).toBe(true);
+  });
+
+  it('a pasted button names the copied blocks it named, and the others as they were', () => {
+    const blocks = [text('note', 0, 0), button('share', 'note')];
+    const alone = pasteBlocks(blocks, copyOf(blocks, 'share'))!.block as Button;
+    // copied alone: it still sends the note
+    expect(alone.prompt_block_id).toBe('note');
+    expect(alone.mappings[0]!.source.value).toBe('note');
+    expect(alone.required).toEqual(['note']);
+  });
+
+  it('never pastes one sharing button too many', () => {
+    let blocks: Block[] = [];
+    for (let i = 0; i < MAX_SHARING_BUTTONS; i++) blocks = addBlock(blocks, 'sharing_button')!.blocks;
+    expect(pasteBlocks(blocks, copyOf(blocks, blocks[0]!.id))).toBeNull();
+  });
+});
+
+describe('a locked tab', () => {
+  type Tabs = Extract<Block, { type: 'tabs' }>;
+  const layout = (): Block[] => [
+    { id: 'tabs', rect: { x: 0, y: 0, w: 8, h: 4 }, type: 'tabs', tabs: [{ name: 'A', blocks: ['in'] }, { name: 'B' }] } as Tabs,
+    text('in', 0, 1, 3, 2),
+    text('out', 0, 5),
+  ];
+
+  it('keeps its blocks where they are and takes no other, until it is unlocked', () => {
+    const locked = lockTab(layout(), 'tabs', 0, true);
+    expect(isLocked(locked, 'in')).toBe(true);
+    expect(isLocked(locked, 'out')).toBe(false);
+    expect(moveTo(locked, 'in', 4, 1)).toBeNull();
+    expect(resizeTo(locked, 'in', 4, 2)).toBeNull();
+    // nothing is dropped in it, moved or new
+    expect(moveTo(locked, 'out', 4, 1, COLUMNS, { tabs: 0 })).toBeNull();
+    expect(addBlock(locked, 'text', { x: 4, y: 1 }, COLUMNS, { tabs: 0 })).toBeNull();
+    // the other tab is not locked
+    expect(addBlock(locked, 'text', { x: 4, y: 1 }, COLUMNS, { tabs: 1 })).not.toBeNull();
+    // the Tabs block itself still moves, its blocks with it
+    expect(moveTo(locked, 'tabs', 2, 0)?.find((b) => b.id === 'in')?.rect.x).toBe(2);
+    const open = lockTab(locked, 'tabs', 0, false);
+    expect((open[0] as Tabs).tabs[0]).toEqual({ name: 'A', blocks: ['in'] });
+    expect(moveTo(open, 'in', 4, 1)).not.toBeNull();
   });
 });

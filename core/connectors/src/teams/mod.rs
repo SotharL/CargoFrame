@@ -540,7 +540,7 @@ impl Connector for TeamsConnector {
                 id: "targets".into(),
                 label: msg!("Your chats and the channels of your teams").into(),
                 param: None,
-                inside: None,
+                inside: None, search: false,
             }],
             summary: msg!("Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The ticked files cannot be sent yet: Teams needs them in OneDrive.").into(),
         }

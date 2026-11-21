@@ -18,10 +18,13 @@ pub mod session;
 pub mod portal;
 #[cfg(target_os = "linux")]
 pub mod screencast;
+pub mod system;
 #[cfg(target_os = "linux")]
 pub mod wayland;
 #[cfg(windows)]
 mod win;
+#[cfg(windows)]
+mod win_system;
 #[cfg(target_os = "linux")]
 pub mod x11;
 

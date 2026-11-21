@@ -37,6 +37,39 @@ describe('DropdownBlock', () => {
   });
 });
 
+describe('DropdownBlock that the service searches', () => {
+  afterEach(() => {
+    cleanup();
+    setApiForTests(undefined);
+  });
+
+  it('asks the service with what is typed, keeps the choice, and starts on the first entry', async () => {
+    const asked: string[] = [];
+    setApiForTests(
+      memoryApi({
+        options: async (_c, list) => {
+          asked.push(list);
+          return list.endsWith('?ana') ? [{ value: 'a1', label: 'Ana Lopez (ana@x.io)', group: null }] : [];
+        },
+      }),
+    );
+    const people: Dropdown = { ...block, id: 'assignee', title: 'Assignee', remember: false };
+    const start: DropdownState = { status: 'ready', options: [{ value: '@me', label: 'Me', group: null }], selected: '@me', message: null, search: true };
+    render(DropdownBlock, { block: people, info: start, value: '@me', sessionId: 3 });
+    const box = screen.getByRole('combobox', { name: 'Assignee' }) as HTMLInputElement;
+    // a list the service searches is a search box even with one entry
+    expect(box.tagName).toBe('INPUT');
+    await fireEvent.focus(box);
+    await fireEvent.input(box, { target: { value: 'ana' } });
+    // the service is asked once the typing pauses, with what is typed
+    await waitFor(() => expect(asked).toEqual(['assignee?ana']), { timeout: 2000 });
+    // what it found is shown as it is (found by e-mail too, which the label alone might not match)
+    await waitFor(() => expect(screen.getByRole('option', { name: 'Ana Lopez (ana@x.io)' })).toBeTruthy());
+    await fireEvent.pointerDown(screen.getByRole('option', { name: 'Ana Lopez (ana@x.io)' }));
+    expect(box.value).toBe('Ana Lopez (ana@x.io)');
+  });
+});
+
 const channel: Dropdown = { ...block, id: 'channel', title: 'Channel', rect: { x: 0, y: 0, w: 5, h: 1 } };
 const o = (value: string, label: string, server: string, category: string | null = null) => ({
   value, label, group: null, server, category,

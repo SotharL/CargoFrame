@@ -204,11 +204,22 @@ struct Prepared {
 /// The connection and list a dropdown of the layout may be filled from, and nothing else: the
 /// window cannot ask for a list the layout does not name. With `parent`, the second list of a
 /// dropdown that goes deeper, asked for as `<list>:<parent>`.
-pub fn options_asked(
+/// With what is typed in a list the service searches, it is asked for as `<list>?<typed>`.
+pub fn options_searched(
     layout: &Layout,
     block_id: &str,
     parent: Option<&str>,
+    typed: Option<&str>,
 ) -> Option<(String, String)> {
+    let (connection, list) = options_list(layout, block_id, parent)?;
+    Some(match typed.map(str::trim) {
+        // `?` ends the list's own name: what is typed cannot change which list it is
+        Some(q) if parent.is_none() => (connection, format!("{list}?{}", q.replace('?', " "))),
+        _ => (connection, list),
+    })
+}
+
+fn options_list(layout: &Layout, block_id: &str, parent: Option<&str>) -> Option<(String, String)> {
     let d = match &layout.block(block_id)?.kind {
         BlockKind::Dropdown(d) => d,
         // a Tags block may suggest from one list, never a list inside a choice

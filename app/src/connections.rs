@@ -460,11 +460,13 @@ impl Connections {
         let connection = self.load(store, id).map_err(conn::error::invalid)?;
         let result = self.quietly(id, &connection, |c, ctx| c.options(ctx, list));
         match &result {
-            Ok(items) => {
+            // a search for what is typed is not kept: each keystroke would add one
+            Ok(items) if !list.contains('?') => {
                 self.cache()
                     .options
                     .insert(key, (Instant::now(), items.clone()));
             }
+            Ok(_) => {}
             Err(e) if e.kind.needs_reconnect() => self.mark_expired(id),
             _ => {}
         }

@@ -88,14 +88,22 @@
 
   // ---- tables ----
 
-  const cellOf = (n: EventTarget | Node | null): HTMLElement | null =>
-    n instanceof Node ? ((n instanceof HTMLElement ? n : n.parentElement)?.closest<HTMLElement>('.cell') ?? null) : null;
+  /**
+   * The cell of one of this box's tables that `n` is in. Only this box's own grids count: the
+   * window around the box has its own elements (a layout's cells), and taking one of them for a
+   * table cell swallowed Enter and wiped the block on a paste.
+   */
+  const cellOf = (n: EventTarget | Node | null): HTMLElement | null => {
+    if (!(n instanceof Node) || !box) return null;
+    const el = (n instanceof HTMLElement ? n : n.parentElement)?.closest<HTMLElement>('.tw-cell') ?? null;
+    return el && box.contains(el) && el.closest('.tw') ? el : null;
+  };
 
   /** The table a grid shows now, read from its cells. */
   function tableIn(grid: HTMLElement): Table {
     const head: string[] = [];
     const rows: string[][] = [];
-    for (const c of Array.from(grid.querySelectorAll<HTMLElement>('.cell'))) {
+    for (const c of Array.from(grid.querySelectorAll<HTMLElement>('.tw-cell'))) {
       const r = Number(c.dataset.r);
       const k = Number(c.dataset.c);
       const text = (c.textContent ?? '').replace(/\n/g, ' ');
@@ -181,7 +189,7 @@
   /** The cell a grid shows at row `r`, column `c`, after the box was drawn again. */
   function cellAt(nth: number, r: number, c: number): HTMLElement | null {
     const grid = box?.querySelectorAll<HTMLElement>('.tw')[nth];
-    return grid?.querySelector<HTMLElement>(`.cell[data-r="${r}"][data-c="${c}"]`) ?? null;
+    return grid?.querySelector<HTMLElement>(`.tw-cell[data-r="${r}"][data-c="${c}"]`) ?? null;
   }
 
   /** The buttons on a grid: a row or a column more, or one less. */
@@ -230,7 +238,7 @@
   function moveFrom(cell: HTMLElement, dr: number, dc: number): boolean {
     const grid = cell.closest<HTMLElement>('.tw');
     if (!grid) return false;
-    const cells = Array.from(grid.querySelectorAll<HTMLElement>('.cell'));
+    const cells = Array.from(grid.querySelectorAll<HTMLElement>('.tw-cell'));
     const r = Number(cell.dataset.r);
     const c = Number(cell.dataset.c);
     const target =
@@ -260,7 +268,7 @@
     if (mark === 'table') {
       // straight into the new table's first cell, its name selected to type over
       const grid = Array.from(box.querySelectorAll<HTMLElement>('.tw')).find((g) => offsetOf(box!, g, 0) === edit.start);
-      const cell = grid?.querySelector<HTMLElement>('.cell');
+      const cell = grid?.querySelector<HTMLElement>('.tw-cell');
       if (cell) caretInCell(cell, 0, cell.textContent?.length ?? 0);
     }
   }
@@ -374,6 +382,27 @@
     }
   }
 
+  /**
+   * A paste comes in as plain text, in a cell or in the box: the paste event always has the
+   * clipboard (a `beforeinput` for a paste may not), and nothing the browser would paste (its
+   * styles, its tags) gets into the box.
+   */
+  function onPaste(e: ClipboardEvent) {
+    if (!box) return;
+    const text = e.clipboardData?.getData('text/plain');
+    if (text == null) return;
+    e.preventDefault();
+    const cell = cellOf(e.target);
+    if (cell) {
+      const [a, b] = inCell(cell);
+      lastCell = { cell, a, b };
+    } else {
+      lastCell = null;
+      lastSel = selectionIn(box) ?? lastSel;
+    }
+    insert(text.replace(/\r\n?/g, '\n'));
+  }
+
   /** The browser typed or deleted: read the text back and draw it with its marks. */
   function onInput(e?: Event) {
     if (!box || composing) return;
@@ -456,6 +485,7 @@
   spellcheck="true"
   onbeforeinput={onBeforeInput}
   oninput={onInput}
+  onpaste={onPaste}
   onclick={onGridClick}
   onmousedown={(e) => {
     // a grid's buttons keep the focus where it is
@@ -517,11 +547,11 @@
   .rich :global(.tw thead tr:last-child th) { background: color-mix(in srgb, var(--text) 7%, transparent); font-weight: 600; }
   .rich :global(.tw .tw-top), .rich :global(.tw .tw-side) { border: none; background: none; padding: 0; }
   .rich :global(.tw .tw-top) { height: 14px; text-align: center; }
-  .rich :global(.tw .cell) {
+  .rich :global(.tw .tw-cell) {
     display: block; min-width: 64px; min-height: 1.4em; padding: 3px 6px; outline: none;
     white-space: pre-wrap; cursor: text; text-align: left;
   }
-  .rich :global(.tw .cell:focus) { box-shadow: inset 0 0 0 2px var(--accent); }
+  .rich :global(.tw .tw-cell:focus) { box-shadow: inset 0 0 0 2px var(--accent); }
   .rich :global(.tw button) {
     font: inherit; font-size: 11px; line-height: 1; border: 1px solid var(--border-strong);
     background: var(--surface); color: var(--quiet); border-radius: 3px; cursor: pointer;

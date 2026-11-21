@@ -18,6 +18,8 @@
     disabled = false,
     emptyText = t('Nothing matches'),
     onchange,
+    onquery,
+    remote = false,
   }: {
     options: readonly ComboOption[];
     also?: readonly ComboOption[];
@@ -30,6 +32,10 @@
     disabled?: boolean;
     emptyText?: string;
     onchange?: (value: string) => void;
+    /** What is typed, as it is typed (a list the service searches asks again with it). */
+    onquery?: (query: string) => void;
+    /** The options are already what the service found for the text typed: shown as they are. */
+    remote?: boolean;
   } = $props();
 
   /** The narrowest the list is drawn, in pixels, however small its box. */
@@ -81,7 +87,7 @@
   );
   const matches = $derived.by(() => {
     const q = (typing ? query : '').trim().toLowerCase();
-    if (!q) return options;
+    if (!q || remote) return options;
     const seen = new Set(options.map((o) => o.value));
     const everything = [...options, ...also.filter((o) => !seen.has(o.value))];
     return everything.filter((o) => `${o.label} ${o.value} ${o.note ?? ''}`.toLowerCase().includes(q));
@@ -104,6 +110,7 @@
     query = e.currentTarget.value;
     open = true;
     active = 0;
+    onquery?.(query);
     if (free) {
       value = query;
       onchange?.(query);

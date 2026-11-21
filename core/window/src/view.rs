@@ -123,6 +123,10 @@ pub struct DropdownState {
     pub options: Vec<DropdownOption>,
     pub selected: Option<String>,
     pub message: Option<String>,
+    /// The service searches the list for what is typed (people, teams): the window asks again
+    /// as the person types instead of narrowing what it has.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub search: bool,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
@@ -325,17 +329,22 @@ fn dropdown_state(block: &Block, inputs: &Inputs<'_>) -> Option<DropdownState> {
                 options,
                 selected,
                 message: None,
+                search: false,
             }
         }
-        DropdownSource::WebApi { connection_id, .. } => match inputs
-            .registry
-            .connection(connection_id)
-        {
+        DropdownSource::WebApi {
+            connection_id,
+            options_id,
+        } => match inputs.registry.connection(connection_id) {
             Some(c) if c.state == cargoframe_layout::ConnectionState::Connected => DropdownState {
                 status: DropdownStatus::Loading,
                 options: Vec::new(),
                 selected: None,
                 message: None,
+                search: inputs.registry.list_searches(
+                    connection_id,
+                    options_id.split(':').next().unwrap_or_default(),
+                ),
             },
             _ => DropdownState {
                 status: DropdownStatus::NeedsConnection,
@@ -345,6 +354,7 @@ fn dropdown_state(block: &Block, inputs: &Inputs<'_>) -> Option<DropdownState> {
                     "Connect \"{connection_id}\" in Settings to load these options",
                     &[("connection_id", &connection_id)],
                 )),
+                search: false,
             },
         },
     })

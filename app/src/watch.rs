@@ -150,12 +150,13 @@ impl Onto {
     fn new(desktop: Option<&Rect>, size: (u32, u32)) -> Self {
         let (w, h) = (f64::from(size.0), f64::from(size.1));
         match desktop {
-            // the same shape as the desktop: it is the desktop, at its size or smaller
+            // the same shape as the desktop: it is the desktop, at its size or smaller (made
+            // smaller to even sides, so the shape is the same within a few pixels: 2 %)
             Some(d)
                 if d.w > 0
                     && d.h > 0
                     && h > 0.0
-                    && ((w / h) - f64::from(d.w) / f64::from(d.h)).abs() < 0.01 =>
+                    && ((w / h) / (f64::from(d.w) / f64::from(d.h)) - 1.0).abs() < 0.02 =>
             {
                 Self {
                     origin: (f64::from(d.x), f64::from(d.y)),
@@ -704,6 +705,29 @@ mod tests {
         // a recording of the whole desktop: its corner is the desktop's
         let c = crop_in(window, Some(&desktop), (3840, 1080)).unwrap();
         assert_eq!((c.x, c.y, c.w, c.h), (920, 100, 800, 600));
+        // three 1080p screens made smaller to about one screen's pixels (3324×622, even
+        // sides): still the desktop, the window where it was
+        let three = Rect {
+            x: 0,
+            y: 0,
+            w: 5760,
+            h: 1080,
+        };
+        let c = crop_in(
+            Rect {
+                x: 1920,
+                y: 0,
+                w: 1920,
+                h: 1080,
+            },
+            Some(&three),
+            (3324, 622),
+        )
+        .unwrap();
+        assert!(
+            (1100..=1112).contains(&c.x) && (1104..=1112).contains(&c.w),
+            "{c:?}"
+        );
         // a recording of one screen at the origin
         let c = crop_in(
             Rect {

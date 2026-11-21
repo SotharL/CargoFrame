@@ -17,6 +17,32 @@ pub struct X11 {
     screen: usize,
 }
 
+/// The screens, the main (primary) one first, from RandR; `None` without an X display.
+pub fn monitors() -> Option<Vec<PixelRect>> {
+    let x = X11::connect().ok()?;
+    let root = x.root();
+    let mut list = x
+        .conn
+        .randr_get_monitors(root, true)
+        .ok()?
+        .reply()
+        .ok()?
+        .monitors;
+    list.sort_by_key(|m| !m.primary);
+    Some(
+        list.iter()
+            .map(|m| {
+                PixelRect::new(
+                    i32::from(m.x),
+                    i32::from(m.y),
+                    u32::from(m.width),
+                    u32::from(m.height),
+                )
+            })
+            .collect(),
+    )
+}
+
 impl X11 {
     pub fn connect() -> Result<Self, CaptureError> {
         let (conn, screen) =

@@ -7,18 +7,22 @@
   import { getApi } from '../../lib/ipc';
   import type {
     ImportAction, ImportPreview, ImportPreviewItem, ImportReport, ItemEntry, Layout, Rule,
-    TransferGroup, InfoType,
+    TransferGroup, InfoType, Trigger,
   } from '../../lib/types';
 
   const GROUPS: { group: TransferGroup; label: string; kind: 'layout' | 'rule' | 'infotype' }[] = [
     { group: 'layouts', label: t('Layouts'), kind: 'layout' },
-    { group: 'rules', label: t('Data from files'), kind: 'rule' },
+    { group: 'rules', label: t('Values'), kind: 'rule' },
     { group: 'infotypes', label: t('Field fills'), kind: 'infotype' },
   ];
 
   type Row = { id: string; name: string; on: boolean };
   let rows = $state<Record<TransferGroup, Row[]>>({ layouts: [], rules: [], infotypes: [] });
   let exported = $state<{ kind: 'ok' | 'err'; text: string; path?: string } | null>(null);
+  /** The shortcuts, to say which would open nothing once their layout is deleted. */
+  let shortcuts = $state<ItemEntry<Trigger>[]>([]);
+  let confirmingDelete = $state(false);
+  let deleted = $state<{ kind: 'ok' | 'err'; text: string } | null>(null);
   let busy = $state(false);
 
   let preview = $state<ImportPreview | null>(null);
@@ -35,9 +39,11 @@
     const api = await getApi();
     const nameOf = (e: ItemEntry<Layout | Rule | InfoType>) => (e.item as { name?: string }).name?.trim() || e.id;
     // Fetch every group first so the lists appear together, not one after another.
-    const lists = await Promise.all(
-      GROUPS.map((g) => api.listItems<Layout | Rule | InfoType>(g.kind).catch(() => null)),
-    );
+    const [lists, triggers] = await Promise.all([
+      Promise.all(GROUPS.map((g) => api.listItems<Layout | Rule | InfoType>(g.kind).catch(() => null))),
+      api.listItems<Trigger>('trigger').catch(() => null),
+    ]);
+    shortcuts = triggers?.items ?? [];
     GROUPS.forEach((g, n) => {
       const before = new Map(rows[g.group].map((r) => [r.id, r.on]));
       rows[g.group] = (lists[n]?.items ?? []).map((e) => ({
@@ -67,6 +73,37 @@
     } catch (e) {
       exported = { kind: 'err', text: String(e) };
     }
+    busy = false;
+  }
+
+  /** What is ticked, by group, with its names. */
+  const picked = $derived(GROUPS.flatMap((g) => rows[g.group].filter((r) => r.on).map((r) => ({ ...r, group: g.group, kind: g.kind }))));
+  /** The shortcuts whose layout is among those ticked: they would open nothing. */
+  const orphaned = $derived.by(() => {
+    const gone = new Set(picked.filter((p) => p.group === 'layouts').map((p) => p.id));
+    return shortcuts.filter((s) => s.item.layout_id && gone.has(s.item.layout_id)).map((s) => s.item.name.trim() || s.id);
+  });
+
+  /** Delete what is ticked, after the person said so: each item's file goes (like Delete on its page). */
+  async function doDelete() {
+    busy = true;
+    deleted = null;
+    const api = await getApi();
+    const failed: string[] = [];
+    let done = 0;
+    for (const p of picked) {
+      try {
+        await api.deleteItem(p.kind, p.id);
+        done++;
+      } catch (e) {
+        failed.push(`${p.name}: ${String(e)}`);
+      }
+    }
+    confirmingDelete = false;
+    deleted = failed.length
+      ? { kind: 'err', text: t('Deleted {n}; could not delete {failed}', { n: done, failed: failed.join('; ') }) }
+      : { kind: 'ok', text: tn('Deleted {n} item', t('Deleted {n} items'), done) };
+    await loadRows();
     busy = false;
   }
 
@@ -123,12 +160,12 @@
 <Section
   title={t('Export and import')}
   tour="files.transfer"
-  hint={t('Back up layouts, data from files and field fills, or move them to another computer. Connections, passwords, keys and shortcuts are never included.')}
+  hint={t('Back up layouts, values and field fills, move them to another computer, or delete several at once. Connections, passwords, keys and shortcuts are never included.')}
 >
   <div class="panel">
     <h3>{t('Export')}</h3>
     {#if total === 0}
-      <p class="quiet">{t('Nothing to export yet. Layouts, data from files and field fills you create show up here.')}</p>
+      <p class="quiet">{t('Nothing here yet. Layouts, values and field fills you create show up here.')}</p>
     {:else}
       {#each GROUPS as g (g.group)}
         {#if rows[g.group].length > 0}
@@ -157,11 +194,36 @@
         <button type="button" onclick={doExport} disabled={busy || selectedCount === 0}>
           {tn('Export {n} item…', t('Export {n} items…'), selectedCount)}
         </button>
+        <button
+          type="button"
+          class="danger-line"
+          onclick={() => { confirmingDelete = true; deleted = null; }}
+          disabled={busy || selectedCount === 0 || confirmingDelete}
+        >
+          {tn('Delete {n} item…', t('Delete {n} items…'), selectedCount)}
+        </button>
         {#if exported}
           <Chip kind={exported.kind} label={exported.text} />
           {#if exported.path}<span class="mono selectable path">{exported.path}</span>{/if}
         {/if}
+        {#if deleted}<Chip kind={deleted.kind} label={deleted.text} />{/if}
       </div>
+      {#if confirmingDelete}
+        <div class="confirm" role="alert">
+          <p>
+            <strong>{tn('Delete {n} item for good?', t('Delete {n} items for good?'), selectedCount)}</strong>
+            {t('It cannot be undone: export them first to keep a copy.')}
+          </p>
+          <p class="quiet names">{picked.map((p) => p.name).join(', ')}</p>
+          {#if orphaned.length}
+            <p class="warn">{tn('The shortcut {names} opens one of these layouts: it will open nothing until another is chosen.', t('The shortcuts {names} open these layouts: they will open nothing until another is chosen.'), orphaned.length, { names: orphaned.join(', ') })}</p>
+          {/if}
+          <div class="line">
+            <button type="button" class="danger" onclick={doDelete} disabled={busy}>{t('Delete for good')}</button>
+            <button type="button" onclick={() => (confirmingDelete = false)} disabled={busy}>{t('Keep')}</button>
+          </div>
+        </div>
+      {/if}
     {/if}
   </div>
 
@@ -244,4 +306,13 @@
   .note { flex-basis: 100%; margin: 0; font-size: 12.5px; }
   .report { display: flex; gap: 6px; flex-wrap: wrap; }
   .path { font-size: 12.5px; overflow-wrap: anywhere; }
+  .danger-line:not(:disabled):hover { color: var(--err); border-color: var(--err); }
+  .confirm {
+    display: grid; gap: 6px; padding: 10px 12px; border-radius: var(--radius-sm);
+    border: 1px solid var(--err); background: color-mix(in srgb, var(--err) 7%, var(--surface));
+  }
+  .confirm p { margin: 0; }
+  .confirm .names { font-size: 12.5px; overflow-wrap: anywhere; }
+  .confirm .warn { color: var(--warn); font-size: 13px; }
+  .danger { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
 </style>

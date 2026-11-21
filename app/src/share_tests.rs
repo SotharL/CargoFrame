@@ -774,17 +774,22 @@ fn the_window_may_only_ask_for_lists_the_layout_names() {
     let layout = w.session.view.layout.as_ref().unwrap();
     // the dropdown's own list, and the one inside it for a given choice
     assert_eq!(
-        options_asked(layout, "where", None),
+        options_searched(layout, "where", None, None),
         Some(("api".into(), "places".into()))
     );
     assert_eq!(
-        options_asked(layout, "where", Some(" 123 ")),
+        options_searched(layout, "where", Some(" 123 "), None),
         Some(("api".into(), "inside:123".into()))
     );
+    // what is typed rides after `?`, and cannot name another list
+    assert_eq!(
+        options_searched(layout, "where", None, Some(" ana? ")),
+        Some(("api".into(), "places?ana ".into()))
+    );
     // nothing inside an empty choice, a block that is not a dropdown, or one that goes nowhere
-    assert_eq!(options_asked(layout, "where", Some("")), None);
-    assert_eq!(options_asked(layout, "note", None), None);
-    assert_eq!(options_asked(layout, "missing", None), None);
+    assert_eq!(options_searched(layout, "where", Some(""), None), None);
+    assert_eq!(options_searched(layout, "note", None, None), None);
+    assert_eq!(options_searched(layout, "missing", None, None), None);
     let plain = cargoframe_layout::DropdownBlock::new(
         "P",
         DropdownSource::WebApi {
@@ -798,7 +803,7 @@ fn the_window_may_only_ask_for_lists_the_layout_names() {
         rect: cargoframe_layout::Rect::new(0, 6, 6, 1),
         kind: BlockKind::Dropdown(plain),
     });
-    assert_eq!(options_asked(&layout, "plain", Some("123")), None);
+    assert_eq!(options_searched(&layout, "plain", Some("123"), None), None);
 }
 
 #[test]

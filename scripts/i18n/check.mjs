@@ -64,14 +64,16 @@ function rustText(body) {
 
 const JS_LIT = String.raw`('(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|` + '`(?:[^`\\\\]|\\\\.)*`' + ')';
 const UI_ONE = new RegExp(String.raw`(?<![\w.$])(?:t|tx|tr|msg)\(\s*` + JS_LIT, 'g');
-const UI_TWO = new RegExp(String.raw`(?<![\w.$])tn\(\s*` + JS_LIT + String.raw`\s*,\s*` + JS_LIT, 'g');
+// tn(one, other, n): the plural is often written t('…') (found by UI_ONE), so the singular is
+// looked for on its own, with or without a plain plural after it
+const UI_TWO = new RegExp(String.raw`(?<![\w.$])tn\(\s*` + JS_LIT + String.raw`(?:\s*,\s*` + JS_LIT + ')?', 'g');
 
 function findUi(src, file, add) {
   src = uncommented(src);
   for (const m of src.matchAll(UI_ONE)) add(jsText(m[1]), file);
   for (const m of src.matchAll(UI_TWO)) {
     add(jsText(m[1]), file);
-    add(jsText(m[2]), file);
+    if (m[2]) add(jsText(m[2]), file);
   }
 }
 

@@ -330,6 +330,7 @@ impl Connector for GithubConnector {
             label: label.into(),
             param: None,
             inside: None,
+            search: false,
         };
         Describe {
             fields: vec![

@@ -265,6 +265,8 @@ export type BlockContent =
 export interface Tab {
   name: string;
   blocks?: string[];
+  /** Locked in the builder: its blocks are not moved, resized or removed, and none is dropped in. */
+  locked?: boolean;
 }
 export type TabSide = 'top' | 'right' | 'bottom' | 'left';
 
@@ -380,6 +382,8 @@ export interface DropdownState {
   options: DropdownOption[];
   selected: string | null;
   message: string | null;
+  /** The service searches the list for what is typed (people, teams): asked again as one types. */
+  search?: boolean;
 }
 
 /** What the window knows of the recording of a video capture. */
@@ -772,6 +776,8 @@ export interface VideoTrial {
 export interface VariableInfo {
   name: string;
   description: string;
+  /** What it is on this computer now (the system values). */
+  value?: string;
 }
 
 // ----- connections and sharing (mirror core/connectors and app/src/share.rs) -----
@@ -857,6 +863,8 @@ export interface ListSpec {
   param: string | null;
   /** What can be chosen inside each choice of this list (the threads of a channel). */
   inside?: { list: string; field: string; label: string } | null;
+  /** The service searches it for what is typed (people, teams) rather than sending it whole. */
+  search?: boolean;
 }
 
 export interface Describe {

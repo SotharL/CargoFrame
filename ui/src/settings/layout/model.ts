@@ -62,6 +62,8 @@ type Spot = { tabs: string; index: number } | null | undefined;
  */
 function spotFor(blocks: readonly Block[], rect: Rect, selfId: string | undefined, type: BlockType | undefined, cols: number, open: OpenTabs): Spot {
   if (!fits(rect, cols)) return undefined;
+  // a block of a locked tab stays where it is
+  if (selfId && isLocked(blocks, selfId)) return undefined;
   const self = selfId ? blocks.find((b) => b.id === selfId) : undefined;
   const isTabs = (self?.type ?? type) === 'tabs';
   if (isTabs && (rect.w < MIN_TABS_SIZE || rect.h < MIN_TABS_SIZE)) return undefined;
@@ -70,6 +72,8 @@ function spotFor(blocks: readonly Block[], rect: Rect, selfId: string | undefine
   // a block moved inside its own Tabs block stays in its tab; one brought in joins the open tab
   const own = selfId ? tabOf(blocks, selfId) : null;
   const index = holder ? (own && own.tabs.id === holder.id ? own.index : openTab(holder, open)) : -1;
+  // nothing is brought into a locked tab
+  if (holder && holder.tabs[index]?.locked && !(own && own.tabs.id === holder.id)) return undefined;
   for (const b of blocks) {
     if (b.id === selfId || along.has(b.id) || !overlaps(b.rect, rect)) continue;
     if (holder) {
@@ -99,6 +103,79 @@ function joinTab(blocks: readonly Block[], id: string, spot: { tabs: string; ind
     });
     return { ...b, tabs };
   });
+}
+
+/** Is the block in a locked tab (fixed in place in the builder)? */
+export function isLocked(blocks: readonly Block[], id: string): boolean {
+  return tabOf(blocks, id)?.tabs.tabs.find((t) => t.blocks?.includes(id))?.locked === true;
+}
+
+/** The blocks with tab `index` of Tabs block `id` locked or unlocked. */
+export function lockTab(blocks: readonly Block[], id: string, index: number, locked: boolean): Block[] {
+  return blocks.map((b) => {
+    if (b.id !== id || b.type !== 'tabs') return b;
+    const tabs = b.tabs.map((t, i) => {
+      if (i !== index) return t;
+      const { locked: _, ...rest } = t;
+      return locked ? { ...rest, locked: true } : rest;
+    });
+    return { ...b, tabs };
+  });
+}
+
+/** A deep copy of blocks: they are plain data (JSON), and may be the builder's live state. */
+const clone = (blocks: readonly Block[]): Block[] => JSON.parse(JSON.stringify(blocks)) as Block[];
+
+/** What a copy of block `id` holds: the block, and for a Tabs block the blocks in its tabs. */
+export function copyOf(blocks: readonly Block[], id: string): Block[] {
+  const self = blocks.find((b) => b.id === id);
+  if (!self) return [];
+  const inner = self.type === 'tabs' ? childIds(self) : [];
+  return clone([self, ...blocks.filter((b) => inner.includes(b.id))]);
+}
+
+/**
+ * The blocks with a copy pasted (see [`copyOf`]): new ids, at the first free place (a Tabs block
+ * with its blocks where they were in it), at the top level. What the copied blocks named among
+ * themselves (a button's prompt and mappings, a tab's blocks) names the new ones; what they named
+ * outside the copy stays as it was. `null` when it would be one sharing button too many.
+ */
+export function pasteBlocks(
+  blocks: readonly Block[], copied: readonly Block[], cols = COLUMNS,
+): { blocks: Block[]; block: Block } | null {
+  const [first] = copied;
+  if (!first) return null;
+  const buttons = copied.filter((b) => b.type === 'sharing_button').length;
+  if (buttons && blocks.filter((b) => b.type === 'sharing_button').length + buttons > MAX_SHARING_BUTTONS) return null;
+  // new ids, given one after the other so two of a kind do not get the same
+  const ids = new Map<string, string>();
+  let taken: Block[] = [...blocks];
+  for (const b of copied) {
+    const id = newBlockId(taken, b.type);
+    ids.set(b.id, id);
+    taken = [...taken, { ...b, id } as Block];
+  }
+  const rename = (id: string | null | undefined) => (id && ids.has(id) ? ids.get(id)! : id ?? null);
+  const w = Math.min(first.rect.w, cols);
+  const at = firstFree(blocks, w, first.rect.h, cols);
+  const dx = at.x - first.rect.x;
+  const dy = at.y - first.rect.y;
+  const pasted = clone(copied).map((b, i): Block => {
+    // the first is the block copied; the others are in its tabs, and move with it
+    const rect = i === 0 ? { ...at, w } : { ...b.rect, x: b.rect.x + dx, y: b.rect.y + dy };
+    const out = { ...b, id: ids.get(b.id)!, rect } as Block;
+    if (out.type === 'tabs') {
+      out.tabs = out.tabs.map((t) => (t.blocks ? { ...t, blocks: t.blocks.map((x) => rename(x)!) } : t));
+    } else if (out.type === 'sharing_button') {
+      out.prompt_block_id = rename(out.prompt_block_id);
+      out.mappings = out.mappings.map((m) =>
+        m.source.kind === 'block' ? { ...m, source: { ...m.source, value: rename(m.source.value)! } } : m,
+      );
+      if (out.required) out.required = out.required.map((r) => rename(r)!);
+    }
+    return out;
+  });
+  return { blocks: [...blocks, ...pasted], block: pasted[0]! };
 }
 
 /** Rows to draw: everything placed, plus a spare row, never fewer than [`MIN_ROWS`]. */

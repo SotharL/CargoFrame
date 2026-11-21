@@ -746,7 +746,13 @@ pub fn prepare_with(
         .and_then(|a| a.exe_path.as_ref())
         .map(|p| p.display().to_string());
     let title = captured.app.as_ref().map(|a| a.title.clone());
-    let builtins = vars::builtins(exe.as_deref(), title.as_deref(), now);
+    let mut builtins = vars::builtins(exe.as_deref(), title.as_deref(), now);
+    // what this computer is, like the time: {system.os}, {system.gpu_driver}…
+    builtins.values.extend(
+        crate::sysinfo::values()
+            .into_iter()
+            .map(|(k, v)| (k.to_string(), v)),
+    );
 
     let project = builtins.project.as_ref().map(|r| ProjectView {
         folder: r.folder.clone(),

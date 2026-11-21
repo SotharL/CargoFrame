@@ -125,3 +125,19 @@ describe('Data & fields: values selected in a file', () => {
     expect(screen.getByText(/Added to the window’s files/)).toBeTruthy();
   });
 });
+
+describe('Data parsing: the values CargoFrame fills in itself', () => {
+  it('lists the capture’s, the program’s and this computer’s, with what the computer is now', async () => {
+    render(DataFields);
+    const list = await waitFor(() => {
+      const d = document.querySelector('details.builtin');
+      expect(d).toBeTruthy();
+      return d as HTMLElement;
+    });
+    expect(list.textContent).toContain('{capture.date}');
+    expect(list.textContent).toContain('{system.gpu_driver}');
+    expect(within(list).getByText('32.0.15.6094')).toBeTruthy();
+    // the two that are pictures, not words, are not listed here
+    expect(list.textContent).not.toContain('{capture.screenshot}');
+  });
+});
