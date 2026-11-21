@@ -8,7 +8,7 @@ const block: Tags = { id: 'labels', type: 'tags', rect: { x: 0, y: 0, w: 4, h: 1
 
 /** The tags shown, in order. */
 const chips = () => Array.from(document.querySelectorAll('.chip span')).map((s) => s.textContent);
-const box = () => screen.getByRole('textbox', { name: 'Add a tag to Labels' }) as HTMLInputElement;
+const box = () => screen.getByLabelText('Add a tag to Labels') as HTMLInputElement;
 
 async function typeTag(text: string, key = 'Enter') {
   await fireEvent.input(box(), { target: { value: text } });
@@ -56,9 +56,35 @@ describe('TagsBlock', () => {
     await fireEvent.click(screen.getByRole('button', { name: 'perf' }));
     expect(chips()).toEqual(['ui', 'perf']);
     await fireEvent.input(box(), { target: { value: 'gp' } });
-    await waitFor(() => expect(screen.getByRole('group', { name: 'Tags of the service' })).toBeTruthy());
-    await fireEvent.click(screen.getByRole('button', { name: 'gpu-driver' }));
+    await waitFor(() => expect(screen.getByRole('listbox', { name: 'Tags of the service' })).toBeTruthy());
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['gpu', 'gpu-driver']);
+    await fireEvent.click(screen.getByRole('option', { name: 'gpu-driver' }));
     expect(chips()).toEqual(['ui', 'perf', 'gpu-driver']);
+  });
+
+  it('opens the service’s list when clicked, to pick several by name, with the mouse or the keys', async () => {
+    render(TagsBlock, {
+      block: { ...block, title: 'Components' },
+      tags: [],
+      suggest: async () => [
+        { value: '10', label: 'Backend', group: null },
+        { value: '11', label: 'Frontend', group: null },
+        { value: '12', label: 'Installer', group: null },
+      ],
+    });
+    const input = screen.getByLabelText('Add a tag to Components') as HTMLInputElement;
+    await waitFor(() => expect(input.getAttribute('role')).toBe('combobox'));
+    await fireEvent.focus(input);
+    // everything listed before anything is typed; a pick adds the name, and the list stays open
+    expect(screen.getAllByRole('option')).toHaveLength(3);
+    await fireEvent.click(screen.getByRole('option', { name: 'Backend' }));
+    expect(chips()).toEqual(['Backend']);
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Frontend', 'Installer']);
+    await fireEvent.keyDown(input, { key: 'ArrowDown' });
+    await fireEvent.keyDown(input, { key: 'Enter' });
+    expect(chips()).toEqual(['Backend', 'Installer']);
+    await fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByRole('listbox')).toBeNull();
   });
 
   it('says how many tags the capture had beyond the limit', () => {

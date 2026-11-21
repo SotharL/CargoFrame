@@ -184,6 +184,7 @@ impl Connector for CustomConnector {
                 },
                 param: None,
                 inside: None,
+                search: false,
             })
             .collect();
         Describe {

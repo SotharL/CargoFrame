@@ -1297,6 +1297,9 @@ impl Recording {
         let mut cfg = recorder_config(&found, &choice, video, session, &ring);
         cfg.window = Window::seconds(keep_secs);
         cfg.area = extras.area;
+        // about one main screen's pixels: three screens cost what one does
+        cfg.max_pixels =
+            recorder::pixels_for(extras.screens.map(|s| (s.main_width, s.main_height)));
         if let Some(secs) = extras.max_run_secs {
             cfg.max_run_secs = secs;
         }

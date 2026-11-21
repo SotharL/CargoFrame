@@ -156,6 +156,11 @@ pub trait Registry {
     fn field_required(&self, _connection_id: &str, _field: &str) -> bool {
         false
     }
+    /// Does the service search list `list` (its id, before any `:`) for what is typed, rather
+    /// than send it whole? The default: none does.
+    fn list_searches(&self, _connection_id: &str, _list: &str) -> bool {
+        false
+    }
 }
 
 /// What a sharing button does when pressed.
@@ -1338,6 +1343,7 @@ mod tests {
                 .map(|(n, ids)| Tab {
                     name: (*n).into(),
                     blocks: ids.iter().map(|s| s.to_string()).collect(),
+                    locked: false,
                 })
                 .collect(),
             side: TabSide::Top,
@@ -1443,6 +1449,7 @@ mod tests {
                     Tab {
                         name: "Notes".into(),
                         blocks: vec!["n".into()],
+                        locked: false,
                     },
                 ],
                 side: TabSide::Left,

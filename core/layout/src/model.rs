@@ -143,6 +143,10 @@ pub struct Tab {
     pub name: String,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub blocks: Vec<String>,
+    /// Locked in the layout builder: its blocks stay where they are (not moved, resized or
+    /// removed) and nothing is dropped in it, until it is unlocked. The window does not change.
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub locked: bool,
 }
 
 impl Tab {
@@ -150,6 +154,7 @@ impl Tab {
         Self {
             name: name.into(),
             blocks: Vec::new(),
+            locked: false,
         }
     }
 }

@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.7.1 (beta) · English, Français, Español, Italiano, Deutsch</p>
+Windows 11 and Linux · version 0.7.2 (beta) · English, Français, Español, Italiano, Deutsch</p>
 
 <p align="center">
   <picture>
@@ -98,7 +98,8 @@ Each release also has **SHA256SUMS.txt** to check the download. To update, run t
 - **Uninstall (Windows):** *Settings, Apps*. It asks whether to delete your settings too.
 - **Video needs ffmpeg** (screenshots do not). *Settings, System* downloads it with one button (Windows and Linux,
   no administrator needed, checked against its published checksums) and offers the newer one when there is one. Recording uses the graphics card where it can (its copy of the screen and its encoder)
-  and runs below the programs in use, so the program you record stays smooth.
+  and runs below the programs in use, so the program you record stays smooth. A recording of several screens is
+  made about the size of your main screen (at most 4K), so three screens cost what one does, on a fast PC or a slow one.
 
 </details>
 
@@ -233,8 +234,9 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
 - **Files from several folders:** a Files block can look in several subfolders, separated by commas (`logs, build/out`).
   Missed one? **＋** adds files by hand; they are copied into the capture and ticked.
 - **Tags:** a Tags block works like Jira's labels: type a tag and press Enter, up to 25. Its starting list can use
-  values (`{gpu}` or `gpu-{gpu}` tags the graphics card when it is found), the last five used are offered, and Jira's or a
-  repository's labels are suggested while typing. Send them as Jira or GitHub labels, hashtags on X, Bluesky and
+  values (`{gpu}` or `gpu-{gpu}` tags the graphics card when it is found), the last five used are offered, and with a
+  list of the service (Jira's labels, components or versions, a repository's labels) the box opens it when clicked:
+  pick several, one after the other, or type to narrow it. Send them as Jira or GitHub labels, hashtags on X, Bluesky and
   Instagram, or a *Tags* line in Slack, Teams and Discord.
 - **Log viewer:** a block that shows a file of the window line by line. Type `error` in its search to see only those
   lines, pick one to read it whole and copy it, or *Copy all*. The expand icon opens it large in the middle of the
@@ -249,7 +251,13 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   screen, the newest coming in at the bottom as it plays. Untick *Following the clip* to see every line.
 - **Tabs:** a Tabs block is a binder: 2 to 5 tabs (named, with the names on the top, bottom, left or right), each
   holding blocks. In the layout builder, click a tab's name and drop blocks inside; drag the grip at its top right to
-  move it with its blocks. In the window, click a tab to see its blocks. What is in the other tabs is kept and sent.
+  move it with its blocks; the lock beside a tab's name keeps its blocks where they are. In the window, click a tab to
+  see its blocks. What is in the other tabs is kept and sent.
+- **Copy, paste, duplicate, delete:** in the layout builder, the buttons over the grid (or Ctrl+C, Ctrl+V, Ctrl+D and
+  Delete) work on the block chosen. A copy can be pasted in another layout while Settings is open.
+- **This computer's details:** `{system.os}`, `{system.cpu}`, `{system.ram}`, `{system.gpu}`, `{system.gpu_driver}`,
+  `{system.screens}` and `{system.computer}` fill in like the date and time (*Data parsing* lists them with what they are
+  here). They are only sent when a layout puts them in a text.
 - **Values made from other values:** in *Data parsing*, *Made from other values*: for example a build id
   `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
@@ -271,7 +279,8 @@ time) and, for Jira and GitHub, shows the recording beside the screenshot in a t
 **Create or update, with one button:** the Jira and GitHub templates' button (*Send to Jira*, *Send to GitHub*)
 creates a new ticket when *Ticket to update* (GitHub: *Issue to update*) is left empty, or updates the one picked:
 the title stays, the description is added below the one there, the labels are added, and the optional *Comment* goes
-with it. In the layout builder, the sharing
+with it. A new Jira ticket is assigned to you unless you pick someone else in *Assignee*; people and teams are found by
+typing their name. In the layout builder, the sharing
 button says for each block what it does to an issue that is there (replace, add below, add one line, add to the
 list, count up, leave it), and can also vote (Jira) or react 👍 (GitHub).
 
@@ -282,6 +291,7 @@ and lists what is still empty.
 |--------|-----|---------|
 | A layout, shortcut, rule or field | **Delete**, then **Delete for good** | Switch off **Enabled** (shortcuts) |
 | A connection | **Delete**, then **Delete for good**; its tokens leave the password store | **Sign out** |
+| Several layouts, values or field fills | *Files & backup*: tick them, **Delete N items…**, then **Delete for good** | **Export** them first |
 | Everything | *Files & backup*, **Reset CargoFrame** (keeps the program and your saved zips) | *Files & backup*, **Export** first |
 
 *Settings, Files & backup* lists what is kept on this computer, with its size and a **Clear** button for each kind.

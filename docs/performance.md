@@ -110,6 +110,20 @@ whole desktop. Now the screens are read every five seconds, the outline is hidde
 again once it has been still for 250 ms, and only the screen the window is on is recorded (then cut to the window),
 which on two 1440p screens halves what is copied and converted.
 
+**Several screens (0.7.2).** A recording is kept to about the main screen's pixels (720p to 4K; 1440p when not
+known), at most 3840 × 2160, never enlarged, scaled once with the bilinear filter (`recorder::fit_filter`). Ten
+seconds of a busy 5760 × 1080 picture (three 1080p screens), 30 frames a second, x264 ultrafast, on the cloud
+machine:
+
+| | Processor time | Kept up (10 s) | Peak memory | Clip |
+|---|---|---|---|---|
+| One core, before (5760 × 1080) | 18 s | no: 19 s to record 10 | 171 MB | 353 MB |
+| One core, after (3324 × 622) | 6 s | yes | 113 MB | 15 MB |
+| Two cores, before | 19 s | barely: 10.8 s | 235 MB | 353 MB |
+| Two cores, after | 6 s | yes | 140 MB | 15 MB |
+
+The picture is noise over a moving pattern, the worst case: a real desktop costs less, and its clip is smaller.
+
 **Shortcuts of any keys (0.7.1).** A shortcut the system can take costs nothing while waiting. Only when one cannot
 (more than one key besides the modifiers, a number-pad or media key…) does CargoFrame read the keys' state, every
 25 ms on a thread of its own (`GetAsyncKeyState` or the X keymap: a few microseconds each); the thread stops when no

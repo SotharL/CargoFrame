@@ -31,7 +31,7 @@ describe('Export', () => {
     const spy = vi.spyOn(api, 'exportSettings');
     render(TransferSection);
     expect(await screen.findByText('Layouts')).toBeTruthy();
-    expect(screen.getByText('Data from files')).toBeTruthy();
+    expect(screen.getByText('Values')).toBeTruthy();
     expect(screen.getByText('Field fills')).toBeTruthy();
     await fireEvent.click(screen.getByRole('button', { name: 'Export 3 items…' }));
     await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
@@ -49,7 +49,7 @@ describe('Export', () => {
     const spy = vi.spyOn(api, 'exportSettings');
     render(TransferSection);
     await screen.findByText('Layouts');
-    await fireEvent.click(screen.getByRole('checkbox', { name: 'All data from files' }));
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'All values' }));
     await fireEvent.click(screen.getByRole('button', { name: 'Export 2 items…' }));
     await waitFor(() => expect(spy).toHaveBeenCalled());
     expect(spy.mock.calls[0]![0].map((s) => s.group)).toEqual(['layouts', 'infotypes']);
@@ -63,7 +63,7 @@ describe('Export', () => {
   it('says so when there is nothing to export', async () => {
     setApiForTests(memoryApi());
     render(TransferSection);
-    expect(await screen.findByText(/Nothing to export yet/)).toBeTruthy();
+    expect(await screen.findByText(/Nothing here yet/)).toBeTruthy();
   });
 });
 
@@ -156,5 +156,31 @@ describe('Import', () => {
     render(TransferSection);
     await fireEvent.click(await screen.findByRole('button', { name: 'Choose a file…' }));
     expect(await screen.findByText(/not a CargoFrame settings file/)).toBeTruthy();
+  });
+});
+
+
+describe('Delete what is ticked', () => {
+  it('asks first, naming what goes and the shortcuts left with nothing, then deletes only what is ticked', async () => {
+    const api = await seeded();
+    await api.saveItem('trigger', 'f9', { name: 'Bug key', shortcut: 'F9', layout_id: 'bug' });
+    render(TransferSection);
+    await screen.findByText('Layouts');
+    // keep the value: untick its group
+    await fireEvent.click(screen.getByRole('checkbox', { name: 'All values' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete 2 items…' }));
+    const ask = screen.getByRole('alert');
+    expect(ask.textContent).toContain('Delete 2 items for good?');
+    expect(ask.textContent).toContain('Bug report');
+    expect(ask.textContent).toContain('Bug key');
+    // "Keep" changes nothing
+    await fireEvent.click(screen.getByRole('button', { name: 'Keep' }));
+    expect((await api.listItems('layout')).items).toHaveLength(1);
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete 2 items…' }));
+    await fireEvent.click(screen.getByRole('button', { name: 'Delete for good' }));
+    await waitFor(() => expect(screen.getByText('Deleted 2 items')).toBeTruthy());
+    expect((await api.listItems('layout')).items).toHaveLength(0);
+    expect((await api.listItems('infotype')).items).toHaveLength(0);
+    expect((await api.listItems('rule')).items).toHaveLength(1);
   });
 });

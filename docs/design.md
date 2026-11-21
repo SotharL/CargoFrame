@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.7.1. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.7.2. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 
@@ -45,9 +45,9 @@ flowchart LR
 | **Layout** | Blocks on a 12-column grid. A **Video** block makes a press record; otherwise it takes a screenshot | `layouts/<id>.json` |
 | **Block** | Screenshot, Video, Text, Dropdown, Files, or a sharing button | inside its layout |
 | **Connection** | A service and its settings; tokens live in the system credential store | `connections/<id>.json` |
-| **Data rule** | "If this file is found: add it to the files, read these values", each value used in text as `{<key>}` (or `{{rule.<key>}}`). The same key can be read by the rules of several files: the newest file's value wins, or every different value | `rules/<id>.json` |
+| **Data rule** | "If this file is found: add it to the files, read these values" (beside the values CargoFrame fills in itself: the capture's, the program's, and the computer's, `{system.os}`, `{system.cpu}`, `{system.ram}`, `{system.gpu}`, `{system.gpu_driver}`, `{system.screens}`, `{system.computer}`), each value used in text as `{<key>}` (or `{{rule.<key>}}`). The same key can be read by the rules of several files: the newest file's value wins, or every different value | `rules/<id>.json` |
 | **Field fill** | One field of a service and the steps that fill it on each share ("if `{gpu}` is found, add `gpu-{gpu}`"); also describes a custom field (its kind, its list) | `infotypes/<id>.json` |
-| **Template** | A ready-made layout per service, never stored until saved. Most hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording (the time of each moment shown over it, the log starting on the lines written while it recorded). Every connection that takes a video has a recording variant, and a template's recording is of the **window in focus**. A report's starting text says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and, for Jira and GitHub, a table with the recording beside the screenshot. The Jira and GitHub templates (*Jira ticket*, *Jira ticket with recording*, *GitHub issue*, *GitHub issue with recording*) create or update with one button, *Send to Jira* / *Send to GitHub*: an optional issue list, empty for a new one. Titles and links are one-line boxes, and X, Bluesky and Instagram posts have a Hashtags block | in the code |
+| **Template** | A ready-made layout per service, never stored until saved. Most hold the capture in a Tabs block: Screenshot and Logs (the files and a log viewer), with Recording first for a recording (the time of each moment shown over it, the log starting on the lines written while it recorded). Every connection that takes a video has a recording variant, and a template's recording is of the **window in focus**. A report's starting text says where it was seen with the values (`{app.exe}`, `{project.name}`, `{capture.date}`, `{capture.time}`) and, for Jira and GitHub, a table with the recording beside the screenshot. The Jira and GitHub templates (*Jira ticket*, *Jira ticket with recording*, *GitHub issue*, *GitHub issue with recording*) create or update with one button, *Send to Jira* / *Send to GitHub*: an optional issue list, empty for a new one; a new Jira ticket is assigned to you unless someone else is picked. Titles and links are one-line boxes, and X, Bluesky and Instagram posts have a Hashtags block | in the code |
 
 ---
 
@@ -96,7 +96,7 @@ connect, test, list options, send), so the share flow never names a service.
 
 | Service | Sign-in | What it sends | Video |
 |---------|---------|---------------|:-----:|
-| Jira Cloud / Server | E-mail and API token / personal access token | A new issue, or an update of one (each field as its mapping says, a comment, a vote), with the picture, still, video and files | ✓ |
+| Jira Cloud / Server | E-mail and API token / personal access token | A new issue, or an update of one (each field as its mapping says, a comment, a vote), with the picture, still, video and files; people and teams searched by name | ✓ |
 | GitHub / Enterprise Server | A fine-grained token for the repository | A new issue, or an update of one (each field as its mapping says, a comment, a 👍); the picture, video and zip go in a branch of the repository and are shown or linked in it, because GitHub's API cannot attach files | ✓ |
 | Google | OAuth with the person's own Desktop client | A Drive upload, optional Sheets row | ✓ |
 | Slack | Bot token (`xoxb-`) | A message with files, in a channel or thread | ✓ |
@@ -134,6 +134,19 @@ what it did: the description becomes a comment on the issue picked.
 </details>
 
 <details>
+<summary><b>Lists the service searches (people, teams)</b></summary>
+
+A list too long to send whole is one the connector marks as searched (`ListSpec::search`). The window's dropdown
+asks again as the person types (after a quarter-second pause, as `<list>?<typed>`; those answers are not kept in the
+list cache), shows what came back as it is (a person found by e-mail too), and keeps the choice listed while other
+names are searched. Jira's: `users` (anyone, *Me* first: `@me`, the person signed in, put in when the ticket is made),
+`assignable_users` (who can be assigned in a project; without a key, everyone), and `teams` (through the Team
+field's own search: its value is the team's id). The builder's Assignee of the Jira templates starts on *Me* each
+time.
+
+</details>
+
+<details>
 <summary><b>Formatting, tables and pictures in the text</b></summary>
 
 A Text block that is a service's message is written with a few marks (`**bold**`, `` `code` ``, `> quote`, `- list`,
@@ -142,7 +155,9 @@ each service wants: Jira wiki markup, HTML for Teams, Slack's mrkdwn, Markdown f
 becomes a Jira or HTML table, a Markdown one, or aligned lines in a code block where the service has no tables
 (Slack, Discord). In the window and in the builder a table is a grid to type in, with ＋ for a row or a column and ×
 to take one out: every column and every row has one, the header row too (the next row takes its place), and the last
-one left takes the table out of the text.
+one left takes the table out of the text. A table's cells are `tw-cell`, and only cells of the box's own tables count
+as cells (the window's layout has cells of its own: taking one for a table cell swallowed Enter and wiped the block on
+a paste before 0.7.2). A paste comes in as plain text, through the paste event.
 
 **How a value is written.** `{name}` (0.5.0) or `{{name}}`: `{map}` is the value `map` read from files (`{{rule.map}}`
 the older way), `{app.exe}` a value of the capture. Single braces stay as written when what is inside cannot be a value,
@@ -165,8 +180,9 @@ services leave the two out of the text and attach the files as before.
 A Tags block holds up to 25 tags (`core/layout` `split_tags`: commas, semicolons and new lines separate them, each is
 kept once, case aside, at most 100 characters). It starts with the tags of its list in the layout, where an entry such
 as `{gpu}` or `gpu-{gpu}` gives a tag only when the value is found and `{platforms}` gives one tag per part. The window
-offers the last five used in the block and, when the block names a list of a connection (Jira's or a repository's
-labels), the matching ones while typing. A sharing button sends them in a field, as several values: labels for Jira
+offers the last five used in the block and, when the block names a list of a connection (Jira's labels, components
+or versions, a repository's labels; a list that needs a project key takes it in the builder), opens that list on a
+click to pick several, narrowed while typing (0.7.2). Lists the service searches are not offered there. A sharing button sends them in a field, as several values: labels for Jira
 and GitHub, `hashtags` for X, Bluesky and Instagram (added at the end of the post, the text cut first so they stay),
 `tags` for Slack, Teams and Discord (a last line, `**Tags:**` followed by each in code marks). The Jira and GitHub
 templates start with a Labels block. `cargoframe open --set labels=crash,gpu` fills it from another program.
@@ -260,6 +276,12 @@ found, its times are `[YYYY_MM_DD] HH:mm -`") or by the block; the last one used
 next time. **While the clip plays**, the lines follow it: those written up to the moment shown, the newest coming in
 at the bottom as it plays (a switch turns it off).
 
+**Several screens** (0.7.2): a recording is kept to about the main screen's pixels (between 720p and 4K, 1440p
+when the main screen is not known), at most 3840 × 2160, its shape kept, never enlarged, with the cheaper bilinear
+scaler: one scale filter does the height setting and these limits (`recorder::fit_filter`). Three 1080p screens
+(5760 × 1080) were more than every hardware encoder and Windows' own player take, and three times the work of one
+screen; they are now recorded at about 3324 × 622, and a slow PC keeps up.
+
 **A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the screen
 the window is on is recorded and the window's place is noted ten times a second; the clip opens cropped to the window
 and the crop slides with it, in the window and in the sent clip. A crop set by hand stays put; *Follow window* follows
@@ -312,12 +334,12 @@ service are grouped under *Connect a service*, below the others.
 | Group | Page | What it holds |
 |-------|------|---------------|
 | Get started | **Connections** | The services captures go to, each with its sign-in or token, a test, and *Add a connection*; Claude's pinned and recent chats |
-| Captures | **Layouts** | The window a capture opens, block by block, on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends (for Jira and GitHub, what each block does to an issue that is there, and a vote or 👍; for every button, the blocks that must be filled before sharing), with a *Fill fields* tab (steps that fill a field of the service on each share); a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
+| Captures | **Layouts** | The window a capture opens, block by block (Copy, Paste, Duplicate and Delete over the grid, or Ctrl+C, Ctrl+V, Ctrl+D and Delete; a copy can go in another layout while Settings is open; a tab locked by the lock beside its name keeps its blocks where they are and takes none), on a grid of 12 columns or more (up to 24: *Columns ＋* adds one on the side and the window opens wider), and what each sharing button sends (for Jira and GitHub, what each block does to an issue that is there, and a vote or 👍; for every button, the blocks that must be filled before sharing), with a *Fill fields* tab (steps that fill a field of the service on each share); a Tabs block holds 2 to 5 tabs (its names stick out of the side chosen, a click opens one, a block dropped inside goes in the tab open, and the grip at its top right picks and moves it even when a block fills the tab); a Text block's starting text is written with every value listed on its right, searchable, the most used first |
 | | **Shortcuts** | The keys and the layout each opens (held together in the box: Ctrl, Alt, Shift or Win with up to three others, any of them; the box says when a key cannot be used); what a press makes (a screenshot of the program, the screen or all screens, or a recording) |
-| | **Data parsing** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or ones opened or dropped on it; a tab's × closes it, and what is opened or closed stays so until Settings closes), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives (the panel beside the file always stays in sight); a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*. *Files*: the files read (one dropped on the page starts a new value in it), each added to the window's files or not, with its lines' time format and its values |
+| | **Data parsing** | Two tabs. *Values*: each value with where it is read, how, what the last capture gave and the layouts using it; *New value: select it in a file* shows the last capture's text files (or ones opened or dropped on it; a tab's × closes it, and what is opened or closed stays so until Settings closes), a search like Ctrl+F, and turns a click or a drag into a way to find it again, with what each file gives (the panel beside the file always stays in sight); a value opens to its files (the newest or all; empty or a text when none has it), and values *made from other values*; *Filled in by CargoFrame* lists the capture's, the program's and the computer's values (`{system.os}`, `{system.gpu_driver}`…) with what they are here. *Files*: the files read (one dropped on the page starts a new value in it), each added to the window's files or not, with its lines' time format and its values |
 | | **Recording** | What shows on screen while recording (the outline and dot), how long a clip is, continuous recording, following a window that is moved, where ffmpeg is, capture and compression (Automatic picks the cheapest that works), a 5-second test |
 | CargoFrame | **Preferences** | Language (its dropdown on the title's line; the computer's by default; English, French, Spanish, Italian, German), appearance (theme, accent colour), notifications (each kind on or off, with a link to the recording sign), starting with the computer |
-| | **Files & backup** | When a share fails (the folder for saved zips, retries), export and import, what is kept on this computer (clear each kind, forget the remembered choices) and *Reset CargoFrame* |
+| | **Files & backup** | When a share fails (the folder for saved zips, retries), export and import (and deleting the items ticked, after naming them and the shortcuts they leave with no layout), what is kept on this computer (clear each kind, forget the remembered choices) and *Reset CargoFrame* |
 | | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing) and ffmpeg's own *Download* / *Update* button, updates and the version (checked against the installer under either of its names, once a day after a day has passed when that is on), windows kept ready, speed and memory |
 
 | Connections | Layout builder | Shortcut |
@@ -333,7 +355,7 @@ service are grouped under *Connect a service*, below the others.
 | **Text** | A box that is a service's message (set in the builder, *Sent in*) shows its formatting as it looks: bold, italic, underline, code, quote, lists, code blocks and tables as grids, with buttons and shortcuts limited to what those services show; values (`{map}`) filled in. The box keeps at least one line; *One line high* keeps it at that |
 | **Dropdown** | Lists from the service, optional, remembers the last five; "where to post" is a path |
 | **Files** | The project folder's files, or the subfolders of it the block names (several, separated by commas: `logs, build/out`); the ones matching the block's patterns (like `*.log`) are ticked in advance. **＋** adds files by hand: each is copied into the capture at once, listed under `added/` and ticked |
-| **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box, the service's own list suggested while typing. Sent in a field that takes several values |
+| **Tags** | Like Jira's labels: chips with ×, Enter or a comma adds one, at most 25. Started from the layout's list (each entry may use a value, left out when it is not found), the last five used offered under the box. With a list of the service (labels, components, versions), clicking the box opens it: several are picked one after the other (by name), typing narrows it, the arrows and Enter pick. Sent in a field that takes several values |
 | **Log viewer** | A file the window offers, line by line: a search keeps the lines with its words (case aside, marked), a line picked is shown whole to copy, *Copy all* copies what is shown; the expand icon opens it large, in the middle of the window over a dimmed one (the cross, Escape or a click outside closes it). It has no background of its own until opened large. Large files show their last 4 MB. A button at the start of the search row turns it from the text search (shown first) to a time search (its icon is the search it turns to: a clock, then a magnifier) that keeps the lines written during the recording, around the capture, or between two times (typed, or set from a line picked: *Start here*, *End here*; UTC when the block says); the time of each line is found by itself, or read the way a time **selected in a line** is written (the format is worked out from it; selected in the text search, it is offered), or a format written by hand (behind the button that shows how times are read), set by a data rule for its file, by the block, or last used for a file of that name; both keep applying, and the button shows a dot while the other one is on. While the clip plays, the lines written up to the moment shown are shown, the newest coming in at the bottom. Nothing of it is sent |
 | **Tabs** | Like a binder: the names on the top (or the bottom, left or right), the blocks of the open tab under them. A click (or the arrow keys) opens a tab; the blocks of the others are only hidden, so what is typed or edited in them stays and is sent. A tab's name lights up while a hovered button sends something in it |
 | **Sharing buttons** | Up to five, in the service's colour; a button with blocks that must be filled stays grey and lists those still empty; a label too long for its button is cut with an ellipsis and is whole on hover. One dot per button at the end of each block's first row (its title, or its tools) says which button sends it: full = sent, an empty ring in the button's colour = left out (a click switches it), dashed = cannot take it, an outer ring = required, a number when two buttons go to the same kind of service. A block with no first row has them on its top edge. Hovering a button or a dot rings what each block it sends holds: the picture of a screenshot or a recording, the box of a text, not the block's title or tools |
@@ -482,6 +504,10 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   looked at (20 ms) can be missed on X11. Every key typed while recording shows, passwords too.
 - Shortcuts of more than one key besides the modifiers are watched by CargoFrame (Windows, X11): a key tapped faster
   than 25 ms can be missed, and the keys still reach the program in use. On Wayland a shortcut is modifiers and one key.
+- Teams in Jira are found through the Team field's search (Jira's own suggestions): tried against a mock of Jira
+  Cloud's answer, still to be tried on a real Jira Cloud and Data Center.
+- The computer's details on Windows come from the registry as Device Manager shows them; a graphics card with no
+  driver installed is listed by Windows' fallback name.
 - An update of an issue changes the fields the layout maps; Jira fields with their own update operations beyond lists
   (worklogs, links) are not offered.
 - Next for the connectors (required fields shown before sending, company sign-in):

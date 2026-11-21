@@ -122,7 +122,8 @@ export interface Api {
    * The list behind a dropdown block, or with `parent` the list inside that choice (the threads of
    * a channel). Rejects with an `OptionsError`.
    */
-  fetchOptions(sessionId: number, blockId: string, parent?: string): Promise<DropdownOption[]>;
+  /** A dropdown's list; `parent` for the list inside a choice, `query` for what is typed in a list the service searches. */
+  fetchOptions(sessionId: number, blockId: string, parent?: string, query?: string): Promise<DropdownOption[]>;
   /** The picture as edited, uploaded before a share. `null` goes back to the capture. */
   setEditedImage(sessionId: number, png: Blob | null): Promise<void>;
   /** The mark drawn over a recording (a see-through PNG the size of the recording), or none. */
@@ -277,9 +278,14 @@ async function tauriApi(): Promise<Api> {
     pinChat: (link, title) => invoke('pin_chat', { link, title }),
     setChatPinned: (id, pinned) => invoke('set_chat_pinned', { id, pinned }),
     removeChat: (id) => invoke('remove_chat', { id }),
-    fetchOptions: async (sessionId, blockId, parent) => {
+    fetchOptions: async (sessionId, blockId, parent, query) => {
       try {
-        return await invoke<DropdownOption[]>('fetch_options', { sessionId, blockId, parent: parent ?? null });
+        return await invoke<DropdownOption[]>('fetch_options', {
+          sessionId,
+          blockId,
+          parent: parent ?? null,
+          query: query ?? null,
+        });
       } catch (e) {
         throw asOptionsError(e);
       }
@@ -400,7 +406,7 @@ export interface MemoryOptions {
 const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'local-capture', name: 'Save a capture locally', description: 'The screenshot, a note and the files you tick, saved as a zip in your folder for saved zips. A Logs tab beside the screenshot reads the logs. No account needed.', service: null },
   { key: 'local-video', name: 'Save a recording locally', description: 'The recording of the window in focus, the screenshot taken from it, a note and the files you tick, saved as a zip in your folder for saved zips. A shortcut that opens it records the window in focus. No account needed.', service: null },
-  { key: 'jira-ticket', name: 'Jira ticket', description: 'Creates a ticket, or updates the one you pick in Ticket to update: the summary stays, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are attached, and a Logs tab beside the screenshot reads the logs.', service: 'jira' },
+  { key: 'jira-ticket', name: 'Jira ticket', description: 'Creates a ticket assigned to you (or to whoever you pick), or updates the one you pick in Ticket to update: the summary and the assignee stay, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are attached, and a Logs tab beside the screenshot reads the logs.', service: 'jira' },
   { key: 'jira-video', name: 'Jira ticket with recording', description: 'Like the Jira ticket, with the recording of the window in focus attached; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus.', service: 'jira' },
   { key: 'github-issue', name: 'GitHub issue', description: 'Opens an issue in a repository, or updates the one you pick in Issue to update: the title stays, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are shown in it, and a Logs tab beside the screenshot reads the logs.', service: 'github' },
   { key: 'github-video', name: 'GitHub issue with recording', description: 'Like the GitHub issue, with the recording of the window in focus linked from it beside the screenshot taken from it; tabs hold the recording, the screenshot and the logs. A shortcut that opens it records the window in focus.', service: 'github' },
@@ -673,6 +679,15 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     }
     return secretsSet.has(`${id}/${TYPED[c.kind]![0]}`) ? 'connected' : 'disconnected';
   };
+  const DEMO_SYSTEM: Record<string, string> = {
+    'system.os': 'Windows 11 Pro 24H2 (26100)',
+    'system.cpu': 'AMD Ryzen 7 7800X3D 8-Core Processor (16 threads)',
+    'system.ram': '32 GB',
+    'system.gpu': 'NVIDIA GeForce RTX 4070',
+    'system.gpu_driver': '32.0.15.6094',
+    'system.screens': '3 screens: 2560×1440 (main), 1920×1080, 1920×1080',
+    'system.computer': 'DESK-042',
+  };
   const BUILTINS: VariableInfo[] = [
     ['app.exe', 'File name of the program in focus'],
     ['app.path', 'Full path of that program'],
@@ -683,7 +698,14 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     ['capture.time', 'Time of the capture (HH:MM:SS)'],
     ['capture.screenshot', 'The screenshot, shown here in the text (Jira, GitHub, Teams)'],
     ['capture.recording', 'The recording, shown here in the text (Jira, GitHub)'],
-  ].map(([name, description]) => ({ name: name!, description: description! }));
+    ['system.os', 'The system and its version'],
+    ['system.cpu', 'The processor'],
+    ['system.ram', 'The memory'],
+    ['system.gpu', 'The graphics cards'],
+    ['system.gpu_driver', 'The versions of their drivers'],
+    ['system.screens', 'The screens and their sizes, the main one first'],
+    ['system.computer', 'The computer\'s name'],
+  ].map(([name, description]) => ({ name: name!, description: description!, ...(DEMO_SYSTEM[name!] ? { value: DEMO_SYSTEM[name!] } : {}) }));
   return {
     appInfo: async () => ({
       version: '0.1.0-dev',
@@ -924,9 +946,9 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     removeChat: async (id) => {
       chats = chats.filter((c) => c.id !== id);
     },
-    fetchOptions: async (_sessionId, blockId, parent) =>
+    fetchOptions: async (_sessionId, blockId, parent, query) =>
       opts.options
-        ? opts.options('demo', parent ? `${blockId}:${parent}` : blockId)
+        ? opts.options('demo', parent ? `${blockId}:${parent}` : query !== undefined ? `${blockId}?${query}` : blockId)
         : parent
           ? []
           : [{ value: 'P1', label: 'Demo project', group: null }],

@@ -10,6 +10,7 @@
   import PageTabs from '../../lib/components/PageTabs.svelte';
   import { createItems } from '../../lib/items.svelte';
   import { getApi } from '../../lib/ipc';
+  import { token } from '../../lib/valueNames';
   import type { Layout, Rule, RuleValue, ValuesPreview, VariableInfo } from '../../lib/types';
   import Combined from '../data/Combined.svelte';
   import FilesTab from '../data/FilesTab.svelte';
@@ -23,6 +24,8 @@
   const layouts = createItems<Layout>('layout');
   let preview = $state<ValuesPreview | null>(null);
   let variables = $state<VariableInfo[]>([]);
+  /** The values CargoFrame fills in itself; the screenshot and recording are pictures, not words. */
+  const builtin = $derived(variables.filter((v) => !v.name.startsWith('rule.') && !['capture.screenshot', 'capture.recording'].includes(v.name)));
 
   type Tab = 'values' | 'files';
   type View =
@@ -154,6 +157,18 @@
           <ValuesTab {entries} {preview} {q} layouts={layouts.items} onopen={open} />
           <p class="quiet small"><Tr text={t('Names written the older way, like {old}, keep working.')}>{#snippet old()}<code>{'{{rule.gpu}}'}</code>{/snippet}</Tr></p>
         {/if}
+      {#if builtin.length}
+          <details class="builtin">
+            <summary>{t('Filled in by CargoFrame: the capture, the program and this computer ({n})', { n: builtin.length })}</summary>
+            <p class="quiet small">{t('Use them in a text like the others. The system ones are read from this computer once, the screens at each capture.')}</p>
+            <dl>
+              {#each builtin as v (v.name)}
+                <dt><code>{token(v.name)}</code></dt>
+                <dd>{v.description}{#if v.value}<span class="now selectable" title={v.value}>{v.value}</span>{/if}</dd>
+              {/each}
+            </dl>
+          </details>
+        {/if}
       {:else}
         <p class="tried quiet">{t('Files looked for in a capture\'s project folder. Each can be added to the window\'s files, and values are read in it.')}</p>
         <FilesTab
@@ -179,4 +194,10 @@
   .empty p { margin: 0; }
   code { font: 12.5px var(--mono); background: var(--surface-2); padding: 1px 6px; border-radius: 5px; }
   .small { font-size: 12.5px; margin: 0; }
+  .builtin { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 8px 12px; }
+  .builtin summary { cursor: pointer; font-weight: 600; font-size: 13px; }
+  .builtin dl { display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 6px 14px; margin: 8px 0 2px; font-size: 13px; }
+  .builtin dt code { font: 12.5px var(--mono); }
+  .builtin dd { margin: 0; color: var(--quiet); display: flex; gap: 10px; min-width: 0; }
+  .builtin .now { color: var(--text); font-family: var(--mono); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 </style>

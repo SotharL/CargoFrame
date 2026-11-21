@@ -256,7 +256,8 @@
 
   function onKey(e: KeyboardEvent) {
     const target = e.target as HTMLElement | null;
-    const typing = target && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
+    // a formatted text box is typed in too: Escape there must not close the window
+    const typing = target && (/^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName) || target.isContentEditable);
     if (e.key === 'Escape' && !typing) void api?.closeCapture();
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'w') {
       e.preventDefault();

@@ -35,7 +35,14 @@ fn an_x11_recording_is_captured_scaled_encoded_and_cut_into_segments() {
     assert_eq!(after(&a, "-video_size"), "2560x1440");
     assert_eq!(after(&a, "-i"), ":0.0");
     // larger pictures are scaled down, never up
-    assert_eq!(after(&a, "-vf"), "scale=-2:min(ih\\,1080),format=yuv420p");
+    // larger pictures are made smaller (1080 tall, at most a 1440p screen's pixels), never larger
+    assert_eq!(
+        after(&a, "-vf"),
+        format!(
+            "{},format=yuv420p",
+            fit_filter(Some(1080), DEFAULT_MAX_PIXELS)
+        )
+    );
     // a keyframe every second, because a segment starts on one
     assert_eq!(after(&a, "-g"), "30");
     // a backstop: ffmpeg ends by itself after an hour
@@ -57,8 +64,15 @@ fn a_windows_recording_downloads_the_picture_from_the_graphics_card_first() {
     let a = strings(&args(&cfg, &ring));
     assert_eq!(after(&a, "-f"), "lavfi");
     assert_eq!(after(&a, "-i"), "ddagrab=output_idx=1:framerate=30");
-    // the hardware encoders take NV12: one conversion, to that
-    assert_eq!(after(&a, "-vf"), "hwdownload,format=bgra,format=nv12");
+    // the hardware encoders take NV12: one conversion, to that; with no height setting the
+    // picture is still kept inside what they take
+    assert_eq!(
+        after(&a, "-vf"),
+        format!(
+            "hwdownload,format=bgra,{},format=nv12",
+            fit_filter(None, DEFAULT_MAX_PIXELS)
+        )
+    );
     assert_eq!(after(&a, "-c:v"), "h264_nvenc");
 
     cfg.capture = Capture::Gdigrab;
@@ -335,7 +349,10 @@ fn a_fed_picture_comes_in_as_yuv4mpeg_over_a_local_connection_and_a_window_is_cu
     );
     assert_eq!(
         after(&a, "-vf"),
-        "crop=trunc(iw*0.50000/2)*2:trunc(ih*1.00000/2)*2:trunc(iw*0.50000):trunc(ih*0.00000),scale=-2:min(ih\\,1080),format=yuv420p"
+        format!(
+            "crop=trunc(iw*0.50000/2)*2:trunc(ih*1.00000/2)*2:trunc(iw*0.50000):trunc(ih*0.00000),{},format=yuv420p",
+            fit_filter(Some(1080), DEFAULT_MAX_PIXELS)
+        )
     );
 }
 
@@ -818,4 +835,82 @@ fn a_picture_fed_by_gstreamer_is_recorded_like_a_screen() {
     // the left half of the picture
     assert_eq!((info.width, info.height), (160, 240));
     assert!(info.duration_ms >= 1_000, "{} ms", info.duration_ms);
+}
+
+#[test]
+fn the_budget_is_the_main_screens_pixels_kept_between_720p_and_4k() {
+    assert_eq!(pixels_for(Some((1920, 1080))), 1920 * 1080);
+    assert_eq!(pixels_for(Some((1024, 600))), 1280 * 720);
+    assert_eq!(pixels_for(Some((7680, 4320))), 3840 * 2160);
+    assert_eq!(pixels_for(None), DEFAULT_MAX_PIXELS);
+    assert_eq!(pixels_for(Some((0, 1080))), DEFAULT_MAX_PIXELS);
+}
+
+/// The size ffmpeg gives a picture of `w`×`h` through [`fit_filter`].
+fn fitted(
+    ffmpeg: &Path,
+    ffprobe: &Path,
+    w: u32,
+    h: u32,
+    max_h: Option<u32>,
+    pixels: u64,
+) -> (u32, u32) {
+    let dir = tempfile::tempdir().unwrap();
+    let out = dir.path().join("one.mp4");
+    let ok = std::process::Command::new(ffmpeg)
+        .args(["-hide_banner", "-loglevel", "error", "-f", "lavfi", "-i"])
+        .arg(format!("color=c=gray:s={w}x{h}:r=5:d=0.4"))
+        .arg("-vf")
+        .arg(format!("{},format=yuv420p", fit_filter(max_h, pixels)))
+        .args(["-c:v", "libx264", "-preset", "ultrafast"])
+        .arg(&out)
+        .status()
+        .unwrap()
+        .success();
+    assert!(ok, "ffmpeg failed for {w}x{h}");
+    let info = probe(ffprobe, &out).unwrap();
+    (info.width, info.height)
+}
+
+#[test]
+fn three_screens_or_a_huge_one_are_recorded_at_about_one_main_screens_size() {
+    let Some((ffmpeg, ffprobe)) = find_tools(&[]) else {
+        eprintln!("skipped: ffmpeg and ffprobe are not installed");
+        return;
+    };
+    let fhd = pixels_for(Some((1920, 1080)));
+    // one screen of the main screen's size: as it is (the 1080 setting already holds it)
+    assert_eq!(
+        fitted(&ffmpeg, &ffprobe, 1920, 1080, Some(1080), fhd),
+        (1920, 1080)
+    );
+    // three 1080p screens side by side: about one screen's pixels, the same shape
+    let (w, h) = fitted(&ffmpeg, &ffprobe, 5760, 1080, Some(1080), fhd);
+    assert!(
+        u64::from(w) * u64::from(h) <= fhd && w % 2 == 0 && h % 2 == 0,
+        "{w}x{h}"
+    );
+    assert!(
+        (f64::from(w) / f64::from(h) - 5760.0 / 1080.0).abs() < 0.05,
+        "{w}x{h}"
+    );
+    assert!(w <= MAX_WIDTH);
+    // three 4K screens, no height setting, a 4K main screen: inside what every encoder takes
+    let (w, h) = fitted(
+        &ffmpeg,
+        &ffprobe,
+        11520,
+        2160,
+        None,
+        pixels_for(Some((3840, 2160))),
+    );
+    assert!(w <= MAX_WIDTH && h <= MAX_HEIGHT, "{w}x{h}");
+    // screens stacked one above the other: the height is what is held
+    let (w, h) = fitted(&ffmpeg, &ffprobe, 1920, 3240, Some(1080), fhd);
+    assert!(h <= 1080 && w <= 1920, "{w}x{h}");
+    // a small screen is never made larger
+    assert_eq!(
+        fitted(&ffmpeg, &ffprobe, 1280, 720, Some(1080), fhd),
+        (1280, 720)
+    );
 }

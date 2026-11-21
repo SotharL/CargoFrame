@@ -23,6 +23,7 @@ mod session;
 mod setup;
 mod share;
 mod state;
+mod sysinfo;
 mod timing;
 mod tools;
 mod transfer;
@@ -223,6 +224,8 @@ pub fn run() {
             }
             sweep_every_hour(app.handle().clone());
             check_for_updates_daily(app.handle().clone());
+            // the system.* values, read once now so a capture does not wait for them
+            sysinfo::warm();
             // with a shortcut that records, ffmpeg is asked what it can do (and its hardware
             // encoders tried) in the background, so the first recording starts at once
             if let Some(state) = app.handle().try_state::<AppState>() {

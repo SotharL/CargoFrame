@@ -1040,11 +1040,17 @@ pub async fn fetch_options(
     session_id: u64,
     block_id: String,
     parent: Option<String>,
+    query: Option<String>,
 ) -> Result<Vec<OptionItem>, OptionsError> {
     let asked = {
         let state = app.state::<AppState>();
         state.sessions.by_id(session_id).and_then(|s| {
-            crate::share::options_asked(s.view.layout.as_ref()?, &block_id, parent.as_deref())
+            crate::share::options_searched(
+                s.view.layout.as_ref()?,
+                &block_id,
+                parent.as_deref(),
+                query.as_deref(),
+            )
         })
     };
     let Some((connection_id, options_id)) = asked else {

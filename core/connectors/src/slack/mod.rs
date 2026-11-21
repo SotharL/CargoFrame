@@ -450,7 +450,7 @@ impl Connector for SlackConnector {
                 id: "channels".into(),
                 label: msg!("Channels the app can see").into(),
                 param: None,
-                inside: None,
+                inside: None, search: false,
             }],
             summary: msg!("Posts a message into a channel or a thread, with the screenshot and a zip of the ticked files attached. The app has to be a member of the channel.").into(),
         }

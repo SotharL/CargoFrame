@@ -60,7 +60,7 @@ describe('tables and code blocks in the formatted box', () => {
     div.innerHTML = toHtml(text);
     const grid = div.querySelector<HTMLElement>('.tw')!;
     expect(grid.getAttribute('contenteditable')).toBe('false');
-    expect(Array.from(grid.querySelectorAll('.cell')).map((c) => c.textContent)).toEqual(['Steps', 'Seen', 'open a | b', 'crash']);
+    expect(Array.from(grid.querySelectorAll('.tw-cell')).map((c) => c.textContent)).toEqual(['Steps', 'Seen', 'open a | b', 'crash']);
     expect(grid.querySelector('[data-act="addrow"]')).toBeTruthy();
     expect(grid.querySelectorAll('[data-act="col"]').length).toBe(2);
     // inside a code block nothing is a mark
@@ -76,7 +76,7 @@ describe('tables and code blocks in the formatted box', () => {
     const div = document.createElement('div');
     div.innerHTML = toHtml(text);
     document.body.append(div);
-    const cell = div.querySelectorAll('.cell')[2]!.firstChild!;
+    const cell = div.querySelectorAll('.tw-cell')[2]!.firstChild!;
     expect(offsetOf(div, cell, 3)).toBe(3);
     const end = text.indexOf('cd');
     const [n, o] = pointAt(div, end + 1);

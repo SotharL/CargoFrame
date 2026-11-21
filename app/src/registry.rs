@@ -7,12 +7,15 @@ use cargoframe_window::vars;
 use std::collections::BTreeSet;
 
 type ConnectionLookup<'a> = Box<dyn Fn(&str) -> Option<ConnectionInfo> + 'a>;
+type ListLookup<'a> = Box<dyn Fn(&str, &str) -> bool + 'a>;
 
 pub struct AppRegistry<'a> {
     pub rules: BTreeSet<String>,
     connection: ConnectionLookup<'a>,
     /// (connection id, field) of every field its service requires.
     required: BTreeSet<(String, String)>,
+    /// Does (connection id, list) search for what is typed?
+    searches: ListLookup<'a>,
 }
 
 impl<'a> AppRegistry<'a> {
@@ -42,7 +45,14 @@ impl<'a> AppRegistry<'a> {
                 rules.extend(r.steps(id).into_iter().map(|s| s.key));
             }
         }
-        Self::with(rules, move |id| connections.info(store, id)).requiring(required)
+        let mut reg = Self::with(rules, move |id| connections.info(store, id)).requiring(required);
+        // the connector says which of its lists it searches; asked only for a dropdown's list
+        reg.searches = Box::new(move |id, list| {
+            connections
+                .describe(store, id)
+                .is_ok_and(|d| d.lists.iter().any(|l| l.id == list && l.search))
+        });
+        reg
     }
 
     /// The fields the services require, as (connection id, field).
@@ -59,6 +69,7 @@ impl<'a> AppRegistry<'a> {
             rules,
             connection: Box::new(connection),
             required: BTreeSet::new(),
+            searches: Box::new(|_, _| false),
         }
     }
 }
@@ -81,6 +92,10 @@ impl Registry for AppRegistry<'_> {
     fn field_required(&self, connection_id: &str, field: &str) -> bool {
         self.required
             .contains(&(connection_id.to_string(), field.to_string()))
+    }
+
+    fn list_searches(&self, connection_id: &str, list: &str) -> bool {
+        (self.searches)(connection_id, list)
     }
 }
 

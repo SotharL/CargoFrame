@@ -8,7 +8,7 @@
   import type { ConnectionView, InfoType, IssueView, Layout, LayoutTemplate, Reach, Rule, Trigger, VariableInfo } from '../../lib/types';
   import Canvas from '../layout/Canvas.svelte';
   import Properties from '../layout/Properties.svelte';
-  import { canPlace, columnsOf, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
+  import { canPlace, columnsOf, isLocked, moveTo, removeBlock, resizeTo, tidy } from '../layout/model';
   import { offersFor, type TemplateOffer } from '../layout/templates';
   import { go, route } from '../route.svelte';
 
@@ -178,7 +178,8 @@
   }
 
   function removeSelected() {
-    if (!draft || !selected) return;
+    // a block of a locked tab stays: the tab is unlocked first
+    if (!draft || !selected || isLocked(draft.blocks, selected)) return;
     draft.blocks = removeBlock(draft.blocks, selected);
     selected = null;
   }

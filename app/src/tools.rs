@@ -233,15 +233,20 @@ pub fn test_folder(path: &str) -> Result<(), String> {
 pub struct VariableInfo {
     pub name: String,
     pub description: String,
+    /// What it is on this computer now (the `system.*` values), for Data parsing to show.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
 }
 
 /// Built-in variables, then one per data rule.
 pub fn variables(store: &Store) -> Vec<VariableInfo> {
+    let system = crate::sysinfo::values();
     let mut out: Vec<VariableInfo> = vars::NAMES
         .iter()
         .map(|n| VariableInfo {
             name: (*n).to_string(),
             description: vars::describe_name(n).to_string(),
+            value: system.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone()),
         })
         .collect();
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
@@ -261,6 +266,7 @@ pub fn variables(store: &Store) -> Vec<VariableInfo> {
         for (key, name, files) in values {
             let files: Vec<String> = files.into_iter().filter(|f| !f.is_empty()).collect();
             out.push(VariableInfo {
+                value: None,
                 name: format!("rule.{key}"),
                 description: match (name.is_empty(), files.is_empty()) {
                     (_, true) if name.is_empty() => t("Made from other values").to_string(),

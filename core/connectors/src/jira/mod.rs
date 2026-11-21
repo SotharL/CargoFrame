@@ -91,6 +91,111 @@ impl JiraConnector {
         })
     }
 
+    /// People found by what is typed: anyone, or those who can be assigned in `project`. Jira
+    /// Cloud names them by account id, Server and Data Center by user name. With nothing typed,
+    /// the first page (Server: everyone, by the `.` that matches all). "Me" comes first, as
+    /// `@me`, which a share turns into the person signed in.
+    fn people(
+        &self,
+        ctx: &Ctx,
+        project: Option<&str>,
+        typed: &str,
+    ) -> Result<Vec<OptionItem>, SendError> {
+        let cloud = self.cloud();
+        let q = encode_component(if typed.is_empty() && !cloud {
+            "."
+        } else {
+            typed
+        });
+        let by = if cloud { "query" } else { "username" };
+        let path = match project {
+            Some(p) => format!(
+                "/rest/api/2/user/assignable/search?project={}&{by}={q}&maxResults=50",
+                encode_component(p)
+            ),
+            None if cloud && typed.is_empty() => "/rest/api/2/users/search?maxResults=50".into(),
+            None => format!("/rest/api/2/user/search?{by}={q}&maxResults=50"),
+        };
+        let v = self.get_json(ctx, &path, msg!("search people"))?;
+        let mut out = Vec::new();
+        let me = t("Me");
+        if typed.is_empty() || me.to_lowercase().starts_with(&typed.to_lowercase()) {
+            out.push(OptionItem::new(ME, me));
+        }
+        for u in v.as_array().into_iter().flatten() {
+            // apps and bots are listed by /users/search too: people only
+            let person = u
+                .get("accountType")
+                .and_then(Value::as_str)
+                .map_or(true, |t| t == "atlassian");
+            if !person || u.get("active").and_then(Value::as_bool) == Some(false) {
+                continue;
+            }
+            let id = u
+                .get(if cloud { "accountId" } else { "name" })
+                .and_then(Value::as_str);
+            let Some(id) = id else { continue };
+            let name = u.get("displayName").and_then(Value::as_str).unwrap_or(id);
+            let label = match u.get("emailAddress").and_then(Value::as_str) {
+                Some(mail) if !mail.is_empty() => format!("{name} ({mail})"),
+                _ => name.to_string(),
+            };
+            out.push(OptionItem::new(id, label));
+        }
+        Ok(out)
+    }
+
+    /// Teams found by what is typed, through the Team field's own search (the suggestions Jira
+    /// gives when a query names the field): the value is the team's id, which the field takes.
+    fn teams(&self, ctx: &Ctx, typed: &str) -> Result<Vec<OptionItem>, SendError> {
+        let fields = self.get_json(ctx, "/rest/api/2/field", msg!("find the Team field"))?;
+        let clause = fields.as_array().into_iter().flatten().find_map(|f| {
+            let custom = f.pointer("/schema/custom").and_then(Value::as_str)?;
+            if !custom.to_lowercase().contains("team") {
+                return None;
+            }
+            f.get("clauseNames")
+                .and_then(Value::as_array)
+                .and_then(|c| {
+                    c.iter()
+                        .filter_map(Value::as_str)
+                        .find(|c| c.starts_with("cf["))
+                })
+                .map(str::to_string)
+        });
+        let Some(clause) = clause else {
+            return Err(invalid(t("This Jira has no Team field")));
+        };
+        let v = self.get_json(
+            ctx,
+            &format!(
+                "/rest/api/2/jql/autocompletedata/suggestions?fieldName={}&fieldValue={}",
+                encode_component(&clause),
+                encode_component(typed)
+            ),
+            msg!("search teams"),
+        )?;
+        Ok(v.get("results")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .filter_map(|r| {
+                let id = r.get("value").and_then(Value::as_str)?;
+                let label = r.get("displayName").and_then(Value::as_str).unwrap_or(id);
+                Some(OptionItem::new(id, strip_tags(label)))
+            })
+            .collect())
+    }
+
+    /// The person signed in, as a field names them (Cloud: account id; Server: user name).
+    fn me(&self, ctx: &Ctx) -> Result<String, SendError> {
+        let me = self.get_json(ctx, "/rest/api/2/myself", msg!("check the sign-in"))?;
+        me.get(if self.cloud() { "accountId" } else { "name" })
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .ok_or_else(|| invalid(t("Jira did not say who you are")))
+    }
+
     /// Update the issue `key` as the mapped fields say: read what is there when something is
     /// added below it or counted, then one PUT.
     fn update(&self, ctx: &Ctx, key: &str, payload: &Payload) -> Result<(), SendError> {
@@ -122,7 +227,10 @@ impl JiraConnector {
                 .and_then(|v| v.get("fields").and_then(Value::as_object).cloned())
                 .unwrap_or_default()
         };
-        let (set, ops) = build_update(payload, self.cloud(), &now)?;
+        let (mut set, ops) = build_update(payload, self.cloud(), &now)?;
+        if names_me(payload) {
+            put_me(&mut set, &self.me(ctx)?);
+        }
         if set.is_empty() && ops.is_empty() {
             return Ok(());
         }
@@ -220,6 +328,48 @@ fn with_media(text: &str, payload: &Payload) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n")
+}
+
+/// The value of a person field that means the person signed in.
+pub const ME: &str = "@me";
+
+/// Does a person field of the share say "Me"?
+fn names_me(payload: &Payload) -> bool {
+    payload
+        .fields
+        .iter()
+        .any(|f| f.value.trim() == ME && matches!(f.key.as_str(), "assignee" | "reporter"))
+}
+
+/// Put the person signed in where a person field said "Me" (`{"accountId": "@me"}`).
+fn put_me(fields: &mut Map<String, Value>, me: &str) {
+    for key in ["assignee", "reporter"] {
+        if let Some(Value::Object(who)) = fields.get_mut(key) {
+            for v in who.values_mut() {
+                if v.as_str() == Some(ME) {
+                    *v = Value::String(me.to_string());
+                }
+            }
+        }
+    }
+}
+
+/// Jira's suggestions mark the matched part in bold: the text alone.
+fn strip_tags(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut inside = false;
+    for c in s.chars() {
+        match c {
+            '<' => inside = true,
+            '>' => inside = false,
+            c if !inside => out.push(c),
+            _ => {}
+        }
+    }
+    out.replace("&amp;", "&")
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
 }
 
 /// A summary must be one line of at most 255 characters.
@@ -442,6 +592,12 @@ impl Connector for JiraConnector {
             label: label.into(),
             param,
             inside: None,
+            search: false,
+        };
+        // too long to list whole: Jira searches them for what is typed
+        let searched = |id: &str, label: &str, param| ListSpec {
+            search: true,
+            ..l(id, label, param)
         };
         Describe {
             fields: vec![
@@ -451,7 +607,7 @@ impl Connector for JiraConnector {
                 f("description", msg!("Description"), msg!("Defaults to the prompt text"), None),
                 f("priority", msg!("Priority"), "", Some("priorities")),
                 f("labels", msg!("Labels"), msg!("Separate several with commas"), Some("labels")),
-                f("assignee", msg!("Assignee"), "", Some("assignable_users")),
+                f("assignee", msg!("Assignee"), msg!("Me, or anyone found by name"), Some("users")),
                 f("components", msg!("Components"), msg!("Separate several with commas"), Some("components")),
                 f("fixVersions", msg!("Fix versions"), msg!("Separate several with commas"), Some("versions")),
                 f("versions", msg!("Affects versions"), msg!("Separate several with commas"), Some("versions")),
@@ -477,7 +633,13 @@ impl Connector for JiraConnector {
                 l("priorities", msg!("Priorities"), None),
                 l("labels", msg!("Labels"), None),
                 l("recent_issues", msg!("Issues I reported recently"), None),
-                l("assignable_users", msg!("People who can be assigned"), Some(msg!("project key"))),
+                searched("users", msg!("People (search by name; Me first)"), None),
+                searched(
+                    "assignable_users",
+                    msg!("People who can be assigned in a project (search by name)"),
+                    Some(msg!("project key")),
+                ),
+                searched("teams", msg!("Teams (search by name)"), None),
                 l("components", msg!("Components of a project"), Some(msg!("project key"))),
                 l("versions", msg!("Versions of a project"), Some(msg!("project key"))),
             ],
@@ -512,6 +674,11 @@ impl Connector for JiraConnector {
     }
 
     fn options(&self, ctx: &Ctx, list: &str) -> Result<Vec<OptionItem>, SendError> {
+        // a searched list carries what is typed after `?`
+        let (list, typed) = match list.split_once('?') {
+            Some((l, q)) => (l, q.trim()),
+            None => (list, ""),
+        };
         let (name, param) = match list.split_once(':') {
             Some((n, p)) => (n, Some(p.trim())),
             None => (list, None),
@@ -629,29 +796,14 @@ impl Connector for JiraConnector {
                     })
                     .unwrap_or_default())
             }
-            "assignable_users" => {
-                let v = self.get_json(
-                    ctx,
-                    &format!(
-                        "/rest/api/2/user/assignable/search?project={}&maxResults=100",
-                        need_project()?
-                    ),
-                    msg!("list people"),
-                )?;
-                Ok(v.as_array()
-                    .map(|a| {
-                        a.iter()
-                            .filter(|u| u.get("active").and_then(Value::as_bool) != Some(false))
-                            .filter_map(|u| {
-                                let id =
-                                    strings(u, if self.cloud() { "accountId" } else { "name" })?;
-                                let label = strings(u, "displayName").unwrap_or_else(|| id.clone());
-                                Some(OptionItem::new(id, label))
-                            })
-                            .collect()
-                    })
-                    .unwrap_or_default())
+            "users" | "assignable_users" => {
+                let project = param
+                    .filter(|p| !p.is_empty())
+                    .map(|_| need_project())
+                    .transpose()?;
+                self.people(ctx, project.as_deref(), typed)
             }
+            "teams" => self.teams(ctx, typed),
             "recent_issues" => {
                 let jql = encode_component("reporter = currentUser() ORDER BY updated DESC");
                 // Jira Cloud replaced /search with /search/jql
@@ -695,13 +847,15 @@ impl Connector for JiraConnector {
             }
         }
         let base = self.base()?;
-
         // 1. the issue: made now, found from an earlier attempt, or the one the person named
         let (key, created) = match (&existing, ctx.progress.get("jira.issue")) {
             (Some(k), _) => (k.clone(), false),
             (None, Some(k)) => (k, true),
             (None, None) => {
-                let fields = build_fields(payload, self.cloud())?;
+                let mut fields = build_fields(payload, self.cloud())?;
+                if names_me(payload) {
+                    put_me(&mut fields, &self.me(ctx)?);
+                }
                 let req = self
                     .request(ctx, Method::Post, "/rest/api/2/issue")?
                     .body(Body::json(&json!({ "fields": fields })));

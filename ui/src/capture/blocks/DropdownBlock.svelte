@@ -2,7 +2,8 @@
   import { t, tn } from '../../lib/i18n/index.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import Combobox from '../../lib/components/Combobox.svelte';
-  import type { Block, DropdownState } from '../../lib/types';
+  import type { Block, DropdownOption, DropdownState } from '../../lib/types';
+  import { getApi } from '../../lib/ipc';
   import type { Recent } from '../../lib/recent';
   import type { DeeperPick } from '../values';
   import DeeperStep from './DeeperStep.svelte';
@@ -42,10 +43,45 @@
   // Chats have their own order (pinned, recent): the memory is for lists a service sends.
   const remembers = $derived(block.remember !== false && block.source.type === 'web_api');
 
+  // A list the service searches (people, teams) is asked for again as the person types: what it
+  // found replaces the list, and the choice made stays listed while other names are searched.
+  const SEARCH_WAIT = 250;
+  let found = $state<DropdownOption[] | null>(null);
+  let searching = $state(false);
+  let typed = $state('');
+  let seen = new Map<string, DropdownOption>();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  let asked = 0;
+  function search(q: string) {
+    typed = q.trim();
+    clearTimeout(timer);
+    if (!typed) {
+      found = null;
+      searching = false;
+      return;
+    }
+    searching = true;
+    timer = setTimeout(() => {
+      const n = ++asked;
+      void getApi()
+        .then((api) => api.fetchOptions(sessionId, block.id, undefined, typed))
+        .then((r) => { if (n === asked) found = r; })
+        .catch(() => { if (n === asked) found = []; })
+        .finally(() => { if (n === asked) searching = false; });
+    }, SEARCH_WAIT);
+  }
+  $effect(() => () => clearTimeout(timer));
+  const listed = $derived.by<DropdownOption[]>(() => {
+    const base = found ?? info.options;
+    for (const o of base) seen.set(o.value, o);
+    const picked = value ? seen.get(value) : undefined;
+    return picked && !base.some((o) => o.value === picked.value) ? [picked, ...base] : base;
+  });
+
   let showAll = $state(false);
   // A block that goes deeper narrows the second list by the title (a post named like it), not the first.
   const narrowed = $derived(
-    showAll || block.deeper ? { options: info.options, applied: false, matched: true } : narrow(info.options, narrowText),
+    showAll || block.deeper || info.search ? { options: listed, applied: false, matched: true } : narrow(listed, narrowText),
   );
   const options = $derived(narrowed.options);
 
@@ -74,7 +110,7 @@
 
   const searchable = $derived(info.status === 'ready' && options.length > SEARCH_FROM);
   const asCombo = $derived(
-    info.status === 'ready' && (levels || searchable || optional || recentHere.length > 0),
+    info.status === 'ready' && (info.search || levels || searchable || optional || recentHere.length > 0),
   );
   const empty = $derived(info.status === 'ready' && info.options.length === 0);
   const groups = $derived.by(() => {
@@ -137,10 +173,14 @@
         value={value ?? ''}
         free={optional}
         onchange={choose}
-        placeholder={optional
-          ? empty ? t('Paste a link (optional)') : t('None: type to search, or paste a link')
-          : tn('Search {n} choice…', 'Search {n} choices…', options.length)}
-        emptyText={empty ? t('Nothing to choose from') : t('Nothing matches')}
+        remote={info.search && typed !== ''}
+        onquery={info.search ? search : undefined}
+        placeholder={info.search
+          ? t('Type a name to search')
+          : optional
+            ? empty ? t('Paste a link (optional)') : t('None: type to search, or paste a link')
+            : tn('Search {n} choice…', 'Search {n} choices…', options.length)}
+        emptyText={searching ? t('Searching…') : empty && !info.search ? t('Nothing to choose from') : t('Nothing matches')}
       />
     </div>
   {:else}
@@ -184,7 +224,7 @@
   {/if}
   {#if info.status === 'needs_connection'}
     <Chip kind="err" label={info.message ?? t('Not connected')} />
-  {:else if empty && !optional}
+  {:else if empty && !optional && !info.search}
     <Chip kind="warn" label={t('Nothing to post in yet. Save locally keeps it on this computer.')} />
   {/if}
 </div>

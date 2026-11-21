@@ -19,6 +19,11 @@ export const ICONS = {
   reset: 'M4 4v6h6M5.2 15a8 8 0 101.6-8.4L4 10',
   // the layout builder
   move: 'M12 3v18M3 12h18M9 6l3-3 3 3M9 18l3 3 3-3M6 9l-3 3 3 3M18 9l3 3-3 3',
+  copy: 'M9 9h11v11H9zM5 15H4V4h11v1',
+  paste: 'M9 4h6v3H9zM9 5H5v15h14V5h-4M9 12h6M9 16h4',
+  duplicate: 'M8 8h12v12H8zM4 16V4h12M14 11v6M11 14h6',
+  lock: 'M6 11h12v9H6zM8 11V8a4 4 0 018 0v3',
+  unlock: 'M6 11h12v9H6zM8 11V8a4 4 0 017.5-2',
   // the recording
   keys: 'M3 6h18v12H3zM7 10h.01M11 10h.01M15 10h.01M7 14h10',
   clock: 'M12 3a9 9 0 100 18a9 9 0 100-18M12 7v5l3.5 2.2',

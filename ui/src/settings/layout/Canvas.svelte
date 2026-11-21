@@ -7,9 +7,10 @@
   import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
   import { lineFor, type Line } from './reach';
   import {
-    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, addBlock, canPlace, moveTo, removeBlock, resizeTo,
-    rowsNeeded, typeLabel, usedColumns, type BlockType,
+    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, addBlock, canPlace, copyOf, isLocked, lockTab,
+    moveTo, pasteBlocks, removeBlock, resizeTo, rowsNeeded, typeLabel, usedColumns, type BlockType,
   } from './model';
+  import { clipboard } from './clipboard.svelte';
   import { isShown, openTab, tabOf, type OpenTabs } from '../../lib/tabs';
 
   let {
@@ -176,7 +177,65 @@
     }
   }
 
+  // ---- copy, paste, duplicate, delete: the selected block, by its buttons or their keys ----
+  const picked = $derived(blocks.find((b) => b.id === selected) ?? null);
+  const pickedLocked = $derived(picked ? isLocked(blocks, picked.id) : false);
+  let note = $state('');
+  function say(text: string) {
+    note = text;
+    setTimeout(() => { if (note === text) note = ''; }, 2500);
+  }
+  function copy(b: Block) {
+    clipboard.set(copyOf(blocks, b.id));
+    say(t('{name} copied: paste it here or in another layout.', { name: label(b) }));
+  }
+  function paste() {
+    const c = clipboard.blocks;
+    if (!c) return;
+    const done = pasteBlocks(blocks, c, cols);
+    if (!done) {
+      say(t('A window has room for {MAX_SHARING_BUTTONS} sharing buttons. Remove one to add another.', { MAX_SHARING_BUTTONS }));
+      return;
+    }
+    blocks = done.blocks;
+    selected = done.block.id;
+  }
+  function duplicate(b: Block) {
+    const done = pasteBlocks(blocks, copyOf(blocks, b.id), cols);
+    if (!done) {
+      say(t('A window has room for {MAX_SHARING_BUTTONS} sharing buttons. Remove one to add another.', { MAX_SHARING_BUTTONS }));
+      return;
+    }
+    blocks = done.blocks;
+    selected = done.block.id;
+  }
+  function remove(b: Block) {
+    if (isLocked(blocks, b.id)) {
+      say(t('{name} is in a locked tab: unlock the tab to remove it.', { name: label(b) }));
+      return;
+    }
+    blocks = removeBlock(blocks, b.id);
+    selected = null;
+  }
+
   function onKey(e: KeyboardEvent, b: Block) {
+    const mod = (e.ctrlKey || e.metaKey) && !e.altKey;
+    const k = e.key.toLowerCase();
+    if (mod && k === 'c') {
+      e.preventDefault();
+      copy(b);
+      return;
+    }
+    if (mod && k === 'v') {
+      e.preventDefault();
+      paste();
+      return;
+    }
+    if (mod && k === 'd') {
+      e.preventDefault();
+      duplicate(b);
+      return;
+    }
     const arrows: Record<string, [number, number]> = {
       ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1],
     };
@@ -189,8 +248,7 @@
       if (next) blocks = next;
     } else if (e.key === 'Delete' || e.key === 'Backspace') {
       e.preventDefault();
-      blocks = removeBlock(blocks, b.id);
-      selected = null;
+      remove(b);
     } else if (e.key === 'Escape') {
       selected = null;
     }
@@ -278,6 +336,28 @@
     </span>
   </div>
 
+  <div class="actions" role="toolbar" aria-label={t('The block chosen')}>
+    <button type="button" class="act" disabled={!picked} onclick={() => picked && copy(picked)} title={t('Copy (Ctrl+C)')}>
+      <Icon name="copy" size={14} />{t('Copy')}
+    </button>
+    <button type="button" class="act" disabled={!clipboard.blocks} onclick={paste} title={t('Paste (Ctrl+V): at the first free place')}>
+      <Icon name="paste" size={14} />{t('Paste')}
+    </button>
+    <button type="button" class="act" disabled={!picked} onclick={() => picked && duplicate(picked)} title={t('Duplicate (Ctrl+D)')}>
+      <Icon name="duplicate" size={14} />{t('Duplicate')}
+    </button>
+    <button
+      type="button"
+      class="act danger"
+      disabled={!picked || pickedLocked}
+      onclick={() => picked && remove(picked)}
+      title={pickedLocked ? t('In a locked tab: unlock the tab to remove it') : t('Delete (Delete key)')}
+    >
+      <Icon name="trash" size={14} />{t('Delete')}
+    </button>
+    {#if note}<span class="quiet note" aria-live="polite">{note}</span>{/if}
+  </div>
+
   <div class="scroll">
     <div class="grid" bind:this={grid} style={gridStyle} class:dragging={drag !== null}>
       {#each drawn as b (b.id)}
@@ -289,6 +369,7 @@
           class:greyed={l?.state === 'cannot_send' || l?.state === 'switched_off'}
           class:unused={l?.state === 'not_used'}
           class:selected={selected === b.id}
+          class:fixed={isLocked(blocks, b.id)}
           class:lifted={drag && drag.kind !== 'new' && drag.id === b.id}
           class:err={w === 'error'}
           class:warn={w === 'warning'}
@@ -308,14 +389,27 @@
             <!-- The names, on their side: a click opens the tab, to see and place its blocks. -->
             <div class="tabnames {b.side ?? 'top'}" role="tablist" aria-label={t('Tabs')}>
               {#each b.tabs as item, i (i)}
-                <button
-                  type="button"
-                  role="tab"
-                  aria-selected={openTab(b, open) === i}
-                  title={tn('{name}: {n} block. Click to see it; a block dropped here goes in this tab.', t('{name}: {n} blocks. Click to see them; a block dropped here goes in this tab.'), (item.blocks ?? []).length, { name: item.name })}
-                  onpointerdown={(e) => e.stopPropagation()}
-                  onclick={() => { open[b.id] = i; selected = b.id; }}
-                >{item.name || t('Tab {n}', { n: i + 1 })}</button>
+                <span class="tabname" class:locked={item.locked}>
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={openTab(b, open) === i}
+                    title={item.locked
+                      ? t('{name} is locked: its blocks stay where they are, and none is dropped in it.', { name: item.name })
+                      : tn('{name}: {n} block. Click to see it; a block dropped here goes in this tab.', t('{name}: {n} blocks. Click to see them; a block dropped here goes in this tab.'), (item.blocks ?? []).length, { name: item.name })}
+                    onpointerdown={(e) => e.stopPropagation()}
+                    onclick={() => { open[b.id] = i; selected = b.id; }}
+                  >{item.name || t('Tab {n}', { n: i + 1 })}</button>
+                  <button
+                    type="button"
+                    class="lock"
+                    aria-pressed={item.locked === true}
+                    aria-label={item.locked ? t('Unlock {name}', { name: item.name || t('Tab {n}', { n: i + 1 }) }) : t('Lock {name}', { name: item.name || t('Tab {n}', { n: i + 1 }) })}
+                    title={item.locked ? t('Unlock: its blocks can be moved again') : t('Lock: its blocks stay where they are')}
+                    onpointerdown={(e) => e.stopPropagation()}
+                    onclick={() => (blocks = lockTab(blocks, b.id, i, !item.locked))}
+                  ><Icon name={item.locked ? 'lock' : 'unlock'} size={11} /></button>
+                </span>
               {/each}
             </div>
             <!-- A grip that stays over the blocks of its tabs: when one fills a tab, the Tabs block
@@ -358,6 +452,18 @@
 
 <style>
   .canvas { display: grid; gap: 8px; min-width: 0; }
+  .actions { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; font-size: 13px; }
+  .act { display: inline-flex; gap: 5px; align-items: center; padding: 2px 9px; font-size: 12.5px; }
+  .act.danger:not(:disabled):hover { color: var(--err); border-color: var(--err); }
+  .note { font-size: 12px; }
+  .tabname { display: inline-flex; align-items: center; }
+  .tabname .lock {
+    border: 0; background: none; padding: 1px 3px; color: var(--quiet); opacity: 0.55; cursor: pointer; line-height: 0;
+  }
+  .tabname .lock:hover, .tabname.locked .lock { opacity: 1; }
+  .tabname.locked .lock { color: var(--accent); }
+  .block.fixed { cursor: default; }
+  .block.fixed .handle { display: none; }
   .palette { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .chip { padding: 3px 10px; border-radius: 999px; font-size: 13px; touch-action: none; }
   .cols { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; font-size: 13px; }

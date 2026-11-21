@@ -42,7 +42,7 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
     TemplateInfo {
         key: "jira-ticket",
         name: msg!("Jira ticket"),
-        description: msg!("Creates a ticket, or updates the one you pick in Ticket to update: the summary stays, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are attached, and a Logs tab beside the screenshot reads the logs."),
+        description: msg!("Creates a ticket assigned to you (or to whoever you pick), or updates the one you pick in Ticket to update: the summary and the assignee stay, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are attached, and a Logs tab beside the screenshot reads the logs."),
         service: Some(ConnectionKind::Jira),
     },
     TemplateInfo {
@@ -223,6 +223,7 @@ fn capture_tabs(h: u32, video: bool, files_title: &str) -> Vec<Block> {
     let tab = |name: &str, ids: &[&str]| Tab {
         name: t(name).into(),
         blocks: ids.iter().map(|id| id.to_string()).collect(),
+        locked: false,
     };
     let mut tabs = Vec::new();
     let mut blocks = Vec::new();
@@ -438,7 +439,7 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ]
         .concat(),
         ("jira-ticket", Some(c)) => [
-            capture_tabs(11, is_video, msg!("Attach files")),
+            capture_tabs(12, is_video, msg!("Attach files")),
             vec![
                 block(
                     "issue",
@@ -459,25 +460,35 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                     rect(7, 2, 5, 1),
                     web_list(msg!("Issue type (for a new ticket)"), c, "issue_types"),
                 ),
-                block("summary", rect(7, 3, 5, 1), line(msg!("Summary"), WHERE)),
+                block("assignee", rect(7, 3, 5, 1), {
+                    // you, unless someone else is picked: a new ticket starts on "Me" each time
+                    match web_list(msg!("Assignee (for a new ticket)"), c, "users") {
+                        BlockKind::Dropdown(mut d) => {
+                            d.remember = false;
+                            BlockKind::Dropdown(d)
+                        }
+                        other => other,
+                    }
+                }),
+                block("summary", rect(7, 4, 5, 1), line(msg!("Summary"), WHERE)),
                 block(
                     "description",
-                    rect(7, 4, 5, 3),
+                    rect(7, 5, 5, 3),
                     text_of(msg!("Description"), report(is_video)),
                 ),
                 block(
                     "labels",
-                    rect(7, 7, 5, 1),
+                    rect(7, 8, 5, 1),
                     tags(msg!("Labels"), c, "labels"),
                 ),
                 block(
                     "comment",
-                    rect(7, 8, 5, 2),
+                    rect(7, 9, 5, 2),
                     text(msg!("Comment (optional)"), TextRole::Plain, ""),
                 ),
                 requiring(
                     button(
-                        rect(7, 10, 5, 1),
+                        rect(7, 11, 5, 1),
                         msg!("Send to Jira"),
                         Some(c),
                         None,
@@ -485,6 +496,8 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                             from_block("issue", "issue"),
                             from_block("project", "project"),
                             from_block("issuetype", "type"),
+                            // an update keeps who the ticket is assigned to
+                            updating("assignee", "assignee", UpdateMode::Skip),
                             updating("summary", "summary", UpdateMode::Skip),
                             updating("description", "description", UpdateMode::Append),
                             updating("labels", "labels", UpdateMode::Add),
@@ -1059,6 +1072,17 @@ mod tests {
             assert_eq!(how(body), Some(UpdateMode::Append), "{key}");
             assert_eq!(how("labels"), Some(UpdateMode::Add), "{key}");
             assert!(b.mappings.iter().any(|m| m.field == "comment"), "{key}");
+            if key.starts_with("jira") {
+                // a new ticket is yours unless someone else is picked; an update keeps its assignee
+                let Some(BlockKind::Dropdown(a)) = l.block("assignee").map(|b| &b.kind) else {
+                    panic!("{key}: no assignee")
+                };
+                assert!(!a.remember, "{key}: starts on Me each time");
+                assert!(
+                    matches!(&a.source, DropdownSource::WebApi { options_id, .. } if options_id == "users")
+                );
+                assert_eq!(how("assignee"), Some(UpdateMode::Skip), "{key}");
+            }
             // no issue picked is a new one: the list may stay empty
             let Some(BlockKind::Dropdown(d)) = l.block("issue").map(|b| &b.kind) else {
                 panic!("{key}: no issue list")

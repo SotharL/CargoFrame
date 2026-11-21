@@ -244,7 +244,7 @@ const escAttr = (s: string) => esc(s).replace(/"/g, '&quot;');
 /** A table as a grid to type in, with buttons to add and remove rows and columns. */
 function tableHtml(t: Table, raw: string): string {
   const cell = (c: string, r: number, k: number) =>
-    `<span class="cell" contenteditable="true" data-r="${r}" data-c="${k}" spellcheck="true">${esc(c)}</span>`;
+    `<span class="tw-cell" contenteditable="true" data-r="${r}" data-c="${k}" spellcheck="true">${esc(c)}</span>`;
   const x = (act: string, n: number, title: string) =>
     `<button type="button" class="tw-x" data-act="${act}" data-n="${n}" title="${title}" aria-label="${title}" tabindex="-1">×</button>`;
   // every column and every line has its ×, the last ones too (they take the table away)

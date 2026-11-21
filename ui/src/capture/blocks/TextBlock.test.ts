@@ -133,6 +133,26 @@ describe('TextBlock formatting buttons', () => {
     expect(readText(rich())).toBe('1. open\n');
   });
 
+  it('in the window, inside a layout cell, Enter makes a line and a paste comes in as text', async () => {
+    // the capture window wraps each block in <section class="cell">: that is not a table's cell
+    const wrap = document.createElement('section');
+    wrap.className = 'cell';
+    document.body.appendChild(wrap);
+    render(TextBlock, { target: wrap, props: { block: block('above'), value: 'Seen', marks: [...tools], services: ['jira'] } });
+    pick(4, 4);
+    await fireEvent(rich(), new InputEvent('beforeinput', { inputType: 'insertParagraph', cancelable: true, bubbles: true }));
+    expect(readText(rich())).toBe('Seen\n');
+    const paste = new Event('paste', { bubbles: true, cancelable: true }) as ClipboardEvent;
+    Object.defineProperty(paste, 'clipboardData', { value: { getData: (k: string) => (k === 'text/plain' ? 'a\r\nb **c**' : '') } });
+    await fireEvent(rich(), paste);
+    expect(paste.defaultPrevented).toBe(true);
+    expect(readText(rich())).toBe('Seen\na\nb **c**');
+    // the block is still there and still typed in
+    expect(wrap.querySelector('.rich')).toBe(rich());
+    expect(rich().querySelector('.m.bold')).toBeTruthy();
+    wrap.remove();
+  });
+
   it('what is typed is read back and drawn with its marks; Ctrl+Z takes it back', async () => {
     render(TextBlock, { block: block('above'), value: 'a *b', marks: [...tools], services: ['jira'] });
     const box = rich();
@@ -160,7 +180,7 @@ describe('TextBlock tables', () => {
   afterEach(cleanup);
   const T = '| A | B |\n| --- | --- |\n| 1 | 2 |';
   const rich = () => screen.getByRole('textbox') as HTMLDivElement;
-  const cells = () => Array.from(rich().querySelectorAll<HTMLElement>('.cell'));
+  const cells = () => Array.from(rich().querySelectorAll<HTMLElement>('.tw-cell'));
 
   it('the Table button puts a table to fill in after the line, the cursor in its first cell', async () => {
     render(TextBlock, { block: block('above'), value: 'Steps', marks: ['bold', 'table'], services: ['jira'] });
