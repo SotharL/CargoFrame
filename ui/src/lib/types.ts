@@ -16,6 +16,15 @@ export interface General {
   debug?: boolean;
 }
 
+/** Debug mode's setup: the GitHub connections, and what is made already (app/src/debug.rs). */
+export interface DebugSetup {
+  /** [id, name] of each GitHub connection. */
+  github: [string, string][];
+  layout: boolean;
+  /** The keys of the shortcut made (empty: the tray menu); null when there is none. */
+  shortcut: string | null;
+}
+
 /** What a CargoFrame window shows, sent in debug mode (lib/debugView.ts, app/src/debug.rs). */
 export interface DebugView {
   window: 'settings' | 'capture';

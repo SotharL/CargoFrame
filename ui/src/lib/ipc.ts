@@ -1,5 +1,5 @@
 import type {
-  AppInfo, Block, ChatView, Cleaned, Connection, ConnectionsView, ConnectionView, DataReport, DebugView, Describe, DropdownOption,
+  AppInfo, Block, ChatView, Cleaned, Connection, ConnectionsView, ConnectionView, DataReport, DebugSetup, DebugView, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   FfmpegPhase, MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
@@ -40,6 +40,10 @@ export interface Api {
   getAutostart(): Promise<boolean>;
   /** Debug mode: what this window shows now. */
   reportView(view: DebugView): Promise<void>;
+  /** Debug mode: the GitHub connections, and whether the bug report is set up. */
+  debugSetupStatus(): Promise<DebugSetup>;
+  /** Make the bug report layout and its shortcut (what is there is kept). */
+  setupDebugReport(connectionId?: string): Promise<DebugSetup>;
   setAutostart(enabled: boolean): Promise<void>;
   /** Other programs Windows starts as CargoFrame at sign-in (an older copy). */
   autostartOthers(): Promise<string[]>;
@@ -193,6 +197,8 @@ export interface Api {
   /** Download what the check offered. Returns at once; progress arrives as `onFfmpegChanged`. */
   ffmpegDownload(): Promise<void>;
   onFfmpegChanged(callback: () => void): Promise<() => void>;
+  /** Debug mode was turned on or off (from System): every window follows. */
+  onDebugChanged(callback: (on: boolean) => void): Promise<() => void>;
 }
 
 /** Pieces in one body, each after its length (four bytes, big-endian), as `set_clip_layer` reads them. */
@@ -221,6 +227,8 @@ async function tauriApi(): Promise<Api> {
     setGeneral: (general) => invoke('set_general', { general }),
     getAutostart: () => invoke<boolean>('get_autostart'),
     reportView: (view) => invoke('report_view', { view }),
+    debugSetupStatus: () => invoke<DebugSetup>('debug_setup_status'),
+    setupDebugReport: (connectionId) => invoke<DebugSetup>('setup_debug_report', { connectionId: connectionId ?? null }),
     setAutostart: (enabled) => invoke('set_autostart', { enabled }),
     autostartOthers: () => invoke<string[]>('autostart_others'),
     removeAutostartOthers: () => invoke<string[]>('remove_autostart_others'),
@@ -354,6 +362,10 @@ async function tauriApi(): Promise<Api> {
       const { listen } = await import('@tauri-apps/api/event');
       return listen('ffmpeg-changed', callback);
     },
+    onDebugChanged: async (callback) => {
+      const { listen } = await import('@tauri-apps/api/event');
+      return listen<boolean>('debug-changed', (e) => callback(e.payload));
+    },
   };
 }
 
@@ -400,6 +412,8 @@ export interface MemoryOptions {
   readText?: (attempt: number) => TextReading | Promise<TextReading>;
   /** Called by `fetchOptions` (as `<block>:<choice>` for the list inside a choice) and `previewOptions`. */
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
+  /** The GitHub connections debug mode's setup offers. Default: one. */
+  github?: [string, string][];
   /** Collects what the windows report in debug mode, for tests. */
   reported?: DebugView[];
   /** Older copies Windows starts at sign-in, for Preferences. Default: none. */
@@ -486,6 +500,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   };
   let autostart = true;
   const reported: DebugView[] = (opts.reported ??= []);
+  let debugSetup: DebugSetup = { github: opts.github ?? [['gh', 'CargoFrame on GitHub']], layout: false, shortcut: null };
   let autostartOthers: string[] = [...(opts.autostartOthers ?? [])];
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
@@ -751,6 +766,14 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     getAutostart: async () => autostart,
     reportView: async (view) => {
       reported.push(view);
+    },
+    debugSetupStatus: async () => ({ ...debugSetup }),
+    setupDebugReport: async (connectionId) => {
+      const github = debugSetup.github;
+      if (!github.length) throw new Error('Add a GitHub connection first (Connections): the report is a GitHub issue.');
+      if (!connectionId && github.length > 1) throw new Error('Choose the GitHub connection the reports go to');
+      debugSetup = { ...debugSetup, layout: true, shortcut: debugSetup.shortcut ?? 'Ctrl+Alt+Shift+F12' };
+      return { ...debugSetup };
     },
     setAutostart: async (enabled) => {
       autostart = enabled;
@@ -1155,6 +1178,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
         ffmpegListeners.delete(callback);
       };
     },
+    onDebugChanged: async () => () => {},
   };
 }
 

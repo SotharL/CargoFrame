@@ -72,6 +72,10 @@ export function startDebugView(window_: DebugView['window'], debug: boolean, mor
     started = true;
     for (const e of ['focusin', 'click', 'keyup'] as const) document.addEventListener(e, send, true);
     window.addEventListener('focus', send);
+    // turned on or off in System while this window is open: it follows at once
+    void getApi()
+      .then((api) => api.onDebugChanged(setDebug))
+      .catch(() => {});
   }
   send();
 }

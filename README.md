@@ -269,8 +269,10 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
 - **Debug mode** (*Settings, System*, off by default): for reporting a problem in CargoFrame itself. A capture of a
   CargoFrame window then fills `{cargoframe.where}` (like *CargoFrame settings - Layouts - Fill fields - Fill a
   field*), `{cargoframe.focus}`, `{cargoframe.guide}`, `{cargoframe.layout}`… and adds the layout on screen, the data
-  rules, the settings and the end of the log to its Files block. The template *CargoFrame bug report* (GitHub) uses
-  them for its title, description and labels.
+  rules, the settings and the end of the log to its Files block. **Set up the bug report**, under the switch, makes the
+  *CargoFrame bug report* layout for your GitHub connection and a shortcut, Ctrl+Alt+Shift+F12: press it in any
+  CargoFrame window and the issue is filled in (where it was, what was in focus, the system, the graphics driver, the
+  screens…), with the version among its labels.
 - **Values made from other values:** in *Data parsing*, *Made from other values*: for example a build id
   `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least

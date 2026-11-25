@@ -890,23 +890,44 @@ fn debug_report(mut b: Block) -> Block {
     match (b.id.as_str(), &mut b.kind) {
         ("title", BlockKind::Text(tb)) => tb.default_text = "{cargoframe.where} - ".into(),
         ("description", BlockKind::Text(tb)) => {
+            // what a developer asks first, filled in; then the two lines the person writes
+            let rows: [(&str, &str); 12] = [
+                (msg!("Where"), "{cargoframe.where}"),
+                (msg!("In focus"), "{cargoframe.focus}"),
+                (msg!("Layout"), "{cargoframe.layout}"),
+                (msg!("Block"), "{cargoframe.block}"),
+                (msg!("Guide"), "{cargoframe.guide}"),
+                (msg!("Data rules"), "{cargoframe.rules}"),
+                (msg!("System"), "{system.os}"),
+                (msg!("Processor"), "{system.cpu}"),
+                (msg!("Memory"), "{system.ram}"),
+                (msg!("Graphics"), "{system.gpu}"),
+                (msg!("Graphics driver"), "{system.gpu_driver}"),
+                (msg!("Screens"), "{system.screens}"),
+            ];
+            let table: String = rows
+                .iter()
+                .map(|(label, value)| format!("| {} | {value} |\n", t(label)))
+                .collect();
             tb.default_text = format!(
-                "{}\n\n| {} |\n| --- |\n| {{capture.screenshot}} |\n\n\
-                 **CargoFrame {{cargoframe.version}}** · {{system.os}} · {{system.screens}}\n\
-                 - {}: {{cargoframe.where}}\n\
-                 - {}: {{cargoframe.focus}}\n\
-                 - {}: {{cargoframe.layout}} ({{cargoframe.block}})\n\
-                 - {}: {{cargoframe.guide}}",
+                "{}\n\n**{}**\n\n**{}**\n\n| {} |\n| --- |\n| {{capture.screenshot}} |\n\n\
+                 **CargoFrame {{cargoframe.version}}**\n\n| {} | {} |\n| --- | --- |\n{table}",
                 t(SEEN_IN),
+                t("What happened:"),
+                t("What was expected:"),
                 t("Screenshot"),
-                t("Where"),
-                t("In focus"),
-                t("Layout"),
-                t("Guide"),
+                t("Detail"),
+                t("Value"),
             )
         }
         ("labels", BlockKind::Tags(tags)) => {
-            tags.tags = vec!["bug".into(), "{app.exe}".into(), "{cargoframe.page}".into()];
+            // the version too, so the issues of a release are found together
+            tags.tags = vec![
+                "bug".into(),
+                "{app.exe}".into(),
+                "{cargoframe.page}".into(),
+                "{cargoframe.version}".into(),
+            ];
         }
         _ => {}
     }
@@ -956,6 +977,9 @@ mod tests {
                 "capture.recording",
             ]
             .contains(&name)
+                // the computer's details, and debug mode's values (the app knows each one)
+                || name.starts_with("system.")
+                || name.starts_with("cargoframe.")
         }
     }
 
@@ -1269,13 +1293,31 @@ mod tests {
             _ => panic!("{id} is not a text"),
         };
         assert_eq!(text("title"), "{cargoframe.where} - ");
-        assert!(text("description").contains("{cargoframe.focus}"));
-        assert!(text("description").contains("{capture.screenshot}"));
+        let d = text("description");
+        for value in [
+            "{cargoframe.focus}",
+            "{capture.screenshot}",
+            "{cargoframe.version}",
+            "{system.gpu_driver}",
+            "{system.screens}",
+        ] {
+            assert!(d.contains(value), "{value} missing from {d}");
+        }
+        // a table the formatted box and GitHub show: a header, its line, one row per detail
+        assert!(d.contains("| Detail | Value |\n| --- | --- |\n| Where | {cargoframe.where} |"));
         let BlockKind::Tags(tags) = &l.blocks.iter().find(|b| b.id == "labels").unwrap().kind
         else {
             panic!("no labels");
         };
-        assert_eq!(tags.tags, ["bug", "{app.exe}", "{cargoframe.page}"]);
+        assert_eq!(
+            tags.tags,
+            [
+                "bug",
+                "{app.exe}",
+                "{cargoframe.page}",
+                "{cargoframe.version}"
+            ]
+        );
         assert_eq!(l.name, "CargoFrame bug report");
     }
 }

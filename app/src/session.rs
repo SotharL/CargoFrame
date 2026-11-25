@@ -60,6 +60,8 @@ pub struct Session {
     /// capture's folder at once, under `added/<name>`: everything that reads a ticked file finds
     /// that copy first, so the file is never read from where it was chosen again.
     added: Mutex<BTreeMap<String, Vec<files::FileEntry>>>,
+    /// Debug mode, a capture of CargoFrame itself: what its windows showed (`debug.rs`).
+    pub debug: Option<crate::debug::View>,
 }
 
 /// The name a file added by hand has in the window and in a zip.
@@ -116,6 +118,7 @@ impl Session {
             files_root,
             dir: Mutex::new(None),
             added: Mutex::new(BTreeMap::new()),
+            debug: None,
         }
     }
 
@@ -770,11 +773,15 @@ pub fn prepare_with(
             .map(|(k, v)| (k.to_string(), v)),
     );
     // debug mode, a capture of CargoFrame itself: what was on screen ({cargoframe.where}…)
-    if let Some(view) = crate::debug::view_for(store, exe.as_deref()) {
-        builtins.values.extend(crate::debug::values(
-            &view,
-            &crate::debug::rule_names(store),
-        ));
+    let debug = crate::debug::view_for(
+        store,
+        captured.app.as_ref().and_then(|a| a.pid),
+        exe.as_deref(),
+    );
+    if let Some(view) = &debug {
+        builtins
+            .values
+            .extend(crate::debug::values(view, &crate::debug::rule_names(store)));
     }
 
     let project = builtins.project.as_ref().map(|r| ProjectView {
@@ -972,7 +979,10 @@ pub fn prepare_with(
         .frame
         .to_png()
         .map_err(|e| PrepareError::Capture(e.to_string()))?;
-    Ok(Session::new(png, view).with_files_root(files_root.map(|r| r.display().to_string())))
+    let mut session =
+        Session::new(png, view).with_files_root(files_root.map(|r| r.display().to_string()));
+    session.debug = debug;
+    Ok(session)
 }
 
 #[cfg(test)]

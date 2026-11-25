@@ -5,7 +5,7 @@
 //! * The short form `{name}` (0.5.0) works the same: `{gpu}`, `{app.exe}`. So that braces written
 //!   for other reasons stay as they are, it takes no spaces, no name made only of digits (`{0}`),
 //!   none of the names Jira's formatting uses (`{code}`, `{quote}`…) and, with a dot, only the
-//!   capture's own groups (`app.`, `project.`, `capture.`, `rule.`). [`render_strict`] reads only
+//!   groups CargoFrame fills (`app.`, `project.`, `capture.`, `rule.`, `system.`, `cargoframe.`). [`render_strict`] reads only
 //!   the double form, for texts where single braces mean something else (a custom API's body).
 //! * A name without a dot is a value read from files: `{gpu}` and `{{gpu}}` are `{{rule.gpu}}`.
 //! * `\{{` produces a literal `{{`.
@@ -35,7 +35,15 @@ pub const RESERVED: [&str; 9] = [
 ];
 
 /// The groups a dotted short name may belong to.
-const GROUPS: [&str; 4] = ["app.", "project.", "capture.", "rule."];
+const GROUPS: [&str; 6] = [
+    "app.",
+    "project.",
+    "capture.",
+    "rule.",
+    // the computer's details (0.7.2) and, in debug mode, what CargoFrame showed
+    "system.",
+    "cargoframe.",
+];
 
 fn valid_name(name: &str) -> bool {
     !name.is_empty()
@@ -298,6 +306,8 @@ mod tests {
     #[test]
     fn short_names_and_rule_keys() {
         assert!(short_name_ok("gpu") && short_name_ok("app.exe") && short_name_ok("rule.x"));
+        // the computer's details and debug mode's values are written short too
+        assert!(short_name_ok("system.os") && short_name_ok("cargoframe.where"));
         assert!(
             !short_name_ok("Code")
                 && !short_name_ok("12")

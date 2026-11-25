@@ -86,7 +86,12 @@ pub fn set_general(
     let accent = cargoframe_config::normalize_accent(&general.accent)
         .ok_or(t("The accent colour must look like #4f8ee0"))?;
     let general = General { accent, ..general };
+    let was_debug = crate::debug::is_on(&state.store);
     state.store.save(&general).map_err(|e| e.to_string())?;
+    // debug mode turned on or off: the windows open start or stop saying what they show
+    if general.debug != was_debug {
+        let _ = app.emit("debug-changed", general.debug);
+    }
     // the arrow of the tray icon follows the accent
     crate::tray::refresh_icon(&app);
     // the tray menu speaks the language chosen
@@ -170,6 +175,25 @@ pub fn reset_everything(
     crate::triggers::reload(&app);
     crate::tray::refresh_menu(&app);
     crate::tray::refresh_icon(&app);
+    Ok(done)
+}
+
+/// Debug mode: the GitHub connections, and whether the bug report layout and shortcut are made.
+#[tauri::command]
+pub fn debug_setup_status(state: State<'_, AppState>) -> crate::debug::Setup {
+    crate::debug::setup_status(&state.store)
+}
+
+/// Debug mode: make the bug report layout and its shortcut (what is there is kept).
+#[tauri::command]
+pub fn setup_debug_report(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    connection_id: Option<String>,
+) -> Result<crate::debug::Setup, String> {
+    let done = crate::debug::setup(&state.store, connection_id.as_deref())?;
+    crate::triggers::reload(&app);
+    crate::tray::refresh_menu(&app);
     Ok(done)
 }
 

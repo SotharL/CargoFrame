@@ -1679,3 +1679,16 @@ problem in itself, behind a debug mode in *System*.
 - **Found on the way.** Two advisories published on 23 Nov made the daily security check fail: `url` 2.5.8
   (a stack overflow on nested `blob:` addresses, RUSTSEC-2026-0592) and `cookie` 0.18.2 (nonces that can repeat
   after a fork, RUSTSEC-2026-0594), both through dependencies; updated to 2.5.9 and 0.18.3.
+- **Debug mode, after a first try on Windows.** The values stayed empty in every text, for two reasons. The short
+  form `{name}` with a dot only read the capture's own groups (`app.`, `project.`, `capture.`, `rule.`), so
+  `{cargoframe.where}`, and `{system.os}` too since earlier in 0.7.2, stayed as written; the groups now include
+  `system.` and `cargoframe.`, in Rust and in the window. And whether the program in focus is CargoFrame was told
+  from its path, which Windows may give in another form; the process is now compared first. A window open when the
+  mode is turned on now starts reporting at once. The setup is one button (*Set up the bug report*: the layout for
+  the GitHub connection and a shortcut on keys no other shortcut uses), and the template's description says more
+  (what happened, what was expected, a table with the system, processor, memory, graphics card and driver, screens,
+  the data rules) and its labels include the version. A test runs the whole way: debug mode on, a capture of this
+  process, the title, the description, the labels and the files.
+- **The language check missed texts split by rustfmt.** A call too long for one line becomes `t(\n "…",\n)`, with
+  a comma the pattern did not expect, so 46 messages (mostly what a connector says when a setting is missing) were
+  never translated; the pattern takes the comma, and they are now in the four languages.

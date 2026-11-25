@@ -84,8 +84,12 @@ pub fn is_on(store: &Store) -> bool {
     store.load_or_default::<General>().is_ok_and(|g| g.debug)
 }
 
-/// Whether `exe`, the program in focus, is this CargoFrame.
-pub fn is_me(exe: Option<&str>) -> bool {
+/// Whether the program in focus is this CargoFrame: its process (exact, whatever form the path
+/// takes), else the same program file.
+pub fn is_me(pid: Option<u32>, exe: Option<&str>) -> bool {
+    if pid == Some(std::process::id()) {
+        return true;
+    }
     let (Some(exe), Ok(me)) = (exe, std::env::current_exe()) else {
         return false;
     };
@@ -106,8 +110,8 @@ fn same_program(a: &Path, b: &Path) -> bool {
 }
 
 /// What was on screen, when this capture is of CargoFrame itself and debug mode is on.
-pub fn view_for(store: &Store, exe: Option<&str>) -> Option<View> {
-    if !is_me(exe) || !is_on(store) {
+pub fn view_for(store: &Store, pid: Option<u32>, exe: Option<&str>) -> Option<View> {
+    if !is_me(pid, exe) || !is_on(store) {
         return None;
     }
     Some(last().unwrap_or_default())
@@ -173,6 +177,144 @@ pub fn rule_names(store: &Store) -> Vec<String> {
                 .collect()
         })
         .unwrap_or_default()
+}
+
+// ── setting it up with one button ──
+
+/// The layout and the shortcut the setup makes, under these ids.
+pub const REPORT_ID: &str = "cargoframe-report";
+/// Keys tried for the shortcut, the first no other shortcut uses: rarely taken by programs.
+const KEYS: [&str; 3] = [
+    "Ctrl+Alt+Shift+F12",
+    "Ctrl+Alt+Shift+F11",
+    "Ctrl+Alt+Shift+F10",
+];
+
+/// What the System page shows under debug mode.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct Setup {
+    /// The GitHub connections a report can go to: id and name.
+    pub github: Vec<(String, String)>,
+    /// The bug report layout is there.
+    pub layout: bool,
+    /// The shortcut that opens it, and its keys (empty: the tray menu only).
+    pub shortcut: Option<String>,
+}
+
+fn to_json(v: &impl Serialize) -> serde_json::Value {
+    serde_json::to_value(v).unwrap_or_default()
+}
+
+fn github_connections(store: &Store) -> Vec<(String, String)> {
+    store
+        .load_all::<cargoframe_connectors::Connection>(Kind::Connections)
+        .map(|l| {
+            l.items
+                .into_iter()
+                .filter(|(_, c)| {
+                    c.enabled
+                        && matches!(
+                            c.settings,
+                            cargoframe_connectors::model::Settings::Github(_)
+                        )
+                })
+                .map(|(id, c)| {
+                    let name = if c.name.trim().is_empty() {
+                        id.clone()
+                    } else {
+                        c.name
+                    };
+                    (id, name)
+                })
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+pub fn setup_status(store: &Store) -> Setup {
+    Setup {
+        github: github_connections(store),
+        layout: store
+            .load_item::<Layout>(Kind::Layouts, REPORT_ID)
+            .ok()
+            .flatten()
+            .is_some(),
+        shortcut: store
+            .load_item::<cargoframe_config::Trigger>(Kind::Triggers, REPORT_ID)
+            .ok()
+            .flatten()
+            .map(|t| t.shortcut),
+    }
+}
+
+/// Make what reporting a problem needs, keeping what is there: the *CargoFrame bug report*
+/// layout for a GitHub connection (`connection`, or the only one), and a shortcut that opens it
+/// on the window in focus, with keys no other shortcut uses.
+pub fn setup(store: &Store, connection: Option<&str>) -> Result<Setup, String> {
+    let github = github_connections(store);
+    let connection =
+        match connection.filter(|c| !c.trim().is_empty()) {
+            Some(c) if github.iter().any(|(id, _)| id == c) => c.to_string(),
+            Some(_) => return Err(t("That GitHub connection does not exist").into()),
+            None => match github.as_slice() {
+                [] => return Err(t(
+                    "Add a GitHub connection first (Connections): the report is a GitHub issue.",
+                )
+                .into()),
+                [(id, _)] => id.clone(),
+                _ => return Err(t("Choose the GitHub connection the reports go to").into()),
+            },
+        };
+    if store
+        .load_item::<Layout>(Kind::Layouts, REPORT_ID)
+        .ok()
+        .flatten()
+        .is_none()
+    {
+        let layout = cargoframe_layout::templates::build(REPORT_ID, Some(&connection))
+            .ok_or(t("The bug report template could not be built"))?;
+        crate::items::save(
+            store,
+            crate::items::ItemKind::Layout,
+            REPORT_ID,
+            to_json(&layout),
+        )?;
+    }
+    if store
+        .load_item::<cargoframe_config::Trigger>(Kind::Triggers, REPORT_ID)
+        .ok()
+        .flatten()
+        .is_none()
+    {
+        let taken: Vec<String> = store
+            .load_all::<cargoframe_config::Trigger>(Kind::Triggers)
+            .map(|l| {
+                l.items
+                    .into_iter()
+                    .map(|(_, t)| t.shortcut.to_lowercase())
+                    .collect()
+            })
+            .unwrap_or_default();
+        let keys = KEYS
+            .iter()
+            .find(|k| !taken.contains(&k.to_lowercase()))
+            .map(|k| k.to_string())
+            .unwrap_or_default();
+        let trigger = cargoframe_config::Trigger {
+            name: t("Report a CargoFrame problem").to_string(),
+            shortcut: keys,
+            capture: cargoframe_config::CaptureMode::ActiveWindow,
+            layout_id: Some(REPORT_ID.to_string()),
+            ..Default::default()
+        };
+        crate::items::save(
+            store,
+            crate::items::ItemKind::Trigger,
+            REPORT_ID,
+            to_json(&trigger),
+        )?;
+    }
+    Ok(setup_status(store))
 }
 
 /// The end of the log kept, enough to see what led to the problem.
@@ -241,8 +383,7 @@ fn tail_of(path: &Path, max: u64) -> Option<Vec<u8>> {
 
 /// Add the files to the first Files block of a capture of CargoFrame, ticked.
 pub fn attach(store: &Store, workspace: &Workspace, session: &mut Session) {
-    let exe = session.view.app.as_ref().and_then(|a| a.exe_path.clone());
-    let Some(view) = view_for(store, exe.as_deref()) else {
+    let Some(view) = session.debug.clone() else {
         return;
     };
     let Some(block) = session
@@ -325,9 +466,14 @@ mod tests {
     #[test]
     fn only_this_program_is_cargoframe() {
         let me = std::env::current_exe().unwrap();
-        assert!(is_me(Some(&me.display().to_string())));
-        assert!(!is_me(Some("/usr/bin/firefox")));
-        assert!(!is_me(None));
+        assert!(is_me(None, Some(&me.display().to_string())));
+        // the process is enough, whatever form the path takes
+        assert!(is_me(
+            Some(std::process::id()),
+            Some(r"\\?\C:\elsewhere\cargoframe.exe")
+        ));
+        assert!(!is_me(Some(1), Some("/usr/bin/firefox")));
+        assert!(!is_me(None, None));
     }
 
     #[test]
@@ -339,5 +485,60 @@ mod tests {
         assert_eq!(tail_of(&p, 4).unwrap(), b"6789");
         assert_eq!(tail_of(&p, 100).unwrap(), b"0123456789");
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn one_button_makes_the_bug_report_layout_and_its_shortcut() {
+        use cargoframe_config::{Dirs, Trigger};
+        let dir = tempfile::tempdir().unwrap();
+        let store = Store::new(Dirs::under(dir.path()));
+        // no GitHub connection: it says what to do first
+        assert!(setup(&store, None)
+            .unwrap_err()
+            .contains("GitHub connection"));
+        let gh =
+            serde_json::json!({"name": "CargoFrame repo", "kind": "github", "repository": "a/b"});
+        crate::items::save(&store, crate::items::ItemKind::Connection, "gh", gh).unwrap();
+        // a shortcut already on the first keys: the next ones are taken
+        let other = Trigger {
+            name: "Mine".into(),
+            shortcut: "Ctrl+Alt+Shift+F12".into(),
+            ..Default::default()
+        };
+        crate::items::save(
+            &store,
+            crate::items::ItemKind::Trigger,
+            "mine",
+            to_json(&other),
+        )
+        .unwrap();
+
+        let done = setup(&store, None).unwrap();
+        assert_eq!(
+            done.github,
+            [("gh".to_string(), "CargoFrame repo".to_string())]
+        );
+        assert!(done.layout);
+        assert_eq!(done.shortcut.as_deref(), Some("Ctrl+Alt+Shift+F11"));
+        let t: Trigger = store.load_item(Kind::Triggers, REPORT_ID).unwrap().unwrap();
+        assert_eq!(t.layout_id.as_deref(), Some(REPORT_ID));
+        let l: Layout = store.load_item(Kind::Layouts, REPORT_ID).unwrap().unwrap();
+        assert!(l.blocks.iter().any(|b| matches!(&b.kind,
+            cargoframe_layout::BlockKind::SharingButton(s) if s.connection_id.as_deref() == Some("gh"))));
+
+        // pressed again: what is there is kept, the person's changes too
+        let mut renamed = t.clone();
+        renamed.shortcut = "Ctrl+Shift+B".into();
+        crate::items::save(
+            &store,
+            crate::items::ItemKind::Trigger,
+            REPORT_ID,
+            to_json(&renamed),
+        )
+        .unwrap();
+        assert_eq!(
+            setup(&store, None).unwrap().shortcut.as_deref(),
+            Some("Ctrl+Shift+B")
+        );
     }
 }

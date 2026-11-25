@@ -76,9 +76,11 @@ export function groupOf(name: string): string {
   if (name.startsWith('project.')) return msg('Project');
   if (name.startsWith('capture.')) return msg('Capture');
   if (name.startsWith('rule.')) return msg('From files');
+  if (name.startsWith('system.')) return msg('This computer');
+  if (name.startsWith('cargoframe.')) return msg('CargoFrame (debug mode)');
   return msg('Other');
 }
-export const GROUPS = ['Program', 'Project', 'Capture', 'From files', 'In the text', 'Other'];
+export const GROUPS = ['Program', 'Project', 'Capture', 'From files', 'This computer', 'CargoFrame (debug mode)', 'In the text', 'Other'];
 /** The values most texts use, as a group of the list. */
 export const MOST_USED = msg('Most used');
 

@@ -10,6 +10,10 @@ those is true for each piece.
 
 - **Unit and integration tests:** about 1,110 Rust tests and 650 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
+- **0.7.2 (25 Nov, after a first try of debug mode):** a capture of this process in debug mode filling the bug
+  report's title, description, labels and files (`session_tests.rs`); the one-button setup, keeping what is there
+  (`debug.rs`, `System.test.ts`); `{system.…}` and `{cargoframe.…}` read in the short form (`template.rs`);
+  the language check reading texts split by rustfmt (46 more translated).
 - **0.7.2 (25 Nov):** the sign-in entry pointed at the installed copy and a machine entry for another copy
   removed, or named in Preferences (`autostart.rs`, `Preferences.test.ts`); a value of several parts, the same
   in Rust and the window, on ffmpeg's lines (`find.rs`, `pick.test.ts`); the grips (`FileViewer.test.ts`) and a
