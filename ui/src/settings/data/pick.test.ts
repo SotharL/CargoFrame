@@ -124,3 +124,15 @@ describe('the label before a selection', () => {
     expect(labelBefore('12 34', 3)).toBe('');
   });
 });
+
+// The cases core/rules/src/find.rs runs too: what the window shows is what a capture reads.
+import cases from '../../../../core/rules/tests/pick_cases.json';
+
+describe('the cases shared with the program (core/rules/tests/pick_cases.json)', () => {
+  it('has them', () => expect(cases.cases.length).toBeGreaterThanOrEqual(10));
+  for (const c of cases.cases) {
+    it(c.name, () => {
+      expect(hits(linesOf(c.text), c.find as Parameters<typeof hits>[1]).map((h) => h.value)).toEqual(c.values);
+    });
+  }
+});

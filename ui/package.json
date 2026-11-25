@@ -8,6 +8,7 @@
     "build": "vite build",
     "check": "svelte-check --tsconfig ./tsconfig.json",
     "test": "vitest run",
+    "overflow": "node scripts/overflow-check.mjs",
     "tauri": "tauri"
   },
   "devDependencies": {
@@ -16,6 +17,7 @@
     "@testing-library/svelte": "^5.4.2",
     "@tsconfig/svelte": "^5.0.8",
     "jsdom": "^29.1.1",
+    "playwright-core": "^1.57.0",
     "svelte": "^5.57.2",
     "svelte-check": "^4.7.7",
     "typescript": "^6.0.3",

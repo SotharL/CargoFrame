@@ -1397,6 +1397,18 @@ impl Recording {
             recorder.keep(Box::new(p));
         }
         let sound = !cfg.audio.is_empty();
+        // what this recording is, for the log a bug report attaches: a crash or a slow PC is
+        // explained by the size, the capture and the encoder
+        tracing::info!(
+            capture = capture_name(choice.capture),
+            encoder = encoder_name(choice.encoder),
+            fps = cfg.fps,
+            max_pixels = cfg.max_pixels,
+            area = ?cfg.area.map(|a| (a.x, a.y, a.w, a.h)),
+            screens = ?extras.screens.map(|s| (s.count, s.main_width, s.main_height)),
+            sound,
+            "recording started"
+        );
         *slot = Slot::Running(Box::new(Active {
             recorder,
             found,
@@ -1534,7 +1546,14 @@ fn finish(active: Active) -> Trial {
         keep_secs,
         began,
     } = active;
-    let fail = |m: String| Trial::failed(format!("{m}{}", hint(&choice)), Some(&choice));
+    let fail = |m: String| {
+        tracing::warn!(
+            capture = capture_name(choice.capture),
+            encoder = encoder_name(choice.encoder),
+            "recording failed: {m}"
+        );
+        Trial::failed(format!("{m}{}", hint(&choice)), Some(&choice))
+    };
     let ring = work.join("ring");
     let ran = recorder.elapsed();
     let segments = match recorder.stop(Duration::from_secs(10)) {
@@ -1557,6 +1576,14 @@ fn finish(active: Active) -> Trial {
     };
     let bytes = std::fs::metadata(&clip).map(|m| m.len()).unwrap_or(0);
     let took_ms = u64::try_from(began.elapsed().as_millis()).unwrap_or(u64::MAX);
+    tracing::info!(
+        duration_ms = info.duration_ms,
+        width = info.width,
+        height = info.height,
+        bytes,
+        ran_ms = u64::try_from(ran.as_millis()).unwrap_or(u64::MAX),
+        "recording stopped"
+    );
     let mut message = format!(
         "Recorded {:.1} s at {}×{} with {} and {}.",
         info.duration_ms as f64 / 1000.0,

@@ -82,7 +82,10 @@
   .text:has(.inside) { grid-template-rows: 1fr auto; }
   .text:has(.tools) { grid-template-rows: auto auto 1fr auto; }
   .text:has(.tools):has(.inside) { grid-template-rows: auto 1fr auto; }
-  .tools { display: flex; flex-wrap: wrap; gap: 4px; }
+  /* One row, scrolled sideways in a narrow block: wrapped onto a second row, it took the text's
+     room in a small window (the overflow check, 0.7.3). */
+  .tools { display: flex; flex-wrap: nowrap; gap: 4px; overflow-x: auto; scrollbar-width: thin; }
+  .tools button { flex: none; }
   .tools button {
     min-width: 28px; height: 26px; padding: 0 6px; font-size: 12.5px; line-height: 1;
     border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface); color: inherit; cursor: pointer;
@@ -114,4 +117,6 @@
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
   /* The first row keeps room at its end for the dots of the sharing buttons (App sets --corner). */
   .text > :first-child:not(.field) { padding-right: var(--corner, 0px); }
+  /* a row that scrolls keeps that room outside itself, so no button goes under the dots */
+  .text > .tools:first-child { padding-right: 0; margin-right: var(--corner, 0px); }
 </style>

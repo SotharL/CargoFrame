@@ -1412,6 +1412,7 @@ pub fn run(
     };
     let timeout = Duration::from_secs(u64::from(safe.timeout_secs));
     let progress = Progress::new();
+    let began = std::time::Instant::now();
 
     let RetryResult { result, attempts } = {
         let mut op = |_attempt: u32| {
@@ -1434,6 +1435,7 @@ pub fn run(
             tracing::info!(
                 connection = %connection_id,
                 attempts,
+                ms = began.elapsed().as_millis() as u64,
                 "share sent"
             );
             // A share to an existing Claude chat makes it the most recent one.
@@ -1454,8 +1456,10 @@ pub fn run(
             tracing::warn!(
                 connection = %connection_id,
                 attempts,
+                ms = began.elapsed().as_millis() as u64,
                 failure = err.kind.label(),
-                "share failed"
+                "share failed: {}",
+                err.message
             );
             let reconnect = err.kind.needs_reconnect();
             if reconnect {

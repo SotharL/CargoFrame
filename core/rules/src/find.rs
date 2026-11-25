@@ -642,4 +642,39 @@ mod tests {
         assert!(check(&pick_find("", true, Some("["))).is_ok());
         assert!(check(&pick_find("GPU:", false, None)).is_ok());
     }
+
+    /// The cases the window runs too (`ui/src/settings/data/pick.test.ts`): the two read alike.
+    #[test]
+    fn the_cases_shared_with_the_window() {
+        #[derive(serde::Deserialize)]
+        struct Case {
+            name: String,
+            text: String,
+            find: Find,
+            values: Vec<String>,
+        }
+        #[derive(serde::Deserialize)]
+        struct Cases {
+            cases: Vec<Case>,
+        }
+        let all: Cases = serde_json::from_str(include_str!("../tests/pick_cases.json")).unwrap();
+        assert!(all.cases.len() >= 10);
+        for c in all.cases {
+            let Find::Pick {
+                lines_with,
+                from_line_start,
+                stop,
+                then,
+            } = &c.find
+            else {
+                panic!("{}: not a pick", c.name);
+            };
+            assert_eq!(
+                picked(&c.text, lines_with, *from_line_start, stop.as_deref(), then),
+                c.values,
+                "{}",
+                c.name
+            );
+        }
+    }
 }

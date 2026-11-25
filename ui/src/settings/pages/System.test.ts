@@ -29,6 +29,17 @@ describe('System', () => {
     expect(screen.getByText(/press Ctrl\+Alt\+Shift\+F12/)).toBeTruthy();
   });
 
+  it('checks this PC and lists each step with how it went', async () => {
+    setApiForTests(memoryApi({ general: { debug: true } }));
+    render(About);
+    await fireEvent.click(await screen.findByRole('button', { name: 'Check this PC' }));
+    const steps = await screen.findByRole('list', { name: 'What was checked' });
+    expect(steps.textContent).toContain('A 3-second recording');
+    expect(steps.querySelector('li.warn')?.textContent).toContain('Another copy starts at sign-in');
+    expect(screen.getByRole('button', { name: 'Check this PC again' })).toBeTruthy();
+    expect(screen.getByText('Kept for the next bug report')).toBeTruthy();
+  });
+
   it('asks for a GitHub connection first when there is none', async () => {
     setApiForTests(memoryApi({ general: { debug: true }, github: [] }));
     render(About);

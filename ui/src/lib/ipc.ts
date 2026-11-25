@@ -9,7 +9,7 @@ import type {
   FileEntry,
   LogText,
   ValuesPreview, SampleFiles, SampleText,
-  LanguageInfo,
+  LanguageInfo, PcCheck, PcCheckStep,
 } from './types';
 import { LANGUAGES, resolve as resolveLanguage } from './i18n/index.svelte';
 import { DEMO_SAMPLES, demoValues } from './demoSamples';
@@ -44,6 +44,8 @@ export interface Api {
   debugSetupStatus(): Promise<DebugSetup>;
   /** Make the bug report layout and its shortcut (what is there is kept). */
   setupDebugReport(connectionId?: string): Promise<DebugSetup>;
+  /** *Check this PC*: the real tests on this computer, kept as a report. */
+  checkThisPc(): Promise<PcCheck>;
   setAutostart(enabled: boolean): Promise<void>;
   /** Other programs Windows starts as CargoFrame at sign-in (an older copy). */
   autostartOthers(): Promise<string[]>;
@@ -229,6 +231,7 @@ async function tauriApi(): Promise<Api> {
     reportView: (view) => invoke('report_view', { view }),
     debugSetupStatus: () => invoke<DebugSetup>('debug_setup_status'),
     setupDebugReport: (connectionId) => invoke<DebugSetup>('setup_debug_report', { connectionId: connectionId ?? null }),
+    checkThisPc: () => invoke<PcCheck>('check_this_pc'),
     setAutostart: (enabled) => invoke('set_autostart', { enabled }),
     autostartOthers: () => invoke<string[]>('autostart_others'),
     removeAutostartOthers: () => invoke<string[]>('remove_autostart_others'),
@@ -774,6 +777,17 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       if (!connectionId && github.length > 1) throw new Error('Choose the GitHub connection the reports go to');
       debugSetup = { ...debugSetup, layout: true, shortcut: debugSetup.shortcut ?? 'Ctrl+Alt+Shift+F12' };
       return { ...debugSetup };
+    },
+    checkThisPc: async () => {
+      const steps: PcCheckStep[] = [
+        { id: 'system', name: 'This computer', outcome: 'ok', detail: 'Windows 11 Pro 24H2 · AMD Ryzen 7 · 32 GB · NVIDIA GeForce RTX 4070 (32.0.15.6094) · 3 screens', ms: 0 },
+        { id: 'screenshot', name: 'A screenshot of every screen', outcome: 'ok', detail: '5760 × 1080 pixels', ms: 48 },
+        { id: 'ffmpeg', name: 'ffmpeg', outcome: 'ok', detail: 'C:/Users/Ana/AppData/Local/CargoFrame/tools/ffmpeg/bin/ffmpeg.exe', ms: 120 },
+        { id: 'recording', name: 'A 3-second recording', outcome: 'ok', detail: 'Recorded 3.0 s at 3324×622 with the graphics card and NVIDIA. (3412 ms, 912 KB)', ms: 3412 },
+        { id: 'sign_in', name: 'Starting when you sign in', outcome: 'warn', detail: 'Another copy starts at sign-in: C:/dev/CargoFrame/target/release/cargoframe.exe', ms: 1 },
+        { id: 'credentials', name: 'The credential store', outcome: 'ok', detail: 'A token is kept and read back', ms: 12 },
+      ];
+      return { steps, report: '# CargoFrame check of this PC\n', saved: 'C:/Users/Ana/AppData/Local/CargoFrame/logs/pc-check.md' };
     },
     setAutostart: async (enabled) => {
       autostart = enabled;

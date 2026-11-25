@@ -11,7 +11,7 @@
   import Toggle from '../../lib/components/Toggle.svelte';
   import { setDebug } from '../../lib/debugView';
   import { getApi } from '../../lib/ipc';
-  import type { DebugSetup, General, MemoryMode } from '../../lib/types';
+  import type { DebugSetup, General, MemoryMode, PcCheck } from '../../lib/types';
   import { go } from '../route.svelte';
 
   let general = $state<General | null>(null);
@@ -31,6 +31,28 @@
   async function loadSetup() {
     setup = await (await getApi()).debugSetupStatus().catch(() => null);
     reportTo = setup?.github[0]?.[0] ?? '';
+  }
+
+  // *Check this PC*: the real tests run on this computer, the report kept for the bug report
+  let pc = $state<PcCheck | null>(null);
+  let checking = $state(false);
+  let copied = $state(false);
+
+  async function checkPc() {
+    checking = true;
+    copied = false;
+    try {
+      pc = await (await getApi()).checkThisPc();
+    } catch (e) {
+      setupProblem = String(e).replace(/^Error: /, '');
+    }
+    checking = false;
+  }
+
+  async function copyReport() {
+    if (!pc) return;
+    await navigator.clipboard?.writeText(pc.report).catch(() => {});
+    copied = true;
   }
 
   async function setUp() {
@@ -132,6 +154,29 @@
           {/if}
           {#if setupProblem}<p class="problem small" role="alert">{setupProblem}</p>{/if}
         </div>
+        <div class="report pc" data-tour="system.debug.check">
+          <p class="small">
+            {t('Check this PC tries what only this computer can show: a screenshot of every screen, a 3-second recording, the apps CargoFrame uses, starting when you sign in, the credential store and the shortcuts. The report goes with the next bug report.')}
+          </p>
+          <button type="button" disabled={checking} onclick={checkPc}>
+            {checking ? t('Checking… (about 10 seconds)') : pc ? t('Check this PC again') : t('Check this PC')}
+          </button>
+          {#if pc}
+            <ul class="steps" aria-label={t('What was checked')}>
+              {#each pc.steps as s (s.id)}
+                <li class={s.outcome}>
+                  <span class="mark" aria-label={s.outcome === 'ok' ? t('Works') : s.outcome === 'warn' ? t('Works, with something to know') : t('Does not work')}>{s.outcome === 'ok' ? '✓' : s.outcome === 'warn' ? '!' : '✗'}</span>
+                  <span class="what"><b>{s.name}</b> <span class="quiet">{s.detail}</span></span>
+                  <span class="quiet ms">{s.ms} ms</span>
+                </li>
+              {/each}
+            </ul>
+            <p class="links small">
+              <button type="button" class="link" onclick={copyReport}>{copied ? t('Copied') : t('Copy the report')}</button>
+              {#if pc.saved}<span class="quiet" title={pc.saved}>{t('Kept for the next bug report')}</span>{/if}
+            </p>
+          {/if}
+        </div>
       {/if}
     </Section>
   {/if}
@@ -147,4 +192,12 @@
   .links { display: flex; gap: 14px; }
   .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
   .problem { color: var(--err); }
+  .steps { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; width: 100%; font-size: 12.5px; }
+  .steps li { display: grid; grid-template-columns: 18px minmax(0, 1fr) auto; gap: 8px; align-items: baseline; }
+  .steps .what { min-width: 0; overflow-wrap: anywhere; }
+  .steps .mark { font-weight: 700; text-align: center; }
+  .steps .ok .mark { color: var(--ok); }
+  .steps .warn .mark { color: var(--warn); }
+  .steps .fail .mark { color: var(--err); }
+  .steps .ms { font-variant-numeric: tabular-nums; }
 </style>

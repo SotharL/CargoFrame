@@ -25,6 +25,21 @@ export interface DebugSetup {
   shortcut: string | null;
 }
 
+/** *Check this PC* (debug mode): each step tried on the computer (app/src/pc_check.rs). */
+export interface PcCheckStep {
+  id: string;
+  name: string;
+  outcome: 'ok' | 'warn' | 'fail';
+  detail: string;
+  ms: number;
+}
+export interface PcCheck {
+  steps: PcCheckStep[];
+  /** The report, as kept in the log folder (Markdown). */
+  report: string;
+  saved: string | null;
+}
+
 /** What a CargoFrame window shows, sent in debug mode (lib/debugView.ts, app/src/debug.rs). */
 export interface DebugView {
   window: 'settings' | 'capture';

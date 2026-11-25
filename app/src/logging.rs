@@ -22,8 +22,15 @@ pub fn init(dirs: &Dirs) {
         _ => builder.with_writer(std::io::stderr).init(),
     }
 
+    // A panic is written with its thread and where it came from: the log is what a bug report
+    // attaches (debug mode), and a crash on someone's PC is read from it.
     std::panic::set_hook(Box::new(|info| {
-        tracing::error!("panic: {info}");
+        let thread = std::thread::current();
+        let backtrace = std::backtrace::Backtrace::force_capture();
+        tracing::error!(
+            thread = thread.name().unwrap_or("unnamed"),
+            "panic: {info}\n{backtrace}"
+        );
     }));
 }
 

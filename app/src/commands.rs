@@ -197,6 +197,12 @@ pub fn setup_debug_report(
     Ok(done)
 }
 
+/// Debug mode: *Check this PC*: the real tests on this computer, kept as a report.
+#[tauri::command]
+pub async fn check_this_pc(app: AppHandle) -> Result<crate::pc_check::Check, String> {
+    blocking(move || crate::pc_check::run(&app)).await
+}
+
 /// Debug mode: what a window shows now (it only sends while the mode is on).
 #[tauri::command]
 pub fn report_view(view: crate::debug::View) {
@@ -760,6 +766,11 @@ fn wants_claude_app(state: &AppState, os: video::Os) -> bool {
 }
 
 /// What the System page shows: the apps CargoFrame leans on, and what the one button does.
+/// What the System page shows of the apps CargoFrame leans on (also *Check this PC*).
+pub fn setup_report(app: &AppHandle) -> crate::setup::Report {
+    current_setup(app)
+}
+
 fn current_setup(app: &AppHandle) -> crate::setup::Report {
     let state = app.state::<AppState>();
     let installer = app.state::<crate::setup::Installer>();

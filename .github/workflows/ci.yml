@@ -44,6 +44,8 @@ jobs:
       - name: Size gate (per-window JavaScript budget)
         working-directory: .
         run: node scripts/ci/check-budgets.mjs ui/dist
+      - name: Overflow check (every page in Chrome, small and large, light and dark)
+        run: node scripts/overflow-check.mjs
       - name: Report bundle size
         run: |
           echo "### UI bundle size (gzip)" >> "$GITHUB_STEP_SUMMARY"

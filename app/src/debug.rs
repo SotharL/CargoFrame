@@ -356,6 +356,10 @@ pub fn files(store: &Store, view: &View) -> Vec<(String, Vec<u8>)> {
     if let Some(tail) = tail_of(&store.dirs().logs().join("cargoframe.log"), LOG_TAIL) {
         out.push(("cargoframe.log".to_string(), tail));
     }
+    // the last *Check this PC*, when there is one: what works on this computer
+    if let Ok(report) = std::fs::read(store.dirs().logs().join(crate::pc_check::REPORT)) {
+        out.push((crate::pc_check::REPORT.to_string(), report));
+    }
     out
 }
 

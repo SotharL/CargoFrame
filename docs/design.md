@@ -166,6 +166,12 @@ version. Setting it up is one button under the switch, *Set up the bug report*: 
 another shortcut has it), both kept as they are when pressed again. `{system.…}` and `{cargoframe.…}` are written in
 the short form like the capture's own values (`core/context/src/template.rs` lists the groups).
 
+**Check this PC** (0.7.3), under the switch, tries on the PC itself what CI cannot: the computer's details, a
+screenshot of every screen, the apps CargoFrame uses, a 3-second recording, the sign-in entry, the credential store
+(a token kept and read back), the shortcuts, the settings folder and the web view, each timed, with a mark (works,
+works with something to know, does not work). The report is kept in the log folder (`pc-check.md`), and the next bug
+report attaches it (`app/src/pc_check.rs`).
+
 </details>
 
 <details>
@@ -362,7 +368,7 @@ service are grouped under *Connect a service*, below the others.
 | | **Recording** | What shows on screen while recording (the outline and dot), how long a clip is, continuous recording, following a window that is moved, where ffmpeg is, capture and compression (Automatic picks the cheapest that works), a 5-second test |
 | CargoFrame | **Preferences** | Language (its dropdown on the title's line; the computer's by default; English, French, Spanish, Italian, German), appearance (theme, accent colour), notifications (each kind on or off, with a link to the recording sign), starting with the computer (the person's own sign-in entry; an older copy the machine starts instead is named, with *Stop the older copy*) |
 | | **Files & backup** | When a share fails (the folder for saved zips, retries), export and import (and deleting the items ticked, after naming them and the shortcuts they leave with no layout), what is kept on this computer (clear each kind, forget the remembered choices) and *Reset CargoFrame* |
-| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing) and ffmpeg's own *Download* / *Update* button, updates and the version (checked against the installer under either of its names, once a day after a day has passed when that is on), windows kept ready, *Debug mode* (off: see *Debug mode* in §2), speed and memory |
+| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing) and ffmpeg's own *Download* / *Update* button, updates and the version (checked against the installer under either of its names, once a day after a day has passed when that is on), windows kept ready, *Debug mode* (off: see *Debug mode* in §2; with it, *Set up the bug report* and *Check this PC*), speed and memory |
 
 | Connections | Layout builder | Shortcut |
 |:---:|:---:|:---:|
@@ -444,7 +450,7 @@ and is migrated with a backup. **Secrets are never in these files**: they are in
 |------|---------------|--------|
 | Safety | No telemetry. Secrets only in the credential store. Files read only inside the project folder where a rule allows. Every request is HTTPS to an address the person set. Text from a screen or file never reaches a command line | [security.md](security.md) |
 | Performance | Tray-only under 40 MB; capture under 150 ms; each window under 250 KB of script. Three memory modes: balanced, low memory, always warm | [performance.md](performance.md) |
-| Testing | Rust unit and integration tests, connectors against mock servers; UI tests on an in-memory backend; a real capture on a virtual X11 screen; installer install, upgrade, uninstall and click test; guides checked against real fields | [development plan](development-plan.md#7-testing-and-quality-gates) |
+| Testing | Rust unit and integration tests, connectors against mock servers; UI tests on an in-memory backend; every page and the CargoFrame window opened in Chrome, small and large, light and dark, failing when something sticks out of its box (the overflow check); the copies of Rust lists in the window compared; a real capture on a virtual X11 screen; installer install, upgrade, uninstall and click test; guides checked against real fields | [development plan](development-plan.md#7-testing-and-quality-gates) |
 
 </details>
 
