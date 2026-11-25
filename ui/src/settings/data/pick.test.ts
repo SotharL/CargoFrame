@@ -69,3 +69,58 @@ describe('a value picked in a file', () => {
     expect(linesOf('a\r\nb\n')).toEqual(['a', 'b']);
   });
 });
+
+describe('a value of several parts (as core/rules find.rs)', () => {
+  const ffmpeg = linesOf(
+    '  Stream #0:0: Video: h264 (avc1 / 0x31637661), 1920x1080\n' +
+      '    Metadata:\n' +
+      '      encoder         : Lavc58.134.100 libopenh264\n' +
+      '  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s\n' +
+      '    Metadata:\n' +
+      '      encoder         : Lavc58.134.100 aac\n' +
+      'frame=    1 fps=0.0\n',
+  );
+  const next = (joined_by: string, lines_with: string) => ({ joined_by, lines_with });
+
+  it('takes the next part found after the first, joined', () => {
+    const [h] = hits(ffmpeg, { type: 'pick', lines_with: 'Stream #0:1:', stop: null, then: [next(' - ', 'encoder         :')] });
+    expect(h!.value).toBe('Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s - Lavc58.134.100 aac');
+    expect(h!.parts.map((p) => p.line)).toEqual([3, 5]);
+    const [v] = hits(ffmpeg, { type: 'pick', lines_with: 'Stream #0:0:', stop: ',', then: [next('\n', 'encoder         :')] });
+    expect(v!.value).toBe('Video: h264 (avc1 / 0x31637661)\nLavc58.134.100 libopenh264');
+  });
+
+  it('looks later on the same line, leaves out a part not found, and takes the line below', () => {
+    const [h] = hits(ffmpeg, { type: 'pick', lines_with: 'frame=', stop: ' ', then: [next(' at ', 'fps='), next(', ', 'speed=')] });
+    expect(h!.value).toBe('1 at 0.0');
+    const [b] = hits(ffmpeg, { type: 'pick', lines_with: 'Stream #0:1:', stop: ':', then: [{ joined_by: ' / ', lines_with: '', from_line_start: true }] });
+    expect(b!.value).toBe('Audio / Metadata:');
+  });
+});
+
+describe('the stop a selection suggests', () => {
+  const line = '[2026.11.16-14.02.51:410][  0]LogAI: Spawned 30 crew on Harbor_P';
+  const at = (text: string) => [line.indexOf(text), line.indexOf(text) + text.length] as const;
+
+  it('is what follows it, a sign or a space', () => {
+    expect(suggest(line, ...at('Spawned')).stop).toBe(' ');
+    expect(suggest(line, ...at('2026')).stop).toBe('.');
+  });
+
+  it('is longer when what follows is in the selection too, so the same text is found again', () => {
+    const [s, e] = at('Spawned 30 crew');
+    const p = suggest(line, s, e);
+    expect(p.stop).toBe(' on');
+    expect(hits([line], p)[0]!.value).toBe('Spawned 30 crew');
+    expect(suggest(line, ...at('Spawned 30 crew on Harbor_P')).stop).toBeNull();
+  });
+});
+
+describe('the label before a selection', () => {
+  it('takes the word before a label with no letter', () => {
+    const line = '  Stream #0:1: Audio: aac (LC)';
+    expect(labelBefore(line, line.indexOf('Audio'))).toBe('Stream #0:1:');
+    expect(labelBefore('      encoder         : Lavc58', 24)).toBe('encoder         :');
+    expect(labelBefore('12 34', 3)).toBe('');
+  });
+});

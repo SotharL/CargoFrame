@@ -5,6 +5,7 @@
   import Field from '../../lib/components/Field.svelte';
   import TimeFormatField from '../../lib/components/TimeFormatField.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
+  import Icon from '../../lib/components/Icon.svelte';
   import LookInEditor from './LookInEditor.svelte';
   import TextAutomation from './TextAutomation.svelte';
   import SharingPanel from './SharingPanel.svelte';
@@ -373,6 +374,15 @@
           <li>
             <input type="text" aria-label={t('Name of tab {n}', { n: i + 1 })} bind:value={item.name} placeholder={t('Tab {n}', { n: i + 1 })} />
             <span class="quiet small">{(item.blocks ?? []).length === 1 ? "1 block" : `${(item.blocks ?? []).length} blocks`}</span>
+            <button
+              type="button"
+              class="lock"
+              class:on={item.locked}
+              aria-pressed={item.locked === true}
+              aria-label={item.locked ? t('Unlock {name}', { name: item.name || t('Tab {n}', { n: i + 1 }) }) : t('Lock {name}', { name: item.name || t('Tab {n}', { n: i + 1 }) })}
+              title={item.locked ? t('Unlock: its blocks can be moved again') : t('Lock: its blocks stay where they are')}
+              onclick={() => { if (item.locked) delete item.locked; else item.locked = true; }}
+            ><Icon name={item.locked ? 'lock' : 'unlock'} size={14} /></button>
           </li>
         {/each}
       </ol>
@@ -597,5 +607,7 @@
   .tablist li { display: flex; gap: 8px; align-items: center; }
   .tablist input { flex: 1; min-width: 0; }
   .tablist .small { flex: none; font-size: 12px; }
+  .tablist .lock { flex: none; display: inline-flex; padding: 4px 6px; color: var(--quiet); }
+  .tablist .lock.on { color: var(--accent); border-color: var(--accent); }
   .tabcount { display: flex; gap: 6px; margin-top: 6px; }
 </style>

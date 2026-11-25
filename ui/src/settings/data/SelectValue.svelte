@@ -3,8 +3,10 @@
   // New value: select it in a file. The selection suggests how to find it again (in the lines with
   // the label before it, up to what follows it); the person can change each part and sees at once
   // what each file gives. Saving adds the value to the rule of each ticked file (values.ts).
+  // The selection's ends have grips to widen or narrow it, and *Add a next part* joins a text
+  // found after it (lower on the same line or below: ffmpeg's stream and its encoder) to it.
   import { onMount, untrack } from 'svelte';
-  import type { RuleAcross, RuleValue, RuleWhich } from '../../lib/types';
+  import type { RuleAcross, RuleNext, RuleValue, RuleWhich } from '../../lib/types';
   import Choices from './Choices.svelte';
   import FileViewer, { type Sel } from './FileViewer.svelte';
   import { baseName, captureFiles, changedAt, closeKept, keepOpened, readCaptureFile, readDropped, withKept, type ViewFile } from './files';
@@ -50,7 +52,8 @@
   let name = $state(fixed.kind === 'add' ? fixed.name : fixed.kind === 'change' ? fixed.source.step.name : '');
   /** Files ticked or unticked by hand; the others follow what they give. */
   let ticks = $state<Record<string, boolean>>({});
-  let editing = $state<'anchor' | 'stop' | null>(null);
+  let editing = $state<'anchor' | 'stop' | 'next' | null>(null);
+  let partProblem = $state('');
   let busy = $state(false);
   let failure = $state('');
   let viewer = $state<ReturnType<typeof FileViewer> | null>(null);
@@ -121,6 +124,10 @@
 
   function onselect(file: string, line: number, s: number, e: number) {
     const text = fileOf(file)?.lines?.[line] ?? '';
+    if (editing === 'next' && sel && find) {
+      addPart(file, line, text, s, e);
+      return;
+    }
     if (editing && sel && find) {
       if (file !== sel.file || line !== sel.line) return;
       const p = snap(text, s, e, true);
@@ -142,10 +149,82 @@
     void loadOthers();
   }
 
+  /** The grips moved: the selection's ends (exactly where they are, no word taken whole), or,
+   *  while the text before the value is changed, that text's. */
+  function onadjust(file: string, line: number, s: number, e: number) {
+    if (!sel || file !== sel.file || line !== sel.line || !find) return;
+    const text = fileOf(file)?.lines?.[line] ?? '';
+    if (editing === 'anchor') {
+      if (e <= sel.s) find = { ...find, lines_with: text.slice(s, e), from_line_start: false };
+      return;
+    }
+    if (editing) return;
+    sel = { file, line, s, e };
+    find = { ...suggest(text, s, e), then: find?.then ?? [] };
+  }
+
+  /** A text selected after the value becomes its next part, when it is found after the part before. */
+  function addPart(file: string, line: number, text: string, s: number, e: number) {
+    const p = snap(text, s, e);
+    const f = fileOf(file);
+    if (!p || !find || !f?.lines) return;
+    const how = suggest(text, p.s, p.e);
+    const part: RuleNext = { joined_by: ' - ', lines_with: how.lines_with, from_line_start: how.from_line_start, stop: how.stop };
+    const then = [...(find.then ?? []), part];
+    const tried = { ...find, then };
+    const lands = hits(f.lines, tried).some((h) => {
+      const last = h.parts[h.parts.length - 1]!;
+      return h.parts.length === then.length + 1 && last.line === line && last.s === p.s && last.e === p.e;
+    });
+    if (!lands) {
+      partProblem = t('That text does not come after the part before it: select one lower in the file.');
+      return;
+    }
+    find = tried;
+    editing = null;
+    partProblem = '';
+  }
+
+  function setPart(i: number, change: Partial<RuleNext>) {
+    if (!find?.then) return;
+    find = { ...find, then: find.then.map((p, k) => (k === i ? { ...p, ...change } : p)) };
+  }
+
+  function removePart(i: number) {
+    if (!find?.then) return;
+    find = { ...find, then: find.then.filter((_, k) => k !== i) };
+  }
+
+  const JOINS = [
+    { value: ' - ', label: '“ - ”' },
+    { value: ', ', label: '“, ”' },
+    { value: ' ', label: t('a space') },
+    { value: '\n', label: t('a new line') },
+  ];
+  const joinsOf = (p: RuleNext) => (JOINS.some((j) => j.value === p.joined_by) ? JOINS : [...JOINS, { value: p.joined_by, label: q(p.joined_by) }]);
+  const partHow = (p: RuleNext) =>
+    p.from_line_start && !p.lines_with
+      ? t('the next line')
+      : p.from_line_start
+        ? t('the next line with {q}', { q: q(p.lines_with) })
+        : t('after the next {q}', { q: q(p.lines_with) });
+  const partStop = (p: RuleNext) => (!p.stop ? t('to the end of the line') : p.stop === ' ' ? t('up to a space') : t('up to {text}', { text: q(p.stop) }));
+
+  /** The text before the value on the selected line, while it is changed: what its grips hold. */
+  const anchorSpan = $derived.by(() => {
+    if (editing !== 'anchor' || !sel || !find?.lines_with) return null;
+    const k = selLine.lastIndexOf(find.lines_with, sel.s - find.lines_with.length);
+    return k < 0 ? null : { line: sel.line, s: k, e: k + find.lines_with.length };
+  });
+  /** How the value was found before a change began, for Cancel. */
+  let before = $state<Pick | null>(null);
+
   // what the shown file gives, for the marks
   const shownFile = $derived(fileOf(current));
   const found = $derived(find && shownFile?.lines ? hits(shownFile.lines, find) : []);
   const kept = $derived(choose(found, which));
+  // every part of each place, for the marks
+  const partsOf = (h: readonly Hit[]) => h.flatMap((x) => x.parts);
 
   // the choices, made from what the selection has around it
   const q = (t: string) => `“${t}”`;
@@ -213,14 +292,20 @@
   const canSave = $derived(!!sel && !!find && !problem && ticked.length > 0 && !(find && !find.lines_with && !find.from_line_start));
 
   const editHint = $derived(
-    !editing || !sel ? '' : editing === 'anchor'
-      ? t('On line {n}, select the text a line must have, before the value.', { n: sel.line + 1 })
+    !editing || !sel ? '' : editing === 'next'
+      ? partProblem || t('Select the next part: a text after the value, lower on the same line or below it.')
+      : editing === 'anchor'
+      ? anchorSpan
+        ? t('On line {n}, drag the grips of the underlined text, or select another text before the value.', { n: sel.line + 1 })
+        : t('On line {n}, select the text a line must have, before the value.', { n: sel.line + 1 })
       : t('On line {n}, select the text the value stops at.', { n: sel.line + 1 }),
   );
 
-  function edit(what: 'anchor' | 'stop') {
+  function edit(what: 'anchor' | 'stop' | 'next') {
     if (!sel) return;
     editing = what;
+    before = find ? { ...find } : null;
+    partProblem = '';
     current = sel.file;
     setTimeout(() => viewer?.reveal(sel!.line, sel!.s), 30);
   }
@@ -240,7 +325,7 @@
     const step: RuleValue = {
       key,
       name: name.trim() || key,
-      find: { ...find, stop: find.stop || null },
+      find: { ...find, stop: find.stop || null, then: find.then?.length ? find.then.map((p) => ({ ...p, stop: p.stop || null })) : undefined },
       which,
       fallback: fixed.kind === 'add' ? fixed.fallback : fixed.kind === 'change' ? fixed.source.step.fallback : null,
       across,
@@ -267,10 +352,12 @@
         bind:this={viewer}
         {files}
         bind:current
-        marks={{ sel, anchor: sel && find ? find.lines_with : '', found, kept }}
+        marks={{ sel, anchor: sel && find ? find.lines_with : '', found: partsOf(found), kept: partsOf(kept), grip: editing === 'anchor' ? anchorSpan : undefined }}
         editing={editHint}
-        oncancel={() => (editing = null)}
+        oncancel={() => { if (editing === 'anchor' && before) find = before; editing = null; partProblem = ''; }}
+        ondone={editing === 'anchor' && anchorSpan ? () => (editing = null) : undefined}
         {onselect}
+        {onadjust}
         onopen={open}
         onclose={close}
       />
@@ -323,6 +410,26 @@
           <p class="summary">{summary}</p>
         </section>
 
+        <section class="box parts" aria-label={t('Next parts')}>
+          <h3>{t('Then add')}</h3>
+          {#each find.then ?? [] as p, i (i)}
+            <div class="part">
+              <span class="row">
+                <span class="what-part">{partHow(p)}, {partStop(p)}</span>
+                <button type="button" class="small" aria-label={t('Remove this part')} onclick={() => removePart(i)}>×</button>
+              </span>
+              <span class="row">
+                <span class="label">{t('Joined by')}</span>
+                <Choices label={t('Joined by')} value={p.joined_by} options={joinsOf(p)} onchange={(v) => setPart(i, { joined_by: v })} />
+                <input type="text" class="join" aria-label={t('Joined by another text')} placeholder={t('Other…')} value={JOINS.some((j) => j.value === p.joined_by) ? '' : p.joined_by} oninput={(e) => setPart(i, { joined_by: e.currentTarget.value })} />
+              </span>
+            </div>
+          {:else}
+            <p class="quiet hint">{t('Join a text found after it to the value, like a stream and the encoder written a few lines below.')}</p>
+          {/each}
+          <button type="button" class="small add-part" class:on={editing === 'next'} onclick={() => edit('next')}>{t('＋ Add a next part')}</button>
+        </section>
+
         <section class="box">
           <h3>{t('Read it in these files')}</h3>
           <div class="reads">
@@ -369,7 +476,9 @@
   .split { display: grid; grid-template-columns: minmax(0, 1fr) clamp(280px, 34%, 420px); gap: 14px; align-items: start; }
   .split > :global(.viewer), .viewer-wait { min-width: 0; }
   aside { min-width: 0; display: grid; gap: 10px; position: sticky; top: 0; }
-  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 8px; min-width: 0; }
+  /* One column no wider than the box: what is in it (a box to type in, a long name) never pushes
+     past its edge when the panel is narrow. */
+  .box { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 12px 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; min-width: 0; }
   .box h3 { margin: 0; font-size: 14px; }
   .empty { border-style: dashed; }
   .empty p { margin: 0; font-size: 13px; }
@@ -378,7 +487,8 @@
   .head .small { margin-left: auto; flex: none; }
   .small { font-size: 12.5px; padding: 2px 8px; }
   .name { display: flex; gap: 8px; align-items: center; }
-  .name input { flex: 1; min-width: 0; }
+  .name input { flex: 1 1 0; width: 0; min-width: 0; }
+  .name .token { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .name input.bad { border-color: var(--err); box-shadow: 0 0 0 1px var(--err); }
   .token { font: 12.5px var(--mono); padding: 2px 8px; border-radius: 5px; background: color-mix(in srgb, var(--accent) 14%, var(--surface)); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); justify-self: start; white-space: nowrap; }
   .problem { margin: 0; min-height: 18px; color: var(--err); font-size: 12.5px; }
@@ -401,4 +511,10 @@
   .what.none { font-family: var(--font); font-weight: 400; color: var(--quiet); }
   .why { grid-column: 2; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .buttons { display: flex; gap: 8px; justify-content: flex-end; }
+  .part { display: grid; gap: 6px; padding: 8px; border-radius: var(--radius-sm); background: var(--surface-2); }
+  .what-part { flex: 1 1 0; min-width: 0; overflow-wrap: anywhere; }
+  .join { width: 90px; font-size: 13px; padding: 3px 8px; }
+  .hint { margin: 0; font-size: 12.5px; }
+  .add-part { justify-self: start; }
+  .add-part.on { border-color: var(--accent); }
 </style>

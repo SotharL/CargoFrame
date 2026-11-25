@@ -196,6 +196,21 @@ impl Session {
         Ok(entry)
     }
 
+    /// A file CargoFrame adds itself (debug mode): like one added by hand, and listed in the
+    /// view the window opens with.
+    pub fn add_own_file(
+        &mut self,
+        workspace: &Workspace,
+        block_id: &str,
+        from: &Path,
+    ) -> Result<(), String> {
+        let entry = self.add_file(workspace, block_id, from)?;
+        if let Some(f) = self.view.files.get_mut(block_id) {
+            f.entries.push(entry);
+        }
+        Ok(())
+    }
+
     /// The text of a file a Files block offers, for a log viewer: this capture's copy if it has
     /// one, else the file in the project; only its end when it is large. Never a file the
     /// capture did not offer.
@@ -610,6 +625,7 @@ pub fn prepare_video(
     if let Some(v) = session.view.video.as_mut() {
         v.started_at_ms = started;
     }
+    crate::debug::attach(store, workspace, &mut session);
     Ok(session)
 }
 
@@ -753,6 +769,13 @@ pub fn prepare_with(
             .into_iter()
             .map(|(k, v)| (k.to_string(), v)),
     );
+    // debug mode, a capture of CargoFrame itself: what was on screen ({cargoframe.where}…)
+    if let Some(view) = crate::debug::view_for(store, exe.as_deref()) {
+        builtins.values.extend(crate::debug::values(
+            &view,
+            &crate::debug::rule_names(store),
+        ));
+    }
 
     let project = builtins.project.as_ref().map(|r| ProjectView {
         folder: r.folder.clone(),

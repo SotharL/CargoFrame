@@ -45,6 +45,10 @@ pub struct General {
     /// The language of the windows and of what CargoFrame says: `system` (the computer's, when
     /// CargoFrame speaks it, else English) or a code (`fr`). See `cargoframe_i18n::LANGUAGES`.
     pub language: String,
+    /// Debug mode (0.7.2, System page, off): a capture of CargoFrame's own windows says what was
+    /// on screen (`{cargoframe.page}`…) and adds its layout, rules, settings and log.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub debug: bool,
 }
 
 /// What CargoFrame may say in a notification. A notice can show up inside a recording of the
@@ -108,6 +112,7 @@ impl Default for General {
             accent: DEFAULT_ACCENT.to_string(),
             notifications: Notifications::default(),
             language: "system".to_string(),
+            debug: false,
         }
     }
 }

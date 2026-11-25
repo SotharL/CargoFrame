@@ -36,7 +36,7 @@ tauri-build = { version = "2", features = [] }
 [dependencies]
 tauri = { version = "2", features = ["tray-icon", "image-png"] }
 tauri-plugin-single-instance = "2"
-tauri-plugin-autostart = "2"
+auto-launch = "0.6"
 tauri-plugin-opener = "2"
 tauri-plugin-dialog = "2"
 serde.workspace = true
@@ -70,6 +70,7 @@ chrono = { version = "0.4", default-features = false, features = ["clock", "std"
 zip = { version = "9", default-features = false, features = ["deflate"] }
 
 [target.'cfg(windows)'.dependencies]
+windows-registry = "0.6"
 tauri-winrt-notification = "0.8"
 keyring = { version = "3", default-features = false, features = ["windows-native"] }
 

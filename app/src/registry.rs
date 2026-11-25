@@ -85,6 +85,7 @@ impl Registry for AppRegistry<'_> {
 
     fn is_known_variable(&self, name: &str) -> bool {
         vars::NAMES.contains(&name)
+            || crate::debug::NAMES.contains(&name)
             || cargoframe_context::template::rule_key(name)
                 .is_some_and(|key| self.rules.contains(key))
     }

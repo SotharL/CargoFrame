@@ -33,6 +33,25 @@ describe('Preferences', () => {
   });
 });
 
+describe('An older copy that starts at sign-in', () => {
+  const old = 'C:\\Users\\Ana\\Documents\\GitHub\\CargoFrame\\target\\release\\cargoframe.exe';
+
+  it('says nothing when there is none', async () => {
+    render(General);
+    await screen.findByRole('heading', { name: 'Startup' });
+    expect(screen.queryByRole('alert')).toBeNull();
+  });
+
+  it('names it and stops it with one button', async () => {
+    setApiForTests(memoryApi({ autostartOthers: [old] }));
+    render(General);
+    const alert = await screen.findByRole('alert');
+    expect(alert.textContent).toContain(old);
+    await fireEvent.click(screen.getByRole('button', { name: 'Stop the older copy' }));
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  });
+});
+
 describe('Language', () => {
   afterEach(() => localStorage.removeItem('cargoframe.demo.language'));
 

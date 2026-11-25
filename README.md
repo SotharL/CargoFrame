@@ -95,6 +95,9 @@ Each release also has **SHA256SUMS.txt** to check the download. To update, run t
   (or `grim`), GStreamer with its PipeWire plugin for video, `wtype` on sway and Hyprland. How each desktop is handled:
   [design](docs/design.md#2-what-it-does).
 - **Silent install (Windows):** `CargoFrame-Setup.exe /S`, add `/NOSTARTUP` to leave "start when I sign in" off.
+- **An older copy starting at sign-in instead of this one** (one built by hand and run as administrator) is removed
+  by the installer and by CargoFrame when Windows allows it; otherwise *Settings, Preferences* names it, with
+  *Stop the older copy*.
 - **Uninstall (Windows):** *Settings, Apps*. It asks whether to delete your settings too.
 - **Video needs ffmpeg** (screenshots do not). *Settings, System* downloads it with one button (Windows and Linux,
   no administrator needed, checked against its published checksums) and offers the newer one when there is one. Recording uses the graphics card where it can (its copy of the screen and its encoder)
@@ -226,7 +229,11 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   newest file wins, or all their different values. A value no file has stays empty, or gives a text you choose. The
   *Values* tab lists each one with what the last capture gave and the layouts using it; *Files* lists the files read,
   whether each is added to the window's files and how its lines write their time. Write a value as `{map}`; the older
-  `{{rule.map}}` keeps working. Only files you name are read, and only inside the project folder.
+  `{{rule.map}}` keeps working. Only files you name are read, and only inside the project folder. The grips at
+  the two ends of a selection widen or narrow it a character at a time (the text before the value gets them while
+  you change it). **＋ Add a next part** joins a text found after the value to it, such as ffmpeg's
+  `Stream #0:1: Audio: aac…` and the `encoder : Lavc58…` written below it, with ` - `, `, `, a space, a new line or
+  your own text between them.
 - **Fill fields** (*Settings, Layouts, Fill fields*): a field of the service and the steps that fill it on each share: *If*
   a value (from a file, the program, the project) *is found / is / contains…*, *add* or *set* a text, *and* more. Add
   puts one more label in a list, a new line in a description. For every layout that shares there, or only some. A
@@ -251,13 +258,19 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   screen, the newest coming in at the bottom as it plays. Untick *Following the clip* to see every line.
 - **Tabs:** a Tabs block is a binder: 2 to 5 tabs (named, with the names on the top, bottom, left or right), each
   holding blocks. In the layout builder, click a tab's name and drop blocks inside; drag the grip at its top right to
-  move it with its blocks; the lock beside a tab's name keeps its blocks where they are. In the window, click a tab to
+  move it with its blocks; the lock beside a tab's name in the block's properties keeps its blocks where they are
+  (the tab is greyed on the grid and still opens). In the window, click a tab to
   see its blocks. What is in the other tabs is kept and sent.
 - **Copy, paste, duplicate, delete:** in the layout builder, the buttons over the grid (or Ctrl+C, Ctrl+V, Ctrl+D and
   Delete) work on the block chosen. A copy can be pasted in another layout while Settings is open.
 - **This computer's details:** `{system.os}`, `{system.cpu}`, `{system.ram}`, `{system.gpu}`, `{system.gpu_driver}`,
   `{system.screens}` and `{system.computer}` fill in like the date and time (*Data parsing* lists them with what they are
   here). They are only sent when a layout puts them in a text.
+- **Debug mode** (*Settings, System*, off by default): for reporting a problem in CargoFrame itself. A capture of a
+  CargoFrame window then fills `{cargoframe.where}` (like *CargoFrame settings - Layouts - Fill fields - Fill a
+  field*), `{cargoframe.focus}`, `{cargoframe.guide}`, `{cargoframe.layout}`… and adds the layout on screen, the data
+  rules, the settings and the end of the log to its Files block. The template *CargoFrame bug report* (GitHub) uses
+  them for its title, description and labels.
 - **Values made from other values:** in *Data parsing*, *Made from other values*: for example a build id
   `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least

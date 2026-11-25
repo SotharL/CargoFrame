@@ -1610,7 +1610,9 @@ values like the time, and deleting several items at once in *Files & backup*.
 - **The builder.** Copy, Paste, Duplicate and Delete for the block chosen, as buttons over the grid and as Ctrl+C,
   Ctrl+V, Ctrl+D and Delete; a copy is kept while Settings is open, so it can be pasted in another layout; a Tabs
   block is copied with its blocks, and what the copied blocks name among themselves names the new ones. A tab is
-  locked by the lock beside its name: its blocks are not moved, resized or removed, and nothing is dropped in it;
+  locked in the Tabs block's properties, by the lock beside its name there (first put on the grid, moved there
+  at the person's request so the grid stays for arranging): it is greyed on the grid and still opens, its blocks
+  are not moved, resized or removed, and nothing is dropped in it;
   the window is not changed by it.
 - **Jira ticket assigned to you.** The Jira templates have an *Assignee* list (the searched people) that starts on
   *Me* each time; an update keeps the ticket's assignee.
@@ -1625,3 +1627,55 @@ values like the time, and deleting several items at once in *Files & backup*.
 - **Found on the way.** The language check read only the plural of `tn(one, t('other'), n)`, so ten singular
   texts ("Export 1 item…") were never translated; it now reads both. Copying a block used `structuredClone`, which
   cannot copy the builder's live state: a JSON copy is used (blocks are plain data).
+
+### 0.7.2, 25 Nov 2026: the issues filed on GitHub (#55 to #61), and debug mode
+
+Asked for, as issues on the repository: an update that comes back after a restart (#56), the Tags list cut by
+the blocks under it (#55), the Columns control on its own line (#57), the first tab's corner cut (#58), the Fill
+fields form not lined up (#59), a value made of two texts found one after the other, with grips to widen or
+narrow a selection (#60), the name of a new value running over its box (#61); and CargoFrame able to report a
+problem in itself, behind a debug mode in *System*.
+
+- **Why 0.6.0 came back at sign-in (#56).** The autostart plugin writes the `Run` entry with Windows' "dynamic"
+  mode: in the machine's list (`HKEY_LOCAL_MACHINE`) whenever the program runs as an administrator, else the
+  person's. A copy built by hand (`target\release\cargoframe.exe`, 0.6.0) run that way put itself in the
+  machine's list; the installer only writes the person's, so after every update Windows started both at sign-in,
+  the old one first, and the new one handed over to it (one copy runs at a time). Now CargoFrame writes the
+  person's entry only (`app/src/autostart.rs`, `auto-launch` with the current user's mode, the plugin removed);
+  an installed copy (one beside its uninstaller) that starts points the person's entry at itself and removes a
+  machine entry that starts another program; one it is not allowed to remove is named in *Preferences*, with
+  *Stop the older copy* (Windows asks an administrator once). The installer also removes such an entry when it
+  is allowed, and counts it as the person's choice to start at sign-in. A copy that was not installed never takes
+  the entry over.
+- **A list that floats (#55).** The Tags list was in the block, so it pushed the block's content down, where the
+  next block cut it. It is now fixed to the screen under the box like the dropdown's (`lib/floating.ts`, used by
+  both), over the blocks below, and the *Last used* line stays.
+- **Layout fixes (#57, #58, #59, #61).** *Columns* is at the end of the Copy/Paste/Duplicate/Delete row. The page
+  of a Tabs block has a square corner where its first tab sits, so the two join. The Fill fields form: a field
+  keeps to the top of its row (a select was stretched to the height of the hint beside it), the two boxes are the
+  same height, and every row of a step is on the same columns (a word, the choice, what it applies to, its ×).
+  The side panel of *New value* has one column no wider than itself, and the name's box has no width of its own,
+  so nothing runs past its edge in a narrow window.
+- **A value of several parts (#60).** `Find::Pick` takes `then`: more parts, each found after the part before it
+  (later on its line when it has a text to come after, else on a line below), joined by what the person chooses
+  (" - ", ", ", a space, a new line or any text); a part not found is left out. In *New value*, *＋ Add a next
+  part* takes a text selected after the value (refused, with a reason, when it does not come after it). Rust and
+  the window run the same steps (`find.rs`, `pick.ts`), tested on ffmpeg's lines from the issue.
+- **Grips (#60).** The selection has a grip at each end, as on a phone: dragged, or moved with the arrow keys, a
+  character at a time, without taking words whole. While the text before the value is changed (*✎ Change*), it
+  has the grips instead, and *Done* keeps it. A selection that holds what follows it ("Spawned 30 crew") now
+  stops at a text that comes only after it (" on"), so the value found again is the one selected. The label
+  before a value that has no letter (`#0:1:`) takes the word before it: `Stream #0:1:`.
+- **Debug mode.** Off by default, on *System*. While it is on, each window says what it shows when something
+  changes (a click, the focus, the window coming forward), read from the page itself (its title, the tabs open,
+  the section and the control in focus, the guide and its step, the layout and the block): no page keeps it up
+  to date, and nothing is sent while it is off. A capture of a CargoFrame window (the program in focus is this
+  one) gets `{cargoframe.where}` ("CargoFrame settings - Layouts - Fill fields - Fill a field", as the issues are
+  titled), `.window`, `.page`, `.tab`, `.section`, `.focus`, `.guide`, `.layout`, `.block`, `.rules` and
+  `.version` (a dash for what was not on screen, so a text that names them reads whole), and its first Files block
+  the layout on screen as saved, the data rules, the settings (no secret is in them) and the last 256 KB of the
+  log, ticked. The template *CargoFrame bug report* (a GitHub issue; offered in debug mode only) starts its title
+  with `{cargoframe.where} - `, its labels with `bug`, the program and the page.
+- **Found on the way.** Two advisories published on 23 Nov made the daily security check fail: `url` 2.5.8
+  (a stack overflow on nested `blob:` addresses, RUSTSEC-2026-0592) and `cookie` 0.18.2 (nonces that can repeat
+  after a fork, RUSTSEC-2026-0594), both through dependencies; updated to 2.5.9 and 0.18.3.

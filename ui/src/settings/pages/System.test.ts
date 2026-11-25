@@ -14,11 +14,19 @@ afterEach(() => {
 });
 
 describe('System', () => {
-  it('has the apps on this computer, the updates, the memory, then the speed', async () => {
+  it('has the apps on this computer, the updates, the memory, debug mode, then the speed', async () => {
     render(About);
     await screen.findByRole('heading', { name: 'Windows kept ready' });
     const titles = [...document.querySelectorAll('section h2')].map((h) => h.textContent);
-    expect(titles.filter((t) => t !== 'Install what is missing')).toEqual(['This computer', 'Updates', 'Windows kept ready', 'Speed and memory']);
+    expect(titles.filter((t) => t !== 'Install what is missing')).toEqual(['This computer', 'Updates', 'Windows kept ready', 'Debug mode', 'Speed and memory']);
+  });
+
+  it('turns debug mode on and off, and keeps it', async () => {
+    render(About);
+    const toggle = await screen.findByRole('switch', { name: 'Describe CargoFrame in a capture of its own windows' });
+    expect((toggle as HTMLInputElement).checked).toBe(false);
+    await fireEvent.click(toggle);
+    await waitFor(async () => expect((await api.getGeneral()).debug).toBe(true));
   });
 
   it('saves the memory setting and says what it does', async () => {

@@ -196,6 +196,7 @@
         {#each draft.steps as step, si (si)}
           <div class="step">
             <div class="row">
+              <span class="quiet lead">{t('When')}</span>
               <select
                 aria-label={t('When')}
                 value={step.when ? 'if' : 'always'}
@@ -204,6 +205,7 @@
                 <option value="always">{t('Always')}</option>
                 <option value="if">{t('If')}</option>
               </select>
+              <div class="test">
               {#if step.when}
                 <div class="subject"><Combobox label={t('What to look at')} options={subjects} free bind:value={step.when.subject} placeholder={'{gpu}'} /></div>
                 <select aria-label={t('Test')} bind:value={step.when.test}>
@@ -211,11 +213,12 @@
                 </select>
                 {#if needsText(step.when.test)}<input type="text" aria-label={t('Text')} bind:value={step.when.text} placeholder="text" />{/if}
               {/if}
+              </div>
               <button type="button" class="x" aria-label={t('Remove this step')} onclick={() => draft!.steps.splice(si, 1)}>✕</button>
             </div>
             {#each step.then as a, ai (ai)}
-              <div class="row then">
-                <span class="quiet">{ai === 0 ? 'then' : 'and'}</span>
+              <div class="row">
+                <span class="quiet lead">{ai === 0 ? t('then') : t('and')}</span>
                 <select aria-label={t('Add or set')} bind:value={a.do}>
                   <option value="add">{t('add')}</option>
                   <option value="set">{t('set it to')}</option>
@@ -223,7 +226,7 @@
                 <input type="text" class="grow" aria-label={t('Text to add')} bind:value={a.text} placeholder={t('gpu-{gpu}')} />
                 {#if step.then.length > 1}
                   <button type="button" class="x" aria-label={t('Remove this action')} onclick={() => step.then.splice(ai, 1)}>✕</button>
-                {/if}
+                {:else}<span></span>{/if}
               </div>
             {/each}
             <button type="button" class="link" onclick={() => step.then.push({ do: 'add', text: '' })}>{t('+ and')}</button>
@@ -313,16 +316,21 @@
   .use, .example { font-size: 13px; }
   .actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: start; }
   .editor { display: grid; gap: 14px; }
-  .sentence { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; }
+  /* The two boxes side by side, on one line whatever hint is under either of them. */
+  .sentence { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+  .editor select, .editor input[type='text'], .editor :global(.combo input) { box-sizing: border-box; height: 34px; }
   .steps { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 8px 12px 12px; margin: 0; display: grid; gap: 10px; }
   .steps legend { font-weight: 600; padding: 0 4px; }
   .step { display: grid; gap: 6px; padding: 8px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--text) 4%, transparent); }
-  .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-  .row.then { padding-left: 16px; }
-  .subject { min-width: 180px; flex: 1 1 200px; }
-  .grow { flex: 1 1 200px; min-width: 0; }
-  .x { padding: 2px 8px; }
-  .link { justify-self: start; background: none; border: none; color: var(--accent); padding: 0 0 0 16px; cursor: pointer; }
+  /* Every row of a step on the same columns: a word, the choice, what it applies to, its ✕. */
+  .row { display: grid; grid-template-columns: 44px 120px minmax(0, 1fr) 34px; gap: 6px; align-items: center; }
+  .lead { text-align: right; font-size: 13px; }
+  .test { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; min-width: 0; }
+  .subject { min-width: 160px; flex: 1 1 180px; }
+  .test input { flex: 1 1 120px; min-width: 0; }
+  .grow { min-width: 0; width: 100%; }
+  .x { width: 34px; height: 34px; padding: 0; }
+  .link { justify-self: start; background: none; border: none; color: var(--accent); padding: 0 0 0 50px; cursor: pointer; }
   .hint { margin: 0; font-size: 12.5px; }
   .where, .layouts { display: grid; gap: 4px; }
   .layouts { padding-left: 22px; }
@@ -334,5 +342,8 @@
   .buttons { display: flex; gap: 8px; }
   .error { color: var(--err); font-size: 13px; }
   .danger { border-color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
-  @media (max-width: 640px) { .sentence { grid-template-columns: 1fr; } }
+  @media (max-width: 640px) {
+    .sentence { grid-template-columns: 1fr; }
+    .row { grid-template-columns: 36px 100px minmax(0, 1fr) 34px; }
+  }
 </style>

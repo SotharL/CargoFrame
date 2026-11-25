@@ -26,7 +26,7 @@ pub mod text;
 pub use combine::combine_values;
 pub use extract::{check, extract, RuleError};
 pub use model::{
-    Across, Choice, Cond, CondTest, Find, Format, Multiple, ReadMode, Rule, Several, ValueStep,
-    Which, DEFAULT_MAX_BYTES, HARD_MAX_BYTES,
+    Across, Choice, Cond, CondTest, Find, Format, Multiple, Next, ReadMode, Rule, Several,
+    ValueStep, Which, DEFAULT_MAX_BYTES, HARD_MAX_BYTES,
 };
 pub use run::{peek, run_all, run_rules, FsFiles, Outcome, Peek, ProjectFiles, Report};
