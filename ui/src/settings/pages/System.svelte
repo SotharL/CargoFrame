@@ -37,14 +37,16 @@
   let pc = $state<PcCheck | null>(null);
   let checking = $state(false);
   let copied = $state(false);
+  let pcProblem = $state('');
 
   async function checkPc() {
     checking = true;
     copied = false;
     try {
       pc = await (await getApi()).checkThisPc();
+      pcProblem = '';
     } catch (e) {
-      setupProblem = String(e).replace(/^Error: /, '');
+      pcProblem = String(e).replace(/^Error: /, '');
     }
     checking = false;
   }
@@ -154,13 +156,17 @@
           {/if}
           {#if setupProblem}<p class="problem small" role="alert">{setupProblem}</p>{/if}
         </div>
+      {/if}
+      {#if general.debug}
         <div class="report pc" data-tour="system.debug.check">
+          <p class="title"><b>{t('Check this PC')}</b></p>
           <p class="small">
             {t('Check this PC tries what only this computer can show: a screenshot of every screen, a 3-second recording, the apps CargoFrame uses, starting when you sign in, the credential store and the shortcuts. The report goes with the next bug report.')}
           </p>
           <button type="button" disabled={checking} onclick={checkPc}>
             {checking ? t('Checking… (about 10 seconds)') : pc ? t('Check this PC again') : t('Check this PC')}
           </button>
+          {#if pcProblem}<p class="problem small" role="alert">{pcProblem}</p>{/if}
           {#if pc}
             <ul class="steps" aria-label={t('What was checked')}>
               {#each pc.steps as s (s.id)}
@@ -188,6 +194,7 @@
   .page { display: grid; gap: 14px; }
   .small { margin: 0; font-size: 12.5px; }
   .report { display: grid; gap: 8px; justify-items: start; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .report .title { margin: 0; }
   .report .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
   .links { display: flex; gap: 14px; }
   .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }

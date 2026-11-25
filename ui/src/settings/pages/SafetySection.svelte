@@ -1,6 +1,7 @@
 <script lang="ts">
   import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
+  import { defaultSafe } from '../../lib/defaults';
   import Chip from '../../lib/components/Chip.svelte';
   import Field from '../../lib/components/Field.svelte';
   import Section from '../../lib/components/Section.svelte';
@@ -11,7 +12,7 @@
   let { onstatus }: { onstatus: (kind: 'ok' | 'err', text: string) => void } = $props();
 
   let loaded = $state(false);
-  let safe = $state<Safe>({ folder: null, timeout_secs: 30, max_retries: 3 });
+  let safe = $state<Safe>(defaultSafe());
   let folderText = $state('');
   let folderCheck = $state<{ ok: boolean; text: string } | null>(null);
 

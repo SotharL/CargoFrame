@@ -131,31 +131,34 @@ export function missing(
   const out: string[] = [];
   for (const b of view.layout?.blocks ?? []) {
     if (!want.has(b.id)) continue;
-    let empty = false;
-    let name = titleOf(b);
-    switch (b.type) {
-      case 'text':
-        empty = (values.texts[b.id] ?? '').trim() === '';
-        break;
-      case 'dropdown':
-        empty = (values.dropdowns[b.id] ?? '').trim() === '';
-        break;
-      case 'tags':
-        empty = (values.tags[b.id] ?? []).length === 0;
-        break;
-      case 'files':
-        empty = (values.files[b.id] ?? []).length === 0;
-        break;
-      case 'screenshot':
-        empty = !stillTaken;
-        name = t('Screenshot');
-        break;
-      case 'video':
-        empty = view.video == null;
-        name = t('Recording');
-        break;
-    }
-    if (empty) out.push(t('“{name}” must be filled before sharing', { name }));
+    if (isEmpty(view, b, values, stillTaken)) out.push(t('“{name}” must be filled before sharing', { name: nameOf(b) }));
   }
   return out;
+}
+
+/** A block's name in a sentence: its title, or what it is. */
+export function nameOf(b: Block): string {
+  if (b.type === 'screenshot') return t('Screenshot');
+  if (b.type === 'video') return t('Recording');
+  return titleOf(b);
+}
+
+/** Whether a block holds nothing yet: no text, no choice, no tag, no file ticked, no picture. */
+export function isEmpty(view: SessionView, b: Block, values: FormValues, stillTaken = true): boolean {
+  switch (b.type) {
+    case 'text':
+      return (values.texts[b.id] ?? '').trim() === '';
+    case 'dropdown':
+      return (values.dropdowns[b.id] ?? '').trim() === '';
+    case 'tags':
+      return (values.tags[b.id] ?? []).length === 0;
+    case 'files':
+      return (values.files[b.id] ?? []).length === 0;
+    case 'screenshot':
+      return !stillTaken;
+    case 'video':
+      return view.video == null;
+    default:
+      return false;
+  }
 }

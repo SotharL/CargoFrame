@@ -6,14 +6,9 @@ describe('in-memory backend', () => {
     const api = memoryApi();
     expect((await api.getGeneral()).theme).toBe('system');
     const notifications = { routine: false, problems: true };
-    await api.setGeneral({ theme: 'dark', memory_mode: 'low_memory', check_updates: false, accent: '#e8590c', notifications });
-    expect(await api.getGeneral()).toEqual({
-      theme: 'dark',
-      memory_mode: 'low_memory',
-      check_updates: false,
-      accent: '#e8590c',
-      notifications,
-    });
+    const changed = { ...(await api.getGeneral()), theme: 'dark' as const, memory_mode: 'low_memory' as const, accent: '#e8590c', notifications };
+    await api.setGeneral(changed);
+    expect(await api.getGeneral()).toEqual(changed);
   });
 
   it('returns copies, so callers cannot change stored state by accident', async () => {

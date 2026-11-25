@@ -813,3 +813,70 @@ fn the_recording_and_the_screenshot_show_in_a_table_of_the_description() {
         "See !screenshot.png|thumbnail! and ."
     );
 }
+
+#[test]
+fn the_fields_jira_needs_for_an_issue_type() {
+    // Jira Cloud's answer: `fields`, each with `fieldId`
+    let cloud_answer = json!({"maxResults":200,"startAt":0,"total":6,"fields":[
+        {"required":true,"name":"Summary","fieldId":"summary","hasDefaultValue":false},
+        {"required":true,"name":"Issue Type","fieldId":"issuetype","hasDefaultValue":false},
+        {"required":true,"name":"Project","fieldId":"project","hasDefaultValue":false},
+        {"required":true,"name":"Reporter","fieldId":"reporter","hasDefaultValue":true},
+        {"required":true,"name":"Component/s","fieldId":"components","hasDefaultValue":false},
+        {"required":false,"name":"Labels","fieldId":"labels","hasDefaultValue":false}
+    ]});
+    let pairs = |v: Vec<OptionItem>| {
+        v.into_iter()
+            .map(|o| (o.value, o.label))
+            .collect::<Vec<_>>()
+    };
+    assert_eq!(
+        pairs(required_fields(&cloud_answer)),
+        vec![
+            ("summary".to_string(), "Summary".to_string()),
+            ("components".to_string(), "Component/s".to_string())
+        ]
+    );
+    // Server and Data Center: `values`, a custom field
+    let server_answer = json!({"values":[
+        {"required":true,"name":"Severity","fieldId":"customfield_10042","hasDefaultValue":false}
+    ],"isLast":true});
+    assert_eq!(
+        pairs(required_fields(&server_answer)),
+        vec![("customfield_10042".to_string(), "Severity".to_string())]
+    );
+    assert!(required_fields(&json!({})).is_empty());
+}
+
+#[test]
+fn the_required_list_asks_jira_for_the_project_and_issue_type() {
+    let server = MockServer::start(|req| match req.path() {
+        "/rest/api/2/issue/createmeta/PROJ/issuetypes/10001" => MockResponse::json(
+            200,
+            json!({"fields":[{"required":true,"name":"Component/s","fieldId":"components","hasDefaultValue":false}]}),
+        ),
+        _ => MockResponse::new(404),
+    });
+    let w = world();
+    let got = w
+        .with("jira", |ctx| {
+            cloud(&server).options(ctx, "required:PROJ/10001")
+        })
+        .unwrap();
+    assert_eq!(got.len(), 1);
+    assert_eq!(got[0].value, "components");
+    // nothing but a key and a number reaches the address
+    for bad in [
+        "required",
+        "required:PROJ",
+        "required:PR J/1",
+        "required:PROJ/../1",
+        "required:../x/1",
+    ] {
+        assert!(
+            w.with("jira", |ctx| cloud(&server).options(ctx, bad))
+                .is_err(),
+            "{bad}"
+        );
+    }
+}

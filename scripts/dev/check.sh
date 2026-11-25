@@ -38,6 +38,7 @@ step "cargo fmt --check" cargo fmt --all --check
 if [ "$mode" != quick ]; then
   step "cargo clippy -D warnings" cargo clippy --workspace --all-targets -- -D warnings
   step "cargo test (all crates)" rust_tests
+  step "types for the window (ui/src/lib/generated)" scripts/ci/check-generated.sh --note
 fi
 if [ "$mode" != rust ]; then
   step "file names (Windows-safe)" node scripts/ci/check-names.mjs

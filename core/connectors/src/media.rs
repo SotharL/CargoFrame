@@ -36,11 +36,15 @@ fn decode_png(data: &[u8]) -> Result<Pixels, String> {
     let rgba = match info.color_type {
         png::ColorType::Rgba => buf,
         png::ColorType::Rgb => buf
-            .chunks_exact(3)
+            .as_chunks::<3>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[1], p[2], 255])
             .collect(),
         png::ColorType::GrayscaleAlpha => buf
-            .chunks_exact(2)
+            .as_chunks::<2>()
+            .0
+            .iter()
             .flat_map(|p| [p[0], p[0], p[0], p[1]])
             .collect(),
         png::ColorType::Grayscale => buf.iter().flat_map(|&g| [g, g, g, 255]).collect(),
@@ -184,7 +188,9 @@ pub fn to_jpeg(picture: &Attachment, max_bytes: usize) -> Result<Fitted, String>
     loop {
         let rgb: Vec<u8> = pixels
             .rgba
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .flat_map(|p| {
                 let a = u32::from(p[3]);
                 let over_white = |c: u8| ((u32::from(c) * a + 255 * (255 - a)) / 255) as u8;

@@ -101,7 +101,7 @@ impl Workspace {
                 continue;
             }
             let age = created_secs(&path).map(|c| now_secs().saturating_sub(c));
-            let too_new = age.map_or(true, |a| Duration::from_secs(a) < older_than);
+            let too_new = age.is_none_or(|a| Duration::from_secs(a) < older_than);
             if too_new {
                 report.kept += 1;
                 continue;

@@ -167,8 +167,8 @@ impl Frame {
             png::ColorType::Rgba => buf,
             png::ColorType::Rgb => {
                 let mut out = Vec::with_capacity(pixels * 4);
-                for c in buf.chunks_exact(3) {
-                    out.extend_from_slice(&[c[0], c[1], c[2], 255]);
+                for &[r, g, b] in buf.as_chunks::<3>().0 {
+                    out.extend_from_slice(&[r, g, b, 255]);
                 }
                 out
             }
@@ -181,8 +181,8 @@ impl Frame {
             }
             png::ColorType::GrayscaleAlpha => {
                 let mut out = Vec::with_capacity(pixels * 4);
-                for c in buf.chunks_exact(2) {
-                    out.extend_from_slice(&[c[0], c[0], c[0], c[1]]);
+                for &[g, a] in buf.as_chunks::<2>().0 {
+                    out.extend_from_slice(&[g, g, g, a]);
                 }
                 out
             }

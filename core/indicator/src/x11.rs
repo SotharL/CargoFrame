@@ -59,7 +59,7 @@ impl Shown {
                     std::thread::sleep(Duration::from_millis(100));
                     ticks += 1;
                     // the dot is on for a second, off for a second; the bands stay on top
-                    if ticks % 10 == 0 {
+                    if ticks.is_multiple_of(10) {
                         on = !on;
                         if let Some(d) = dot {
                             let _ = if on {

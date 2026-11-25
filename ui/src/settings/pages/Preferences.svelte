@@ -13,12 +13,10 @@
   import { go } from '../route.svelte';
   import { applyAccent, applyTheme } from '../../lib/theme';
   import type { General, LanguageInfo, ThemeChoice } from '../../lib/types';
+  import { defaultGeneral } from '../../lib/defaults';
 
   let loaded = $state(false);
-  let general = $state<General>({
-    theme: 'system', memory_mode: 'balanced', check_updates: false, accent: '#4f8ee0',
-    notifications: { routine: true, problems: true },
-  });
+  let general = $state<General>(defaultGeneral());
   let autostart = $state(false);
   // an older copy Windows starts at sign-in instead of this one (a build run as administrator)
   let others = $state<string[]>([]);

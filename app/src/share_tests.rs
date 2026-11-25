@@ -2346,3 +2346,28 @@ fn a_button_waits_for_the_blocks_it_says_must_be_filled() {
     let (r, _) = go(&w, &request(), vec![]);
     assert!(matches!(r, ShareResult::Sent { .. }), "{r:?}");
 }
+
+#[test]
+fn a_sharing_button_asks_what_its_service_needs() {
+    let layout: Layout = serde_json::from_value(serde_json::json!({
+        "schema_version": 1, "id": "l", "name": "L",
+        "blocks": [
+            {"id": "send", "type": "sharing_button", "label": "Send", "connection_id": "jira",
+             "rect": {"x": 0, "y": 0, "w": 2, "h": 1}}
+        ]
+    }))
+    .unwrap();
+    assert_eq!(
+        options_searched(&layout, "send", Some(" SP/10001 "), None),
+        Some(("jira".into(), "required:SP/10001".into()))
+    );
+    // only a project key and an issue type id
+    for bad in ["SP", "SP/x", "../SP/1", "SP/1/2", "S P/1", ""] {
+        assert_eq!(
+            options_searched(&layout, "send", Some(bad), None),
+            None,
+            "{bad}"
+        );
+    }
+    assert_eq!(options_searched(&layout, "send", None, None), None);
+}

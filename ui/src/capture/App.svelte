@@ -3,7 +3,7 @@
   import { onMount } from 'svelte';
   import Chip from '../lib/components/Chip.svelte';
   import { getApi, type Api } from '../lib/ipc';
-  import type { Block, ClipEdit, SessionView, ShareResult } from '../lib/types';
+  import type { Block, ClipEdit, DropdownOption, SessionView, ShareResult } from '../lib/types';
   import ScreenshotBlock from './blocks/ScreenshotBlock.svelte';
   import VideoBlock from './blocks/VideoBlock.svelte';
   import TextBlock from './blocks/TextBlock.svelte';
@@ -26,6 +26,7 @@
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, cornerWidth, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
   import { chatToOpen, missing, pairedWithRecording, willSend } from './willSend';
+  import { needsAsk, unsent } from './needs';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
   import { applyAccent, applyTheme } from '../lib/theme';
@@ -34,6 +35,27 @@
   let view = $state<SessionView | null>(null);
   let image = $state<Blob | null>(null);
   let values = $state<FormValues>({ texts: {}, dropdowns: {}, deeper: {}, files: {}, tags: {} });
+  // What Jira needs for the project and issue type picked, per button: asked once per pair.
+  let needs = $state<Record<string, { ask: string; fields: DropdownOption[] }>>({});
+  const asked = new Map<string, string>();
+  $effect(() => {
+    const v = view;
+    if (!v || !api) return;
+    for (const b of v.layout?.blocks ?? []) {
+      if (b.type !== 'sharing_button') continue;
+      const ask = needsAsk(v, b, values);
+      if (!ask || asked.get(b.id) === ask) continue;
+      asked.set(b.id, ask);
+      const session = v.session_id;
+      void api.fetchOptions(session, b.id, ask).then(
+        (fields) => {
+          if (view?.session_id === session && asked.get(b.id) === ask) needs[b.id] = { ask, fields };
+        },
+        // Jira could not say (no right to its create screen, an old Server): nothing is held back
+        () => {},
+      );
+    }
+  });
   let imageEdited = $state(false);
   /** The part of the recording to send; `null` sends all of it. */
   let clipEdit = $state<ClipEdit | null>(null);
@@ -98,6 +120,8 @@
       view = v;
       image = img;
       values = initialValues(v);
+      needs = {};
+      asked.clear();
       imageEdited = false;
       still = null;
       stillIsPoster = false;
@@ -182,7 +206,7 @@
   const gridRows = (heights: number[]) => heights.map((h) => `minmax(${h}px, 1fr)`).join(' ');
   const empty = $derived(view !== null && blocks.length === 0);
   // "This button does not send X" is shown on the block itself, so the header does not repeat it.
-  const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug' && i.code !== 'cannot_send') ?? []);
+  const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug' && i.code !== 'cannot_send' && i.code !== 'not_sent') ?? []);
   const debugs = $derived(view?.issues.filter((i) => i.severity === 'debug') ?? []);
 
   /** Where a block goes in its grid: the window's, or its Tabs block's page (from `origin`). */
@@ -402,7 +426,9 @@
           {:else if b.type === 'log_view'}
             <LogViewBlock block={b} {view} files={values.files} api={api ?? null} />
           {:else if b.type === 'sharing_button'}
-            {@const unfilled = missing(view, b, values, !pairedWithRecording(view) || still !== null)}
+            {@const stillTaken = !pairedWithRecording(view) || still !== null}
+            {@const ask = needsAsk(view, b, values)}
+            {@const unfilled = [...missing(view, b, values, stillTaken), ...(ask && needs[b.id]?.ask === ask ? unsent(view, b, values, needs[b.id]!.fields, stillTaken) : [])]}
             <SharingBlock
               block={b}
               enabled={(view.sharing[b.id]?.enabled ?? false) && unfilled.length === 0 && sending === null}

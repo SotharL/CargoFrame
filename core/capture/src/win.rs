@@ -175,7 +175,7 @@ impl Backend for Windows {
             .map_err(|e| CaptureError::Grab(format!("{e:?}")))?;
         let mut rgba = shot.pixels;
         // GDI leaves the alpha byte at 0.
-        for px in rgba.chunks_exact_mut(4) {
+        for px in rgba.as_chunks_mut::<4>().0 {
             px[3] = 255;
         }
         let whole = Frame::new(shot.width, shot.height, rgba)?;

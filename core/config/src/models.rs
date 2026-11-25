@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum Theme {
     /// Follow the operating system.
     #[default]
@@ -17,6 +18,7 @@ pub enum Theme {
 /// How long the window's web view stays alive after it closes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum MemoryMode {
     /// Keep the view for 5 minutes, then free it.
     #[default]
@@ -31,6 +33,7 @@ pub enum MemoryMode {
 /// system's own startup entry is the single source of truth.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct General {
     pub schema_version: u32,
     pub theme: Theme,
@@ -48,6 +51,7 @@ pub struct General {
     /// Debug mode (0.7.2, System page, off): a capture of CargoFrame's own windows says what was
     /// on screen (`{cargoframe.page}`…) and adds its layout, rules, settings and log.
     #[serde(skip_serializing_if = "std::ops::Not::not")]
+    #[cfg_attr(test, ts(as = "Option<bool>", optional))]
     pub debug: bool,
 }
 
@@ -55,6 +59,7 @@ pub struct General {
 /// screen, so each kind can be switched off.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Notifications {
     /// "CargoFrame is running", "CargoFrame is recording…", "Shared", "Saved locally".
     pub routine: bool,
@@ -125,6 +130,7 @@ impl Document for General {
 /// `safe.json`: what happens when sharing fails.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Safe {
     pub schema_version: u32,
     /// Folder for the fallback zip. Empty means "ask me".
@@ -154,6 +160,7 @@ impl Document for Safe {
 /// How the screen is captured for a video.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum VideoCapture {
     /// CargoFrame picks what suits this system.
     #[default]
@@ -172,6 +179,7 @@ pub enum VideoCapture {
 /// How a video is compressed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum VideoEncoder {
     /// CargoFrame picks what suits this system.
     #[default]
@@ -189,6 +197,7 @@ pub enum VideoEncoder {
 /// The corner of the recorded area the blinking dot is in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub enum SignCorner {
     TopLeft,
     #[default]
@@ -200,6 +209,7 @@ pub enum SignCorner {
 /// What shows on screen while a trigger records, besides the notification and the tray.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct RecordingSign {
     /// A red outline around what is recorded.
     pub outline: bool,
@@ -222,6 +232,7 @@ impl Default for RecordingSign {
 /// from a trigger.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
+#[cfg_attr(test, derive(ts_rs::TS), ts(export))]
 pub struct Video {
     pub schema_version: u32,
     /// Folder that holds ffmpeg and ffprobe, or the ffmpeg program itself. Empty means "look
@@ -369,6 +380,26 @@ impl Document for cargoframe_connectors::Connection {
 
 #[cfg(test)]
 mod tests {
+    /// The settings a new install starts with, for the window (`ui/src/lib/generated`, beside
+    /// the types ts-rs writes): its pages show them until the real ones arrive, and the in-memory
+    /// backend starts from them. Written by `cargo test`, compared by check.sh and CI.
+    #[test]
+    fn the_window_gets_the_default_settings() {
+        let dir = std::env::var("TS_RS_EXPORT_DIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|_| {
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../ui/src/lib/generated")
+            });
+        let defaults = serde_json::json!({
+            "general": super::General::default(),
+            "video": super::Video::default(),
+            "safe": super::Safe::default(),
+        });
+        std::fs::create_dir_all(&dir).unwrap();
+        let text = serde_json::to_string_pretty(&defaults).unwrap() + "\n";
+        std::fs::write(dir.join("defaults.json"), text).unwrap();
+    }
+
     use super::*;
 
     #[test]

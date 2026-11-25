@@ -308,7 +308,7 @@ impl Backend for X11 {
         // Standard 24-bit colour in a 32-bit pixel, little-endian: bytes are B, G, R, unused.
         let mut rgba = reply.data;
         rgba.truncate(expected);
-        for px in rgba.chunks_exact_mut(4) {
+        for px in rgba.as_chunks_mut::<4>().0 {
             px.swap(0, 2);
             px[3] = 255;
         }
