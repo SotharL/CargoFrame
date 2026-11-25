@@ -76,6 +76,7 @@
     "allow-report-view",
     "allow-debug-setup-status",
     "allow-setup-debug-report",
+    "allow-check-this-pc",
     "allow-get-timings",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

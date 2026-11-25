@@ -400,6 +400,26 @@ fn no_room(app: &AppHandle, state: &AppState) -> bool {
 /// Give a finished capture a window of its own and open it. The windows already open keep
 /// their captures: up to ten can be open together.
 fn show(app: &AppHandle, state: &AppState, s: session::Session) {
+    // what was captured, for the log: the program (its file name only), the layout, the size
+    let program = s
+        .view
+        .app
+        .as_ref()
+        .and_then(|a| a.exe_path.as_deref())
+        .and_then(|p| p.rsplit(['/', '\\']).next())
+        .unwrap_or("-")
+        .to_string();
+    tracing::info!(
+        trigger = %s.view.trigger_id,
+        layout = s.view.layout.as_ref().map_or("-", |l| l.id.as_str()),
+        program = %program,
+        subject = s.view.subject,
+        width = s.view.image.width,
+        height = s.view.image.height,
+        video = s.view.video.is_some(),
+        debug = s.debug.is_some(),
+        "capture taken"
+    );
     match state.sessions.place(s) {
         Ok((label, session)) => {
             stage_files_in_background(app, session);

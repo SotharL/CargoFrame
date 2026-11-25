@@ -272,7 +272,9 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   rules, the settings and the end of the log to its Files block. **Set up the bug report**, under the switch, makes the
   *CargoFrame bug report* layout for your GitHub connection and a shortcut, Ctrl+Alt+Shift+F12: press it in any
   CargoFrame window and the issue is filled in (where it was, what was in focus, the system, the graphics driver, the
-  screens…), with the version among its labels.
+  screens…), with the version among its labels. **Check this PC**, beside it, tries the screenshot, a 3-second
+  recording, the apps, starting at sign-in, the credential store and the shortcuts on your PC, and the next bug
+  report attaches what it found.
 - **Values made from other values:** in *Data parsing*, *Made from other values*: for example a build id
   `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
@@ -383,6 +385,7 @@ data, run `npm run dev` in `ui/` and open `settings.html` or `capture.html`.
 | [Design](docs/design.md) | What the app is, does, how it is used and built; branding |
 | [Development plan](docs/development-plan.md) | How to make the app: stack, architecture, modules, build order, quality gates |
 | [Connectors](docs/connectors.md) | How each service flows, and what to improve next |
+| [Changelog](CHANGELOG.md) | What each version changed |
 | [Decisions](docs/decisions.md) | What was decided, and why |
 | [Languages](docs/i18n.md) | How texts are translated, the glossary, and keeping the packs in step on each push |
 | [Status](docs/status.md) · [Security](docs/security.md) · [Performance](docs/performance.md) | What is verified; the security review; budgets and measures |

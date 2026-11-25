@@ -19,6 +19,7 @@ mod items;
 mod language;
 mod logging;
 mod notify;
+mod pc_check;
 mod registry;
 mod secrets;
 mod session;
@@ -179,6 +180,7 @@ pub fn run() {
             commands::report_view,
             commands::debug_setup_status,
             commands::setup_debug_report,
+            commands::check_this_pc,
             commands::get_timings,
             commands::get_memory_status,
             commands::get_update_view,

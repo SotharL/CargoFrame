@@ -1692,3 +1692,38 @@ problem in itself, behind a debug mode in *System*.
 - **The language check missed texts split by rustfmt.** A call too long for one line becomes `t(\n "…",\n)`, with
   a comma the pattern did not expect, so 46 messages (mostly what a connector says when a setting is missing) were
   never translated; the pattern takes the comma, and they are now in the four languages.
+
+## 0.7.3 (in progress): what the code review asked for
+
+The review of 0.7.2 (25 Nov 2026) scored the code 75 / 100: reliable 80 (about 1,770 tests, clippy strict, 25
+`unwrap`/`expect` in shipping code and all of them invariants, a panic hook, locks that survive a panic), optimized 78
+(budgets gated in CI, tray at 19.7 MB of its own memory, recordings capped; cold opens a little over budget on a
+virtual display, nothing measured on a reference PC), easy to maintain 70 (20 crates, one folder per service; files
+of 1,200 to 1,800 lines, and lists written in Rust and again in TypeScript by hand), user friendly 74 (guides, tour,
+search, four languages, one-button setups; five of the seven issues of 25 Nov were layout bugs the owner found),
+documented 72 (every part documented and updated each release; the docs grow by piling up). Its plan is in the
+development plan, §10.
+
+- **Check this PC.** The Windows code is compiled and unit-tested on a cloud runner with no screens, sound card or
+  graphics card, so the owner's PC has been the test lab. Debug mode gets a button that runs the real steps there
+  and writes a report the bug report attaches; each step reuses what the app does (the capture, the Recording page's
+  test recording, the System page's apps, the credential store, the shortcuts' status), so it tests that code, not a
+  copy of it.
+- **The overflow check.** Behaviour tests cannot see a box past its card. A real browser (the system's Chrome, through
+  `playwright-core`, so nothing is downloaded) opens every page and the CargoFrame window with the demo data, small
+  and large, light and dark, and looks for an element outside the nearest box it sits in (a border or a background),
+  unless something between them scrolls or floats on purpose; a block of the window that scrolls; a page that
+  scrolls sideways. With the 0.7.2 New value panel put back it reports "Select again sticks out by 50 px". Its first
+  run found the formatting toolbar of a Text block wrapping onto a second row at the window's smallest size, taking
+  the text's room: the toolbar is now one row that scrolls sideways, kept clear of the sharing dots.
+- **Copies on both sides.** The value groups were written in Rust and in TypeScript; only one side learned `system.`
+  and `cargoframe.`, and debug mode showed nothing. A test now reads each Rust list and limit the window copies
+  and compares; the value-finding cases are one JSON file that `find.rs` and `pick.ts` both run. Generating the
+  window's types from Rust (`specta`) would remove the copies of the types themselves; it is a new dependency and a
+  large change, left to the owner.
+- **The log.** The capture (program, layout, size), the recording (capture kind, encoder, frame rate, pixels allowed,
+  screens, sound; then its length, size and file size), the share (how long, and the failure's message) and a panic
+  (thread and backtrace) are logged; the bug report already attaches the end of the log.
+- **The docs.** `CHANGELOG.md` holds what each version changed (it was a 5,000-character first paragraph of the
+  status page); the status page starts with what is true today (CargoFrame runs on the owner's Windows PC, Jira and
+  GitHub are used for real).

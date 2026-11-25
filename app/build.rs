@@ -25,6 +25,7 @@ fn main() {
             "report_view",
             "debug_setup_status",
             "setup_debug_report",
+            "check_this_pc",
             "get_timings",
             "get_memory_status",
             "get_shortcut_status",

@@ -147,7 +147,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `update` | Check GitHub releases (the installer under its versioned name or `CargoFrame-Setup.exe`; a token that no longer works left out for a public repository), download, verify SHA-256, run the installer. Its checked download also fetches ffmpeg | `check`, `fetch`, `install` |
 | `shortcuts` | Wayland: hand each shortcut to the desktop (GNOME settings, sway and Hyprland IPC, the portal's GlobalShortcuts, or a command to copy) | `Route`, `gnome::sync`, `wlroots`, `portal::Portal` |
 | `i18n` | The language in use and the packs (French, Spanish, Italian, German) embedded in the program: `t`, `tf`, `msg!`; the computer's language from the system | `lib.rs`, `packs/*.json` |
-| `app` | Glue: tray, shortcuts, sessions, share, commands, secrets, setup checks, clean-up, CLI; starting at sign-in from the person's own entry, repaired when an older copy holds the machine's (`autostart.rs`); debug mode: what was on screen, as values and files of a capture of CargoFrame (`debug.rs`) | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs`, `autostart.rs`, `debug.rs` |
+| `app` | Glue: tray, shortcuts, sessions, share, commands, secrets, setup checks, clean-up, CLI; starting at sign-in from the person's own entry, repaired when an older copy holds the machine's (`autostart.rs`); debug mode: what was on screen, as values and files of a capture of CargoFrame (`debug.rs`), and *Check this PC* (`pc_check.rs`); the log, with the key steps and a panic's backtrace (`logging.rs`) | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs`, `autostart.rs`, `debug.rs` |
 
 <details>
 <summary><b>The app crate, file by file</b></summary>
@@ -322,7 +322,7 @@ One command runs the local gate. Run it before every push; GitHub minutes are sp
 
 ```sh
 CARGO_INCREMENTAL=0 scripts/dev/check.sh quick   # fmt, clippy, cargo test, file names, svelte-check, vitest
-CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, release build, end-to-end capture on Xvfb
+CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, overflow check, release build, end-to-end capture on Xvfb
 ```
 
 | Layer | How it is tested |
@@ -330,6 +330,9 @@ CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, rel
 | Logic crates | Unit and integration tests; side effects behind traits (files, secrets, network, clock) |
 | Connectors | Against `MockServer` following each service's documented API: sign-in, lists, send, retries, "never twice" |
 | UI | vitest on `memoryApi`; whole windows rendered (`App.test.ts`) including recording and demo variants |
+| How the windows look | The overflow check (0.7.3, `ui/scripts/overflow-check.mjs`): Chrome opens every Settings page, the states that make a page longest and the CargoFrame window with the demo data, at the smallest size the app allows and at 1440 × 900, light and dark, and fails when something sticks out of its box, a block of the window scrolls, or a page scrolls sideways. A view that brings up a new state gets its line there |
+| Copies on both sides | `ui/src/lib/mirrors.test.ts` reads each Rust list and limit the window keeps a copy of (value groups, Jira's names, tag and tab limits, block kinds, the values CargoFrame fills) and compares; `core/rules/tests/pick_cases.json` holds the value-finding cases that `find.rs` and `pick.ts` both run. A new copy of a Rust list gets its line in `mirrors.test.ts` |
+| A real PC | *Check this PC* (System, debug mode; `app/src/pc_check.rs`): the screenshot, a 3-second recording, the apps, the sign-in entry, the credential store, the shortcuts, the settings folder and the web view, tried on the owner's PC, the report attached to the next bug report |
 | Guides | `tours.test.ts` (every field exists), `walk.test.ts` (every step can be walked) |
 | Whole program | A fake program on a virtual X11 screen is captured by the real binary (`scripts/e2e/linux-capture.sh`); on a headless sway desktop with the portal, the shortcut, focus and capture of a Wayland and an XWayland program (`scripts/e2e/wayland-capture.sh`) |
 | Budgets | Idle memory and CPU, capture and window times, script size per window (`scripts/ci/check-budgets.mjs`) |
@@ -410,6 +413,27 @@ listed. Branches merge with a **merge commit**.
 ---
 
 ## 10. Next
+
+### 0.7.3: what the code review asked for (planned 25 Nov 2026)
+
+The review of 0.7.2 scored the code **75 / 100**: reliable 80, optimized 78, easy to maintain 70, user friendly 74,
+documented 72. Its weak points, the worst first, and what 0.7.3 does about each:
+
+| # | Weak point | What 0.7.3 does | Needs the owner | State |
+|---|------------|-----------------|-----------------|-------|
+| 1 | Windows paths are tested by CI only; the owner's PC finds the bugs | *Check this PC* (System, debug mode): a screenshot of every screen, a 3-second recording, the apps (ffmpeg, the sound output…), the sign-in entry, the credential store, the shortcuts, the settings folder and the web view, run on the PC itself, written to a report the bug report attaches | One press on the PC, and the report sent | Done |
+| 2 | Layout bugs (boxes overflowing, lists cut) reach the owner first | An overflow check: a real browser opens every Settings page and the CargoFrame window at a small and a large size, light and dark, and fails when something sticks out of its box or the page scrolls sideways; in `scripts/dev/check.sh` and CI | No | Done; it found the formatting toolbar wrapping onto a second row in a small window |
+| 3 | Lists and rules written twice, in Rust and in TypeScript, kept the same by hand | Tests that read the Rust list and compare it with the TypeScript one, for every such pair (the value groups, the values CargoFrame fills, the debug names), and value-finding cases both sides run | No | Done |
+| 4 | Too little logging to explain a crash | The key steps logged with their time: capture, recording (size, encoder, capture kind), share (service, result), window opened; errors always; a panic with its thread and backtrace | No | Done |
+| 5 | Docs that pile up: the status page starts with a 5,000-character paragraph and a sentence no longer true | `CHANGELOG.md` for what each version changed; the status page says what is true today | No | Done |
+| 6 | Files of 1,200 to 1,800 lines (`commands.rs`, `video.rs`, `share.rs`, `ipc.ts`) | Split by topic, starting with `ipc.ts` (the in-memory stand-in in its own file) | No | If time |
+| 7 | The window's types are written by hand from Rust's (132 types, 85 commands) | Generate them from Rust (`specta`), so a changed field cannot go unnoticed | Yes: a new dependency and a large change | Proposed |
+| 8 | Required fields only found when Jira refuses the issue | Ask Jira which fields the project and type require (`createmeta`) and show them in the window before sending | A real Jira to confirm | Proposed |
+
+What only the owner can do stays as it was: real accounts (Jira, Google, Reddit, Claude), the signing certificate,
+the company sign-in apps, and the spikes on real desktops (`docs/spikes.md`).
+
+### Later
 
 | Item | Why |
 |------|-----|

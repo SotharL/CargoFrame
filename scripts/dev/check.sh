@@ -48,6 +48,7 @@ fi
 if [ "$mode" = all ]; then
   step "ui build" bash -c 'cd ui && npm run build'
   step "size budgets" node scripts/ci/check-budgets.mjs
+  step "overflow check (real browser)" bash -c 'cd ui && timeout 600 node scripts/overflow-check.mjs'
   step "build app (embedded UI)" cargo build -p cargoframe --features tauri/custom-protocol
   step "build test helper" cargo build -p cargoframe-capture --example fake_app
   if command -v xvfb-run >/dev/null && command -v xdotool >/dev/null; then

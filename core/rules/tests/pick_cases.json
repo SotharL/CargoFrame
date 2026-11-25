@@ -1,0 +1,180 @@
+{
+ "_about": "Cases that core/rules/src/find.rs (picked) and ui/src/settings/data/pick.ts (hits) both run: the window shows what a capture reads. Add a case here, not to one side.",
+ "cases": [
+  {
+   "name": "after a label, to the end of the line",
+   "text": "[2026.11.16-14.02.50:001][  0]LogInit: Build: ++UE5+Release-5.4-CL-33043543\n[2026.11.16-14.02.51:410][  0]LogAI: Spawned 30 crew on Harbor_P\n[2026.11.16-14.03.10:002][  0]LogLoad: Took 1.2s to load /Game/Maps/Harbor_P?listen\n[2026.11.16-14.05.22:812][  0]LogAI: Spawned 12 crew on Dock_B\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "LogAI:"
+   },
+   "values": [
+    "Spawned 30 crew on Harbor_P",
+    "Spawned 12 crew on Dock_B"
+   ]
+  },
+  {
+   "name": "after a label, up to a space",
+   "text": "[2026.11.16-14.02.50:001][  0]LogInit: Build: ++UE5+Release-5.4-CL-33043543\n[2026.11.16-14.02.51:410][  0]LogAI: Spawned 30 crew on Harbor_P\n[2026.11.16-14.03.10:002][  0]LogLoad: Took 1.2s to load /Game/Maps/Harbor_P?listen\n[2026.11.16-14.05.22:812][  0]LogAI: Spawned 12 crew on Dock_B\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "LogAI:",
+    "stop": " "
+   },
+   "values": [
+    "Spawned",
+    "Spawned"
+   ]
+  },
+  {
+   "name": "up to a text that is only after the value",
+   "text": "[2026.11.16-14.02.50:001][  0]LogInit: Build: ++UE5+Release-5.4-CL-33043543\n[2026.11.16-14.02.51:410][  0]LogAI: Spawned 30 crew on Harbor_P\n[2026.11.16-14.03.10:002][  0]LogLoad: Took 1.2s to load /Game/Maps/Harbor_P?listen\n[2026.11.16-14.05.22:812][  0]LogAI: Spawned 12 crew on Dock_B\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "LogAI:",
+    "stop": " on"
+   },
+   "values": [
+    "Spawned 30 crew",
+    "Spawned 12 crew"
+   ]
+  },
+  {
+   "name": "a path between a text and a sign",
+   "text": "[2026.11.16-14.02.50:001][  0]LogInit: Build: ++UE5+Release-5.4-CL-33043543\n[2026.11.16-14.02.51:410][  0]LogAI: Spawned 30 crew on Harbor_P\n[2026.11.16-14.03.10:002][  0]LogLoad: Took 1.2s to load /Game/Maps/Harbor_P?listen\n[2026.11.16-14.05.22:812][  0]LogAI: Spawned 12 crew on Dock_B\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "Maps/",
+    "stop": "?"
+   },
+   "values": [
+    "Harbor_P"
+   ]
+  },
+  {
+   "name": "a stop missing on a line gives nothing there",
+   "text": "[2026.11.16-14.02.50:001][  0]LogInit: Build: ++UE5+Release-5.4-CL-33043543\n[2026.11.16-14.02.51:410][  0]LogAI: Spawned 30 crew on Harbor_P\n[2026.11.16-14.03.10:002][  0]LogLoad: Took 1.2s to load /Game/Maps/Harbor_P?listen\n[2026.11.16-14.05.22:812][  0]LogAI: Spawned 12 crew on Dock_B\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "LogAI:",
+    "stop": "#"
+   },
+   "values": []
+  },
+  {
+   "name": "a value that starts with its stop",
+   "text": "x [a][b]\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "x",
+    "stop": "["
+   },
+   "values": [
+    "[a]"
+   ]
+  },
+  {
+   "name": "every line from its start",
+   "text": "one\n  two  \n\nthree\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "",
+    "from_line_start": true
+   },
+   "values": [
+    "one",
+    "two",
+    "three"
+   ]
+  },
+  {
+   "name": "letters beyond ASCII",
+   "text": "Carte: Hafen_é?x\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "Carte:",
+    "stop": "?"
+   },
+   "values": [
+    "Hafen_é"
+   ]
+  },
+  {
+   "name": "a next part found lower down",
+   "text": "  Stream #0:0: Video: h264 (avc1 / 0x31637661), 1920x1080\n    Metadata:\n      encoder         : Lavc58.134.100 libopenh264\n  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s\n    Metadata:\n      encoder         : Lavc58.134.100 aac\nframe=    1 fps=0.0\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "Stream #0:1:",
+    "then": [
+     {
+      "joined_by": " - ",
+      "lines_with": "encoder         :"
+     }
+    ]
+   },
+   "values": [
+    "Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s - Lavc58.134.100 aac"
+   ]
+  },
+  {
+   "name": "each first part takes the next part after it",
+   "text": "  Stream #0:0: Video: h264 (avc1 / 0x31637661), 1920x1080\n    Metadata:\n      encoder         : Lavc58.134.100 libopenh264\n  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s\n    Metadata:\n      encoder         : Lavc58.134.100 aac\nframe=    1 fps=0.0\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "Stream #0:",
+    "stop": ",",
+    "then": [
+     {
+      "joined_by": " / ",
+      "lines_with": "encoder         :"
+     }
+    ]
+   },
+   "values": [
+    "0: Video: h264 (avc1 / 0x31637661) / Lavc58.134.100 libopenh264",
+    "1: Audio: aac (LC) (mp4a / 0x6134706D) / Lavc58.134.100 aac"
+   ]
+  },
+  {
+   "name": "next parts on the same line, one missing",
+   "text": "  Stream #0:0: Video: h264 (avc1 / 0x31637661), 1920x1080\n    Metadata:\n      encoder         : Lavc58.134.100 libopenh264\n  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s\n    Metadata:\n      encoder         : Lavc58.134.100 aac\nframe=    1 fps=0.0\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "frame=",
+    "stop": " ",
+    "then": [
+     {
+      "joined_by": " at ",
+      "lines_with": "fps="
+     },
+     {
+      "joined_by": ", ",
+      "lines_with": "speed="
+     }
+    ]
+   },
+   "values": [
+    "1 at 0.0"
+   ]
+  },
+  {
+   "name": "the next line, whole",
+   "text": "  Stream #0:0: Video: h264 (avc1 / 0x31637661), 1920x1080\n    Metadata:\n      encoder         : Lavc58.134.100 libopenh264\n  Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s\n    Metadata:\n      encoder         : Lavc58.134.100 aac\nframe=    1 fps=0.0\n",
+   "find": {
+    "type": "pick",
+    "lines_with": "Stream #0:1:",
+    "stop": ":",
+    "then": [
+     {
+      "joined_by": " / ",
+      "lines_with": "",
+      "from_line_start": true
+     }
+    ]
+   },
+   "values": [
+    "Audio / Metadata:"
+   ]
+  }
+ ]
+}
