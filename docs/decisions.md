@@ -1731,3 +1731,19 @@ development plan, §10.
   is `memoryApi.ts`, and `getApi` imports it only outside the app. The windows' shared script loses 12 KB gzipped,
   and the file the commands are added to is the `Api` type and the real calls only. `commands.rs`, `video.rs` and
   `share.rs` are next, when a change touches them.
+- **What the owner's log showed (25 Nov).** Three things, all CargoFrame's, none the owner's doing:
+  - `ERROR tauri::manager: asset not found: favicon.ico` on every window opened on Windows. The pages named no
+    icon, so WebView2 (Chromium) asked for `/favicon.ico`, which the app does not have, and Tauri logs every missing
+    file as an error. WebKitGTK asks for none, so Linux never showed it. The pages now name an empty `data:` icon
+    (the windows' CSP allows `img-src data:`; a window shows the program's icon, not the page's). A test checks
+    both pages; the overflow check now also fails on any file a page asks for that the build lacks, and the Linux
+    end-to-end run on any `ERROR` line. Chrome's own icon request cannot be seen from a page, hence the test.
+  - Settings opened at every sign-in, and the copy used all day was 0.6.0. Two sign-in entries started CargoFrame
+    (the hand-built 0.6.0 in the machine's list, see 0.7.2, and the installed copy in the person's); the second
+    handed over to the first, and a second launch always meant "open Settings". A second launch with `--autostart`
+    now opens nothing and logs a warning with the other program's path (`cli::again`), and every start logs its own
+    path. A newer copy that starts second still cannot stop an older one already running: Preferences and *Check
+    this PC* name the other entry, and *Stop the older copy* removes it.
+  - `timing: usable ms=99133 metric=settings_paint`. Bringing an open Settings window to the front started its
+    timing, and nothing ended it, since the page paints only when it loads; the next reload counted the time
+    since. The timing now starts only when the page is built.

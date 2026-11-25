@@ -162,9 +162,53 @@ pub fn startup(cli: &Cli, tray_available: bool) -> Startup {
     }
 }
 
+/// What the running copy does when CargoFrame is started again (the single-instance channel
+/// brings it the second launch's switches, and the second launch exits).
+#[derive(Debug, PartialEq, Eq)]
+pub enum Again {
+    /// The installer asks it to quit.
+    Quit,
+    /// Another program asks for a capture.
+    Open(Result<OpenRequest, String>),
+    /// A second sign-in entry started CargoFrame again: nothing to show. Before 0.7.3 this
+    /// opened Settings, so with two entries Settings came up at every sign-in.
+    SignIn,
+    /// The person started it again (the Start menu, the program itself): show Settings.
+    ShowSettings,
+}
+
+pub fn again(second: Cli) -> Again {
+    if second.quit {
+        Again::Quit
+    } else if let Some(open) = second.open {
+        Again::Open(open)
+    } else if second.autostart {
+        Again::SignIn
+    } else {
+        Again::ShowSettings
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn started_again_at_sign_in_shows_nothing() {
+        let again_with = |args: &[&str]| {
+            again(Cli::parse(
+                std::iter::once("app").chain(args.iter().copied()),
+            ))
+        };
+        assert_eq!(again_with(&["--autostart"]), Again::SignIn);
+        assert_eq!(again_with(&[]), Again::ShowSettings);
+        assert_eq!(again_with(&["--quit"]), Again::Quit);
+        assert_eq!(again_with(&["--autostart", "--quit"]), Again::Quit);
+        assert!(matches!(
+            again_with(&["open", "--trigger", "bug"]),
+            Again::Open(Ok(_))
+        ));
+    }
 
     #[test]
     fn parses_known_switches_and_ignores_the_rest() {

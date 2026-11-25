@@ -3,6 +3,9 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- No icon: a window shows the program's own. Without this line Windows' web view asks for
+         /favicon.ico on every window it opens, and Tauri logs "asset not found" as an error. -->
+    <link rel="icon" href="data:," />
     <title>CargoFrame</title>
   </head>
   <body>

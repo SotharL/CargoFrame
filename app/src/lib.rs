@@ -65,7 +65,11 @@ pub fn run() {
     let cli = Cli::parse(std::env::args());
     let dirs = Dirs::from_env().expect("cannot find a settings folder for this user");
     logging::init(&dirs);
-    tracing::info!(version = env!("CARGO_PKG_VERSION"), ?cli, "starting");
+    // which program this is: with two copies on a PC (an install and a build), the log says which ran
+    let exe = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_default();
+    tracing::info!(version = env!("CARGO_PKG_VERSION"), exe, ?cli, "starting");
 
     // WebKit's GPU path shows blank windows with NVIDIA's driver on Wayland: draw without it there.
     #[cfg(target_os = "linux")]
@@ -91,14 +95,19 @@ pub fn run() {
     let app = tauri::Builder::default()
         // Must be first: a second launch tells this copy what to do, then exits.
         .plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
-            let second = Cli::parse(argv);
-            if second.quit {
-                tracing::info!("asked to quit by another launch");
-                app.exit(0);
-            } else if let Some(open) = second.open {
-                open_from_another_program(app, open);
-            } else {
-                windowing::open_settings(app);
+            let other = argv.first().cloned().unwrap_or_default();
+            match cli::again(Cli::parse(argv)) {
+                cli::Again::Quit => {
+                    tracing::info!("asked to quit by another launch");
+                    app.exit(0);
+                }
+                cli::Again::Open(open) => open_from_another_program(app, open),
+                // two sign-in entries: Preferences names the other one, and *Check this PC* says so
+                cli::Again::SignIn => tracing::warn!(
+                    other,
+                    "started again at sign-in by a second entry: this copy keeps running"
+                ),
+                cli::Again::ShowSettings => windowing::open_settings(app),
             }
         }))
         .plugin(tauri_plugin_opener::init())
