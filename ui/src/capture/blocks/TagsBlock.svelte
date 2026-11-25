@@ -4,10 +4,12 @@
   // adds it; Backspace in the empty box takes the last one out), at most 25. Under the box: the
   // last five tags used here. With a list of the service (Jira's labels or components), the box
   // opens it when clicked: several can be picked one after the other, typing narrows it, the
-  // arrows and Enter pick from it. A tag is the entry's name, as the service shows it.
+  // arrows and Enter pick from it. A tag is the entry's name, as the service shows it. The list
+  // floats over the blocks below (lib/floating.ts), so the block keeps its size.
   import { onMount } from 'svelte';
   import { MAX_TAGS, MAX_TAG_CHARS, type Block, type DropdownOption } from '../../lib/types';
   import type { Recent } from '../../lib/recent';
+  import { floatUnder } from '../../lib/floating';
 
   type TagsBlock = Extract<Block, { type: 'tags' }>;
 
@@ -31,6 +33,7 @@
   const id = $derived(`tags-${block.id}`);
   let typed = $state('');
   let input = $state<HTMLInputElement>();
+  let box = $state<HTMLDivElement>();
   let listed = $state<DropdownOption[]>([]);
   let problem = $state('');
   let open = $state(false);
@@ -130,7 +133,7 @@
 <div class="tags">
   <label for={id}>{block.title}<span class="quiet count">{tags.length}/{MAX_TAGS}</span></label>
   <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="box" data-content onclick={() => input?.focus()}>
+  <div class="box" data-content bind:this={box} onclick={() => input?.focus()}>
     <ul class="chips" aria-label={`${block.title || 'Tags'}: ${tags.length} tags`}>
       {#each tags as item, i (item)}
         <li class="chip">
@@ -165,7 +168,7 @@
     />
   </div>
   {#if showList}
-    <ul class="list" id={listId} role="listbox" aria-label={t('Tags of the service')} aria-multiselectable="true">
+    <ul class="list" id={listId} use:floatUnder={box} role="listbox" aria-label={t('Tags of the service')} aria-multiselectable="true">
       {#each matches as o, i (o.value)}
         <!-- svelte-ignore a11y_click_events_have_key_events -->
         <li
@@ -178,7 +181,7 @@
       {/each}
     </ul>
   {/if}
-  {#if recents.length && !full && !showList}
+  {#if recents.length && !full}
     <div class="offer" role="group" aria-label={t('Last tags used')}>
       <span class="quiet">{t('Last used:')}</span>
       {#each recents as item (item)}
@@ -208,9 +211,11 @@
   .x { border: 0; background: transparent; padding: 0 4px; font-size: 14px; line-height: 1; cursor: pointer; color: inherit; }
   .x:hover { color: var(--err); }
   input { flex: 1; min-width: 90px; border: 0; background: transparent; padding: 2px; font: inherit; font-size: 13px; outline: none; }
+  /* fixed to the screen under the box (floatUnder), over the blocks below: a block clips */
   .list {
-    list-style: none; margin: 0; padding: 4px; max-height: 180px; overflow-y: auto; font-size: 13px;
+    box-sizing: border-box; list-style: none; margin: 0; padding: 4px; overflow-y: auto; font-size: 13px;
     border: 1px solid var(--border-strong); border-radius: var(--radius-sm); background: var(--surface);
+    box-shadow: 0 6px 18px color-mix(in srgb, #000 22%, transparent);
   }
   .list li { padding: 3px 8px; border-radius: 4px; cursor: pointer; }
   .list li.active, .list li:hover { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); }

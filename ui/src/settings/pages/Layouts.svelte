@@ -285,8 +285,8 @@
   {/if}
 
   {#if draft}
-    <div class="titlebar">
-      <input class="name" type="text" bind:value={draft.name} aria-label={t('Layout name')} />
+    <div class="titlebar" data-layout={draft.id}>
+      <input class="name" type="text" bind:value={draft.name} aria-label={t('Layout name')} data-layout-name />
       <div class="chips">
         {#if counts.error}<Chip kind="err" label={t('{n} to fix', { n: counts.error })} />{/if}
         {#if counts.warning}<Chip kind="warn" label={t('{n} to check', { n: counts.warning })} />{/if}

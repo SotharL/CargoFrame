@@ -14,6 +14,9 @@
     /** Where the value is found in the shown file, and the places kept. */
     found: { line: number; s: number; e: number }[];
     kept: { line: number; s: number; e: number }[];
+    /** What the grips adjust when it is not the selection: the text before the value, while it
+     *  is being changed. */
+    grip?: { line: number; s: number; e: number } | null;
   }
 </script>
 
@@ -21,7 +24,9 @@
   import { t } from '../../lib/i18n/index.svelte';
   // A file of the last capture, one 20px line per line of the file with scroll bars both ways,
   // and a search like Ctrl+F. Only the lines in view are drawn, so a large log stays quick.
-  // A click or a drag on a line is handed to `onselect` as where it is on that line.
+  // A click or a drag on a line is handed to `onselect` as where it is on that line. The
+  // selection has a grip at each end, as on a phone: dragged (or moved with the arrow keys), it
+  // widens or narrows the selection a character at a time, handed to `onadjust`.
   import { search } from './pick';
   import { changedAt, type ViewFile } from './files';
 
@@ -31,7 +36,9 @@
     marks,
     editing = '',
     oncancel,
+    ondone,
     onselect,
+    onadjust,
     onopen,
     onclose,
   }: {
@@ -41,7 +48,11 @@
     /** Set while a text is chosen for a setting: what to select. */
     editing?: string;
     oncancel?: () => void;
+    /** Shown beside Cancel while editing: keep what the grips set. */
+    ondone?: () => void;
     onselect: (file: string, line: number, s: number, e: number) => void;
+    /** A grip at an end of the selection moved it. */
+    onadjust?: (file: string, line: number, s: number, e: number) => void;
     onopen: (files: File[]) => void;
     /** The × of a tab: the file is closed. */
     onclose?: (id: string) => void;
@@ -75,8 +86,9 @@
   type Kind = 0 | 1 | 2 | 3 | 4 | 5 | 6;
   const CLASS = ['', 'anchor', 'hit', 'found', 'kept', 'here', 'sel'];
 
-  /** A line cut into pieces by what is marked on it, the strongest mark winning. */
-  function pieces(n: number): { t: string; c: string }[] {
+  /** A line cut into pieces by what is marked on it, the strongest mark winning; `gs` and `ge`
+   *  mark the pieces the selection starts and ends with, for its grips. */
+  function pieces(n: number): { t: string; c: string; gs?: boolean; ge?: boolean }[] {
     const line = lines[n] ?? '';
     if (!line) return [{ t: ' ', c: '' }];
     const mark = new Uint8Array(line.length);
@@ -92,11 +104,14 @@
     for (const f of marks.kept) if (f.line === n) put(f.s, f.e, 4);
     const sel = marks.sel;
     if (sel && file && sel.file === file.id && sel.line === n) put(sel.s, sel.e, 6);
-    const out: { t: string; c: string }[] = [];
+    const g = gripped();
+    const here = !!(g && file && marks.sel?.file === file.id && g.line === n);
+    const out: { t: string; c: string; gs?: boolean; ge?: boolean }[] = [];
     for (let i = 0; i < line.length; ) {
-      let j = i;
-      while (j < line.length && mark[j] === mark[i]) j++;
-      out.push({ t: line.slice(i, j), c: CLASS[mark[i]!]! });
+      let j = i + 1;
+      // a piece also ends where what the grips hold does, so the grips sit at its ends
+      while (j < line.length && mark[j] === mark[i] && !(here && (j === g!.s || j === g!.e))) j++;
+      out.push({ t: line.slice(i, j), c: CLASS[mark[i]!]!, gs: here && !!onadjust && i === g!.s, ge: here && !!onadjust && j === g!.e });
       i = j;
     }
     return out;
@@ -191,6 +206,53 @@
     onselect(file.id, n, Math.min(from, to), Math.max(from, to));
   }
 
+  // ── the grips ──
+  let gripping: 's' | 'e' | null = null;
+
+  /** What the grips hold: the text before the value while it is changed, else the selection. */
+  const gripped = () => (marks.grip !== undefined ? marks.grip : marks.sel);
+
+  /** Move an end of what the grips hold to `at` (kept at least one character long). */
+  function moveEnd(which: 's' | 'e', at: number) {
+    const sel = gripped();
+    if (!sel || !file || !onadjust) return;
+    const len = (lines[sel.line] ?? '').length;
+    const s = which === 's' ? Math.max(0, Math.min(at, sel.e - 1)) : sel.s;
+    const e = which === 'e' ? Math.min(len, Math.max(at, sel.s + 1)) : sel.e;
+    if (s !== sel.s || e !== sel.e) onadjust(file.id, sel.line, s, e);
+  }
+
+  function gripDown(e: PointerEvent, which: 's' | 'e') {
+    e.preventDefault();
+    e.stopPropagation();
+    gripping = which;
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+  }
+
+  function gripMove(e: PointerEvent) {
+    const sel = gripped();
+    if (!gripping || !sel || !scroller) return;
+    const text = scroller.querySelector(`[data-line="${sel.line}"] .text`);
+    if (!text) return;
+    // the line's own height, wherever the pointer is above or below it
+    const r = text.getBoundingClientRect();
+    const c = caretAt(Math.max(r.left, Math.min(e.clientX, r.right - 1)), r.top + r.height / 2);
+    if (!c) return;
+    moveEnd(gripping, offsetIn(text, c.node, c.offset, (lines[sel.line] ?? '').length));
+  }
+
+  function gripUp(e: PointerEvent | MouseEvent) {
+    e.stopPropagation();
+    gripping = null;
+  }
+
+  function gripKey(e: KeyboardEvent, which: 's' | 'e') {
+    const sel = gripped();
+    if (!sel || (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight')) return;
+    e.preventDefault();
+    moveEnd(which, (which === 's' ? sel.s : sel.e) + (e.key === 'ArrowLeft' ? -1 : 1));
+  }
+
   function onDrop(e: DragEvent) {
     e.preventDefault();
     over = false;
@@ -252,7 +314,10 @@
   {#if editing}
     <div class="editing" role="status">
       <span>{editing}</span>
-      <button type="button" onclick={() => oncancel?.()}>{t('Cancel')}</button>
+      <span class="editing-buttons">
+        {#if ondone}<button type="button" class="primary" onclick={() => ondone()}>{t('Done')}</button>{/if}
+        <button type="button" onclick={() => oncancel?.()}>{t('Cancel')}</button>
+      </span>
     </div>
   {/if}
 
@@ -269,7 +334,7 @@
     {:else}
       <div class="inner" style:min-width="calc({widest}ch + 70px)" style:padding-top="{first * ROW}px" style:padding-bottom="{(shown.length - last) * ROW}px">
         {#each shown.slice(first, last) as n (n)}
-          <div class="row" data-line={n}><span class="num" aria-hidden="true">{n + 1}</span><div class="text">{#each pieces(n) as p, i (i)}<span class={p.c}>{p.t}</span>{/each}</div></div>
+          <div class="row" data-line={n}><span class="num" aria-hidden="true">{n + 1}</span><div class="text">{#each pieces(n) as p, i (i)}{#if p.gs}<span class="grip s" role="slider" tabindex="0" aria-label={marks.grip ? t('Start of the text before the value') : t('Start of the selection')} aria-valuenow={gripped()?.s} aria-valuemin={0} aria-valuemax={gripped()?.e} onpointerdown={(e) => gripDown(e, 's')} onpointermove={gripMove} onpointerup={gripUp} onmouseup={gripUp} onkeydown={(e) => gripKey(e, 's')}></span>{/if}<span class={p.c}>{p.t}</span>{#if p.ge}<span class="grip e" role="slider" tabindex="0" aria-label={marks.grip ? t('End of the text before the value') : t('End of the selection')} aria-valuenow={gripped()?.e} aria-valuemin={gripped()?.s} aria-valuemax={(lines[n] ?? '').length} onpointerdown={(e) => gripDown(e, 'e')} onpointermove={gripMove} onpointerup={gripUp} onmouseup={gripUp} onkeydown={(e) => gripKey(e, 'e')}></span>{/if}{/each}</div></div>
         {/each}
       </div>
     {/if}
@@ -313,7 +378,8 @@
   .tiny { width: 30px; height: 30px; padding: 0; }
   .only { display: flex; align-items: center; gap: 6px; font-size: 13px; }
   .editing { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 8px 12px; font-size: 13px; background: color-mix(in srgb, var(--warn) 16%, var(--surface)); border-bottom: 1px solid var(--border); }
-  .editing button { margin-left: auto; font-size: 13px; padding: 2px 10px; }
+  .editing-buttons { margin-left: auto; display: flex; gap: 6px; }
+  .editing button { font-size: 13px; padding: 2px 10px; }
   .lines { overflow: auto; font: 12.5px/20px var(--mono); }
   .inner { box-sizing: border-box; }
   .row { display: flex; height: 20px; }
@@ -330,4 +396,13 @@
   .hit { background: color-mix(in srgb, var(--dbg) 22%, transparent); }
   .here { background: color-mix(in srgb, var(--dbg) 55%, transparent); }
   .anchor { text-decoration: underline 2px var(--accent); text-underline-offset: 3px; }
+  /* A grip: no width in the text (so offsets do not change), a bar the line's height and a knob,
+     above the line at the start and under it at the end, as on a phone. */
+  .grip { position: relative; display: inline-block; width: 0; height: 20px; vertical-align: top; cursor: ew-resize; touch-action: none; user-select: none; z-index: 2; }
+  .grip::before { content: ''; position: absolute; left: -6px; width: 12px; top: 0; bottom: 0; background: linear-gradient(var(--accent), var(--accent)) center / 2px 100% no-repeat; }
+  .grip::after { content: ''; position: absolute; left: -5px; width: 10px; height: 10px; border-radius: 50%; background: var(--accent); }
+  .grip.s::after { top: -7px; }
+  .grip.e::after { bottom: -7px; }
+  .grip:focus-visible { outline: none; }
+  .grip:focus-visible::after { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--accent); }
 </style>

@@ -16,6 +16,8 @@
     "allow-get-autostart",
     "allow-get-memory-status",
     "allow-set-autostart",
+    "allow-autostart-others",
+    "allow-remove-autostart-others",
     "allow-open-config-folder",
     "allow-get-shortcut-status",
     "allow-list-items",
@@ -71,6 +73,7 @@
     "allow-remove-chat",
     "allow-open-link",
     "allow-report-painted",
+    "allow-report-view",
     "allow-get-timings",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

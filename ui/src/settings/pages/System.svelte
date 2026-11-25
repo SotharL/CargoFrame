@@ -8,6 +8,8 @@
   import Setup from './Setup.svelte';
   import UpdatesSection from './UpdatesSection.svelte';
   import Diagnostics from './Diagnostics.svelte';
+  import Toggle from '../../lib/components/Toggle.svelte';
+  import { setDebug } from '../../lib/debugView';
   import { getApi } from '../../lib/ipc';
   import type { General, MemoryMode } from '../../lib/types';
 
@@ -34,6 +36,12 @@
       failed = String(e);
     }
   }
+  function onDebug(value: boolean) {
+    if (!general) return;
+    general.debug = value;
+    setDebug(value);
+    void saveGeneral();
+  }
   function onAuto(value: boolean) {
     if (!general) return;
     general.check_updates = value;
@@ -58,6 +66,18 @@
         </select>
       {/snippet}
       <p class="quiet small">{memoryHints[general.memory_mode]}</p>
+    </Section>
+  {/if}
+  {#if general}
+    <Section
+      title={t('Debug mode')}
+      tour="system.debug"
+      hint={t('For reporting a problem in CargoFrame itself. Off, nothing of this is kept.')}
+    >
+      <Toggle label={t('Describe CargoFrame in a capture of its own windows')} checked={!!general.debug} onchange={onDebug} />
+      <p class="quiet small">
+        {t('A capture of a CargoFrame window then fills values such as {cargoframe.page}, {cargoframe.section}, {cargoframe.focus} and {cargoframe.guide}, and adds the layout on screen, the data rules, the settings and the end of the log to its Files blocks. The template CargoFrame bug report uses them.')}
+      </p>
     </Section>
   {/if}
   {#if failed}<div role="alert"><Chip kind="err" label={t('Could not save')} /> <span class="quiet">{failed}</span></div>{/if}

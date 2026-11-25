@@ -308,7 +308,7 @@
         <button class="primary" onclick={() => api?.editLayout(view?.layout?.id ?? null)}>{t('Edit layout')}</button>
       </main>
     {:else}
-      <main class="grid" style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={gridRows(rowHeights)} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
+      <main class="grid" data-layout={view.layout?.id} data-layout-name={view.layout?.name} style:grid-template-columns={`repeat(${cols}, minmax(0, 1fr))`} style:grid-template-rows={gridRows(rowHeights)} style={hovered ? kindStyle(view.sharing[hovered]?.kind ?? null) : ''}>
         {#each topLevel as b (b.id)}{@render slot(b, { x: 0, y: 0 }, false)}{/each}
       </main>
     {/if}
@@ -352,7 +352,7 @@
           </div>
         </TabsBlock>
       {:else}
-        <section class="cell" class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
+        <section class="cell" data-block={`${b.type}: ${'title' in b && b.title ? b.title : 'label' in b ? b.label : b.id}`} class:lit={hovered !== null && isTicked(ticks, hovered, b.id)}>
           <div class="body">
           {#if b.type === 'screenshot' && paired}
             {#if still}

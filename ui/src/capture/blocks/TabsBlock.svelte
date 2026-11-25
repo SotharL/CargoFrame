@@ -84,6 +84,8 @@
   .bottom .names button[aria-selected='true'] { border-top-color: var(--surface); }
   .left .names button[aria-selected='true'] { border-right-color: var(--surface); }
   .right .names button[aria-selected='true'] { border-left-color: var(--surface); }
+  /* The names scroll (a long row), so a ring drawn outside a name would be cut: drawn inside. */
+  .names button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
   /* A closed tab that holds what the hovered sharing button sends. */
   .names button.lit { box-shadow: inset 0 -3px 0 var(--kind-line, var(--accent)); }
 
@@ -91,4 +93,9 @@
     min-width: 0; min-height: 0; overflow: auto; padding: 8px;
     border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface);
   }
+  /* The first name sits on the page's corner: that corner is square, so the two join. */
+  .top .page { border-top-left-radius: 0; }
+  .bottom .page { border-bottom-left-radius: 0; }
+  .left .page { border-top-left-radius: 0; }
+  .right .page { border-top-right-radius: 0; }
 </style>

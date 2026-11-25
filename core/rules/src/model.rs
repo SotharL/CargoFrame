@@ -102,6 +102,8 @@ pub enum Find {
     /// (every line when it is empty), from right after that text, or from the start of the line
     /// with `from_line_start`, up to `stop` (the end of the line when there is none). A line
     /// where `stop` does not come after the start gives nothing. Case counts, as selected.
+    /// `then` (0.7.2): more parts, each found after the one before it and joined to it, such as
+    /// ffmpeg's `Stream #0:1: Audio: aac…` and the `encoder : Lavc58…` a few lines below.
     Pick {
         #[serde(default)]
         lines_with: String,
@@ -109,6 +111,8 @@ pub enum Find {
         from_line_start: bool,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         stop: Option<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        then: Vec<Next>,
     },
     /// A rule made before 0.3.0: its own format and query (the fields of [`Rule`]).
     Advanced,
@@ -116,6 +120,21 @@ pub enum Find {
     /// such as `{{rule.stream}}_{{rule.change}}_{{rule.shelf}}_{{rule.config}}` when a shelf is
     /// found, else `{{rule.stream}}_{{rule.change}}_{{rule.config}}`. See [`crate::combine`].
     Combine { choices: Vec<Choice> },
+}
+
+/// A further part of a picked value: looked for after the part before it, later on the same
+/// line (when it has a text to come after) or on the lines below, the first place it is found.
+/// When it is not found, the value is the parts found before it.
+#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Next {
+    /// What goes between the part before and this one: " - ", ", ", a new line…
+    pub joined_by: String,
+    pub lines_with: String,
+    #[serde(skip_serializing_if = "is_false")]
+    pub from_line_start: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stop: Option<String>,
 }
 
 /// One way to make a combined value. With no conditions it fits when every value its text names

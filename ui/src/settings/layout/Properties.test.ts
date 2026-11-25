@@ -167,3 +167,21 @@ describe('Properties: a text block', () => {
   });
 });
 
+
+describe('Properties: a Tabs block', () => {
+  it('locks and unlocks each tab with the lock beside its name', async () => {
+    const tabs = {
+      id: 'tabs', type: 'tabs', rect: { x: 0, y: 0, w: 8, h: 4 }, tabs: [{ name: 'Logs', blocks: [] as string[] }, { name: 'Other' }],
+    } as Extract<Block, { type: 'tabs' }>;
+    open(tabs);
+    await fireEvent.click(screen.getByRole('button', { name: 'Lock Logs' }));
+    expect(tabs.tabs[0]!.locked).toBe(true);
+    expect(tabs.tabs[1]!.locked).toBeUndefined();
+    cleanup();
+    open(tabs);
+    const unlock = screen.getByRole('button', { name: 'Unlock Logs' });
+    expect(unlock.getAttribute('aria-pressed')).toBe('true');
+    await fireEvent.click(unlock);
+    expect('locked' in tabs.tabs[0]!).toBe(false);
+  });
+});

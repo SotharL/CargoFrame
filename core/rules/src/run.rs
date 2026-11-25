@@ -1307,6 +1307,7 @@ mod tests {
                 lines_with: "Maps/".into(),
                 from_line_start: false,
                 stop: Some("?".into()),
+                then: vec![],
             },
             Which::Last,
         );

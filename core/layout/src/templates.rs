@@ -26,7 +26,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 20] = [
+pub const TEMPLATES: [TemplateInfo; 21] = [
     TemplateInfo {
         key: "local-capture",
         name: msg!("Save a capture locally"),
@@ -61,6 +61,12 @@ pub const TEMPLATES: [TemplateInfo; 20] = [
         key: "github-video",
         name: msg!("GitHub issue with recording"),
         description: msg!("Like the GitHub issue, with the recording of the window in focus linked from it beside the screenshot taken from it; tabs hold the recording, the screenshot and the logs. A shortcut that opens it records the window in focus."),
+        service: Some(ConnectionKind::Github),
+    },
+    TemplateInfo {
+        key: "cargoframe-report",
+        name: msg!("CargoFrame bug report"),
+        description: msg!("Debug mode: a GitHub issue about CargoFrame itself, from a capture of one of its windows. The title starts with where it was (window, page, tab, section), the description says what was in focus, and the layout on screen, the data rules, the settings and the end of the log are attached."),
         service: Some(ConnectionKind::Github),
     },
     TemplateInfo {
@@ -405,6 +411,8 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         "local-video" => ("local-capture", true),
         "jira-video" => ("jira-ticket", true),
         "github-video" => ("github-issue", true),
+        // the GitHub issue, with its title, description and labels made from what was on screen
+        "cargoframe-report" => ("github-issue", false),
         "google-drive-video" => ("google-drive", true),
         "slack-video" => ("slack-message", true),
         "discord-video" => ("discord-message", true),
@@ -861,6 +869,11 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         ],
         _ => return None,
     };
+    let blocks = if tpl.key == "cargoframe-report" {
+        blocks.into_iter().map(debug_report).collect()
+    } else {
+        blocks
+    };
     Some(Layout {
         accepts_input: false,
         columns: crate::GRID_COLUMNS,
@@ -868,6 +881,36 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         name: t(tpl.name).to_string(),
         blocks,
     })
+}
+
+/// The CargoFrame bug report (debug mode): the GitHub issue's title starts with where it was,
+/// as CargoFrame's issues are titled; its description says what was on screen and on which
+/// computer; its labels start with what it is about.
+fn debug_report(mut b: Block) -> Block {
+    match (b.id.as_str(), &mut b.kind) {
+        ("title", BlockKind::Text(tb)) => tb.default_text = "{cargoframe.where} - ".into(),
+        ("description", BlockKind::Text(tb)) => {
+            tb.default_text = format!(
+                "{}\n\n| {} |\n| --- |\n| {{capture.screenshot}} |\n\n\
+                 **CargoFrame {{cargoframe.version}}** · {{system.os}} · {{system.screens}}\n\
+                 - {}: {{cargoframe.where}}\n\
+                 - {}: {{cargoframe.focus}}\n\
+                 - {}: {{cargoframe.layout}} ({{cargoframe.block}})\n\
+                 - {}: {{cargoframe.guide}}",
+                t(SEEN_IN),
+                t("Screenshot"),
+                t("Where"),
+                t("In focus"),
+                t("Layout"),
+                t("Guide"),
+            )
+        }
+        ("labels", BlockKind::Tags(tags)) => {
+            tags.tags = vec!["bug".into(), "{app.exe}".into(), "{cargoframe.page}".into()];
+        }
+        _ => {}
+    }
+    b
 }
 
 #[cfg(test)]
@@ -1212,5 +1255,27 @@ mod tests {
                 t.key
             );
         }
+    }
+
+    #[test]
+    fn the_cargoframe_bug_report_is_the_github_issue_titled_where_it_was() {
+        let l = build("cargoframe-report", Some("c")).unwrap();
+        let issue = build("github-issue", Some("c")).unwrap();
+        // the same blocks, so the two cannot drift apart
+        let ids = |l: &Layout| l.blocks.iter().map(|b| b.id.clone()).collect::<Vec<_>>();
+        assert_eq!(ids(&l), ids(&issue));
+        let text = |id: &str| match &l.blocks.iter().find(|b| b.id == id).unwrap().kind {
+            BlockKind::Text(t) => t.default_text.clone(),
+            _ => panic!("{id} is not a text"),
+        };
+        assert_eq!(text("title"), "{cargoframe.where} - ");
+        assert!(text("description").contains("{cargoframe.focus}"));
+        assert!(text("description").contains("{capture.screenshot}"));
+        let BlockKind::Tags(tags) = &l.blocks.iter().find(|b| b.id == "labels").unwrap().kind
+        else {
+            panic!("no labels");
+        };
+        assert_eq!(tags.tags, ["bug", "{app.exe}", "{cargoframe.page}"]);
+        assert_eq!(l.name, "CargoFrame bug report");
     }
 }

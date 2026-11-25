@@ -7,7 +7,7 @@
   import type { Block, ConnectionView, IssueView, Reach, Rect } from '../../lib/types';
   import { lineFor, type Line } from './reach';
   import {
-    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, addBlock, canPlace, copyOf, isLocked, lockTab,
+    BLOCK_TYPES, COLUMNS, MAX_COLUMNS, MAX_SHARING_BUTTONS, MIN_COLUMNS, addBlock, canPlace, copyOf, isLocked,
     moveTo, pasteBlocks, removeBlock, resizeTo, rowsNeeded, typeLabel, usedColumns, type BlockType,
   } from './model';
   import { clipboard } from './clipboard.svelte';
@@ -314,26 +314,6 @@
         onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); addAt(item.type); } }}
       >＋ {item.label}</button>
     {/each}
-    <span class="cols" role="group" aria-label={t('Columns')}>
-      <span class="quiet">{t('Columns:')}</span>
-      <button
-        type="button"
-        class="step"
-        disabled={!canNarrow}
-        aria-label={t('Remove the last column')}
-        title={canNarrow ? t('Remove the last column') : cols <= MIN_COLUMNS ? t('A layout has at least {MIN_COLUMNS} columns', { MIN_COLUMNS }) : t('Move the blocks out of the last column first')}
-        onclick={() => (columns = cols - 1 === COLUMNS ? undefined : cols - 1)}
-      >−</button>
-      <span class="count-cols" aria-live="polite">{cols}</span>
-      <button
-        type="button"
-        class="step"
-        disabled={!canWiden}
-        aria-label={t('Add a column on the side')}
-        title={canWiden ? t('Add a column on the right side: the window opens wider') : t('A layout has at most {MAX_COLUMNS} columns', { MAX_COLUMNS })}
-        onclick={() => (columns = cols + 1)}
-      >＋</button>
-    </span>
   </div>
 
   <div class="actions" role="toolbar" aria-label={t('The block chosen')}>
@@ -356,6 +336,26 @@
       <Icon name="trash" size={14} />{t('Delete')}
     </button>
     {#if note}<span class="quiet note" aria-live="polite">{note}</span>{/if}
+    <span class="cols" role="group" aria-label={t('Columns')}>
+      <span class="quiet">{t('Columns:')}</span>
+      <button
+        type="button"
+        class="step"
+        disabled={!canNarrow}
+        aria-label={t('Remove the last column')}
+        title={canNarrow ? t('Remove the last column') : cols <= MIN_COLUMNS ? t('A layout has at least {MIN_COLUMNS} columns', { MIN_COLUMNS }) : t('Move the blocks out of the last column first')}
+        onclick={() => (columns = cols - 1 === COLUMNS ? undefined : cols - 1)}
+      >−</button>
+      <span class="count-cols" aria-live="polite">{cols}</span>
+      <button
+        type="button"
+        class="step"
+        disabled={!canWiden}
+        aria-label={t('Add a column on the side')}
+        title={canWiden ? t('Add a column on the right side: the window opens wider') : t('A layout has at most {MAX_COLUMNS} columns', { MAX_COLUMNS })}
+        onclick={() => (columns = cols + 1)}
+      >＋</button>
+    </span>
   </div>
 
   <div class="scroll">
@@ -365,6 +365,7 @@
         {@const l = lineOf(b)}
         <div
           class="block {b.type}"
+          data-name={`${typeLabel(b.type)}: ${label(b)}`}
           class:sharing={b.type === 'sharing_button'}
           class:greyed={l?.state === 'cannot_send' || l?.state === 'switched_off'}
           class:unused={l?.state === 'not_used'}
@@ -389,27 +390,18 @@
             <!-- The names, on their side: a click opens the tab, to see and place its blocks. -->
             <div class="tabnames {b.side ?? 'top'}" role="tablist" aria-label={t('Tabs')}>
               {#each b.tabs as item, i (i)}
-                <span class="tabname" class:locked={item.locked}>
-                  <button
-                    type="button"
-                    role="tab"
-                    aria-selected={openTab(b, open) === i}
-                    title={item.locked
-                      ? t('{name} is locked: its blocks stay where they are, and none is dropped in it.', { name: item.name })
-                      : tn('{name}: {n} block. Click to see it; a block dropped here goes in this tab.', t('{name}: {n} blocks. Click to see them; a block dropped here goes in this tab.'), (item.blocks ?? []).length, { name: item.name })}
-                    onpointerdown={(e) => e.stopPropagation()}
-                    onclick={() => { open[b.id] = i; selected = b.id; }}
-                  >{item.name || t('Tab {n}', { n: i + 1 })}</button>
-                  <button
-                    type="button"
-                    class="lock"
-                    aria-pressed={item.locked === true}
-                    aria-label={item.locked ? t('Unlock {name}', { name: item.name || t('Tab {n}', { n: i + 1 }) }) : t('Lock {name}', { name: item.name || t('Tab {n}', { n: i + 1 }) })}
-                    title={item.locked ? t('Unlock: its blocks can be moved again') : t('Lock: its blocks stay where they are')}
-                    onpointerdown={(e) => e.stopPropagation()}
-                    onclick={() => (blocks = lockTab(blocks, b.id, i, !item.locked))}
-                  ><Icon name={item.locked ? 'lock' : 'unlock'} size={11} /></button>
-                </span>
+                <!-- a locked tab (locked in the block's properties) is greyed, and still opens -->
+                <button
+                  type="button"
+                  role="tab"
+                  class:locked={item.locked}
+                  aria-selected={openTab(b, open) === i}
+                  title={item.locked
+                    ? t('{name} is locked: its blocks stay where they are, and none is dropped in it.', { name: item.name })
+                    : tn('{name}: {n} block. Click to see it; a block dropped here goes in this tab.', t('{name}: {n} blocks. Click to see them; a block dropped here goes in this tab.'), (item.blocks ?? []).length, { name: item.name })}
+                  onpointerdown={(e) => e.stopPropagation()}
+                  onclick={() => { open[b.id] = i; selected = b.id; }}
+                >{#if item.locked}<Icon name="lock" size={10} />{/if}{item.name || t('Tab {n}', { n: i + 1 })}</button>
               {/each}
             </div>
             <!-- A grip that stays over the blocks of its tabs: when one fills a tab, the Tabs block
@@ -456,13 +448,10 @@
   .act { display: inline-flex; gap: 5px; align-items: center; padding: 2px 9px; font-size: 12.5px; }
   .act.danger:not(:disabled):hover { color: var(--err); border-color: var(--err); }
   .note { font-size: 12px; }
-  .tabname { display: inline-flex; align-items: center; }
-  .tabname .lock {
-    border: 0; background: none; padding: 1px 3px; color: var(--quiet); opacity: 0.55; cursor: pointer; line-height: 0;
-  }
-  .tabname .lock:hover, .tabname.locked .lock { opacity: 1; }
-  .tabname.locked .lock { color: var(--accent); }
-  .block.fixed { cursor: default; }
+  /* A locked tab and its blocks are greyed: they open and can be chosen, not changed. */
+  .tabnames button.locked { opacity: 0.6; display: inline-flex; align-items: center; gap: 3px; }
+  .block.fixed { cursor: default; opacity: 0.6; filter: grayscale(0.6); }
+  .block.fixed.selected { opacity: 0.8; }
   .block.fixed .handle { display: none; }
   .palette { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
   .chip { padding: 3px 10px; border-radius: 999px; font-size: 13px; touch-action: none; }

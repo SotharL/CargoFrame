@@ -249,6 +249,14 @@ pub fn variables(store: &Store) -> Vec<VariableInfo> {
             value: system.iter().find(|(k, _)| k == n).map(|(_, v)| v.clone()),
         })
         .collect();
+    // debug mode: what a capture of CargoFrame itself says
+    if crate::debug::is_on(store) {
+        out.extend(crate::debug::NAMES.iter().map(|n| VariableInfo {
+            name: (*n).to_string(),
+            description: crate::debug::describe(n).to_string(),
+            value: None,
+        }));
+    }
     if let Ok(loaded) = store.load_all::<Rule>(Kind::Rules) {
         // a value read in several files is offered once, naming its files
         let mut values: Vec<(String, String, Vec<String>)> = Vec::new();
@@ -756,6 +764,7 @@ mod tests {
                 lines_with: after.into(),
                 from_line_start: false,
                 stop: None,
+                then: vec![],
             },
             which: Which::Last,
             fallback: None,

@@ -6,6 +6,7 @@
   // until something is typed, then are searched together with the others. An option with a `group`
   // is listed under that heading, where the heading changes.
   import type { ComboOption } from '../types';
+  import { floatUnder } from '../floating';
 
   let {
     options,
@@ -39,7 +40,6 @@
   } = $props();
 
   /** The narrowest the list is drawn, in pixels, however small its box. */
-  const MIN_LIST = 260;
   const uid = `cb-${Math.random().toString(36).slice(2, 8)}`;
   const listId = `${uid}-list`;
 
@@ -49,38 +49,6 @@
   let active = $state(0);
   let list = $state<HTMLUListElement>();
   let wrap = $state<HTMLDivElement>();
-  let pos = $state({ left: 0, top: 0, width: 0, maxH: 240, up: false });
-
-  // The list is fixed to the screen, not to the block that holds the box: a block clips what
-  // overflows it, and the list must be able to reach past a small block.
-  function place() {
-    if (!wrap) return;
-    const r = wrap.getBoundingClientRect();
-    const below = window.innerHeight - r.bottom - 8;
-    const above = r.top - 8;
-    const up = below < 160 && above > below;
-    // A narrow box (one of three in a row) still gets a list wide enough to read, kept on screen.
-    const width = Math.min(Math.max(r.width, MIN_LIST), window.innerWidth - 16);
-    pos = {
-      left: Math.max(8, Math.min(r.left, window.innerWidth - width - 8)),
-      width,
-      top: up ? r.top - 2 : r.bottom + 2,
-      maxH: Math.max(100, Math.min(240, up ? above : below)),
-      up,
-    };
-  }
-
-  $effect(() => {
-    if (!open) return;
-    place();
-    const again = () => place();
-    window.addEventListener('resize', again);
-    window.addEventListener('scroll', again, true);
-    return () => {
-      window.removeEventListener('resize', again);
-      window.removeEventListener('scroll', again, true);
-    };
-  });
 
   const shown = $derived(
     options.find((o) => o.value === value)?.label ?? also.find((o) => o.value === value)?.label ?? (free ? value : ''),
@@ -176,11 +144,7 @@
       role="listbox"
       bind:this={list}
       aria-label={label}
-      style:left="{pos.left}px"
-      style:top="{pos.top}px"
-      style:width="{pos.width}px"
-      style:max-height="{pos.maxH}px"
-      style:transform={pos.up ? 'translateY(-100%)' : undefined}
+      use:floatUnder={wrap}
     >
       {#each matches as o, i (i)}
         {#if o.group && o.group !== matches[i - 1]?.group}
@@ -209,7 +173,7 @@
   input { width: 100%; padding-right: 26px; }
   .caret { position: absolute; right: 9px; top: 50%; transform: translateY(-50%); color: var(--quiet); pointer-events: none; font-size: 12px; }
   ul {
-    position: fixed; z-index: 50; box-sizing: border-box;
+    box-sizing: border-box;
     margin: 0; padding: 4px; list-style: none; overflow-y: auto;
     background: var(--surface); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
     box-shadow: 0 6px 18px color-mix(in srgb, #000 22%, transparent);

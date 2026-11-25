@@ -116,7 +116,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `app/` | The program: tray, shortcuts, commands, sharing, secrets, setup checks, `cargoframe open` |
 | `ui/src/settings` | Settings window: pages, layout builder, connections, guides |
 | `ui/src/capture` | CargoFrame window: blocks, editor, tick boxes, sharing |
-| `ui/src/lib` | IPC (`ipc.ts`, with `memoryApi` for tests and demos), tokens, shared components |
+| `ui/src/lib` | IPC (`ipc.ts`, with `memoryApi` for tests and demos), tokens, shared components; a list fixed to the screen under its box (`floating.ts`: the dropdown's and the Tags list); what a window shows, in debug mode (`debugView.ts`) |
 | `installers/` | NSIS script and hooks; AppImage, `install.sh`, `uninstall.sh` |
 | `scripts/` | `dev/check.sh` (the gate), `ci/` (budgets, names), `e2e/` (virtual-screen tests), `windows/build.cmd` |
 | `assets/brand/` | Logo and icon SVGs |
@@ -147,7 +147,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `update` | Check GitHub releases (the installer under its versioned name or `CargoFrame-Setup.exe`; a token that no longer works left out for a public repository), download, verify SHA-256, run the installer. Its checked download also fetches ffmpeg | `check`, `fetch`, `install` |
 | `shortcuts` | Wayland: hand each shortcut to the desktop (GNOME settings, sway and Hyprland IPC, the portal's GlobalShortcuts, or a command to copy) | `Route`, `gnome::sync`, `wlroots`, `portal::Portal` |
 | `i18n` | The language in use and the packs (French, Spanish, Italian, German) embedded in the program: `t`, `tf`, `msg!`; the computer's language from the system | `lib.rs`, `packs/*.json` |
-| `app` | Glue: tray, shortcuts, sessions, share, commands, secrets, setup checks, clean-up, CLI | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs` |
+| `app` | Glue: tray, shortcuts, sessions, share, commands, secrets, setup checks, clean-up, CLI; starting at sign-in from the person's own entry, repaired when an older copy holds the machine's (`autostart.rs`); debug mode: what was on screen, as values and files of a capture of CargoFrame (`debug.rs`) | `triggers.rs`, `session.rs`, `share.rs`, `cli.rs`, `autostart.rs`, `debug.rs` |
 
 <details>
 <summary><b>The app crate, file by file</b></summary>
@@ -189,7 +189,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `capture/blocks` | Screenshot, Video (trim strip, crop box, marks drawn with the editor's model: `MarkCanvas.svelte`; texts over the clip: `TextOverlay.svelte`, `keyLayer.ts`), Text (formatted box with table grids: `richtext.ts`, `RichBox.svelte`; a table's cells are `tw-cell`, only the box's own), Dropdown (path steps; a searched list asked again as one types), Files (＋ to add by hand), Tags (a list of the service to pick several from), Log viewer (`logLines.ts`, `logTimes.ts`, `logFormat.ts` for the formats people write, `logInfer.ts` for a format worked out from a time selected in a line, `logFormats.ts` for the ones kept; `../playhead.svelte.ts` is where the clip is, for the lines to follow it), Tabs (`TabsBlock.svelte`: the names; the window draws the page), Sharing |
 | `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
 | `capture/*.ts` | Values, the sharing dots (`ticks.ts`), what each button will send and what it still waits for (`willSend.ts`: `missing`), remembered choices, row heights (`rows.ts`) |
-| `settings/data` | Data parsing's file viewer and value editor; the files opened and closed kept until Settings closes (`files.ts`) |
+| `settings/data` | Data parsing's file viewer (grips at a selection's ends) and value editor (parts found one after the other: `pick.ts` runs `Find::Pick` with its `then` as `find.rs` does); the files opened and closed kept until Settings closes (`files.ts`) |
 | `lib/` | `ipc.ts` (real and in-memory API), `shortcut.ts` (keys held and let go, named by their place, and which ones CargoFrame watches), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links), `icons.ts` with `Icon.svelte` (the line icons, the Settings pages' included), `tabs.ts` (which tab a block is in, shared by the builder and the window), `i18n/` (`t`, `tn`, `msg`, `Tr`, the packs) |
 
 </details>

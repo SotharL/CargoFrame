@@ -1,5 +1,5 @@
 import type {
-  AppInfo, Block, ChatView, Cleaned, Connection, ConnectionsView, ConnectionView, DataReport, Describe, DropdownOption,
+  AppInfo, Block, ChatView, Cleaned, Connection, ConnectionsView, ConnectionView, DataReport, DebugView, Describe, DropdownOption,
   ExportSelection, FilesPreview, General, ImportPick, ImportPreview, ImportReport, IssueView, ItemEntry,
   ItemKind, ItemList, Layout, LayoutTemplate, LookFolder, OptionsError, Rule, RuleTest, Safe, SessionView,
   FfmpegPhase, MemoryStatus, Reach, ShareRequest, ShareResult, TimingView, UpdateLast, UpdateView, VariableInfo, Video,
@@ -38,7 +38,13 @@ export interface Api {
   getLanguage(): Promise<LanguageInfo>;
   setGeneral(general: General): Promise<void>;
   getAutostart(): Promise<boolean>;
+  /** Debug mode: what this window shows now. */
+  reportView(view: DebugView): Promise<void>;
   setAutostart(enabled: boolean): Promise<void>;
+  /** Other programs Windows starts as CargoFrame at sign-in (an older copy). */
+  autostartOthers(): Promise<string[]>;
+  /** Stop them: Windows asks for the administrator's right. Returns what is left. */
+  removeAutostartOthers(): Promise<string[]>;
   openConfigFolder(): Promise<void>;
   /** What CargoFrame keeps on this computer, by kind. */
   getDataReport(): Promise<DataReport>;
@@ -214,7 +220,10 @@ async function tauriApi(): Promise<Api> {
     getLanguage: () => invoke<LanguageInfo>('get_language'),
     setGeneral: (general) => invoke('set_general', { general }),
     getAutostart: () => invoke<boolean>('get_autostart'),
+    reportView: (view) => invoke('report_view', { view }),
     setAutostart: (enabled) => invoke('set_autostart', { enabled }),
+    autostartOthers: () => invoke<string[]>('autostart_others'),
+    removeAutostartOthers: () => invoke<string[]>('remove_autostart_others'),
     openConfigFolder: () => invoke('open_config_folder'),
     getDataReport: () => invoke<DataReport>('get_data_report'),
     cleanData: (areas) => invoke<Cleaned>('clean_data', { areas }),
@@ -391,6 +400,10 @@ export interface MemoryOptions {
   readText?: (attempt: number) => TextReading | Promise<TextReading>;
   /** Called by `fetchOptions` (as `<block>:<choice>` for the list inside a choice) and `previewOptions`. */
   options?: (connectionId: string, list: string) => DropdownOption[] | Promise<DropdownOption[]>;
+  /** Collects what the windows report in debug mode, for tests. */
+  reported?: DebugView[];
+  /** Older copies Windows starts at sign-in, for Preferences. Default: none. */
+  autostartOthers?: string[];
   /** What `openImport` finds in the "file" the person picks; the default is a cancelled dialog. */
   importFile?: ImportPreview;
   /** What "Check for updates" finds in the stand-in. Default: nothing newer. */
@@ -410,6 +423,7 @@ const TEMPLATE_CATALOG: LayoutTemplate[] = [
   { key: 'jira-video', name: 'Jira ticket with recording', description: 'Like the Jira ticket, with the recording of the window in focus attached; tabs hold the recording (with the time of each moment over it), the screenshot taken from it and the logs, starting on the lines written while it recorded. A shortcut that opens it records the window in focus.', service: 'jira' },
   { key: 'github-issue', name: 'GitHub issue', description: 'Opens an issue in a repository, or updates the one you pick in Issue to update: the title stays, the description goes below the one there and the labels are added. An optional comment goes with either. The screenshot and the ticked files are shown in it, and a Logs tab beside the screenshot reads the logs.', service: 'github' },
   { key: 'github-video', name: 'GitHub issue with recording', description: 'Like the GitHub issue, with the recording of the window in focus linked from it beside the screenshot taken from it; tabs hold the recording, the screenshot and the logs. A shortcut that opens it records the window in focus.', service: 'github' },
+  { key: 'cargoframe-report', name: 'CargoFrame bug report', description: 'Debug mode: a GitHub issue about CargoFrame itself, from a capture of one of its windows. The title starts with where it was (window, page, tab, section), the description says what was in focus, and the layout on screen, the data rules, the settings and the end of the log are attached.', service: 'github' },
   { key: 'google-drive', name: 'Google Drive upload', description: 'Upload the screenshot and a zip of the ticked files to a Drive folder you pick. A Logs tab beside the screenshot reads the logs.', service: 'google' },
   { key: 'google-drive-video', name: 'Google Drive upload of a recording', description: 'Upload the recording of the window in focus, the screenshot taken from it and a zip of the ticked files to a Drive folder you pick. A shortcut that opens it records the window in focus.', service: 'google' },
   { key: 'google-sheet', name: 'Google Sheet row', description: 'Add a row to a spreadsheet: the date, two columns you fill, and links to the uploads.', service: 'google' },
@@ -471,6 +485,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     work: { files: 4, bytes: 5_300_000 }, kept: { files: 0, bytes: 0 }, logs: { files: 3, bytes: 120_000 }, updates: { files: 0, bytes: 0 },
   };
   let autostart = true;
+  const reported: DebugView[] = (opts.reported ??= []);
+  let autostartOthers: string[] = [...(opts.autostartOthers ?? [])];
   let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
   let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
   let trialRan = false;
@@ -733,8 +749,16 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       }
     },
     getAutostart: async () => autostart,
+    reportView: async (view) => {
+      reported.push(view);
+    },
     setAutostart: async (enabled) => {
       autostart = enabled;
+    },
+    autostartOthers: async () => [...autostartOthers],
+    removeAutostartOthers: async () => {
+      autostartOthers = [];
+      return [];
     },
     openConfigFolder: async () => {},
     getDataReport: async () => ({
@@ -808,7 +832,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       }
       return out;
     },
-    listLayoutTemplates: async () => TEMPLATE_CATALOG.map((t) => ({ ...t })),
+    // the CargoFrame bug report is for debug mode, as in the app
+    listLayoutTemplates: async () => TEMPLATE_CATALOG.filter((t) => general.debug || t.key !== 'cargoframe-report').map((t) => ({ ...t })),
     layoutFromTemplate: async (key, connectionId) => {
       const t = TEMPLATE_CATALOG.find((x) => x.key === key);
       if (!t) throw 'That template does not exist';

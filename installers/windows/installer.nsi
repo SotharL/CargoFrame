@@ -326,6 +326,15 @@ Function .onInit
   ReadRegStr $R0 SHCTX "${UNINSTKEY}" "DisplayVersion"
   ${If} $R0 != ""
     ReadRegStr $R1 HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+    ; an entry in the machine's list (put there by a copy run as administrator) is a choice too
+    ${If} $R1 == ""
+      SetRegView 64
+      ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+      SetRegView 32
+      ${If} $R1 == ""
+        ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+      ${EndIf}
+    ${EndIf}
     ${IfThen} $R1 == "" ${|} StrCpy $StartupChoice 0 ${|}
   ${EndIf}
   ${GetOptions} $CMDLINE "/NOSTARTUP" $R0
@@ -573,6 +582,11 @@ Section Install
     Call CreateOrUpdateDesktopShortcut
   ${EndIf}
 
+  ; An entry in the machine's list that starts another copy (one built by hand and run as
+  ; administrator) would start that copy at sign-in instead of this one: removed when Windows
+  ; allows it, otherwise by CargoFrame (Preferences asks Windows for the right once).
+  Call RemoveOtherMachineStartup
+
   ; Run on sign-in (the app itself keeps this value in sync from Settings)
   ${If} $StartupChoice = 1
     WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}" "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --autostart"
@@ -746,6 +760,21 @@ Section Uninstall
     SetAutoClose true
   ${EndIf}
 SectionEnd
+
+Function RemoveOtherMachineStartup
+  SetRegView 64
+  ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  ${If} $R1 != ""
+  ${AndIf} $R1 != "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --autostart"
+    DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  ${EndIf}
+  SetRegView 32
+  ReadRegStr $R1 HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  ${If} $R1 != ""
+  ${AndIf} $R1 != "$\"$INSTDIR\${MAINBINARYNAME}.exe$\" --autostart"
+    DeleteRegValue HKLM "Software\Microsoft\Windows\CurrentVersion\Run" "${PRODUCTNAME}"
+  ${EndIf}
+FunctionEnd
 
 Function RestorePreviousInstallLocation
   ReadRegStr $4 SHCTX "${MANUPRODUCTKEY}" ""

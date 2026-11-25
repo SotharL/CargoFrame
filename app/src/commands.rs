@@ -25,7 +25,6 @@ use cargoframe_window::view::{issue_views, IssueView, SessionView};
 use serde::Serialize;
 use tauri::ipc::{InvokeBody, Request, Response};
 use tauri::{AppHandle, Emitter, Manager, State};
-use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
 use tauri_plugin_opener::OpenerExt as _;
 
@@ -174,19 +173,34 @@ pub fn reset_everything(
     Ok(done)
 }
 
+/// Debug mode: what a window shows now (it only sends while the mode is on).
 #[tauri::command]
-pub fn get_autostart(app: AppHandle) -> Result<bool, String> {
-    app.autolaunch().is_enabled().map_err(|e| e.to_string())
+pub fn report_view(view: crate::debug::View) {
+    crate::debug::report(view);
 }
 
 #[tauri::command]
-pub fn set_autostart(app: AppHandle, enabled: bool) -> Result<(), String> {
-    let launcher = app.autolaunch();
-    if enabled {
-        launcher.enable().map_err(|e| e.to_string())
-    } else {
-        launcher.disable().map_err(|e| e.to_string())
-    }
+pub fn get_autostart() -> Result<bool, String> {
+    crate::autostart::is_enabled()
+}
+
+#[tauri::command]
+pub fn set_autostart(enabled: bool) -> Result<(), String> {
+    crate::autostart::set(enabled)
+}
+
+/// Other programs Windows starts as CargoFrame at sign-in (an older copy), for Preferences.
+#[tauri::command]
+pub fn autostart_others() -> Vec<String> {
+    crate::autostart::others()
+}
+
+/// Stop them (Windows asks for the administrator's right); what is left.
+#[tauri::command]
+pub async fn remove_autostart_others() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(crate::autostart::remove_others)
+        .await
+        .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
@@ -384,9 +398,12 @@ pub struct TemplateView {
 
 /// The ready-made layouts, one or two for each kind of destination.
 #[tauri::command]
-pub fn list_layout_templates() -> Vec<TemplateView> {
+pub fn list_layout_templates(state: State<'_, AppState>) -> Vec<TemplateView> {
+    let debug = crate::debug::is_on(&state.store);
     templates::TEMPLATES
         .iter()
+        // the CargoFrame bug report is for debug mode
+        .filter(|t| debug || t.key != "cargoframe-report")
         // a service this build leaves out has no templates either
         .filter(|t| {
             t.service.map_or(true, |k| {

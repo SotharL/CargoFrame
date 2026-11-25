@@ -469,6 +469,7 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
         let state = app.state::<AppState>();
         match result {
             Ok(Ok(mut s)) => {
+                crate::debug::attach(&state.store, &state.workspace, &mut s);
                 session::apply_incoming(&mut s.view, &values);
                 state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
                 show(&app, &state, s);

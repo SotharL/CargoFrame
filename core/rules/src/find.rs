@@ -13,7 +13,7 @@
 //! Each gives every place it finds; [`pick`] keeps the first, the last or all of them.
 
 use crate::extract::{extract, RuleError};
-use crate::model::{Find, Format, Multiple, Rule, Which};
+use crate::model::{Find, Format, Multiple, Next, Rule, Which};
 use cargoframe_i18n::t;
 
 /// The kind of a file, from its name, for the formats that hold named values.
@@ -119,46 +119,84 @@ fn lines_with(text: &str, needle: &str) -> Vec<String> {
         .collect()
 }
 
-/// The value [`Find::Pick`] gives on each line it looks in. Byte positions are only ever taken
-/// from `find`, so every cut falls between characters.
+/// Where one part of a picked value is on `line`, looking from byte `at`: its trimmed start and
+/// end. `None` when the line does not have it there. Byte positions are only ever taken from
+/// `find`, so every cut falls between characters.
+fn part_in(
+    line: &str,
+    at: usize,
+    lines_with: &str,
+    from_line_start: bool,
+    stop: Option<&str>,
+) -> Option<(usize, usize)> {
+    let stop = stop.filter(|s| !s.is_empty());
+    let found = if lines_with.is_empty() {
+        at
+    } else {
+        at + line[at..].find(lines_with)?
+    };
+    let mut from = if from_line_start {
+        at
+    } else {
+        found + lines_with.len()
+    };
+    from += line[from..].len() - line[from..].trim_start_matches(' ').len();
+    let to = match stop {
+        None => line.len(),
+        // the stop is looked for after the value's first character, so a value that starts
+        // with the stop (a "[" up to the next "[") is not empty
+        Some(s) => {
+            let first = line[from..].chars().next().map_or(0, char::len_utf8);
+            from + first + line[from + first..].find(s)?
+        }
+    };
+    let part = &line[from..to];
+    let start = from + (part.len() - part.trim_start().len());
+    let end = to - (part.len() - part.trim_end().len());
+    (end > start).then_some((start, end))
+}
+
+/// The value [`Find::Pick`] gives on each line it looks in: the first part there, and each of
+/// `then` after the one before it (later on that line when it has a text to come after, else on
+/// the lines below), joined.
 pub fn picked(
     text: &str,
     lines_with: &str,
     from_line_start: bool,
     stop: Option<&str>,
+    then: &[Next],
 ) -> Vec<String> {
-    let stop = stop.filter(|s| !s.is_empty());
+    let lines: Vec<&str> = text.lines().collect();
     let mut out = Vec::new();
-    for line in text.lines() {
-        let Some(at) = (if lines_with.is_empty() {
-            Some(0)
-        } else {
-            line.find(lines_with)
-        }) else {
+    for (n, line) in lines.iter().enumerate() {
+        let Some((s, e)) = part_in(line, 0, lines_with, from_line_start, stop) else {
             continue;
         };
-        let mut from = if from_line_start {
-            0
-        } else {
-            at + lines_with.len()
-        };
-        from += line[from..].len() - line[from..].trim_start_matches(' ').len();
-        let to = match stop {
-            None => line.len(),
-            // the stop is looked for after the value's first character, so a value that starts
-            // with the stop (a "[" up to the next "[") is not empty
-            Some(s) => {
-                let first = line[from..].chars().next().map_or(0, char::len_utf8);
-                match line[from + first..].find(s) {
-                    Some(i) => from + first + i,
-                    None => continue,
-                }
+        let mut value = line[s..e].to_string();
+        let (mut at_line, mut at) = (n, e);
+        for next in then {
+            // on the same line only after a text: "the next line" and "from the start of the
+            // line" mean a line below
+            let same_line = !next.lines_with.is_empty() && !next.from_line_start;
+            let first = if same_line { at_line } else { at_line + 1 };
+            let found = (first..lines.len()).find_map(|k| {
+                let from = if k == at_line { at } else { 0 };
+                let (s, e) = part_in(
+                    lines[k],
+                    from,
+                    &next.lines_with,
+                    next.from_line_start,
+                    next.stop.as_deref(),
+                )?;
+                Some((k, s, e))
+            });
+            if let Some((k, s, e)) = found {
+                value.push_str(&next.joined_by);
+                value.push_str(&lines[k][s..e]);
+                (at_line, at) = (k, e);
             }
-        };
-        let value = line[from..to].trim();
-        if !value.is_empty() {
-            out.push(value.to_string());
         }
+        out.push(value);
     }
     out
 }
@@ -206,7 +244,8 @@ pub fn all(
             lines_with,
             from_line_start,
             stop,
-        } => picked(text, lines_with, *from_line_start, stop.as_deref()),
+            then,
+        } => picked(text, lines_with, *from_line_start, stop.as_deref(), then),
         Find::Advanced => vec![extract(rule, text)?],
         // made from other values, after the files are read (see `combine`)
         Find::Combine { .. } => Vec::new(),
@@ -246,6 +285,13 @@ pub fn check(find: &Find) -> Result<(), String> {
             from_line_start: false,
             ..
         } if lines_with.is_empty() => Err(t("Choose the text it comes right after").into()),
+        Find::Pick { then, .. }
+            if then
+                .iter()
+                .any(|n| n.lines_with.is_empty() && !n.from_line_start) =>
+        {
+            Err(t("Choose the text each next part comes right after").into())
+        }
         Find::Combine { choices } => crate::combine::check(choices),
         _ => Ok(()),
     }
@@ -451,7 +497,88 @@ mod tests {
             lines_with: lines_with.into(),
             from_line_start,
             stop: stop.map(str::to_string),
+            then: vec![],
         }
+    }
+
+    // what ffmpeg writes about a file it made (issue #60)
+    const FFMPEG: &str = "  Stream #0:0: Video: h264 (avc1 / 0x31637661), 1920x1080\n\
+    \x20   Metadata:\n\
+    \x20     encoder         : Lavc58.134.100 libopenh264\n\
+    \x20 Stream #0:1: Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s\n\
+    \x20   Metadata:\n\
+    \x20     encoder         : Lavc58.134.100 aac\n\
+    frame=    1 fps=0.0\n";
+
+    fn next(joined_by: &str, lines_with: &str) -> Next {
+        Next {
+            joined_by: joined_by.into(),
+            lines_with: lines_with.into(),
+            ..Next::default()
+        }
+    }
+
+    #[test]
+    fn a_value_of_two_parts_takes_the_next_one_found_after_the_first() {
+        let audio = Find::Pick {
+            lines_with: "Stream #0:1:".into(),
+            from_line_start: false,
+            stop: None,
+            then: vec![next(" - ", "encoder         :")],
+        };
+        assert_eq!(
+            run(&audio, "Choca.mp4.log", FFMPEG, Which::Last).as_deref(),
+            Some("Audio: aac (LC) (mp4a / 0x6134706D), 48000 Hz, stereo, fltp (24 bit), 128 kb/s - Lavc58.134.100 aac")
+        );
+        // the first stream's encoder is the one after it, not the audio's
+        let video = Find::Pick {
+            lines_with: "Stream #0:0:".into(),
+            from_line_start: false,
+            stop: Some(",".into()),
+            then: vec![next("\n", "encoder         :")],
+        };
+        assert_eq!(
+            run(&video, "a.log", FFMPEG, Which::Last).as_deref(),
+            Some("Video: h264 (avc1 / 0x31637661)\nLavc58.134.100 libopenh264")
+        );
+    }
+
+    #[test]
+    fn a_next_part_can_be_later_on_the_same_line_or_missing() {
+        // after the first part on its own line: "fps=" after "frame="
+        let p = Find::Pick {
+            lines_with: "frame=".into(),
+            from_line_start: false,
+            stop: Some(" ".into()),
+            then: vec![next(" at ", "fps="), next(", ", "speed=")],
+        };
+        // no speed anywhere after it: the parts found
+        assert_eq!(
+            run(&p, "a.log", FFMPEG, Which::Last).as_deref(),
+            Some("1 at 0.0")
+        );
+        // "the next line": the line below, whole
+        let below = Find::Pick {
+            lines_with: "Stream #0:1:".into(),
+            from_line_start: false,
+            stop: Some(":".into()),
+            then: vec![Next {
+                joined_by: " / ".into(),
+                from_line_start: true,
+                ..Next::default()
+            }],
+        };
+        assert_eq!(
+            run(&below, "a.log", FFMPEG, Which::Last).as_deref(),
+            Some("Audio / Metadata:")
+        );
+        assert!(check(&Find::Pick {
+            lines_with: "a".into(),
+            from_line_start: false,
+            stop: None,
+            then: vec![next(", ", "")],
+        })
+        .is_err());
     }
 
     #[test]
@@ -459,7 +586,7 @@ mod tests {
         // right after a text, up to the next sign; a line without the sign gives nothing
         let map = pick_find("Maps/", false, Some("?"));
         assert_eq!(
-            picked(GAME_LOG, "Maps/", false, Some("?")),
+            picked(GAME_LOG, "Maps/", false, Some("?"), &[]),
             ["MainMenu", "Harbor_P"]
         );
         assert_eq!(
@@ -495,7 +622,7 @@ mod tests {
         );
         // a value with letters of any script is cut between characters
         assert_eq!(
-            picked("Carte: Hafen_é?x", "Carte:", false, Some("?")),
+            picked("Carte: Hafen_é?x", "Carte:", false, Some("?"), &[]),
             ["Hafen_é"]
         );
         assert_eq!(

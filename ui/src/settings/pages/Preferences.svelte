@@ -20,6 +20,9 @@
     notifications: { routine: true, problems: true },
   });
   let autostart = $state(false);
+  // an older copy Windows starts at sign-in instead of this one (a build run as administrator)
+  let others = $state<string[]>([]);
+  let stopping = $state(false);
   let language = $state<LanguageInfo | null>(null);
   let status = $state<'' | 'saved' | 'error'>('');
   let errorText = $state('');
@@ -37,6 +40,7 @@
       api.getAutostart(),
       api.getLanguage().catch(() => null),
     ]);
+    others = await api.autostartOthers().catch(() => []);
     loaded = true;
   });
 
@@ -48,6 +52,15 @@
       status = 'error';
       errorText = String(e);
     }
+  }
+
+  async function stopOthers() {
+    stopping = true;
+    await save(async () => {
+      others = await (await getApi()).removeAutostartOthers();
+      autostart = await (await getApi()).getAutostart();
+    });
+    stopping = false;
   }
 
   const onTheme = (t: ThemeChoice) => {
@@ -114,6 +127,19 @@
 
     <Section title={t('Startup')} tour="prefs.startup" hint={t('CargoFrame waits in the tray for your shortcuts.')}>
       <Toggle label={t('Start CargoFrame when I sign in')} bind:checked={autostart} onchange={onAutostart} />
+      {#if others.length}
+        <div class="other" role="alert">
+          <Chip kind="warn" label={t('Another copy of CargoFrame starts when you sign in')} />
+          <p class="quiet hint">
+            {t('Windows starts this older copy for every account, so it opens instead of this version:')}
+          </p>
+          {#each others as path (path)}<code class="path" title={path}>{path}</code>{/each}
+          <p class="quiet hint">{t('Windows asks for an administrator to stop it. This version keeps starting when you sign in.')}</p>
+          <button type="button" disabled={stopping} onclick={stopOthers}>
+            {stopping ? t('Waiting for Windows…') : t('Stop the older copy')}
+          </button>
+        </div>
+      {/if}
     </Section>
 
     <div class="status" role="status" aria-live="polite">
@@ -127,5 +153,8 @@
   .page { display: grid; gap: 14px; }
   .hint { margin: 0; font-size: 12.5px; }
   .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+  .other { display: grid; gap: 6px; justify-items: start; padding: 10px 12px; border-radius: 8px;
+    background: var(--surface-2, transparent); border: 1px solid var(--border); }
+  .path { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
   .status { min-height: 26px; display: flex; align-items: center; gap: 8px; }
 </style>

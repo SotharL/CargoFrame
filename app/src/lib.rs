@@ -4,11 +4,13 @@
 //! state. Windows (and their web views) exist only while open.
 
 mod audio;
+mod autostart;
 mod chats;
 mod cleanup;
 mod cli;
 mod commands;
 mod connections;
+mod debug;
 mod desktop;
 mod desktop_keys;
 mod ffmpeg_get;
@@ -41,7 +43,6 @@ use cli::{Cli, Startup};
 use connections::Connections;
 use state::AppState;
 use tauri::{Manager, RunEvent};
-use tauri_plugin_autostart::MacosLauncher;
 
 /// `cargoframe open ...` from another program: run the trigger with the values it sent, or
 /// say what was wrong with the request.
@@ -99,10 +100,6 @@ pub fn run() {
                 windowing::open_settings(app);
             }
         }))
-        .plugin(tauri_plugin_autostart::init(
-            MacosLauncher::LaunchAgent,
-            Some(vec!["--autostart"]),
-        ))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
@@ -122,6 +119,8 @@ pub fn run() {
             commands::set_general,
             commands::get_autostart,
             commands::set_autostart,
+            commands::autostart_others,
+            commands::remove_autostart_others,
             commands::get_data_report,
             commands::clean_data,
             commands::reset_everything,
@@ -177,6 +176,7 @@ pub fn run() {
             commands::share,
             commands::open_link,
             commands::report_painted,
+            commands::report_view,
             commands::get_timings,
             commands::get_memory_status,
             commands::get_update_view,
@@ -226,6 +226,8 @@ pub fn run() {
             check_for_updates_daily(app.handle().clone());
             // the system.* values, read once now so a capture does not wait for them
             sysinfo::warm();
+            // an older copy left in the machine's sign-in list would start instead of this one
+            autostart::repair();
             // with a shortcut that records, ffmpeg is asked what it can do (and its hardware
             // encoders tried) in the background, so the first recording starts at once
             if let Some(state) = app.handle().try_state::<AppState>() {
@@ -579,6 +581,8 @@ mod shipped_config_tests {
             "allow-open-link",
             "allow-open-settings",
             "allow-report-painted",
+            // debug mode: what the window shows (it sends nothing while the mode is off)
+            "allow-report-view",
             "allow-set-clip-mark",
             "allow-set-clip-layer",
             "allow-set-edited-image",

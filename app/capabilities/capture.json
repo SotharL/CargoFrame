@@ -26,6 +26,7 @@
     "allow-open-link",
     "allow-open-settings",
     "allow-report-painted",
+    "allow-report-view",
     "core:event:allow-listen",
     "core:event:allow-unlisten"
   ]

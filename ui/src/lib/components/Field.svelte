@@ -13,8 +13,9 @@
 </div>
 
 <style>
-  .field { display: grid; gap: 4px; }
-  label { display: grid; gap: 4px; }
+  /* Kept at the top of a taller neighbour's row: a select is never stretched to fill it. */
+  .field { display: grid; gap: 4px; align-content: start; }
+  label { display: grid; gap: 4px; align-content: start; }
   .label { font-weight: 600; font-size: 13px; }
   .hint, .error { font-size: 12.5px; }
   .error { color: var(--err); }

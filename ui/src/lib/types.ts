@@ -12,6 +12,21 @@ export interface General {
   notifications: Notifications;
   /** 'system' (the computer's language) or a code: 'fr'. Absent in files from before 0.6.0. */
   language?: string;
+  /** Debug mode (System): a capture of CargoFrame itself says what was on screen. */
+  debug?: boolean;
+}
+
+/** What a CargoFrame window shows, sent in debug mode (lib/debugView.ts, app/src/debug.rs). */
+export interface DebugView {
+  window: 'settings' | 'capture';
+  page?: string;
+  tab?: string;
+  section?: string;
+  focus?: string;
+  guide?: string;
+  layout_id?: string;
+  layout?: string;
+  block?: string;
 }
 
 /** The language CargoFrame speaks now, and the ones it can. */
@@ -561,11 +576,20 @@ export type RuleFind =
   /** Chosen by selecting it in a file (0.5.0): in the lines with `lines_with` (every line when
    *  empty), right after it or from the start of the line, up to `stop` (the end of the line when
    *  none). Mirror of `Find::Pick` in core/rules; `settings/data/pick.ts` runs it in the window. */
-  | { type: 'pick'; lines_with: string; from_line_start?: boolean; stop?: string | null }
+  | { type: 'pick'; lines_with: string; from_line_start?: boolean; stop?: string | null; then?: RuleNext[] }
   /** Made from other values: the first choice that fits gives the value (core/rules/src/combine.rs). */
   | { type: 'combine'; choices: RuleChoice[] }
   /** A rule made before 0.3.0: its own `format` and `query`. */
   | { type: 'advanced' };
+
+/** A further part of a picked value, found after the part before it and joined to it with
+ *  `joined_by` (0.7.2). Mirror of `Next` in core/rules. */
+export interface RuleNext {
+  joined_by: string;
+  lines_with: string;
+  from_line_start?: boolean;
+  stop?: string | null;
+}
 
 /** When several files have the same value: the newest file's, or every different value. */
 export type RuleAcross = 'newest' | 'all';

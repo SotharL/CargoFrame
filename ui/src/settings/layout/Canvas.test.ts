@@ -192,20 +192,26 @@ describe('Layout canvas: copy, paste, delete and locked tabs', () => {
     expect(names()).toHaveLength(3);
   });
 
-  it('a tab is locked and unlocked from the lock by its name; a block in it cannot be deleted', async () => {
+  it('a locked tab is greyed and still opens; a block in it cannot be deleted', async () => {
     const tabbed: Block[] = [
-      { id: 'tabs', type: 'tabs', rect: { x: 0, y: 0, w: 8, h: 4 }, tabs: [{ name: 'Logs', blocks: ['desc'] }, { name: 'Other' }] },
+      { id: 'tabs', type: 'tabs', rect: { x: 0, y: 0, w: 8, h: 4 }, tabs: [{ name: 'Logs', blocks: ['desc'], locked: true }, { name: 'Other' }] },
       { ...blocks[0]!, rect: { x: 0, y: 1, w: 3, h: 1 } },
     ];
     render(Canvas, { blocks: tabbed, selected: 'desc' });
-    await fireEvent.click(screen.getByRole('button', { name: 'Lock Logs' }));
-    expect(screen.getByRole('button', { name: 'Unlock Logs' }).getAttribute('aria-pressed')).toBe('true');
+    const logs = screen.getByRole('tab', { name: 'Logs' });
+    expect(logs.classList.contains('locked')).toBe(true);
+    expect(screen.getByRole('tab', { name: 'Other' }).classList.contains('locked')).toBe(false);
+    // the lock is in the block's properties, not on the grid
+    expect(screen.queryByRole('button', { name: /^(Lock|Unlock) / })).toBeNull();
     expect((screen.getByRole('button', { name: 'Delete' }) as HTMLButtonElement).disabled).toBe(true);
     const block = [...document.querySelectorAll<HTMLElement>('.block')].find((b) => b.textContent?.includes('Description'))!;
+    expect(block.classList.contains('fixed')).toBe(true);
     await fireEvent.keyDown(block, { key: 'Delete' });
     expect(names()).toContain('Description of the problem seen');
-    await fireEvent.click(screen.getByRole('button', { name: 'Unlock Logs' }));
-    await fireEvent.keyDown(block, { key: 'Delete' });
-    expect(names()).not.toContain('Description of the problem seen');
+    // still responsive: the other tab opens, and the locked one again
+    await fireEvent.click(screen.getByRole('tab', { name: 'Other' }));
+    expect(screen.getByRole('tab', { name: 'Other' }).getAttribute('aria-selected')).toBe('true');
+    await fireEvent.click(logs);
+    expect(logs.getAttribute('aria-selected')).toBe('true');
   });
 });
