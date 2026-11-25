@@ -152,12 +152,19 @@ time.
 Off by default (*System*). While it is on, each window says what it shows when something changes (a click, the
 focus, the window coming forward), read from the page itself: its title, the tabs open, the section and the control
 in focus, the guide and its step, the layout and the block (`ui/src/lib/debugView.ts`); nothing is sent while it is
-off. A capture whose program in focus is this CargoFrame gets `{cargoframe.where}` (window - page - tab - section,
+off, and a window open when the mode changes follows at once (the `debug-changed` event). A capture whose program in
+focus is this CargoFrame (its process, so the form of its path does not matter) gets `{cargoframe.where}` (window - page - tab - section,
 as the issues are titled), `.window`, `.page`, `.tab`, `.section`, `.focus`, `.guide`, `.layout`, `.block`, `.rules`
 and `.version` (a dash for what was not on screen), and its first Files block the layout on screen as saved, the data
 rules, the settings and the last 256 KB of the log, ticked (`app/src/debug.rs`). The template *CargoFrame bug
 report* (GitHub, offered in debug mode only) is the GitHub issue with its title, description and labels made from
-them.
+them: a title that starts with `{cargoframe.where} - `, a description with *What happened* and *What was expected*,
+the screenshot, and a table of where it was, what was in focus, the layout, the block, the guide, the data rules,
+the system, processor, memory, graphics card and driver, and screens; labels `bug`, the program, the page and the
+version. Setting it up is one button under the switch, *Set up the bug report*: the layout for the GitHub connection
+(the only one, or the one chosen) and the shortcut *Report a CargoFrame problem* on Ctrl+Alt+Shift+F12 (F11, F10 when
+another shortcut has it), both kept as they are when pressed again. `{system.…}` and `{cargoframe.…}` are written in
+the short form like the capture's own values (`core/context/src/template.rs` lists the groups).
 
 </details>
 

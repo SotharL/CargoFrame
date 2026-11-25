@@ -78,8 +78,8 @@ function findUi(src, file, add) {
 }
 
 const RS_LIT = String.raw`"((?:[^"\\]|\\.|\\\r?\n)*)"`;
-// t("…") alone, tf("…", values), msg!("…")
-const RS = new RegExp(String.raw`(?<![\w.])(?:(?:cargoframe_i18n::)?t\(\s*` + RS_LIT + String.raw`\s*\)|(?:cargoframe_i18n::)?tf\(\s*` + RS_LIT + String.raw`\s*,|(?:cargoframe_i18n::)?msg!\(\s*` + RS_LIT + ')', 'g');
+// t("…") alone (also split over lines by rustfmt, which adds a comma: `t(\n "…",\n)`), tf("…", values), msg!("…")
+const RS = new RegExp(String.raw`(?<![\w.])(?:(?:cargoframe_i18n::)?t\(\s*` + RS_LIT + String.raw`\s*,?\s*\)|(?:cargoframe_i18n::)?tf\(\s*` + RS_LIT + String.raw`\s*,|(?:cargoframe_i18n::)?msg!\(\s*` + RS_LIT + ')', 'g');
 
 const uncommented = (src) => src.replace(/^\s*\/\/.*$/gm, '');
 

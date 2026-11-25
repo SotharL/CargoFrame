@@ -177,6 +177,8 @@ pub fn run() {
             commands::open_link,
             commands::report_painted,
             commands::report_view,
+            commands::debug_setup_status,
+            commands::setup_debug_report,
             commands::get_timings,
             commands::get_memory_status,
             commands::get_update_view,

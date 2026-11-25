@@ -1012,3 +1012,95 @@ fn the_layout_says_whether_a_trigger_records() {
     assert!(!records(&store, &with(None, Media::Video)));
     assert!(!records(&store, &with(Some("gone"), Media::Video)));
 }
+
+// Debug mode: a capture of CargoFrame's own window (its process, whatever its path says) fills
+// the bug report's title, description and labels from what was on screen, and adds the files.
+#[test]
+fn a_capture_of_cargoframe_in_debug_mode_fills_the_bug_report() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::new(Dirs::under(dir.path()));
+    let gh = serde_json::json!({"name": "Repo", "kind": "github", "repository": "a/b"});
+    crate::items::save(&store, crate::items::ItemKind::Connection, "gh", gh).unwrap();
+    store
+        .save(&cargoframe_config::General {
+            debug: true,
+            ..Default::default()
+        })
+        .unwrap();
+    crate::debug::setup(&store, None).unwrap();
+    crate::debug::report(crate::debug::View {
+        window: "settings".into(),
+        page: "Layouts".into(),
+        tab: "Fill fields".into(),
+        section: "Fill a field".into(),
+        focus: "Service".into(),
+        ..Default::default()
+    });
+    let trigger: Trigger = store
+        .load_item(Kind::Triggers, crate::debug::REPORT_ID)
+        .unwrap()
+        .unwrap();
+    let mut captured = fake_capture(Some(r"C:\Program Files\Somewhere\cargoframe.exe"));
+    captured.app.as_mut().unwrap().pid = Some(std::process::id());
+    let mut s = prepare_with(
+        &store,
+        &no_connections(),
+        crate::debug::REPORT_ID,
+        &trigger,
+        captured,
+        NOW,
+        1,
+    )
+    .unwrap();
+
+    let title = &s.view.texts["title"].value;
+    assert_eq!(
+        title,
+        "CargoFrame settings - Layouts - Fill fields - Fill a field - "
+    );
+    let description = &s.view.texts["description"].value;
+    assert!(description.contains("| Service |"), "{description}");
+    assert!(
+        description.contains(&format!("**CargoFrame {}**", env!("CARGO_PKG_VERSION"))),
+        "{description}"
+    );
+    assert!(!description.contains("{cargoframe."), "{description}");
+    let tags = &s.view.tags["labels"].tags;
+    assert!(
+        tags.contains(&env!("CARGO_PKG_VERSION").to_string()),
+        "{tags:?}"
+    );
+    assert!(tags.contains(&"Layouts".to_string()), "{tags:?}");
+
+    // the files: the rules, the settings… ticked in the first Files block
+    let workspace = Workspace::new(dir.path().join("work"));
+    crate::debug::attach(&store, &workspace, &mut s);
+    let files: Vec<_> = s
+        .view
+        .files
+        .values()
+        .flat_map(|f| f.entries.iter())
+        .collect();
+    assert!(
+        files
+            .iter()
+            .any(|e| e.path.ends_with("cargoframe-settings.json") && e.selected),
+        "{files:?}"
+    );
+
+    // another program: nothing of this
+    let other = prepare_with(
+        &store,
+        &no_connections(),
+        crate::debug::REPORT_ID,
+        &trigger,
+        fake_capture(Some("/usr/bin/editor")),
+        NOW,
+        2,
+    )
+    .unwrap();
+    assert!(other.debug.is_none());
+    assert!(other.view.texts["title"]
+        .value
+        .contains("{cargoframe.where}"));
+}

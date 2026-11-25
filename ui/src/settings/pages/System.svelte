@@ -11,14 +11,38 @@
   import Toggle from '../../lib/components/Toggle.svelte';
   import { setDebug } from '../../lib/debugView';
   import { getApi } from '../../lib/ipc';
-  import type { General, MemoryMode } from '../../lib/types';
+  import type { DebugSetup, General, MemoryMode } from '../../lib/types';
+  import { go } from '../route.svelte';
 
   let general = $state<General | null>(null);
   let failed = $state('');
 
+  // debug mode's setup: one button makes the bug report layout and its shortcut
+  let setup = $state<DebugSetup | null>(null);
+  let reportTo = $state('');
+  let setupProblem = $state('');
+  let settingUp = $state(false);
+
   onMount(async () => {
     general = await (await getApi()).getGeneral().catch(() => null);
+    if (general?.debug) await loadSetup();
   });
+
+  async function loadSetup() {
+    setup = await (await getApi()).debugSetupStatus().catch(() => null);
+    reportTo = setup?.github[0]?.[0] ?? '';
+  }
+
+  async function setUp() {
+    settingUp = true;
+    setupProblem = '';
+    try {
+      setup = await (await getApi()).setupDebugReport(reportTo || undefined);
+    } catch (e) {
+      setupProblem = String(e).replace(/^Error: /, '');
+    }
+    settingUp = false;
+  }
 
   const memoryHints: Record<MemoryMode, string> = {
     balanced: t('Ready for 5 minutes after it closes, then the memory is freed.'),
@@ -40,6 +64,7 @@
     if (!general) return;
     general.debug = value;
     setDebug(value);
+    if (value) void loadSetup();
     void saveGeneral();
   }
   function onAuto(value: boolean) {
@@ -78,6 +103,36 @@
       <p class="quiet small">
         {t('A capture of a CargoFrame window then fills values such as {cargoframe.page}, {cargoframe.section}, {cargoframe.focus} and {cargoframe.guide}, and adds the layout on screen, the data rules, the settings and the end of the log to its Files blocks. The template CargoFrame bug report uses them.')}
       </p>
+      {#if general.debug && setup}
+        <div class="report" data-tour="system.debug.setup">
+          {#if setup.layout && setup.shortcut !== null}
+            <Chip kind="ok" label={t('The bug report is set up')} />
+            <p class="small">
+              {setup.shortcut
+                ? t('In any CargoFrame window, press {keys}: the window opens with the screenshot, where it was and the files, ready to send to GitHub.', { keys: setup.shortcut })
+                : t('In any CargoFrame window, choose Report a CargoFrame problem in the tray menu.')}
+            </p>
+            <p class="links small">
+              <button type="button" class="link" onclick={() => go('layouts', 'cargoframe-report')}>{t('Open the layout')}</button>
+              <button type="button" class="link" onclick={() => go('triggers')}>{t('Change the shortcut')}</button>
+            </p>
+          {:else if setup.github.length === 0}
+            <p class="small">{t('The report is a GitHub issue: add a GitHub connection first, then set it up here.')}</p>
+            <button type="button" onclick={() => go('connections')}>{t('Go to Connections')}</button>
+          {:else}
+            <p class="small">{t('One button makes the CargoFrame bug report layout and a shortcut that opens it.')}</p>
+            <div class="row">
+              {#if setup.github.length > 1}
+                <select bind:value={reportTo} aria-label={t('GitHub connection the reports go to')}>
+                  {#each setup.github as [id, name] (id)}<option value={id}>{name}</option>{/each}
+                </select>
+              {/if}
+              <button type="button" class="primary" disabled={settingUp} onclick={setUp}>{t('Set up the bug report')}</button>
+            </div>
+          {/if}
+          {#if setupProblem}<p class="problem small" role="alert">{setupProblem}</p>{/if}
+        </div>
+      {/if}
     </Section>
   {/if}
   {#if failed}<div role="alert"><Chip kind="err" label={t('Could not save')} /> <span class="quiet">{failed}</span></div>{/if}
@@ -87,4 +142,9 @@
 <style>
   .page { display: grid; gap: 14px; }
   .small { margin: 0; font-size: 12.5px; }
+  .report { display: grid; gap: 8px; justify-items: start; margin-top: 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); }
+  .report .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .links { display: flex; gap: 14px; }
+  .link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+  .problem { color: var(--err); }
 </style>

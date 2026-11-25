@@ -21,6 +21,21 @@ describe('System', () => {
     expect(titles.filter((t) => t !== 'Install what is missing')).toEqual(['This computer', 'Updates', 'Windows kept ready', 'Debug mode', 'Speed and memory']);
   });
 
+  it('sets the bug report up with one button once debug mode is on', async () => {
+    render(About);
+    await fireEvent.click(await screen.findByRole('switch', { name: 'Describe CargoFrame in a capture of its own windows' }));
+    await fireEvent.click(await screen.findByRole('button', { name: 'Set up the bug report' }));
+    expect(await screen.findByText('The bug report is set up')).toBeTruthy();
+    expect(screen.getByText(/press Ctrl\+Alt\+Shift\+F12/)).toBeTruthy();
+  });
+
+  it('asks for a GitHub connection first when there is none', async () => {
+    setApiForTests(memoryApi({ general: { debug: true }, github: [] }));
+    render(About);
+    expect(await screen.findByRole('button', { name: 'Go to Connections' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Set up the bug report' })).toBeNull();
+  });
+
   it('turns debug mode on and off, and keeps it', async () => {
     render(About);
     const toggle = await screen.findByRole('switch', { name: 'Describe CargoFrame in a capture of its own windows' });

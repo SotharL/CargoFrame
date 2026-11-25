@@ -4,7 +4,7 @@
 
 /** Names Jira's own formatting writes in single braces: never values. */
 export const RESERVED = ['code', 'noformat', 'quote', 'color', 'panel', 'anchor', 'toc', 'section', 'column'];
-const GROUPS = ['app.', 'project.', 'capture.', 'rule.'];
+const GROUPS = ['app.', 'project.', 'capture.', 'rule.', 'system.', 'cargoframe.'];
 
 const validName = (n: string) => /^[A-Za-z0-9_.-]+$/.test(n);
 

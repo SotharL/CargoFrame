@@ -74,6 +74,8 @@
     "allow-open-link",
     "allow-report-painted",
     "allow-report-view",
+    "allow-debug-setup-status",
+    "allow-setup-debug-report",
     "allow-get-timings",
     "core:event:allow-listen",
     "core:event:allow-unlisten"

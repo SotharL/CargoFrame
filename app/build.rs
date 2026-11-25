@@ -23,6 +23,8 @@ fn main() {
             "open_settings",
             "report_painted",
             "report_view",
+            "debug_setup_status",
+            "setup_debug_report",
             "get_timings",
             "get_memory_status",
             "get_shortcut_status",
