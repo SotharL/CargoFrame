@@ -15,6 +15,10 @@ people who use it; why each change was made is in [decisions.md](docs/decisions.
 - A second sign-in entry that starts CargoFrame again no longer opens Settings at every sign-in; the log names the other program
 - The Settings timing is no longer left running when Settings is only brought to the front (a 99-second "usable" was logged on a reload)
 - The log says which program started (its path), so two copies on one PC can be told apart
+- Jira: the window names the fields Jira requires for the issue type picked that the button does not send, and waits for them
+- The builder warns about a block no sharing button sends (what is put in it goes nowhere)
+- *Check this PC* shows whenever debug mode is on, with its own heading, and is found by the Settings search
+- The settings types and their defaults come from Rust (`ts-rs`, test-only): the window keeps no copy of its own
 
 ## 0.7.2 (25 November 2026)
 

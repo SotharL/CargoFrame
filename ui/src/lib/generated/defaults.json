@@ -1,0 +1,36 @@
+{
+  "general": {
+    "accent": "#4f8ee0",
+    "check_updates": false,
+    "language": "system",
+    "memory_mode": "balanced",
+    "notifications": {
+      "problems": true,
+      "routine": true
+    },
+    "schema_version": 1,
+    "theme": "system"
+  },
+  "safe": {
+    "folder": null,
+    "max_retries": 3,
+    "schema_version": 1,
+    "timeout_secs": 30
+  },
+  "video": {
+    "capture": "auto",
+    "continuous": false,
+    "encoder": "auto",
+    "ffmpeg": null,
+    "follow_window": false,
+    "fps": 30,
+    "max_height": 1080,
+    "schema_version": 1,
+    "sign": {
+      "corner": "top_right",
+      "dot": true,
+      "outline": true
+    },
+    "window_secs": 10
+  }
+}

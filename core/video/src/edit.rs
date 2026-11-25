@@ -156,7 +156,7 @@ impl fmt::Display for Problem {
 
 /// `1.5 s`, `0.5 s`, `12 s`, for messages.
 fn clock(ms: u64) -> String {
-    if ms % 1000 == 0 {
+    if ms.is_multiple_of(1000) {
         format!("{} s", ms / 1000)
     } else {
         format!("{:.1} s", ms as f64 / 1000.0)

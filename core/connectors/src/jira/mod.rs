@@ -127,7 +127,7 @@ impl JiraConnector {
             let person = u
                 .get("accountType")
                 .and_then(Value::as_str)
-                .map_or(true, |t| t == "atlassian");
+                .is_none_or(|t| t == "atlassian");
             if !person || u.get("active").and_then(Value::as_bool) == Some(false) {
                 continue;
             }
@@ -571,6 +571,33 @@ pub fn build_update(
     Ok((set, ops))
 }
 
+/// The fields Jira's create screen requires and fills in no other way (no default value), from
+/// the answer of `createmeta/{project}/issuetypes/{type}`: Jira Cloud lists them under
+/// `fields`, Server and Data Center under `values`. The project and the issue type are what was
+/// asked about, so they are never missing.
+pub fn required_fields(v: &Value) -> Vec<OptionItem> {
+    let list = v
+        .get("fields")
+        .or_else(|| v.get("values"))
+        .and_then(Value::as_array);
+    list.into_iter()
+        .flatten()
+        .filter(|f| f.get("required").and_then(Value::as_bool) == Some(true))
+        .filter(|f| f.get("hasDefaultValue").and_then(Value::as_bool) != Some(true))
+        .filter_map(|f| {
+            let id = f
+                .get("fieldId")
+                .or_else(|| f.get("key"))
+                .and_then(Value::as_str)?;
+            if matches!(id, "project" | "issuetype") {
+                return None;
+            }
+            let name = f.get("name").and_then(Value::as_str).unwrap_or(id);
+            Some(OptionItem::new(id, name))
+        })
+        .collect()
+}
+
 fn issue_key_ok(k: &str) -> bool {
     // PROJ-123: letters/digits/underscore, a dash, digits
     let Some((p, n)) = k.rsplit_once('-') else {
@@ -804,6 +831,29 @@ impl Connector for JiraConnector {
                 self.people(ctx, project.as_deref(), typed)
             }
             "teams" => self.teams(ctx, typed),
+            // what Jira needs to create an issue of a type in a project: `required:PROJ/10001`
+            "required" => {
+                let (project, kind) = param
+                    .and_then(|p| p.split_once('/'))
+                    .filter(|(p, k)| {
+                        !p.is_empty()
+                            && p.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                            && is_digits(k)
+                    })
+                    .ok_or_else(|| {
+                        invalid(t(
+                            "The list \"required\" needs a project key and an issue type id, like required:PROJ/10001",
+                        ))
+                    })?;
+                let v = self.get_json(
+                    ctx,
+                    &format!(
+                        "/rest/api/2/issue/createmeta/{project}/issuetypes/{kind}?maxResults=200"
+                    ),
+                    msg!("read the fields Jira needs"),
+                )?;
+                Ok(required_fields(&v))
+            }
             "recent_issues" => {
                 let jql = encode_component("reporter = currentUser() ORDER BY updated DESC");
                 // Jira Cloud replaced /search with /search/jql

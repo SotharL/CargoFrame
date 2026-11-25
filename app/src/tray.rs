@@ -29,7 +29,12 @@ const PLAIN_PNG: &[u8] = include_bytes!("../icons/32x32.png");
 /// arrow layer contributes only its transparency, its own colour is ignored.
 fn with_accent(frames: &[u8], arrow: &[u8], accent: [u8; 3]) -> Vec<u8> {
     let mut out = Vec::with_capacity(frames.len());
-    for (f, a) in frames.chunks_exact(4).zip(arrow.chunks_exact(4)) {
+    for (f, a) in frames
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .zip(arrow.as_chunks::<4>().0.iter())
+    {
         let fa = f[3] as f32 / 255.0;
         let aa = a[3] as f32 / 255.0;
         let alpha = aa + fa * (1.0 - aa);
@@ -333,7 +338,13 @@ mod tests {
         assert_eq!((red.width(), red.height()), (32, 32));
         // pixels that differ between the two are the arrow, and they carry the accent
         let mut arrow_pixels = 0;
-        for (r, g) in red.rgba().chunks_exact(4).zip(green.rgba().chunks_exact(4)) {
+        for (r, g) in red
+            .rgba()
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .zip(green.rgba().as_chunks::<4>().0.iter())
+        {
             if r != g {
                 arrow_pixels += 1;
                 assert!(r[0] > r[1] && g[1] > g[0], "{r:?} {g:?}");
@@ -343,7 +354,9 @@ mod tests {
         // the frames are not accent coloured: there are neutral pixels in both
         assert!(red
             .rgba()
-            .chunks_exact(4)
+            .as_chunks::<4>()
+            .0
+            .iter()
             .any(|p| p[3] > 0 && p[0].abs_diff(p[1]) < 8));
     }
 }

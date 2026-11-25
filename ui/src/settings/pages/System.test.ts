@@ -41,6 +41,15 @@ describe('System', () => {
     expect(screen.getByText('Kept for the next bug report')).toBeTruthy();
   });
 
+  it('offers Check this PC even when the bug report setup cannot be read', async () => {
+    const api = memoryApi({ general: { debug: true } });
+    api.debugSetupStatus = async () => { throw new Error('no'); };
+    setApiForTests(api);
+    render(About);
+    expect(await screen.findByRole('button', { name: 'Check this PC' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Set up the bug report' })).toBeNull();
+  });
+
   it('asks for a GitHub connection first when there is none', async () => {
     setApiForTests(memoryApi({ general: { debug: true }, github: [] }));
     render(About);

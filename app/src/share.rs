@@ -227,6 +227,21 @@ fn options_list(layout: &Layout, block_id: &str, parent: Option<&str>) -> Option
             let list = t.suggest.as_ref().filter(|_| parent.is_none())?;
             return Some((list.connection_id.clone(), list.options_id.clone()));
         }
+        // a sharing button asks what its service needs for what is picked (Jira: the fields
+        // required for an issue type in a project, `PROJ/10001`)
+        BlockKind::SharingButton(b) => {
+            let asked = parent.map(str::trim).filter(|p| {
+                p.split_once('/').is_some_and(|(project, kind)| {
+                    !project.is_empty()
+                        && project
+                            .chars()
+                            .all(|c| c.is_ascii_alphanumeric() || c == '_')
+                        && !kind.is_empty()
+                        && kind.chars().all(|c| c.is_ascii_digit())
+                })
+            })?;
+            return Some((b.connection_id.clone()?, format!("required:{asked}")));
+        }
         _ => return None,
     };
     let DropdownSource::WebApi {
@@ -263,11 +278,11 @@ fn unfilled(layout: &Layout, session: &Session, req: &Request, id: &str) -> Opti
                 .get(id)
                 .cloned()
                 .flatten()
-                .map_or(true, |v| v.trim().is_empty()),
+                .is_none_or(|v| v.trim().is_empty()),
             d.title.clone(),
         ),
         BlockKind::Files(f) => (
-            req.files.get(id).map_or(true, |v| v.is_empty()),
+            req.files.get(id).is_none_or(|v| v.is_empty()),
             f.title.clone(),
         ),
         BlockKind::Screenshot => (

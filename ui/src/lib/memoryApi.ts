@@ -14,6 +14,7 @@ import { DEMO_SAMPLES, demoValues } from './demoSamples';
 import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
 import { valuesOf } from '../settings/ruleValues';
+import { defaultGeneral, defaultSafe, defaultVideo } from './defaults';
 
 /** Options for the in-memory stand-in: what a share and a list request should do. */
 export type SetupScenario =
@@ -123,14 +124,7 @@ const DEMO_LANGUAGE = 'cargoframe.demo.language';
 
 export function memoryApi(opts: MemoryOptions = {}): Api {
   const initial = opts.general;
-  let general: General = {
-    theme: 'system',
-    memory_mode: 'balanced',
-    check_updates: false,
-    accent: '#4f8ee0',
-    notifications: { routine: true, problems: true },
-    ...initial,
-  };
+  let general: General = { ...defaultGeneral(), ...initial };
   // the preview in a browser keeps its language across reloads (the app keeps it in its settings)
   if (!initial?.language) {
     try {
@@ -148,8 +142,8 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
   const reported: DebugView[] = (opts.reported ??= []);
   let debugSetup: DebugSetup = { github: opts.github ?? [['gh', 'CargoFrame on GitHub']], layout: false, shortcut: null };
   let autostartOthers: string[] = [...(opts.autostartOthers ?? [])];
-  let safe: Safe = { folder: null, timeout_secs: 30, max_retries: 3 };
-  let video: Video = { ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080, ...opts.video };
+  let safe: Safe = defaultSafe();
+  let video: Video = { ...defaultVideo(), ...opts.video };
   let trialRan = false;
   // the Setup page's stand-in: what is installed changes only when the install button is pressed
   let scenario: SetupScenario = opts.setup ?? 'ready';

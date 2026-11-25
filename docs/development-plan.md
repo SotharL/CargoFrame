@@ -49,7 +49,7 @@ the app is and how it is used, read the [design](design.md).
 
 | Layer | Choice | Why |
 |-------|--------|-----|
-| Language | **Rust** stable (MSRV 1.80), edition 2021 | Small memory, no runtime, safe without `unsafe` |
+| Language | **Rust** stable (at least 1.90, what Tauri 2.12 needs), edition 2021 | Small memory, no runtime, safe without `unsafe` |
 | Shell | **Tauri 2** (tray-icon, global-shortcut, single-instance, autostart, opener, dialog) | Native tray without a web view; windows created only when needed |
 | UI | **Svelte 5** + TypeScript, **Vite** | Tiny bundles, two pages (`settings.html`, `capture.html`) |
 | Languages | Our own `t`/`msg` (Rust and TypeScript), English as the key, JSON packs embedded | No runtime library; a check script keeps every pack complete |
@@ -428,8 +428,8 @@ documented 72. Its weak points, the worst first, and what 0.7.3 does about each:
 | 4 | Too little logging to explain a crash | The key steps logged with their time: capture, recording (size, encoder, capture kind), share (service, result), window opened; errors always; a panic with its thread and backtrace | No | Done |
 | 5 | Docs that pile up: the status page starts with a 5,000-character paragraph and a sentence no longer true | `CHANGELOG.md` for what each version changed; the status page says what is true today | No | Done |
 | 6 | Files of 1,200 to 1,800 lines (`commands.rs`, `video.rs`, `share.rs`, `ipc.ts`) | Split by topic, starting with `ipc.ts` (the in-memory stand-in in its own file) | No | `ipc.ts` done (1,255 lines to 380; the code both windows load at start 48.5 KB gzip to 36.6 KB); `commands.rs`, `video.rs` and `share.rs` later |
-| 7 | The window's types are written by hand from Rust's (132 types, 85 commands) | Generate them from Rust (`specta`), so a changed field cannot go unnoticed | Yes: a new dependency and a large change | Proposed |
-| 8 | Required fields only found when Jira refuses the issue | Ask Jira which fields the project and type require (`createmeta`) and show them in the window before sending | A real Jira to confirm | Proposed |
+| 7 | The window's types are written by hand from Rust's (132 types, 85 commands) | Generate them from Rust, so a changed field cannot go unnoticed. `specta`/`tauri-specta` are still release candidates (pinned exact versions, breaking changes between them): **`ts-rs`** instead, stable, a test-only dependency (`cargo test` writes `ui/src/lib/generated`, CI fails when it differs from the commit), nothing added to the program | The owner: yes, if it is the safest | Started: the settings files (`General`, `Video`, `Safe` and their parts) and their defaults (`defaults.json`); the other crates' types move one at a time |
+| 8 | Required fields only found when Jira refuses the issue | Ask Jira which fields the project and type require (`createmeta`) and show them in the window before sending; the builder says when a block is sent by no button | A real Jira to confirm | Built, against Jira's documented answers; to try on the owner's Jira |
 
 What only the owner can do stays as it was: real accounts (Jira, Google, Reddit, Claude), the signing certificate,
 the company sign-in apps, and the spikes on real desktops (`docs/spikes.md`).
@@ -440,7 +440,6 @@ the company sign-in apps, and the spikes on real desktops (`docs/spikes.md`).
 |------|-----|
 | A sidebar folded to its icons | More room for the page on a small screen (the icons and their names on hover are there) |
 | Managed settings folder and `policy.json` | Set up thousands of computers at once, with locked items |
-| Required fields from the service shown before sending (Jira first) | No "field is required" error after pressing the button |
 | Company sign-in: Jira OAuth, generic OAuth 2.0 for Custom API | No personal tokens in large companies |
 | Video for X, Bluesky, Instagram; Teams files through OneDrive | Recordings everywhere |
 | `cargoframe open` for files and recording layouts | Other programs hand over more than text |

@@ -131,6 +131,14 @@ operations for lists) or `PATCH` (GitHub, with the labels and assignees added by
 progress records it, so a retry does not add the text twice. A layout saved before 0.7.1 says none of this, and does
 what it did: the description becomes a comment on the issue picked.
 
+**What Jira requires** (0.7.3). For a new issue, the window asks Jira which fields its create screen requires for
+the issue type picked in the project picked (`createmeta`, through the button: the list `required:PROJ/10001`),
+less those with a default value and those a field fill sets. A required field no block sends, or sent by a block
+still empty, is named beside the button, which stays grey until it is: *Jira needs "Component/s" for this issue
+type, and no block sends it*. The summary is never missing (the window's title when nothing else). An issue picked
+to update, or a Jira that cannot say, holds nothing back. The builder warns about a text, dropdown or tags block
+that no sharing button sends, since what is put in it goes nowhere.
+
 </details>
 
 <details>
@@ -543,5 +551,5 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   the CI's Windows build only, not yet on a real PC).
 - An update of an issue changes the fields the layout maps; Jira fields with their own update operations beyond lists
   (worklogs, links) are not offered.
-- Next for the connectors (required fields shown before sending, company sign-in):
+- Next for the connectors (required fields shown before sending for services beyond Jira, company sign-in):
   [connectors.md](connectors.md).

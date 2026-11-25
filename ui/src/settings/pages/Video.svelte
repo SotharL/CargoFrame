@@ -8,6 +8,7 @@
   import Field from '../../lib/components/Field.svelte';
   import Section from '../../lib/components/Section.svelte';
   import { getApi } from '../../lib/ipc';
+  import { defaultVideo } from '../../lib/defaults';
   import { go } from '../route.svelte';
   import type { RecordingSign, SignCorner, Video, VideoCapture, VideoEncoder, VideoTools, VideoTrial } from '../../lib/types';
 
@@ -29,10 +30,7 @@
   ];
 
   let loaded = $state(false);
-  let video = $state<Video>({
-    ffmpeg: null, capture: 'auto', encoder: 'auto', fps: 30, window_secs: 10, max_height: 1080,
-    sign: { outline: true, dot: true, corner: 'top_right' },
-  });
+  let video = $state<Video>(defaultVideo());
   const CORNERS: { id: SignCorner; label: string }[] = [
     { id: 'top_left', label: t('Top left') },
     { id: 'top_right', label: t('Top right') },

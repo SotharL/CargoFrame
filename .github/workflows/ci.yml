@@ -104,6 +104,10 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: scripts/ci/run.sh "cargo test" xvfb-run -a -s "-screen 0 1280x800x24" cargo test --workspace --no-fail-fast
+      - name: The window's types are the Rust ones (ui/src/lib/generated, written by the tests)
+        if: runner.os == 'Linux'
+        shell: bash
+        run: scripts/ci/check-generated.sh
       - name: Test (Windows)
         if: runner.os == 'Windows'
         shell: bash

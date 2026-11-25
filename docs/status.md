@@ -18,7 +18,9 @@ says which of those is true for each piece.
   25 Nov: the pages name an empty icon (`pages.test.ts`; plain Chrome asks for `/favicon.ico` without it and not
   with it), a second start at sign-in opens nothing (checked by the Linux end-to-end run, which now also fails on any
   `ERROR` line in the log), the Settings timing starts only when its page is built. **Not yet seen on Windows:** the
-  log without the favicon line. **Not yet run on a real PC:** *Check this PC* itself.
+  log without the favicon line. Jira's required fields (`createmeta`, Cloud and Data Center answers as documented, `required_fields` and
+  the window's `needs.ts`, `App.test.ts`); the builder's warning for a block no button sends; the settings types and
+  defaults generated from Rust (`ts-rs`), checked in CI. **Not yet tried on a real Jira:** the required fields. **Not yet run on a real PC:** *Check this PC* itself.
 - **0.7.2 (25 Nov, after a first try of debug mode):** a capture of this process in debug mode filling the bug
   report's title, description, labels and files (`session_tests.rs`); the one-button setup, keeping what is there
   (`debug.rs`, `System.test.ts`); `{system.…}` and `{cargoframe.…}` read in the short form (`template.rs`);

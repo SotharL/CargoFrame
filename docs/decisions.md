@@ -1747,3 +1747,23 @@ development plan, §10.
   - `timing: usable ms=99133 metric=settings_paint`. Bringing an open Settings window to the front started its
     timing, and nothing ended it, since the page paints only when it loads; the next reload counted the time
     since. The timing now starts only when the page is built.
+- **Types from Rust: `ts-rs`, not `specta`.** The owner said yes to generating the window's types if it is the
+  safest and easiest to keep. `specta` 2 and `tauri-specta` 2 are still release candidates two years on, pinned to
+  exact versions, with breaking changes between candidates, and `tauri-specta` would also take over how commands are
+  registered. `ts-rs` 12 is stable, derives a type's TypeScript from its serde attributes, and runs only in tests
+  (`#[cfg_attr(test, derive(ts_rs::TS), ts(export))]`, a dev-dependency): `cargo test` writes `ui/src/lib/generated`,
+  `types.ts` re-exports from there under the names the window used, and CI fails when the files differ from the
+  commit (`scripts/ci/check-generated.sh`). The same test run writes the default settings (`defaults.json`), so the
+  four copies of them the window kept are gone. The settings files came first; each crate's types move over when a
+  change touches them. `ts-rs` needs Rust 1.88; the workspace said 1.80, but Tauri 2.12 already needs 1.90, so it
+  now says 1.90.
+- **Jira's required fields, before sending.** Jira refused a ticket with "Component/s is required" only after the
+  button was pressed. The window now asks Jira's create metadata
+  (`/rest/api/2/issue/createmeta/{project}/issuetypes/{type}`, Cloud's `fields` and Data Center's `values`) through
+  the sharing button, with no new command: the button is a block, and its list is `required:PROJ/10001` (only a key
+  and a number reach the address). The app drops the fields a field fill sets, the window the ones its blocks send
+  with something in them, and the summary, which the connector always fills. The rest grey the button, like the
+  blocks a button requires. The owner's Jira layout had an Assignee dropdown no button sent; the builder now says so
+  (`Code::NotSent`, a warning, not shown in the CargoFrame window).
+- **Check this PC was not found.** It sat inside the bug report's setup box, which is hidden when that setup cannot
+  be read, and had no heading. It is now its own box whenever debug mode is on, titled, and found by the search.

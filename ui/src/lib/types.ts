@@ -1,21 +1,22 @@
-export type ThemeChoice = 'system' | 'light' | 'dark';
-export type MemoryMode = 'balanced' | 'low_memory' | 'always_warm';
-
-/** Mirrors `general.json` (without the schema version, which only the backend handles). */
-export interface General {
-  theme: ThemeChoice;
-  memory_mode: MemoryMode;
-  check_updates: boolean;
-  /** `#rrggbb`: buttons, focus rings, links and the arrow of the logo. */
-  accent: string;
-  /** Which notices CargoFrame may show. */
-  notifications: Notifications;
-  /** 'system' (the computer's language) or a code: 'fr'. Absent in files from before 0.6.0. */
-  language?: string;
-  /** Debug mode (System): a capture of CargoFrame itself says what was on screen. */
-  debug?: boolean;
-}
-
+// The settings files, generated from Rust by ts-rs (`cargo test` writes ui/src/lib/generated;
+// check.sh and CI fail when the files there differ from what Rust says). Do not copy these here.
+export type { General } from './generated/General';
+export type { Notifications } from './generated/Notifications';
+export type { Theme as ThemeChoice } from './generated/Theme';
+export type { MemoryMode } from './generated/MemoryMode';
+export type { Safe } from './generated/Safe';
+export type { Video } from './generated/Video';
+export type { VideoCapture } from './generated/VideoCapture';
+export type { VideoEncoder } from './generated/VideoEncoder';
+export type { RecordingSign } from './generated/RecordingSign';
+export type { SignCorner } from './generated/SignCorner';
+import type { General } from './generated/General';
+import type { Notifications } from './generated/Notifications';
+import type { Safe } from './generated/Safe';
+import type { Video } from './generated/Video';
+import type { VideoCapture } from './generated/VideoCapture';
+import type { VideoEncoder } from './generated/VideoEncoder';
+import type { MemoryMode } from './generated/MemoryMode';
 /** Debug mode's setup: the GitHub connections, and what is made already (app/src/debug.rs). */
 export interface DebugSetup {
   /** [id, name] of each GitHub connection. */
@@ -62,12 +63,6 @@ export interface LanguageInfo {
 }
 
 /** A notice can show up inside a recording of the screen, so each kind can be switched off. */
-export interface Notifications {
-  /** "CargoFrame is running", "CargoFrame is recording…", "Shared", "Saved locally". */
-  routine: boolean;
-  /** Something went wrong: a capture or recording that failed, a share that did not go. */
-  problems: boolean;
-}
 
 /** One kind of data CargoFrame keeps on this computer. */
 export interface DataArea {
@@ -755,45 +750,12 @@ export interface InfoType {
   layouts?: string[];
 }
 
-export interface Safe {
-  /** Folder for the fallback zip; null means "ask me". */
-  folder: string | null;
-  timeout_secs: number;
-  max_retries: number;
-}
 
 // ----- video (mirror core/config Video and app/src/video.rs) -----
 
-export type VideoCapture = 'auto' | 'gdigrab' | 'ddagrab' | 'x11' | 'wayland';
-export type VideoEncoder = 'auto' | 'software' | 'nvenc' | 'qsv' | 'amf' | 'media_foundation' | 'vaapi';
 
-export interface Video {
-  /** Folder that holds ffmpeg and ffprobe, or the ffmpeg program; null means "find it". */
-  ffmpeg: string | null;
-  capture: VideoCapture;
-  encoder: VideoEncoder;
-  fps: number;
-  /** Seconds before the stop shortcut the clip may start. */
-  window_secs: number;
-  /** Larger pictures are scaled down to this height; 0 keeps the screen's size. */
-  max_height: number;
-  /** What shows on screen while a trigger records. */
-  sign?: RecordingSign;
-  /** Holding a shortcut 2 seconds starts (and stops) a recording that goes on; a press then opens the last seconds. */
-  continuous?: boolean;
-  /** A recording of the window in focus follows it when it is moved (the whole screen is recorded). */
-  follow_window?: boolean;
-}
 
 /** The corner of the recorded area the blinking dot is in. */
-export type SignCorner = 'top_left' | 'top_right' | 'bottom_left' | 'bottom_right';
-export interface RecordingSign {
-  /** A red outline around what is recorded. */
-  outline: boolean;
-  /** A red dot that blinks once a second. */
-  dot: boolean;
-  corner: SignCorner;
-}
 
 export interface VideoTools {
   found: boolean;

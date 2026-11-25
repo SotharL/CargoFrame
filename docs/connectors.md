@@ -13,7 +13,7 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 | 2 | Pictures made to fit each service's size limit | No failed share because a 4K screenshot is too big | Started (X, Bluesky, Instagram) |
 | 3 | A "where to post" path for every service with places (the Discord path, extended) | One box instead of several dropdowns; the last place is remembered | Discord done; others below |
 | 4 | Extra fields reworked as *Fill fields* (Settings, Layouts, Fill fields): steps that fill a field on each share, from values found in files; a block is sent in a field from the sharing button only | One place for each: what a block sends, what fills a field by itself | Done (0.3.0) |
-| 5 | Required fields asked by the service shown in the layout before the first send | No "field X is required" error after pressing the button | Proposed (Jira first) |
+| 5 | Required fields asked by the service shown in the layout before the first send | No "field X is required" error after pressing the button | Jira built (0.7.3): the window asks Jira's `createmeta` for the project and issue type picked and greys the button while a required field is not sent |
 | 6 | Company sign-in (OAuth with the company's identity provider) | No personal tokens to paste in a large company | Proposed (Jira, Custom API) |
 | 7 | Other programs fill a layout (`cargoframe open`) | A company tool can open CargoFrame with its own data in the blocks | Started (text boxes and dropdowns) |
 | 8 | Tables and code blocks written the service's way | A repro table or a stack trace reads well in Jira, Teams, GitHub and Reddit; aligned lines in a code block where there are no tables | Done (0.3.0) |

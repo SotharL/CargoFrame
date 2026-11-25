@@ -97,7 +97,9 @@ fn what_is_heard_is_passed_on_in_step_with_the_clock() {
         "1.5 s of sound came as {seconds:.2} s"
     );
     let loud = got
-        .chunks_exact(4)
+        .as_chunks::<4>()
+        .0
+        .iter()
         .filter(|s| f32::from_le_bytes([s[0], s[1], s[2], s[3]]).abs() > 0.05)
         .count();
     assert!(loud > got.len() / 4 / 2, "the tone was lost");

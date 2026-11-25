@@ -74,6 +74,7 @@ const RAW: Finding[] = [
   { page: 'system', title: msg('Install what is missing'), section: 'Install what is missing', words: msg('winget download install ffmpeg tesseract') },
   { page: 'system', title: msg('Updates'), section: 'Updates', words: msg('version about check update download install new release') },
   { page: 'system', title: msg('Debug mode'), section: 'Debug mode', words: msg('debug report bug problem cargoframe itself values log layout export') },
+  { page: 'system', title: msg('Check this PC'), section: 'Debug mode', target: 'system.debug.check', words: msg('check test this pc computer screenshot recording sign-in credential shortcuts works report') },
   { page: 'system', title: msg('Windows kept ready'), section: 'Windows kept ready', words: msg('memory warm fast open speed ram') },
   { page: 'system', title: msg('Speed and memory'), section: 'Speed and memory', words: msg('diagnostics performance timing fast slow') },
 ];

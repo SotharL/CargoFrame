@@ -436,7 +436,7 @@ pub fn list_layout_templates(state: State<'_, AppState>) -> Vec<TemplateView> {
         .filter(|t| debug || t.key != "cargoframe-report")
         // a service this build leaves out has no templates either
         .filter(|t| {
-            t.service.map_or(true, |k| {
+            t.service.is_none_or(|k| {
                 crate::connections::kind_of_layout(k).is_some_and(cargoframe_connectors::available)
             })
         })
@@ -1111,7 +1111,36 @@ pub async fn fetch_options(
             reconnect: false,
         });
     };
-    fetch(app, connection_id, options_id).await
+    let needs = options_id.starts_with("required:");
+    let found = fetch(app.clone(), connection_id.clone(), options_id).await?;
+    if !needs {
+        return Ok(found);
+    }
+    // what the service needs, less the fields a field fill sets on every share of this layout
+    let state = app.state::<AppState>();
+    let layout_id = state
+        .sessions
+        .by_id(session_id)
+        .and_then(|s| s.view.layout.as_ref().map(|l| l.id.clone()))
+        .unwrap_or_default();
+    let filled: Vec<String> = state
+        .store
+        .load_all::<cargoframe_config::InfoType>(cargoframe_config::Kind::InfoTypes)
+        .map(|l| {
+            l.items
+                .into_iter()
+                .map(|(_, t)| t)
+                .filter(|t| {
+                    t.connection_id == connection_id && t.fills() && t.applies_in(&layout_id)
+                })
+                .map(|t| t.field)
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(found
+        .into_iter()
+        .filter(|o| !filled.contains(&o.value))
+        .collect())
 }
 
 /// Add files to a Files block by hand: the person picks them, each is copied into the capture's

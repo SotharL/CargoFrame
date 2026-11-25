@@ -65,6 +65,9 @@ pub enum Code {
     /// A Tabs block with too few or too many tabs, too small, or a block in its tabs that is
     /// not there, not inside it, in two tabs, or itself a Tabs block.
     BadTabs,
+    /// A text, dropdown or tags block that no sharing button sends: what is typed or picked in
+    /// it goes nowhere (0.7.3: an Assignee dropdown nobody mapped).
+    NotSent,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -270,6 +273,7 @@ fn check_paths(
 pub fn validate(layout: &Layout, reg: &dyn Registry) -> Vec<Issue> {
     let mut out = Vec::new();
     check_geometry(layout, &mut out);
+    check_sent(layout, reg, &mut out);
     let mut zip_names = 0;
     for block in &layout.blocks {
         match &block.kind {
@@ -445,6 +449,7 @@ fn is_blocking(code: Code) -> bool {
             | Code::MappingRuleMissing
             | Code::UnresolvedVariable
             | Code::CannotSend
+            | Code::NotSent
     )
 }
 
@@ -593,6 +598,48 @@ fn cannot_send_issues(layout: &Layout, button_block: &Block, reg: &dyn Registry)
             _ => None,
         })
         .collect()
+}
+
+/// A block to fill that no sharing button sends. Only when the layout has a button: a layout
+/// without one sends nothing anyway, and says so elsewhere.
+fn check_sent(layout: &Layout, reg: &dyn Registry, out: &mut Vec<Issue>) {
+    let reaches: Vec<_> = layout
+        .blocks
+        .iter()
+        .filter(|b| matches!(b.kind, BlockKind::SharingButton(_)))
+        .filter_map(|b| reach(layout, &b.id, reg))
+        .collect();
+    if reaches.is_empty() {
+        return;
+    }
+    for block in &layout.blocks {
+        let title = match &block.kind {
+            // a zip name is used when the share is saved here, not sent
+            BlockKind::Text(t) if t.role != TextRole::ZipName => &t.title,
+            BlockKind::Dropdown(d) => &d.title,
+            BlockKind::Tags(t) => &t.title,
+            _ => continue,
+        };
+        if reaches
+            .iter()
+            .all(|r| matches!(r.of(&block.id), Some(Verdict::NotUsed)))
+        {
+            let name = if title.trim().is_empty() {
+                block.id.as_str()
+            } else {
+                title.trim()
+            };
+            out.push(issue(
+                block,
+                Severity::Warning,
+                Code::NotSent,
+                tf(
+                    "No sharing button sends \u{201c}{name}\u{201d}, so what is put in it goes nowhere: choose the field it fills in a button\u{2019}s properties",
+                    &[("name", &name)],
+                ),
+            ));
+        }
+    }
 }
 
 fn check_geometry(layout: &Layout, out: &mut Vec<Issue>) {
@@ -1319,6 +1366,40 @@ mod tests {
     }
 
     #[test]
+    fn a_block_no_button_sends_is_said() {
+        let reg = Reg::default();
+        let mapped = |field: &str, block: &str| {
+            let BlockKind::SharingButton(mut b) = button(None, None) else {
+                unreachable!()
+            };
+            b.mappings = vec![InfoMapping {
+                field: field.into(),
+                source: ValueSource::Block(block.into()),
+                update: None,
+            }];
+            BlockKind::SharingButton(b)
+        };
+        let l = layout(vec![
+            at("summary", 0, text(TextRole::Plain, "")),
+            at("note", 1, text(TextRole::Plain, "")),
+            at("send", 2, mapped("summary", "summary")),
+        ]);
+        let not_sent: Vec<_> = validate(&l, &reg)
+            .into_iter()
+            .filter(|i| i.code == Code::NotSent)
+            .map(|i| i.block_id.unwrap_or_default())
+            .collect();
+        assert_eq!(not_sent, vec!["note".to_string()]);
+        // a warning, not a block: the button still works
+        assert!(!is_blocking(Code::NotSent));
+        // no button at all: nothing is sent anyway, nothing to say about each block
+        let alone = layout(vec![at("note", 0, text(TextRole::Plain, ""))]);
+        assert!(validate(&alone, &reg)
+            .iter()
+            .all(|i| i.code != Code::NotSent));
+    }
+
+    #[test]
     fn issues_are_sorted_most_severe_first() {
         let reg = Reg::default();
         let l = layout(vec![
@@ -1328,9 +1409,15 @@ mod tests {
         ]);
         let issues = validate(&l, &reg);
         let sev: Vec<Severity> = issues.iter().map(|i| i.severity).collect();
+        // the warnings: no connection chosen, and the text no button sends
         assert_eq!(
             sev,
-            vec![Severity::Error, Severity::Warning, Severity::Debug]
+            vec![
+                Severity::Error,
+                Severity::Warning,
+                Severity::Warning,
+                Severity::Debug
+            ]
         );
         assert_eq!(worst(&issues), Some(Severity::Error));
         assert_eq!(worst(&[]), None);

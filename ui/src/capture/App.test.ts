@@ -27,6 +27,43 @@ async function opens(search: string) {
 }
 
 describe('the CargoFrame window', () => {
+  it('greys a Jira button while a field Jira needs for the issue type is not sent', async () => {
+    const blocks = [
+      { id: 'proj', type: 'dropdown', rect: { x: 0, y: 0, w: 4, h: 1 }, title: 'Project', source: { type: 'web_api', connection_id: 'jira', options_id: 'projects' } },
+      { id: 'env', type: 'text', rect: { x: 0, y: 1, w: 4, h: 1 }, title: 'Environment', placement: 'above', role: 'plain', default_text: '' },
+      {
+        id: 'send', type: 'sharing_button', rect: { x: 0, y: 2, w: 4, h: 1 }, label: 'Send to Jira', connection_id: 'jira', prompt_block_id: null, on_success: 'keep_open',
+        mappings: [
+          { field: 'project', source: { kind: 'block', value: 'proj' } },
+          { field: 'issuetype', source: { kind: 'fixed', value: '10001' } },
+          { field: 'environment', source: { kind: 'block', value: 'env' } },
+        ],
+      },
+    ];
+    const asked: string[] = [];
+    history.replaceState(null, '', `/capture.html?blocks=${encodeURIComponent(JSON.stringify(blocks))}`);
+    setApiForTests(memoryApi({
+      options: (_c, list) => {
+        asked.push(list);
+        if (list === 'proj') return [{ value: 'SP', label: 'Skeleton Patch (SP)', group: null }];
+        if (list === 'send:SP/10001') return [
+          { value: 'summary', label: 'Summary', group: null },
+          { value: 'environment', label: 'Environment', group: null },
+          { value: 'components', label: 'Component/s', group: null },
+        ];
+        return [];
+      },
+    }));
+    render(App);
+    expect(await screen.findByText('Jira needs “Component/s” for this issue type, and no block sends it')).toBeTruthy();
+    // Environment is sent, and its box holds the demo's text: Jira has it
+    expect(screen.queryByText(/Jira needs “Environment”/)).toBeNull();
+    expect((screen.getByRole('button', { name: /Send to Jira/ }) as HTMLButtonElement).disabled).toBe(true);
+    // asked once for the pair, however often the window redraws
+    expect(asked.filter((l) => l === 'send:SP/10001')).toHaveLength(1);
+  });
+
+
   it('opens a screenshot layout with dropdowns', () => opens(''));
   it('opens a layout with a Discord path that goes down to threads', () => opens('?demo=discord'));
   it('opens a recording', () => opens('?media=video'));
