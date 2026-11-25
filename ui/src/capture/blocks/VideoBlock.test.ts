@@ -3,7 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import VideoBlock from './VideoBlock.svelte';
 import Harness from './VideoBlock.harness.svelte';
 import type { ClipEdit } from '../../lib/types';
-import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 
 const info = { width: 1280, height: 720, duration_ms: 9_500, bytes: 3 * 1024 * 1024, audio: true };
 let revoked: string[];

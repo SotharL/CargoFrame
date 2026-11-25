@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { memoryApi } from './ipc';
+import { memoryApi } from './memoryApi';
 
 describe('in-memory backend', () => {
   it('stores settings between calls', async () => {

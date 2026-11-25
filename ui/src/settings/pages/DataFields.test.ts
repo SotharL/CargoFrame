@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import DataFields from './DataFields.svelte';
-import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import type { Rule } from '../../lib/types';
 import { go } from '../route.svelte';
 

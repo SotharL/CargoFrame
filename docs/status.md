@@ -14,7 +14,7 @@ says which of those is true for each piece.
 - **0.7.3 (in progress):** the overflow check runs every page in Chrome (`ui/scripts/overflow-check.mjs`, in
   `check.sh` and CI); the copies of Rust lists in the window are compared (`mirrors.test.ts`) and the value-finding
   cases run on both sides (`pick_cases.json`); *Check this PC*'s report and the steps that need no screen
-  (`pc_check.rs`), its page (`System.test.ts`). **Not yet run on a real PC:** *Check this PC* itself.
+  (`pc_check.rs`), its page (`System.test.ts`); the in-memory backend in its own file, loaded only outside the app (the windows' shared script 48.5 KB gzip to 36.6 KB). **Not yet run on a real PC:** *Check this PC* itself.
 - **0.7.2 (25 Nov, after a first try of debug mode):** a capture of this process in debug mode filling the bug
   report's title, description, labels and files (`session_tests.rs`); the one-button setup, keeping what is there
   (`debug.rs`, `System.test.ts`); `{system.…}` and `{cargoframe.…}` read in the short form (`template.rs`);

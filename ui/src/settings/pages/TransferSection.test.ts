@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import TransferSection from './TransferSection.svelte';
-import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import type { ImportPreview, ImportPreviewItem } from '../../lib/types';
 
 afterEach(() => {

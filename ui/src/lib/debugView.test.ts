@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { memoryApi, setApiForTests, type Api } from './ipc';
+import { setApiForTests, type Api } from './ipc';
+import { memoryApi } from './memoryApi';
 import { setDebug, snapshot, startDebugView } from './debugView';
 import type { DebugView } from './types';
 

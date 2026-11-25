@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import LogViewBlock from './LogViewBlock.svelte';
 import { matching, splitLines } from './logLines';
-import { memoryApi } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import type { Block, SessionView } from '../../lib/types';
 import { demoSession } from '../demo';
 

@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
-import { memoryApi } from './ipc';
+import { memoryApi } from './memoryApi';
 
 // The ready-made layouts the in-memory stand-in lists (demos, tests, screenshots) are the
 // program's own: same keys, names and sentences, in the same order.

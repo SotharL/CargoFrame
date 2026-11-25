@@ -10,6 +10,7 @@ people who use it; why each change was made is in [decisions.md](docs/decisions.
 - Tests that compare the window's copies of the program's lists, and value-finding cases both sides run
 - The key steps logged with their time (capture, recording, share), a panic with its thread and backtrace
 - This changelog, and a status page that says what is true today
+- The windows no longer load the demo's in-memory backend (`memoryApi.ts`): 12 KB less to load, gzipped
 
 ## 0.7.2 (25 November 2026)
 
