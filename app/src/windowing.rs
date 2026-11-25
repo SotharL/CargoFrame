@@ -61,13 +61,15 @@ fn timing_mark(app: &AppHandle, flow: &str, metric: &str) {
 
 fn open_settings_now(app: &AppHandle) -> tauri::Result<()> {
     shown(app, SETTINGS);
-    timing_begin(app, "settings", SETTINGS);
     if let Some(win) = app.get_webview_window(SETTINGS) {
         let _ = win.unminimize();
         win.show()?;
         win.set_focus()?;
         return Ok(());
     }
+    // timed only when the page is built: brought to the front, it paints nothing to report, and
+    // the timing left open was counted by the next reload (99 s on the owner's PC)
+    timing_begin(app, "settings", SETTINGS);
     settings_window(app, "settings.html").build()?;
     Ok(())
 }
@@ -182,7 +184,6 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
     let page = page.to_string();
     tauri::async_runtime::spawn(async move {
         shown(&app, SETTINGS);
-        timing_begin(&app, "settings", SETTINGS);
         if let Some(win) = app.get_webview_window(SETTINGS) {
             let _ = win.emit("navigate", page);
             let _ = win.unminimize();
@@ -190,6 +191,7 @@ pub fn open_settings_at(app: &AppHandle, page: &str) {
             let _ = win.set_focus();
             return;
         }
+        timing_begin(&app, "settings", SETTINGS);
         let url = format!("settings.html?page={page}");
         if let Err(e) = settings_window(&app, &url).build() {
             tracing::error!("could not open settings: {e}");

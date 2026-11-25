@@ -536,7 +536,9 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   Cloud's answer, still to be tried on a real Jira Cloud and Data Center.
 - The computer's details on Windows come from the registry as Device Manager shows them; a graphics card with no
   driver installed is listed by Windows' fallback name.
-- Starting at sign-in is the person's own entry. An entry in the machine's list that starts an older copy is removed
+- Starting at sign-in is the person's own entry. A second entry that starts CargoFrame again hands over to the copy
+  running, which opens nothing and names the other program in its log (0.7.3; before, Settings opened at each
+  sign-in, and the copy that started first, maybe an older one, was the one used all day). An entry in the machine's list that starts an older copy is removed
   when Windows allows it; otherwise Preferences names it and *Stop the older copy* asks an administrator (tried on
   the CI's Windows build only, not yet on a real PC).
 - An update of an issue changes the fields the layout maps; Jira fields with their own update operations beyond lists

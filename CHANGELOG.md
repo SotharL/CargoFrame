@@ -11,6 +11,10 @@ people who use it; why each change was made is in [decisions.md](docs/decisions.
 - The key steps logged with their time (capture, recording, share), a panic with its thread and backtrace
 - This changelog, and a status page that says what is true today
 - The windows no longer load the demo's in-memory backend (`memoryApi.ts`): 12 KB less to load, gzipped
+- No more `ERROR tauri::manager: asset not found: favicon.ico` each time a window opens on Windows: the pages name an empty icon
+- A second sign-in entry that starts CargoFrame again no longer opens Settings at every sign-in; the log names the other program
+- The Settings timing is no longer left running when Settings is only brought to the front (a 99-second "usable" was logged on a reload)
+- The log says which program started (its path), so two copies on one PC can be told apart
 
 ## 0.7.2 (25 November 2026)
 

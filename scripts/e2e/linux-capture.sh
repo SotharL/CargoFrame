@@ -189,7 +189,17 @@ for _ in $(seq 100); do [ -n "$(find_window CargoFrame || true)" ] && break; sle
 [ -n "$(find_window CargoFrame || true)" ] || fail "no window after the shortcut in Low memory"
 echo "ok: a new window opened in Low memory"
 
+# A second sign-in entry (an install and a build on one PC, say) starts CargoFrame again: the copy
+# running keeps running, says so in its log and opens nothing (before 0.7.3 it opened Settings).
+"$bin" --autostart >/dev/null 2>&1 || true
+for _ in $(seq 50); do grep -q "started again at sign-in" "$work/cargoframe.log" && break; sleep 0.1; done
+grep -q "started again at sign-in" "$work/cargoframe.log" || fail "a second sign-in start was not handed to the running copy"
+kill -0 "$app_pid" 2>/dev/null || fail "CargoFrame exited when started again at sign-in"
+echo "ok: a second sign-in start is handed over and opens nothing"
+
 grep -q "panicked" "$work/cargoframe.log" && fail "the app panicked"
+# an error in the log is a bug or noise to remove (Windows' web view asking for /favicon.ico was one)
+if grep -E "^[0-9TZ:.-]+ +ERROR" "$work/cargoframe.log" >&2; then fail "the log has errors (above)"; fi
 "$bin" --quit >/dev/null 2>&1 || true
 for _ in $(seq 50); do kill -0 "$app_pid" 2>/dev/null || break; sleep 0.1; done
 kill -0 "$app_pid" 2>/dev/null && fail "CargoFrame did not quit on --quit"

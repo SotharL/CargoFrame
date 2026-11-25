@@ -8,6 +8,10 @@
 //   CHROME=/path/to/chrome node scripts/overflow-check.mjs
 //
 // A problem is printed as: page, size, theme, the element, the box it should stay in, by how much.
+//
+// It also fails when a page asks for a file the build does not have (a 404 here): in the app,
+// Tauri answers such a request with "ERROR tauri::manager: asset not found" in the log, as
+// Windows' web view did for `/favicon.ico` on every window it opened before 0.7.3.
 import { existsSync } from 'node:fs';
 import { preview } from 'vite';
 import { chromium } from 'playwright-core';
@@ -113,6 +117,10 @@ try {
     for (const size of [view.capture ? CAPTURE : SETTINGS, LARGE]) {
       for (const scheme of ['light', 'dark']) {
         const page = await browser.newPage({ viewport: { width: size.w, height: size.h }, colorScheme: scheme });
+        const missing = new Set();
+        page.on('response', (r) => {
+          if (r.url().startsWith(base) && r.status() >= 400) missing.add(new URL(r.url()).pathname);
+        });
         await page.addInitScript(() => localStorage.setItem('cargoframe.tour.done', '1'));
         await page.goto(base + view.path);
         await page.waitForLoadState('networkidle');
@@ -127,6 +135,10 @@ try {
           problems += 1;
           console.log(`✗ ${view.name}, ${size.w}×${size.h}, ${scheme}: ${p.what} sticks out of ${p.box} by ${p.by} px`);
         }
+        for (const path of missing) {
+          problems += 1;
+          console.log(`✗ ${view.name}, ${size.w}×${size.h}, ${scheme}: asks for ${path}, which the build does not have`);
+        }
         await page.close();
       }
     }
@@ -139,4 +151,4 @@ if (problems) {
   console.log(`overflow check: ${problems} problem(s)`);
   process.exit(1);
 }
-console.log(`overflow check: ${VIEWS.length} views, 2 sizes, light and dark: nothing sticks out`);
+console.log(`overflow check: ${VIEWS.length} views, 2 sizes, light and dark: nothing sticks out, no file missing`);
