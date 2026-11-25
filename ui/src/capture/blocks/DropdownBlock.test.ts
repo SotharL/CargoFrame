@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import DropdownBlock from './DropdownBlock.svelte';
-import { memoryApi, setApiForTests } from '../../lib/ipc';
+import { setApiForTests } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import type { Block, DropdownState } from '../../lib/types';
 
 type Dropdown = Extract<Block, { type: 'dropdown' }>;

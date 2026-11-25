@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import ClaudeAppNote from './ClaudeAppNote.svelte';
-import { memoryApi, setApiForTests, type Api, type MemoryOptions } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi, type MemoryOptions } from '../../lib/memoryApi';
 
 afterEach(() => {
   cleanup();

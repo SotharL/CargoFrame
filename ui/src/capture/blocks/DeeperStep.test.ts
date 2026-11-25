@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/svelte';
 import DeeperStep from './DeeperStep.svelte';
-import { memoryApi, setApiForTests } from '../../lib/ipc';
+import { setApiForTests } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import { deeperKey, remember } from '../../lib/recent';
 import type { DropdownOption } from '../../lib/types';
 

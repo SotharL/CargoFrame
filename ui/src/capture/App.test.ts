@@ -4,7 +4,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import App from './App.svelte';
-import { memoryApi, setApiForTests } from '../lib/ipc';
+import { setApiForTests } from '../lib/ipc';
+import { memoryApi } from '../lib/memoryApi';
 
 // jsdom draws no pictures: the screenshot block says so instead, and the window still opens
 globalThis.createImageBitmap ??= (() => Promise.reject(new Error('no pictures here'))) as typeof createImageBitmap;

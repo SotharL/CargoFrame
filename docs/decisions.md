@@ -1727,3 +1727,7 @@ development plan, §10.
 - **The docs.** `CHANGELOG.md` holds what each version changed (it was a 5,000-character first paragraph of the
   status page); the status page starts with what is true today (CargoFrame runs on the owner's Windows PC, Jira and
   GitHub are used for real).
+- **`ipc.ts` split.** The in-memory backend (about 820 of its 1,255 lines: the demo's data, the tests' stand-in)
+  is `memoryApi.ts`, and `getApi` imports it only outside the app. The windows' shared script loses 12 KB gzipped,
+  and the file the commands are added to is the `Api` type and the real calls only. `commands.rs`, `video.rs` and
+  `share.rs` are next, when a change touches them.

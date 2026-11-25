@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import Setup from './Setup.svelte';
 import { setupState } from '../setupState.svelte';
-import { memoryApi, setApiForTests, type MemoryOptions } from '../../lib/ipc';
+import { setApiForTests } from '../../lib/ipc';
+import { memoryApi, type MemoryOptions } from '../../lib/memoryApi';
 
 function open(opts: MemoryOptions = {}) {
   setApiForTests(memoryApi(opts));

@@ -6,7 +6,8 @@ import App from '../App.svelte';
 import { guide, startTour, stopTour } from './tourState.svelte';
 import { selectorOf, TOURS } from './tours';
 import { go } from '../route.svelte';
-import { memoryApi, setApiForTests } from '../../lib/ipc';
+import { setApiForTests } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 
 beforeEach(() => {
   setApiForTests(memoryApi({ setup: 'windows_missing' }));

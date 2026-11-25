@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import YourData from './YourData.svelte';
 import General from './Preferences.svelte';
-import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import { deeperKey, recentChoices, remember } from '../../lib/recent';
 
 let api: Api;

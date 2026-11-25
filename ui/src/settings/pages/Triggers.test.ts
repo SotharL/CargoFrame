@@ -1,7 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import Triggers from './Triggers.svelte';
-import { memoryApi, setApiForTests, type Api } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi } from '../../lib/memoryApi';
 import type { Layout, Trigger } from '../../lib/types';
 
 let api: Api;

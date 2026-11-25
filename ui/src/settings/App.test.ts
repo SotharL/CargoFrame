@@ -2,7 +2,8 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/svelte';
 import App from './App.svelte';
 import { go } from './route.svelte';
-import { memoryApi, setApiForTests } from '../lib/ipc';
+import { setApiForTests } from '../lib/ipc';
+import { memoryApi } from '../lib/memoryApi';
 
 beforeEach(() => {
   setApiForTests(memoryApi());

@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/svelte';
 import UpdatesSection from './UpdatesSection.svelte';
-import { memoryApi, setApiForTests, type Api, type MemoryOptions } from '../../lib/ipc';
+import { setApiForTests, type Api } from '../../lib/ipc';
+import { memoryApi, type MemoryOptions } from '../../lib/memoryApi';
 import type { UpdateView } from '../../lib/types';
 
 afterEach(() => {

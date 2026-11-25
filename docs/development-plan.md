@@ -116,7 +116,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `app/` | The program: tray, shortcuts, commands, sharing, secrets, setup checks, `cargoframe open` |
 | `ui/src/settings` | Settings window: pages, layout builder, connections, guides |
 | `ui/src/capture` | CargoFrame window: blocks, editor, tick boxes, sharing |
-| `ui/src/lib` | IPC (`ipc.ts`, with `memoryApi` for tests and demos), tokens, shared components; a list fixed to the screen under its box (`floating.ts`: the dropdown's and the Tags list); what a window shows, in debug mode (`debugView.ts`) |
+| `ui/src/lib` | IPC (`ipc.ts`; the in-memory backend for tests and demos in `memoryApi.ts`, loaded only outside the app), tokens, shared components; a list fixed to the screen under its box (`floating.ts`: the dropdown's and the Tags list); what a window shows, in debug mode (`debugView.ts`) |
 | `installers/` | NSIS script and hooks; AppImage, `install.sh`, `uninstall.sh` |
 | `scripts/` | `dev/check.sh` (the gate), `ci/` (budgets, names), `e2e/` (virtual-screen tests), `windows/build.cmd` |
 | `assets/brand/` | Logo and icon SVGs |
@@ -190,7 +190,7 @@ Leaf crates have no CargoFrame dependencies and are built and tested first. `app
 | `capture/editor` | Picture editor: pen, square, circle, arrow, text with styles, crop, colour, size; *Read text* (`ocr.ts`) |
 | `capture/*.ts` | Values, the sharing dots (`ticks.ts`), what each button will send and what it still waits for (`willSend.ts`: `missing`), remembered choices, row heights (`rows.ts`) |
 | `settings/data` | Data parsing's file viewer (grips at a selection's ends) and value editor (parts found one after the other: `pick.ts` runs `Find::Pick` with its `then` as `find.rs` does); the files opened and closed kept until Settings closes (`files.ts`) |
-| `lib/` | `ipc.ts` (real and in-memory API), `shortcut.ts` (keys held and let go, named by their place, and which ones CargoFrame watches), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links), `icons.ts` with `Icon.svelte` (the line icons, the Settings pages' included), `tabs.ts` (which tab a block is in, shared by the builder and the window), `i18n/` (`t`, `tn`, `msg`, `Tr`, the packs) |
+| `lib/` | `ipc.ts` (the `Api` type and the real one), `memoryApi.ts` (the in-memory one, with the demo's data), `shortcut.ts` (keys held and let go, named by their place, and which ones CargoFrame watches), `tokens.css` (colours), `connectorHelp.ts` (the only "get a token" links), `icons.ts` with `Icon.svelte` (the line icons, the Settings pages' included), `tabs.ts` (which tab a block is in, shared by the builder and the window), `i18n/` (`t`, `tn`, `msg`, `Tr`, the packs) |
 
 </details>
 
@@ -289,7 +289,8 @@ Secrets go only to the credential store, keyed by connection. The web view never
 <summary><b>Commands and windows</b></summary>
 
 About 80 Tauri commands (`app/build.rs`). `ui/src/lib/ipc.ts` has one `Api` type with two implementations: the real
-one (Tauri `invoke`) and `memoryApi` (in memory, for tests and the browser demos `?demo=…`). A test
+one (Tauri `invoke`) and `memoryApi` (`memoryApi.ts`, in memory, for tests and the browser demos `?demo=…`; `getApi`
+imports it only outside the app, so the windows do not load it). A test
 (`shipped_config_tests`) fails if a command is not registered, not listed, or not granted to a window.
 
 </details>
@@ -426,7 +427,7 @@ documented 72. Its weak points, the worst first, and what 0.7.3 does about each:
 | 3 | Lists and rules written twice, in Rust and in TypeScript, kept the same by hand | Tests that read the Rust list and compare it with the TypeScript one, for every such pair (the value groups, the values CargoFrame fills, the debug names), and value-finding cases both sides run | No | Done |
 | 4 | Too little logging to explain a crash | The key steps logged with their time: capture, recording (size, encoder, capture kind), share (service, result), window opened; errors always; a panic with its thread and backtrace | No | Done |
 | 5 | Docs that pile up: the status page starts with a 5,000-character paragraph and a sentence no longer true | `CHANGELOG.md` for what each version changed; the status page says what is true today | No | Done |
-| 6 | Files of 1,200 to 1,800 lines (`commands.rs`, `video.rs`, `share.rs`, `ipc.ts`) | Split by topic, starting with `ipc.ts` (the in-memory stand-in in its own file) | No | If time |
+| 6 | Files of 1,200 to 1,800 lines (`commands.rs`, `video.rs`, `share.rs`, `ipc.ts`) | Split by topic, starting with `ipc.ts` (the in-memory stand-in in its own file) | No | `ipc.ts` done (1,255 lines to 380; the code both windows load at start 48.5 KB gzip to 36.6 KB); `commands.rs`, `video.rs` and `share.rs` later |
 | 7 | The window's types are written by hand from Rust's (132 types, 85 commands) | Generate them from Rust (`specta`), so a changed field cannot go unnoticed | Yes: a new dependency and a large change | Proposed |
 | 8 | Required fields only found when Jira refuses the issue | Ask Jira which fields the project and type require (`createmeta`) and show them in the window before sending | A real Jira to confirm | Proposed |
 

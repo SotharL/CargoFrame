@@ -11,7 +11,7 @@ import { MAX_TAGS, MAX_TAG_CHARS } from './types';
 import { MIN_TABS, MAX_TABS, MIN_TABS_SIZE } from './tabs';
 import { MAX_SHARING_BUTTONS, BLOCK_TYPES } from '../settings/layout/model';
 import { groupOf } from '../settings/layout/automation';
-import { memoryApi } from './ipc';
+import { memoryApi } from './memoryApi';
 
 const rust = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
 
