@@ -880,3 +880,32 @@ fn the_required_list_asks_jira_for_the_project_and_issue_type() {
         );
     }
 }
+
+#[test]
+fn the_answer_of_a_real_jira_cloud_needs_nothing_more_for_a_task() {
+    // skeletonpatch.atlassian.net, project KAN (team-managed), Task, 25 Nov 2026: the required
+    // fields as Jira Cloud gave them, without `hasDefaultValue` on the reporter
+    let task = json!({"total":18,"startAt":0,"maxResults":200,"fields":[
+        {"fieldId":"assignee","name":"Assignee","required":false,"schema":{"type":"user"}},
+        {"fieldId":"issuetype","name":"Issue Type","required":true,"schema":{"type":"issuetype"}},
+        {"fieldId":"project","name":"Project","required":true,"schema":{"type":"project"}},
+        {"fieldId":"reporter","name":"Reporter","required":true,"schema":{"type":"user"}},
+        {"fieldId":"summary","name":"Summary","required":true,"schema":{"type":"string"}}
+    ]});
+    let ids: Vec<String> = required_fields(&task)
+        .into_iter()
+        .map(|o| o.value)
+        .collect();
+    // the summary is left for the window, which knows the connector always fills it
+    assert_eq!(ids, vec!["summary".to_string()]);
+    // its Subtask needs a parent
+    let subtask = json!({"fields":[
+        {"fieldId":"parent","name":"Parent","required":true,"schema":{"type":"issuelink"}},
+        {"fieldId":"reporter","name":"Reporter","required":true,"schema":{"type":"user"}}
+    ]});
+    let ids: Vec<String> = required_fields(&subtask)
+        .into_iter()
+        .map(|o| o.value)
+        .collect();
+    assert_eq!(ids, vec!["parent".to_string()]);
+}

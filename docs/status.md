@@ -1,6 +1,6 @@
 # Status
 
-_Last updated 2026-11-25: 0.7.2 is published, 0.7.3 is in progress (its plan: [development plan, Next](development-plan.md#10-next)). What each version changed is in the [changelog](../CHANGELOG.md)._
+_Last updated 2026-11-25: 0.7.3 is ready as a draft release, waiting for the owner (what it holds: [development plan, Next](development-plan.md#10-next)). What each version changed is in the [changelog](../CHANGELOG.md)._
 
 **CargoFrame runs on the owner's Windows 11 PC (since the installer test of 7 November), and its own issues are
 filed with it on GitHub; Jira and GitHub are used with real accounts. It has not yet run on a real Linux desktop,
@@ -11,7 +11,7 @@ says which of those is true for each piece.
 
 - **Unit and integration tests:** about 1,110 Rust tests and 650 UI tests pass. `cargo clippy -D warnings`,
   `cargo fmt --check` and `svelte-check` are clean.
-- **0.7.3 (in progress):** the overflow check runs every page in Chrome (`ui/scripts/overflow-check.mjs`, in
+- **0.7.3 (25 Nov):** the overflow check runs every page in Chrome (`ui/scripts/overflow-check.mjs`, in
   `check.sh` and CI); the copies of Rust lists in the window are compared (`mirrors.test.ts`) and the value-finding
   cases run on both sides (`pick_cases.json`); *Check this PC*'s report and the steps that need no screen
   (`pc_check.rs`), its page (`System.test.ts`); the in-memory backend in its own file, loaded only outside the app (the windows' shared script 48.5 KB gzip to 36.6 KB). From the owner's log of
@@ -20,7 +20,7 @@ says which of those is true for each piece.
   `ERROR` line in the log), the Settings timing starts only when its page is built. **Not yet seen on Windows:** the
   log without the favicon line. Jira's required fields (`createmeta`, Cloud and Data Center answers as documented, `required_fields` and
   the window's `needs.ts`, `App.test.ts`); the builder's warning for a block no button sends; the settings types and
-  defaults generated from Rust (`ts-rs`), checked in CI. **Not yet tried on a real Jira:** the required fields. **Not yet run on a real PC:** *Check this PC* itself.
+  defaults generated from Rust (`ts-rs`), checked in CI. Jira's answer read from the owner's Jira (KAN: a Task needs nothing more, a Subtask a parent; the reporter, marked required with no default given, is never counted). **Not yet sent from CargoFrame on the owner's PC:** a ticket with the required fields check on. **Not yet run on a real PC:** *Check this PC* itself.
 - **0.7.2 (25 Nov, after a first try of debug mode):** a capture of this process in debug mode filling the bug
   report's title, description, labels and files (`session_tests.rs`); the one-button setup, keeping what is there
   (`debug.rs`, `System.test.ts`); `{system.…}` and `{cargoframe.…}` read in the short form (`template.rs`);

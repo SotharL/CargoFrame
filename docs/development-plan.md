@@ -1,6 +1,6 @@
 # Development plan
 
-How to make CargoFrame as it is in version 0.7.2, written as if it were started today: what it must do, the stack,
+How to make CargoFrame as it is in version 0.7.3, written as if it were started today: what it must do, the stack,
 the architecture, each module, the order to build them in, and the gates every change passes. The order is the one a
 new team would follow, not the order the versions came in (that history is in [decisions](decisions.md)). For what
 the app is and how it is used, read the [design](design.md).
@@ -415,7 +415,7 @@ listed. Branches merge with a **merge commit**.
 
 ## 10. Next
 
-### 0.7.3: what the code review asked for (planned 25 Nov 2026)
+### 0.7.3: what the code review asked for (planned and built 25 Nov 2026)
 
 The review of 0.7.2 scored the code **75 / 100**: reliable 80, optimized 78, easy to maintain 70, user friendly 74,
 documented 72. Its weak points, the worst first, and what 0.7.3 does about each:

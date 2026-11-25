@@ -574,7 +574,9 @@ pub fn build_update(
 /// The fields Jira's create screen requires and fills in no other way (no default value), from
 /// the answer of `createmeta/{project}/issuetypes/{type}`: Jira Cloud lists them under
 /// `fields`, Server and Data Center under `values`. The project and the issue type are what was
-/// asked about, so they are never missing.
+/// asked about, so they are never missing; nor is the reporter, which Jira sets to the person
+/// signed in when it is left out (Jira Cloud marks it required, and not every Jira says it has a
+/// default).
 pub fn required_fields(v: &Value) -> Vec<OptionItem> {
     let list = v
         .get("fields")
@@ -589,7 +591,7 @@ pub fn required_fields(v: &Value) -> Vec<OptionItem> {
                 .get("fieldId")
                 .or_else(|| f.get("key"))
                 .and_then(Value::as_str)?;
-            if matches!(id, "project" | "issuetype") {
+            if matches!(id, "project" | "issuetype" | "reporter") {
                 return None;
             }
             let name = f.get("name").and_then(Value::as_str).unwrap_or(id);

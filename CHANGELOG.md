@@ -3,7 +3,7 @@
 What each version of CargoFrame changed, newest first. The release notes on GitHub say the same for the
 people who use it; why each change was made is in [decisions.md](docs/decisions.md).
 
-## 0.7.3 (in progress)
+## 0.7.3 (25 November 2026)
 
 - *Check this PC* in debug mode: the real tests run on the PC itself, in a report the bug report attaches
 - An overflow check of every page in a real browser, in the checks and CI

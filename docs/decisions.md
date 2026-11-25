@@ -1693,7 +1693,7 @@ problem in itself, behind a debug mode in *System*.
   a comma the pattern did not expect, so 46 messages (mostly what a connector says when a setting is missing) were
   never translated; the pattern takes the comma, and they are now in the four languages.
 
-## 0.7.3 (in progress): what the code review asked for
+## 0.7.3 (25 Nov 2026): what the code review asked for
 
 The review of 0.7.2 (25 Nov 2026) scored the code 75 / 100: reliable 80 (about 1,770 tests, clippy strict, 25
 `unwrap`/`expect` in shipping code and all of them invariants, a panic hook, locks that survive a panic), optimized 78
@@ -1767,3 +1767,7 @@ development plan, §10.
   (`Code::NotSent`, a warning, not shown in the CargoFrame window).
 - **Check this PC was not found.** It sat inside the bug report's setup box, which is hidden when that setup cannot
   be read, and had no heading. It is now its own box whenever debug mode is on, titled, and found by the search.
+- **The reporter is never a missing field.** The owner's Jira Cloud (read through the Atlassian connector) marks
+  Reporter required on every issue type and the answer read gave no default for it; Jira sets it to the person
+  signed in when it is left out. Counted, it would have greyed every Jira button: it is left out with the project and
+  the issue type.
