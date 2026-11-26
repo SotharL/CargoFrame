@@ -4,7 +4,7 @@ Thank you for helping. Issues and pull requests are welcome on
 https://github.com/SotharL/CargoFrame.
 
 - Before a pull request, run the local checks: `CARGO_INCREMENTAL=0 scripts/dev/check.sh all`
-  (see [the development plan](docs/development-plan.md#7-testing-and-quality-gates)).
+  (see [the development plan](docs/development-plan.md#9-quality-tests-gates-budgets)).
 - Every text people read goes through `t()` and is translated into French, Spanish, Italian and
   German (`node scripts/i18n/check.mjs --missing` lists what is left).
 - What the app is and how it works: [docs/design.md](docs/design.md); why choices were made:

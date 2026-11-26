@@ -434,7 +434,7 @@ everything after the recorded file exists, and a recorder that works on a virtua
 - **Capture and encoder choices are the ones S9 measures:** Linux X11 `x11grab`; Windows
   `gdigrab` and `ddagrab`; encoders x264 (ultrafast/veryfast), NVENC, QSV, AMF, Media Foundation
   and VAAPI. Frames larger than 1080 lines are scaled down before encoding by default. Which is
-  the default per machine is left to S9 (`docs/spikes.md`), with `scripts/windows/s9-video.ps1`
+  the default per machine is left to S9 (then `docs/spikes.md`, now `docs/performance.md`), with `scripts/windows/s9-video.ps1`
   and `scripts/e2e/s9-video-linux.sh` to measure it.
 - **Not built yet:** the video block and the "video layout", the recorder window (start, stop,
   the editor with its timeline, crop and marks), per-connection sending of a video (size limits

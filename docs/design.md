@@ -457,8 +457,9 @@ flowchart TB
 | CI | `.github/` | Linux on pull requests; Windows and Linux on `main`; installers; release draft; security audit |
 
 Side effects (files, secrets, network, clock) sit behind traits, so tests use a mock server and an in-memory secret
-store. How it was built, in order: [development plan](development-plan.md); how to change it (remove a service, plug it
-into another tool, add a sign-in, hide values): [customizing](customizing.md) and [AGENTS.md](../AGENTS.md). `unsafe` is forbidden in every crate. The full module list is in the [development plan](development-plan.md#4-modules).
+store. `unsafe` is forbidden outside the platform crates. The modules, one by one: [development plan](development-plan.md#7-modules);
+how to change it (remove a service, plug it into another tool, add a sign-in, hide values): [customizing](customizing.md)
+and [AGENTS.md](../AGENTS.md).
 
 <details>
 <summary><b>Settings on disk</b></summary>
@@ -477,7 +478,7 @@ and is migrated with a backup. **Secrets are never in these files**: they are in
 |------|---------------|--------|
 | Safety | No telemetry. Secrets only in the credential store. Files read only inside the project folder where a rule allows. Every request is HTTPS to an address the person set. Text from a screen or file never reaches a command line | [security.md](security.md) |
 | Performance | Tray-only under 40 MB; capture under 150 ms; each window under 250 KB of script. Three memory modes: balanced, low memory, always warm | [performance.md](performance.md) |
-| Testing | Rust unit and integration tests, connectors against mock servers; UI tests on an in-memory backend; every page and the CargoFrame window opened in Chrome, small and large, light and dark, failing when something sticks out of its box (the overflow check); the copies of Rust lists in the window compared; a real capture on a virtual X11 screen; installer install, upgrade, uninstall and click test; guides checked against real fields | [development plan](development-plan.md#7-testing-and-quality-gates) |
+| Testing | Rust unit and integration tests, connectors against mock servers; UI tests on an in-memory backend; every page and the CargoFrame window opened in Chrome, small and large, light and dark, failing when something sticks out of its box (the overflow check); the copies of Rust lists in the window compared; a real capture on a virtual X11 screen; installer install, upgrade, uninstall and click test; guides checked against real fields | [development plan](development-plan.md#9-quality-tests-gates-budgets) |
 
 </details>
 
