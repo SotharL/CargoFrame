@@ -10,10 +10,11 @@ notice, or a line such as "Based on CargoFrame (https://github.com/SotharL/Cargo
 with your copy, so that others can find the original.
 
 "CargoFrame" and the Convoy logo are the project's names and marks; they are not
-covered by either license. See TRADEMARKS.md.
+covered by either license. See docs/trademarks.md in the source.
 
 CargoFrame is not affiliated with, or endorsed by, the Rust Foundation or the
 Rust project. "Cargo" is a trademark of the Rust Foundation.
 
 The libraries CargoFrame is built with keep their own licenses: see
-THIRD-PARTY-LICENSES.md.
+docs/third-party-licenses.md in the source, THIRD-PARTY-LICENSES.md in the
+installed program.

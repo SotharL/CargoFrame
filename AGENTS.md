@@ -39,5 +39,5 @@ and update [docs/status.md](docs/status.md).
 
 ## Docs to keep current
 
-A user-visible change: `README.md`, `docs/design.md`, `CHANGELOG.md` (Next). A decision: `docs/decisions.md`. What is
+A user-visible change: `README.md`, `docs/design.md`, `docs/changelog.md` (Next). A decision: `docs/decisions.md`. What is
 verified: `docs/status.md`.

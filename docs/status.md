@@ -2,7 +2,7 @@
 
 _Last updated 26 Nov 2026 · version 0.7.3 · the repository is public; open-source license pending its merge._
 
-What is verified today, how, and what is not. What each version changed is in the [changelog](../CHANGELOG.md); why,
+What is verified today, how, and what is not. What each version changed is in the [changelog](changelog.md); why,
 in [decisions](decisions.md).
 
 **In one line:** CargoFrame runs every day on the owner's Windows 11 PC, sends real Jira tickets, GitHub issues and
@@ -24,7 +24,7 @@ services other than Jira, GitHub and Discord only against mocks of their documen
 | Windows build | Rust tests and clippy on Windows; installer silent install, upgrade, uninstall and a click on its window | `ci.yml`, `bundle.yml`, `release.yml` |
 | Budgets | Idle memory and CPU, capture and window times, script size | `scripts/ci/check-budgets.mjs`, timing tests |
 | Languages | Every text of both codebases in French, Spanish, Italian and German, with the same `{names}` | `scripts/i18n/check.mjs` |
-| Dependencies | `cargo audit`, `npm audit`; licenses within the accepted list | `security.yml`, `about.toml` |
+| Dependencies | `cargo audit`, `npm audit`; licenses within the accepted list | `security.yml`, `scripts/licenses/about.toml` |
 
 ## Seen on real machines
 

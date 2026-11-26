@@ -39,7 +39,7 @@ offline, encrypted backup, and do not paste the key into chats, tickets or issue
 ## Still to do
 
 The repository is public (26 Nov 2026): its history was scanned for secrets and personal paths (none), OAuth clients
-use PKCE with no secret, `SECURITY.md` is there and the open-source license is ready to merge. What remains:
+use PKCE with no secret, `.github/SECURITY.md` is there and the project is open source (MIT OR Apache-2.0). What remains:
 
 1. A publicly trusted code-signing certificate in place of none, and the program inside the installer signed too.
 2. A signed update manifest on top of the checksum file.

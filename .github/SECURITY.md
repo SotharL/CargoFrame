@@ -14,4 +14,4 @@ updates*), and installs it only when you press the button.
 ## What CargoFrame does with your data
 
 How tokens, screenshots, files and recordings are kept and sent, and the known limits, are written down in
-[docs/security.md](docs/security.md).
+[docs/security.md](../docs/security.md).
