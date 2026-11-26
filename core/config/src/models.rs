@@ -38,7 +38,7 @@ pub struct General {
     pub schema_version: u32,
     pub theme: Theme,
     pub memory_mode: MemoryMode,
-    /// Off while the repository is private (no public release assets to check).
+    /// Off unless the person turns it on: a daily request to GitHub's releases.
     pub check_updates: bool,
     /// The accent colour as `#rrggbb`: buttons, focus rings, links and the arrow of the logo.
     /// A value that is not a colour counts as the default wherever it is used.

@@ -3,6 +3,14 @@
 What each version of CargoFrame changed, newest first. The release notes on GitHub say the same for the
 people who use it; why each change was made is in [decisions.md](docs/decisions.md).
 
+## Next
+
+- Open source: MIT OR Apache-2.0, at the user's choice, with a NOTICE asking for credit (`LICENSE-MIT`,
+  `LICENSE-APACHE`, `NOTICE`); the name and logo kept for the official copy (`TRADEMARKS.md`); `CONTRIBUTING.md`
+- The licenses of every library CargoFrame ships with (`THIRD-PARTY-LICENSES.md`, written by cargo-about), in the
+  installers with CargoFrame's own
+- System, Updates: a line with the license and a link to the source; the GitHub token is only for a private copy
+
 ## 0.7.3 (25 November 2026)
 
 - *Check this PC* in debug mode: the real tests run on the PC itself, in a report the bug report attaches

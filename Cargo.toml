@@ -28,6 +28,8 @@ version = "0.7.3"
 edition = "2021"
 rust-version = "1.90"
 publish = false
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/SotharL/CargoFrame"
 
 [workspace.dependencies]
 serde = { version = "1", features = ["derive"] }

@@ -3,9 +3,9 @@
 //! (check, download, verify, hand over to the installer) is tested without a network, a real
 //! installer or Tauri.
 //!
-//! While the repository is private the requests carry a read-only token the owner created. It is
-//! kept in the credential store, never read back to a window, and only ever sent to the GitHub
-//! API address.
+//! The repository is public (26 Nov 2026); a private copy of it needs a read-only token, which the
+//! requests then carry. It is kept in the credential store, never read back to a window, and only
+//! ever sent to the GitHub API address.
 
 use cargoframe_connectors::SecretStore;
 use cargoframe_i18n::t;

@@ -379,8 +379,11 @@ CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, ove
 | `release.yml` | Tag `v*`, by hand | Check, build both platforms, `SHA256SUMS.txt`, a **draft** release |
 | `security.yml` | Pushes, pull requests, weekly (Monday) | `cargo audit`, `npm audit` |
 
-**Release:** set the version in `Cargo.toml` (workspace) and `ui/package.json`, merge to `main`, tag `vX.Y.Z`, check
-the draft, publish. The app's update check reads the newest release and installs only an installer whose SHA-256 is
+**Release:** set the version in `Cargo.toml` (workspace) and `ui/package.json`; when a dependency changed, write the
+licenses again (`scripts/licenses/third-party.sh`, with `cargo install cargo-about --locked --features cli`; a crate
+under a license `about.toml` does not accept stops it); merge to `main`, tag `vX.Y.Z`, check the draft, publish.
+The installers carry `LICENSE-MIT`, `LICENSE-APACHE`, `NOTICE` and `THIRD-PARTY-LICENSES.md` (a `licenses` folder
+beside the program on Windows, the top of the Linux package). The app's update check reads the newest release and installs only an installer whose SHA-256 is
 listed. Branches merge with a **merge commit**.
 
 ---

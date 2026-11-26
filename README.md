@@ -390,3 +390,22 @@ data, run `npm run dev` in `ui/` and open `settings.html` or `capture.html`.
 | [Languages](docs/i18n.md) | How texts are translated, the glossary, and keeping the packs in step on each push |
 | [Status](docs/status.md) · [Security](docs/security.md) · [Performance](docs/performance.md) | What is verified; the security review; budgets and measures |
 | [Spikes](docs/spikes.md) · [Signing](docs/signing.md) · [Installers](installers/README.md) | Real-machine checks; certificates; what the packages do |
+| [Contributing](CONTRIBUTING.md) | Checks to run, translations, and the license of contributions |
+
+## License
+
+CargoFrame is free and open source: use it, copy it, change it and share it, at no cost, under
+either of
+
+- the MIT License ([LICENSE-MIT](LICENSE-MIT)), or
+- the Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE)),
+
+at your option. The one thing asked in return is credit: keep the copyright notice and
+[NOTICE](NOTICE) with your copy, or a line such as *Based on CargoFrame
+(https://github.com/SotharL/CargoFrame)*, so that others can find the original.
+
+The name **CargoFrame** and the Convoy logo are not covered by these licenses: a changed copy shared
+with others takes a name of its own ([TRADEMARKS.md](TRADEMARKS.md)). CargoFrame is not affiliated
+with the Rust Foundation; "Cargo" is the Rust Foundation's trademark, and here simply the English
+word. The libraries it is built with keep their own licenses: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+

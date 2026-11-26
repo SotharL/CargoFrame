@@ -16,6 +16,9 @@ A tray program for **Windows 11 and Linux**. A shortcut captures the program in 
 finds that program's project folder, reads the few values the person asked for, and opens **one window** to check
 everything and send it to a web service with **one button**. Nothing is sent without that button.
 
+It is **free and open source**: MIT OR Apache-2.0, at the user's choice, asking only that the source be named
+([NOTICE](../NOTICE)); the name and logo stay with the official copy ([TRADEMARKS.md](../TRADEMARKS.md)).
+
 ### Four rules
 
 | Rule | In practice |

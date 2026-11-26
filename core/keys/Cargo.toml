@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # The keyboard is read with the operating system's own calls. Unsafe code is denied everywhere
 # except the Windows module that needs it.

@@ -107,6 +107,10 @@
     <p>
       <Tr text={t('Version {version}')}>{#snippet version()}<span class="mono selectable">{view!.current}</span>{/snippet}</Tr>
     </p>
+    <p class="quiet small">
+      {t('Free and open source, under the MIT or Apache 2.0 license.')}
+      <button type="button" class="link" onclick={() => open(`https://github.com/${view!.repository}`)}>{t('Source code, credits and licenses')}</button>
+    </p>
 
     {#if !view.supported}
       <p class="quiet">
@@ -188,7 +192,7 @@
         stored={view.token_set}
         onsave={saveToken}
         onclear={() => saveToken('')}
-        hint={t('While the {repository} repository is private, GitHub only answers with a token. Create a fine-grained token that can only read this repository\'s contents. It is kept in your system\'s password store and sent to api.github.com only. Leave it empty once the repository is public.', { repository: view.repository })}
+        hint={t('Only needed when {repository} is a private repository, such as a private copy of CargoFrame: GitHub then answers only with a token. Create a fine-grained token that can only read its contents. It is kept in your system\'s password store and sent to api.github.com only.', { repository: view.repository })}
       />
       {#if view.token_problem}
         <p class="error" role="alert">

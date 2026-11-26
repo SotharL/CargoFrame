@@ -1771,3 +1771,35 @@ development plan, §10.
   Reporter required on every issue type and the answer read gave no default for it; Jira sets it to the person
   signed in when it is left out. Counted, it would have greyed every Jira button: it is left out with the project and
   the issue type.
+
+## Open source (26 Nov 2026)
+
+The owner wants CargoFrame free for anyone to use, copy and change, at no cost, asking only to be named as the
+source. The repository was already public, without a license: people could read the code, but the law gave them no
+right to reuse it.
+
+- **MIT OR Apache-2.0, at the user's option.** Both are permissive and both keep the copyright notice with every
+  copy, which is the credit asked for. It is what Rust itself and nearly every crate CargoFrame uses are under (610
+  crates, none GPL), so the code can move both ways. MIT is short and works with GPLv2 projects; Apache-2.0 adds a
+  patent grant and says in so many words (section 6) that the name and marks are not licensed. The copyright line
+  carries the project's address, so keeping it points back to the source; `NOTICE` asks for a line such as "Based
+  on CargoFrame" and Apache-2.0 makes keeping it a condition. The holder is written as the owner's GitHub name
+  (SotharL) and "the CargoFrame contributors", so nothing personal is published; the owner can put a legal name
+  there instead. Copyleft (GPL, MPL) was set aside: it would ask users to share their changes, more than the owner
+  asked.
+- **The name is not the license's.** A name is protected by trademark, not copyright. `TRADEMARKS.md` lets anyone
+  say "based on CargoFrame" and use the name for CargoFrame itself, and asks a changed copy shared with others to
+  take its own name and icon. "Cargo" is a trademark of the Rust Foundation, whose policy needs written permission
+  to use it within another trademark and forbids looking affiliated; CargoFrame is a Rust program, so `NOTICE`,
+  `TRADEMARKS.md` and the README say it is not affiliated and that "Cargo" here is the English word. Registering
+  CargoFrame as a trademark (INPI or EUIPO) is the owner's decision; the Rust Foundation is asked first.
+- **Third-party licenses go with the program.** MIT and BSD ask that their text travel with every copy, and MPL-2.0
+  (`cssparser`, `selectors`, `dtoa-short`, `option-ext`, unchanged) that people be told where its source is.
+  `cargo-about` writes `THIRD-PARTY-LICENSES.md` from the crates' own sources (`about.toml` lists the licenses
+  accepted, so a new one stops the script), with the Svelte runtime and `@tauri-apps/api` added; Tauri's
+  `bundle.resources` put it, the two licenses and `NOTICE` into both installers. ffmpeg (GPL) is not shipped: the
+  person downloads it from its own release.
+- **What was public before.** The history (186 commits, both branches) holds no token, key or personal e-mail;
+  the attachments branch holds screenshots of CargoFrame's own windows. The Updates section said the repository
+  was private; it now says a token is for a private copy only.
+

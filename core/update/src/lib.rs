@@ -8,8 +8,8 @@
 //! 3. [`install`] hands the verified installer to the platform's own installer, which quits the
 //!    running copy, swaps the files, keeps the settings and starts CargoFrame again.
 //!
-//! While the repository is private the requests carry a read-only token the owner created; the
-//! token only ever goes to the GitHub API address the check was started with, never to the
+//! A private repository (a private copy of CargoFrame) needs a read-only token, which the requests
+//! carry; the token only ever goes to the GitHub API address the check was started with, never to the
 //! storage address a download is redirected to.
 
 mod checksum;
