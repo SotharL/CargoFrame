@@ -1,7 +1,7 @@
 # The CargoFrame name and logo
 
 The code of CargoFrame is free to use, copy, change and share under the MIT License or the
-Apache License 2.0 (see [LICENSE-MIT](LICENSE-MIT) and [LICENSE-APACHE](LICENSE-APACHE)). The
+Apache License 2.0 (see [LICENSE-MIT](../LICENSE-MIT) and [LICENSE-APACHE](../LICENSE-APACHE)). The
 name **CargoFrame** and the **Convoy** logo (`assets/brand/`, `app/icons/`) are not part of those
 licenses: they say where a copy comes from, so that people can trust it.
 

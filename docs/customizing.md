@@ -46,7 +46,7 @@ others.
 ### For good (delete the code)
 
 Take `bluesky` as the example; do the same for any service. Search for the service's key first:
-`git grep -il bluesky -- ':!THIRD-PARTY-LICENSES.md'`.
+`git grep -il bluesky -- ':!docs/third-party-licenses.md'`.
 
 1. **Rust, connector:** delete `core/connectors/src/bluesky/`; remove it from `core/connectors/src/lib.rs` (the
    `mod`, the registry), `model.rs` (its settings, its `Kind`), and the mentions in `media.rs`, `richtext.rs`, `custom.rs`.
@@ -216,7 +216,7 @@ Rules: every text through `t()`; every control labelled; nothing wider than its 
 
 ## 9. Rename a fork
 
-The license lets anyone change and share CargoFrame; [TRADEMARKS.md](../TRADEMARKS.md) asks a shared, changed copy
+The license lets anyone change and share CargoFrame; [trademarks.md](trademarks.md) asks a shared, changed copy
 to take its own name and icon. Change:
 
 | What | Where |

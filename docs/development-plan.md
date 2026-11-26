@@ -4,7 +4,7 @@ How to build a tool like CargoFrame from an empty repository, in the order a car
 build first, why, how to know each step is done, and what it costs. It is written for an AI agent or an engineering
 team that wants to make a similar tool (a tray program that captures what is on screen, gathers the context around it
 and sends it to a service with one button). It describes the **end state of CargoFrame 0.7.3** as the target, but
-not the path its versions took; that history is in the [changelog](../CHANGELOG.md) and [decisions](decisions.md).
+not the path its versions took; that history is in the [changelog](changelog.md) and [decisions](decisions.md).
 
 What the finished tool is and how people use it: [design](design.md). How to change it (remove a service, plug it
 into another tool, add a sign-in, hide values, restyle it): [customizing](customizing.md).
@@ -171,7 +171,7 @@ sequenceDiagram
     P->>W: draws, types, picks where to post, ticks
     P->>W: presses a sharing button
     W->>T: share (the blocks ticked for this button)
-    T->>S: send (retries with backoff; never twice)
+    T->>S: send (retries with backoff, never twice)
     alt it still fails
         T->>P: keeps a zip and says where
     else
@@ -600,7 +600,7 @@ CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, ove
 | Guides and search | Every guide field exists and every step can be walked; every search entry points at real code | |
 | Whole program | The real binary captures a fake program on a virtual X11 screen and on headless sway; a second sign-in start is handed over; the log has no error | 2 scripts |
 | Installers | Silent install, upgrade, uninstall and a click on the real installer window; AppImage install and run | |
-| Security | `cargo audit`, `npm audit` on a schedule; accepted licenses (`about.toml`) | |
+| Security | `cargo audit`, `npm audit` on a schedule; accepted licenses (`scripts/licenses/about.toml`) | |
 | A real PC | *Check this PC*, by the person who has it | |
 
 <details>
@@ -644,7 +644,7 @@ CARGO_INCREMENTAL=0 scripts/dev/check.sh all     # + UI build, size budgets, ove
 
 **Release checklist:** set the version in `Cargo.toml` (workspace) and `ui/package.json`; date the changelog; when a
 dependency changed, write the licenses again (`scripts/licenses/third-party.sh`); merge to `main`; run the release
-workflow; read the draft; publish. The installers carry the licenses, `NOTICE` and `THIRD-PARTY-LICENSES.md`.
+workflow; read the draft; publish. The installers carry the licenses, `NOTICE` and the third-party licenses (`docs/third-party-licenses.md`).
 
 ---
 

@@ -405,12 +405,12 @@ data, run `npm run dev` in `ui/` and open `settings.html` or `capture.html`.
 | [Development plan](docs/development-plan.md) | How to build a tool like this, in order of priority: requirements, architecture, milestones, quality, metrics, risks, effort |
 | [Customizing](docs/customizing.md) · [AGENTS.md](AGENTS.md) | Recipes to change it (remove a service, plug it into another tool, add a sign-in, hide values, restyle, rename a fork); the rules for AI agents |
 | [Connectors](docs/connectors.md) | How each service flows, and what to improve next |
-| [Changelog](CHANGELOG.md) | What each version changed |
+| [Changelog](docs/changelog.md) | What each version changed |
 | [Decisions](docs/decisions.md) | What was decided, and why |
 | [Languages](docs/i18n.md) | How texts are translated, the glossary, and keeping the packs in step on each push |
 | [Status](docs/status.md) · [Security](docs/security.md) · [Performance](docs/performance.md) | What is verified; the security review; budgets and measures |
 | [Signing](docs/signing.md) · [Installers](installers/README.md) | Certificates; what the packages do |
-| [Contributing](CONTRIBUTING.md) | Checks to run, translations, and the license of contributions |
+| [Contributing](.github/CONTRIBUTING.md) | Checks to run, translations, and the license of contributions |
 
 ## License
 
@@ -425,7 +425,7 @@ at your option. The one thing asked in return is credit: keep the copyright noti
 (https://github.com/SotharL/CargoFrame)*, so that others can find the original.
 
 The name **CargoFrame** and the Convoy logo are not covered by these licenses: a changed copy shared
-with others takes a name of its own ([TRADEMARKS.md](TRADEMARKS.md)). CargoFrame is not affiliated
+with others takes a name of its own ([the name and logo](docs/trademarks.md)). CargoFrame is not affiliated
 with the Rust Foundation; "Cargo" is the Rust Foundation's trademark, and here simply the English
-word. The libraries it is built with keep their own licenses: [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md).
+word. The libraries it is built with keep their own licenses: [third-party licenses](docs/third-party-licenses.md).
 

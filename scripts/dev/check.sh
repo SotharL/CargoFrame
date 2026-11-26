@@ -42,6 +42,7 @@ if [ "$mode" != quick ]; then
 fi
 if [ "$mode" != rust ]; then
   step "file names (Windows-safe)" node scripts/ci/check-names.mjs
+  step "docs (links, sections, diagrams)" node scripts/ci/check-docs.mjs
   step "language packs (every text, same {names})" node scripts/i18n/check.mjs
   step "svelte-check" bash -c 'cd ui && npx svelte-check'
   step "vitest" bash -c 'cd ui && npx vitest run'

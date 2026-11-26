@@ -1,18 +1,24 @@
 # Changelog
 
 What each version of CargoFrame changed, newest first. The release notes on GitHub say the same for the
-people who use it; why each change was made is in [decisions.md](docs/decisions.md).
+people who use it; why each change was made is in [decisions.md](decisions.md).
 
 ## Next
 
 - Open source: MIT OR Apache-2.0, at the user's choice, with a NOTICE asking for credit (`LICENSE-MIT`,
-  `LICENSE-APACHE`, `NOTICE`); the name and logo kept for the official copy (`TRADEMARKS.md`); `CONTRIBUTING.md`
-- The licenses of every library CargoFrame ships with (`THIRD-PARTY-LICENSES.md`, written by cargo-about), in the
+  `LICENSE-APACHE`, `NOTICE`); the name and logo kept for the official copy (`docs/trademarks.md`); `.github/CONTRIBUTING.md`
+- The licenses of every library CargoFrame ships with (`docs/third-party-licenses.md`, written by cargo-about), in the
   installers with CargoFrame's own
 - System, Updates: a line with the license and a link to the source; the GitHub token is only for a private copy
 - Recording on a new install: 30 frames a second, the last 15 seconds kept, at the screen's own height (*Largest height* 0); settings already saved keep their values
 - Docs: the development plan rewritten as the plan to build a tool like this, in order of priority (milestones, effort, metrics, risks); `docs/customizing.md`, recipes to change it; `AGENTS.md`, the rules for AI agents; the design without version history, with a feature map; the status page by area; fresh pictures in the README
 - Removed: the spikes page (its questions are the plan's first milestone, the recording measures are in `docs/performance.md`), an old colour chart, an unused dependency (`tracing` in `ocr`) and four unused functions in the windows
+- Fewer files at the top of the repository: the changelog, the trademark policy and the third-party licenses moved to
+  `docs/`, the contributing guide and the security policy to `.github/` (GitHub still shows them), the cargo-about
+  settings beside its script; `rustfmt.toml` removed (it only repeated rustfmt's defaults)
+- The development plan's "One press, end to end" diagram shows on GitHub again (a `;` cut its line short), and a new
+  check (`scripts/ci/check-docs.mjs`, in the gate and CI) fails on a broken link, a missing section or picture, or a
+  diagram line Mermaid would cut
 
 ## 0.7.3 (25 November 2026)
 
