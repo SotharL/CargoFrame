@@ -17,7 +17,7 @@ export interface ViewFile {
 }
 
 /** The most of a file read here: its end, like the window's log viewer. */
-export const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_BYTES = 4 * 1024 * 1024;
 
 /** `Saved/Logs/Game.log` → `Game.log`: the name a rule looks for in every folder. */
 export const baseName = (path: string) => path.split(/[\\/]/).filter(Boolean).pop() ?? path;

@@ -17,7 +17,7 @@ export function measureLine(a: Extract<Annotation, { kind: 'text' }>, line: stri
 }
 
 /** Black or white, whichever reads better on `hex`; used for text outlines. */
-export function contrastOf(hex: string): string {
+function contrastOf(hex: string): string {
   const m = /^#?([0-9a-f]{6})$/i.exec(hex);
   if (!m) return '#000000';
   const n = parseInt(m[1]!, 16);

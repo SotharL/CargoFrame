@@ -28,6 +28,22 @@ It is **free and open source**: MIT OR Apache-2.0, at the user's choice, asking 
 | **Little to maintain** | One place for each thing: one list of templates, one list of "get a token" links, one file per setting, one HTTP client. A service that changes breaks one folder |
 | **Fit for a large company** | Per-user install without an administrator, builds without unused services, works behind the company's proxy and certificates, other programs can hand it data |
 
+### Everything it does, at a glance
+
+| Area | What it does | Where it is set |
+|------|--------------|-----------------|
+| **Capture** | Screenshot of the program in focus, the screen under the mouse or all screens; menus and tooltips included | Shortcuts |
+| **Recording** | The last seconds (15 by default, 30 at most), sound, a red outline and dot while recording, continuous recording, a window followed when it moves, the keys pressed and the time over the clip | Recording; the Video block |
+| **Context** | The program's project folder; values selected once in a log and read again in every capture; values made from other values; the computer's details (`{system.gpu_driver}`…) | Data parsing |
+| **The window** | Screenshot editor and *Read text*; video trim, crop and marks; formatted text with tables; dropdowns filled by the service; files; tags; log viewer by words or time; tabs | Layouts |
+| **Sending** | 12 services and a local zip; create or update an issue field by field; comment, vote; required fields named before sending; one button per destination, up to five | Connections; Layouts |
+| **Never lost** | Retries, then a zip in a safe folder; every send safe to repeat | Files & backup |
+| **Setting up** | Tour, guides, search, templates, export and import, one-button install of the apps it uses | Settings |
+| **Other tools** | `cargoframe open` fills a layout; data rules read another tool's files; the custom API receives reports ([customizing](customizing.md)) | Shortcuts; Layouts |
+| **Companies** | Per-user install, builds with only some services, the system's proxy and certificates | At build time |
+| **Languages** | English, French, Spanish, Italian, German | Preferences |
+| **Its own bugs** | Debug mode: a capture of CargoFrame fills where it was and attaches its state; *Check this PC* | System |
+
 ### The concepts
 
 ```mermaid
@@ -87,7 +103,7 @@ sequenceDiagram
 |------|--------------|------|
 | Capture | Windows (a copy of the desktop, so menus are in the picture), X11, Wayland (see below). With no window in focus, the screen under the mouse. While recording, a red outline and a blinking dot say so (never in the recording itself), and a change of focus is followed: the program used longest names the capture | `core/capture`, `core/indicator`, `app/src/watch.rs` |
 | Project folder | Climb the program's path to a folder with the program's name, else one folder above. Nothing outside it is read | `core/context` |
-| Data parsing | If a file named like this is found (newest, or all): add it to the Files blocks, read values. A value is made by **selecting it in a file** (0.5.0, `Find::Pick`): in the lines with a text (the label just before the selection, or every line), right after it or from the start of the line, up to a text (the next sign, a space) or the end of the line; the most recent line, the first or all. Values from 0.4 (after a name, between two pieces, the line with a word; JSON, YAML, TOML, INI and XML read by key) keep working. **The same value in several files**: each file's rule reads it with the same key; the newest file (by its change time) wins, or every different value, the newest first; a value no file has is empty, or the text it says. A value can also be **made from other values**: choices tried from the top (`{stream}_{change}_{shelf}_{config}`, else without the shelf), with conditions when needed | `core/rules` |
+| Data parsing | If a file named like this is found (newest, or all): add it to the Files blocks, read values. A value is made by **selecting it in a file** (`Find::Pick`): in the lines with a text (the label just before the selection, or every line), right after it or from the start of the line, up to a text (the next sign, a space) or the end of the line; the most recent line, the first or all. Values from 0.4 (after a name, between two pieces, the line with a word; JSON, YAML, TOML, INI and XML read by key) keep working. **The same value in several files**: each file's rule reads it with the same key; the newest file (by its change time) wins, or every different value, the newest first; a value no file has is empty, or the text it says. A value can also be **made from other values**: choices tried from the top (`{stream}_{change}_{shelf}_{config}`, else without the shelf), with conditions when needed | `core/rules` |
 | Window | One serializable view of the session; the web view only draws it | `core/window`, `ui/src/capture` |
 | Share | The blocks the button says must be filled are checked first (the window greys the button and lists them; the share checks again). Then one `Payload` from the ticked blocks (picture, still, video, files zip, texts, choices, and for each field what it does to an issue that is there), handed to the connector | `app/src/share.rs` |
 | Fallback | Retry with backoff; then a zip of everything is kept. A button with no connection is **Save locally** | `core/safe`, `core/bundle` |
@@ -134,7 +150,7 @@ operations for lists) or `PATCH` (GitHub, with the labels and assignees added by
 progress records it, so a retry does not add the text twice. A layout saved before 0.7.1 says none of this, and does
 what it did: the description becomes a comment on the issue picked.
 
-**What Jira requires** (0.7.3). For a new issue, the window asks Jira which fields its create screen requires for
+**What Jira requires.** For a new issue, the window asks Jira which fields its create screen requires for
 the issue type picked in the project picked (`createmeta`, through the button: the list `required:PROJ/10001`),
 less those with a default value and those a field fill sets. A required field no block sends, or sent by a block
 still empty, is named beside the button, which stays grey until it is: *Jira needs "Component/s" for this issue
@@ -177,7 +193,7 @@ version. Setting it up is one button under the switch, *Set up the bug report*: 
 another shortcut has it), both kept as they are when pressed again. `{system.…}` and `{cargoframe.…}` are written in
 the short form like the capture's own values (`core/context/src/template.rs` lists the groups).
 
-**Check this PC** (0.7.3), under the switch, tries on the PC itself what CI cannot: the computer's details, a
+**Check this PC**, under the switch, tries on the PC itself what CI cannot: the computer's details, a
 screenshot of every screen, the apps CargoFrame uses, a 3-second recording, the sign-in entry, the credential store
 (a token kept and read back), the shortcuts, the settings folder and the web view, each timed, with a mark (works,
 works with something to know, does not work). The report is kept in the log folder (`pc-check.md`), and the next bug
@@ -195,10 +211,9 @@ becomes a Jira or HTML table, a Markdown one, or aligned lines in a code block w
 (Slack, Discord). In the window and in the builder a table is a grid to type in, with ＋ for a row or a column and ×
 to take one out: every column and every row has one, the header row too (the next row takes its place), and the last
 one left takes the table out of the text. A table's cells are `tw-cell`, and only cells of the box's own tables count
-as cells (the window's layout has cells of its own: taking one for a table cell swallowed Enter and wiped the block on
-a paste before 0.7.2). A paste comes in as plain text, through the paste event.
+as cells (the window's layout has cells of its own). A paste comes in as plain text, through the paste event.
 
-**How a value is written.** `{name}` (0.5.0) or `{{name}}`: `{map}` is the value `map` read from files (`{{rule.map}}`
+**How a value is written.** `{name}` or `{{name}}`: `{map}` is the value `map` read from files (`{{rule.map}}`
 the older way), `{app.exe}` a value of the capture. Single braces stay as written when what is inside cannot be a value,
 so Jira's own `{code}`, `{noformat}`, `{quote}`, `{color:red}`, `{panel}` and the like, numbers like `{0}`, JSON and
 names with spaces are left alone; a value cannot be named like one of Jira's (`core/context/src/template.rs`). Values
@@ -221,7 +236,7 @@ kept once, case aside, at most 100 characters). It starts with the tags of its l
 as `{gpu}` or `gpu-{gpu}` gives a tag only when the value is found and `{platforms}` gives one tag per part. The window
 offers the last five used in the block and, when the block names a list of a connection (Jira's labels, components
 or versions, a repository's labels; a list that needs a project key takes it in the builder), opens that list on a
-click to pick several, narrowed while typing (0.7.2). Lists the service searches are not offered there. A sharing button sends them in a field, as several values: labels for Jira
+click to pick several, narrowed while typing. Lists the service searches are not offered there. A sharing button sends them in a field, as several values: labels for Jira
 and GitHub, `hashtags` for X, Bluesky and Instagram (added at the end of the post, the text cut first so they stay),
 `tags` for Slack, Teams and Discord (a last line, `**Tags:**` followed by each in code marks). The Jira and GitHub
 templates start with a Labels block. `cargoframe open --set labels=crash,gpu` fills it from another program.
@@ -268,7 +283,7 @@ the desktop for each. The program checks which desktop it is on and picks the wa
 <summary><b>Video</b></summary>
 
 `core/video` runs **ffmpeg** (the one optional program) into a ring of short segments, so the last seconds are kept
-(10 by default). **What it costs the program being recorded** is kept low by default: on Windows the graphics card's
+(15 by default, at the screen's own height unless *Largest height* says otherwise). **What it costs the program being recorded** is kept low by default: on Windows the graphics card's
 copy of the screen (Desktop Duplication) is used for the main screen, and GDI (which copies the screen slowly through
 the processor) only for what that copy cannot see (another screen, the whole desktop of several screens) or when it
 fails; a hardware encoder (NVIDIA, Intel, AMD; VAAPI on Linux) is used when it encodes a test picture on this PC, x264
@@ -315,11 +330,11 @@ found, its times are `[YYYY_MM_DD] HH:mm -`") or by the block; the last one used
 next time. **While the clip plays**, the lines follow it: those written up to the moment shown, the newest coming in
 at the bottom as it plays (a switch turns it off).
 
-**Several screens** (0.7.2): a recording is kept to about the main screen's pixels (between 720p and 4K, 1440p
+**Several screens:** a recording is kept to about the main screen's pixels (between 720p and 4K, 1440p
 when the main screen is not known), at most 3840 × 2160, its shape kept, never enlarged, with the cheaper bilinear
 scaler: one scale filter does the height setting and these limits (`recorder::fit_filter`). Three 1080p screens
-(5760 × 1080) were more than every hardware encoder and Windows' own player take, and three times the work of one
-screen; they are now recorded at about 3324 × 622, and a slow PC keeps up.
+(5760 × 1080, more than hardware encoders and Windows' own player take) are recorded at about 3324 × 622, so a slow
+PC keeps up.
 
 **A window that is moved** (*Recording*, off by default): a recorded region cannot move, so with this on the screen
 the window is on is recorded and the window's place is noted ten times a second; the clip opens cropped to the window
@@ -327,12 +342,12 @@ and the crop slides with it, in the window and in the sent clip. A crop set by h
 again. The screens are read every five seconds, and the red outline is hidden while the window moves and drawn again
 once it is still (a quarter of a second), so following costs little beyond the larger picture to encode.
 
-**ffmpeg** can be downloaded from *System* (0.7.1): the build ffmpeg.org links to (BtbN on GitHub, GPL, the newest
+**ffmpeg** can be downloaded from *System*: the build ffmpeg.org links to (BtbN on GitHub, GPL, the newest
 release branch for Windows or Linux), checked against the checksums published beside it, unpacked into CargoFrame's
 own folder (`tools/ffmpeg`, no administrator) and used before any other ffmpeg. The line offers the newer build when
 there is one.
 
-**Shortcuts of any keys** (0.7.1): the system shortcut library (`global-hotkey`) takes modifiers and one key it
+**Shortcuts of any keys:** the system shortcut library (`global-hotkey`) takes modifiers and one key it
 knows; a shortcut it can take still goes through it. Any other (several keys, the number pad, `<>`, media and
 browser keys…) is watched by CargoFrame: `core/keys` reads the keys' state every 25 ms (`GetAsyncKeyState`, or the X
 keymap) on a thread that exists only while such a shortcut does, and fires once when the last key goes down with
@@ -379,7 +394,7 @@ service are grouped under *Connect a service*, below the others.
 | | **Recording** | What shows on screen while recording (the outline and dot), how long a clip is, continuous recording, following a window that is moved, where ffmpeg is, capture and compression (Automatic picks the cheapest that works), a 5-second test |
 | CargoFrame | **Preferences** | Language (its dropdown on the title's line; the computer's by default; English, French, Spanish, Italian, German), appearance (theme, accent colour), notifications (each kind on or off, with a link to the recording sign), starting with the computer (the person's own sign-in entry; an older copy the machine starts instead is named, with *Stop the older copy*) |
 | | **Files & backup** | When a share fails (the folder for saved zips, retries), export and import (and deleting the items ticked, after naming them and the shortcuts they leave with no layout), what is kept on this computer (clear each kind, forget the remembered choices) and *Reset CargoFrame* |
-| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing) and ffmpeg's own *Download* / *Update* button, updates and the version (checked against the installer under either of its names, once a day after a day has passed when that is on), windows kept ready, *Debug mode* (off: see *Debug mode* in §2; with it, *Set up the bug report* and *Check this PC*), speed and memory |
+| | **System** | The apps CargoFrame uses on this computer (ffmpeg, sound output, Claude app, `xdotool`) with one install button (the sidebar shows how many are missing) and ffmpeg's own *Download* / *Update* button, updates and the version (checked against the installer under either of its names, once a day after a day has passed when that is on), windows kept ready, *Debug mode* (off: see *Debug mode* in §2; with it, *Set up the bug report* and *Check this PC*), speed and memory, the license with a link to the source |
 
 | Connections | Layout builder | Shortcut |
 |:---:|:---:|:---:|
@@ -442,7 +457,8 @@ flowchart TB
 | CI | `.github/` | Linux on pull requests; Windows and Linux on `main`; installers; release draft; security audit |
 
 Side effects (files, secrets, network, clock) sit behind traits, so tests use a mock server and an in-memory secret
-store. `unsafe` is forbidden in every crate. The full module list is in the [development plan](development-plan.md#4-modules).
+store. How it was built, in order: [development plan](development-plan.md); how to change it (remove a service, plug it
+into another tool, add a sign-in, hide values): [customizing](customizing.md) and [AGENTS.md](../AGENTS.md). `unsafe` is forbidden in every crate. The full module list is in the [development plan](development-plan.md#4-modules).
 
 <details>
 <summary><b>Settings on disk</b></summary>
@@ -498,6 +514,7 @@ convoy is what travels with them, the arrow is the sharing.
 | **Name** | *Cargo* Manrope 800 + *Frame* Manrope 500, one word, letter-spacing -0.02em; outlined in the SVGs |
 | **Colours** | Ink `#1F1E1D` / page `#F5F4EE` (light), reversed in dark; accent `#4F8EE0`, changeable with a contrast warning |
 | **Destinations** | Each service has its own colour on its button and its dots, never the only signal: the label always says where, and a dot is full or empty |
+| **Brand kit** | `assets/brand/`: the icon and the logo in a light, a dark and a self-adapting drawing (`convoy-icon.svg`, `convoy-logo.svg` follow the system's theme), the small icon in light and dark, the two static drawings the program icons are rendered from, and the tray's two layers |
 
 | Icon | Small icon | Program icon | Installer icon | Tray |
 |:---:|:---:|:---:|:---:|:---:|
@@ -515,8 +532,7 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
 
 ## 7. Known limits
 
-- Not yet run against every real account; the Windows sound capture and Discord threads need one run on a real PC.
-  See [status.md](status.md).
+- What has been tried on real machines and accounts, and what has not: [status.md](status.md).
 - The installer and the program are not signed yet.
 - Wayland: GNOME tells no program which Wayland window is in focus (XWayland programs are found), and GNOME and KDE
   let no program press keys, so a Claude message is left on the clipboard. Verified on a headless sway desktop (also
@@ -548,8 +564,7 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
 - The computer's details on Windows come from the registry as Device Manager shows them; a graphics card with no
   driver installed is listed by Windows' fallback name.
 - Starting at sign-in is the person's own entry. A second entry that starts CargoFrame again hands over to the copy
-  running, which opens nothing and names the other program in its log (0.7.3; before, Settings opened at each
-  sign-in, and the copy that started first, maybe an older one, was the one used all day). An entry in the machine's list that starts an older copy is removed
+  running, which opens nothing and names the other program in its log. An entry in the machine's list that starts an older copy is removed
   when Windows allows it; otherwise Preferences names it and *Stop the older copy* asks an administrator (tried on
   the CI's Windows build only, not yet on a real PC).
 - An update of an issue changes the fields the layout maps; Jira fields with their own update operations beyond lists

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Spike S9 on Linux: what does a screen recording cost? Runs ffmpeg on the screen for a few
+# What does a screen recording cost on Linux? Runs ffmpeg on the screen for a few
 # seconds with each encoder it can find and reports wall time, CPU time, peak memory and size.
 #
 #   scripts/e2e/s9-video-linux.sh [seconds] [fps]       (default: 10 s at 30 fps)
@@ -8,7 +8,7 @@
 #   gives a floor; the numbers that matter come from your own desktop, so run it there:
 #   an X11 session records the whole screen with x11grab.
 # * On Wayland, x11grab only sees X11 (XWayland) windows, so it measures nothing useful. See
-#   docs/spikes.md S9 for how to measure there.
+#   docs/performance.md (Measuring a recording) for how to measure there.
 # * CPU is "user + system" seconds of ffmpeg divided by wall time and the number of cores.
 #
 # Needs: ffmpeg, python3 (to read CPU time and peak memory of the child), xvfb-run (optional).

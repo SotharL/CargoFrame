@@ -19,7 +19,7 @@ const text = (el: Element | null | undefined, max = 80) => {
 };
 
 /** What a control is called: its label, as a screen reader says it. */
-export function nameOf(el: Element | null): string {
+function nameOf(el: Element | null): string {
   if (!el || el === document.body) return '';
   const aria = el.getAttribute('aria-label');
   if (aria) return aria.trim();
@@ -83,10 +83,5 @@ export function startDebugView(window_: DebugView['window'], debug: boolean, mor
 /** Debug mode turned on or off from the System page. */
 export function setDebug(debug: boolean) {
   on = debug;
-  send();
-}
-
-/** Something only the window knows changed (a guide step): sent like any change. */
-export function debugChanged() {
   send();
 }

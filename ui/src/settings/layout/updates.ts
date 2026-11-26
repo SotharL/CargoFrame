@@ -8,7 +8,7 @@ import { msg, t } from '../../lib/i18n/index.svelte';
 type SharingBlock = Extract<Block, { type: 'sharing_button' }>;
 
 /** The connections whose share can update an existing issue. */
-export const UPDATES: readonly ServiceKind[] = ['jira', 'github'];
+const UPDATES: readonly ServiceKind[] = ['jira', 'github'];
 
 export const canUpdate = (kind: ServiceKind | null): boolean => kind !== null && UPDATES.includes(kind);
 

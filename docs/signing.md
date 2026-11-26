@@ -20,13 +20,13 @@ and never by an automated session.
 - The Linux package is not signed. Publish `SHA256SUMS.txt` (the release draft includes it).
 - None of this has run with a real certificate yet.
 
-## Private beta (now)
+## Now
 
-- The certificate is self-signed. Testers see an "unknown publisher" warning. That is expected.
-- "Check for updates" (Settings, System) works while the repository is private, with a
-  read-only GitHub token you create (fine-grained, *Contents: read* on this repository only). It is
-  kept in the system credential store. The daily automatic check is **off** by default. You can
-  also update by hand: run the newer installer, which upgrades in place and keeps your settings.
+- The installers are not signed yet. Windows shows an "unknown publisher" warning (*More info*, *Run anyway*); the
+  release publishes `SHA256SUMS.txt` to check a download against.
+- "Check for updates" (Settings, System) reads the public releases with no token (a private copy needs a read-only
+  token, kept in the credential store). The daily automatic check is **off** by default. Running a newer installer by
+  hand also upgrades in place and keeps the settings.
 - Generate both with `scripts/windows/new-signing-material.ps1`, then run the `gh secret set`
   commands it prints.
 
@@ -36,10 +36,10 @@ The public key is built into every installed copy. If the private key is lost or
 already installed can no longer be updated automatically and testers must reinstall. Keep an
 offline, encrypted backup, and do not paste the key into chats, tickets or issues.
 
-## Before the repository goes public
+## Still to do
 
-1. Replace the self-signed certificate with a publicly trusted code-signing certificate.
-2. Scan the git history for secrets and personal paths; rotate anything found.
-3. Keep OAuth client secrets out of the repository (use PKCE public clients, or CI secrets).
-4. Choose a license; add a security policy (`SECURITY.md`).
-5. Make the repository public, then the token is no longer needed: remove it in Settings, System, Updates. Consider a signed update manifest on top of the checksum file.
+The repository is public (26 Nov 2026): its history was scanned for secrets and personal paths (none), OAuth clients
+use PKCE with no secret, `SECURITY.md` is there and the open-source license is ready to merge. What remains:
+
+1. A publicly trusted code-signing certificate in place of none, and the program inside the installer signed too.
+2. A signed update manifest on top of the checksum file.

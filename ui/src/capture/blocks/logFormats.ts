@@ -4,7 +4,7 @@
 
 const FOR_FILE = 'cargoframe.logtime.file.';
 const RECENT = 'cargoframe.logtime.recent';
-export const KEEP_FORMATS = 5;
+const KEEP_FORMATS = 5;
 
 const name = (path: string) => path.split(/[\\/]/).pop()?.toLowerCase() ?? path.toLowerCase();
 

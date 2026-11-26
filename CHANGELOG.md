@@ -10,6 +10,9 @@ people who use it; why each change was made is in [decisions.md](docs/decisions.
 - The licenses of every library CargoFrame ships with (`THIRD-PARTY-LICENSES.md`, written by cargo-about), in the
   installers with CargoFrame's own
 - System, Updates: a line with the license and a link to the source; the GitHub token is only for a private copy
+- Recording on a new install: 30 frames a second, the last 15 seconds kept, at the screen's own height (*Largest height* 0); settings already saved keep their values
+- Docs: the development plan rewritten as the plan to build a tool like this, in order of priority (milestones, effort, metrics, risks); `docs/customizing.md`, recipes to change it; `AGENTS.md`, the rules for AI agents; the design without version history, with a feature map; the status page by area; fresh pictures in the README
+- Removed: the spikes page (its questions are the plan's first milestone, the recording measures are in `docs/performance.md`), an old colour chart, an unused dependency (`tracing` in `ocr`) and four unused functions in the windows
 
 ## 0.7.3 (25 November 2026)
 

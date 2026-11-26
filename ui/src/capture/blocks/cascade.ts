@@ -66,7 +66,7 @@ export function narrow(
 }
 
 /** Where a choice is, for the small note after its name. */
-export const placeOf = (o: DropdownOption) => [o.server, o.category].filter(Boolean).join(' · ');
+const placeOf = (o: DropdownOption) => [o.server, o.category].filter(Boolean).join(' · ');
 
 /** The choices recently used that are still in the list, with their current names. */
 export function recentIn(options: readonly DropdownOption[], recent: readonly Recent[]): DropdownOption[] {

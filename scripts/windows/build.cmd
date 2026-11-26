@@ -12,7 +12,7 @@ rem  Add  nopause  to close without waiting for a key (VS Code tasks and CI use 
 rem
 rem  To build with only some services (a company build), set CF_SERVICES first, for example
 rem    set CF_SERVICES=jira,teams,custom
-rem  Names: jira google reddit claude slack discord teams custom x bluesky instagram.
+rem  Names: jira google reddit claude slack discord teams custom x bluesky instagram github.
 rem  The services left out are not in the program at all.
 rem
 rem  Every variable here starts with CF_ because the build tools read some plain names from the

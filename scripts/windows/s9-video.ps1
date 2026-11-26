@@ -1,5 +1,5 @@
 <#
-  Spike S9 on Windows: what does a screen recording cost on this PC?
+  What does a screen recording cost on this PC? (docs/performance.md, Measuring a recording)
 
   Records the primary screen for a few seconds with every capture and encoder combination this
   ffmpeg can run, and reports wall time, CPU time, peak memory and the size of the clip. The
@@ -11,7 +11,7 @@
   Needs ffmpeg (for example: winget install Gyan.FFmpeg). Move things on the screen while it
   runs: a still screen costs far less than a busy one. Open Task Manager, Performance, GPU, and
   watch "Video Encode" and "3D" during each run; GPU load is not measured here, so write what you
-  see into the S9 table by hand.
+  see into the table in docs/performance.md by hand.
 
   This script has not been run by its author (no Windows machine in the build environment): if it
   fails, the first lines of the log say how.
@@ -54,7 +54,7 @@ $codecs = @(
 )
 
 $lines = New-Object System.Collections.Generic.List[string]
-$lines.Add("# S9 on Windows, $(Get-Date -Format s)")
+$lines.Add("# Recording cost on Windows, $(Get-Date -Format s)")
 $lines.Add("ffmpeg: $version")
 $lines.Add("cpu: $cpu ($cores logical cores)")
 $lines.Add("gpu: $gpu")
@@ -102,7 +102,7 @@ foreach ($g in $grabs) {
 }
 
 $lines.Add("")
-$lines.Add("Add the GPU load you saw in Task Manager for each run, and the display setup, to the S9 table in docs\spikes.md.")
+$lines.Add("Add the GPU load you saw in Task Manager for each run, and the display setup, to the table in docs\performance.md (Measuring a recording).")
 $lines | Set-Content -Encoding UTF8 $log
 Write-Host ""
 Write-Host "Written to $log"

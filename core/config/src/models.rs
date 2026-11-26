@@ -274,8 +274,9 @@ impl Default for Video {
             capture: VideoCapture::Auto,
             encoder: VideoEncoder::Auto,
             fps: 30,
-            window_secs: 10,
-            max_height: 1080,
+            // a new install keeps 15 s at the screen's own height (0); a saved video.json keeps its values
+            window_secs: 15,
+            max_height: 0,
             sign: RecordingSign::default(),
             continuous: false,
             follow_window: false,

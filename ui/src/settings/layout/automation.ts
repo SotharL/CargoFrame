@@ -61,7 +61,7 @@ const LABELS: Record<string, string> = {
 export const quickLabel = (name: string): string => (LABELS[name] ? t(LABELS[name]) : name);
 
 /** The pictures a text can show where it names them, and the services that do. */
-export const MEDIA_VARIABLES = ['capture.screenshot', 'capture.recording'];
+const MEDIA_VARIABLES = ['capture.screenshot', 'capture.recording'];
 export const MEDIA_SERVICES: Record<string, string[]> = {
   'capture.screenshot': ['jira', 'github', 'teams'],
   'capture.recording': ['jira', 'github'],

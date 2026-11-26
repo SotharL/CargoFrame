@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.7.3 (beta) · English, Français, Español, Italiano, Deutsch</p>
+Windows 11 and Linux · version 0.7.3 (beta) · English, Français, Español, Italiano, Deutsch · free and open source</p>
 
 <p align="center">
   <picture>
@@ -15,11 +15,12 @@ Windows 11 and Linux · version 0.7.3 (beta) · English, Français, Español, It
   </picture>
 </p>
 
-> **Beta.** Everything is built and tested, and the Windows installer has been tried, but not every service has
-> been used with a real account and the installer is not signed yet. [What is verified](docs/status.md).
+> **Beta.** Used every day on Windows 11 with Jira, GitHub and Discord, and checked by about 1,780 tests on every
+> change. The other services are tested against their documented APIs but not yet with a real account, Linux
+> desktops only on virtual screens, and the installer is not signed yet. [What is verified](docs/status.md).
 
 **On this page:** [What it is](#what-it-is) · [What it does](#what-it-does) · [How to use it](#how-to-use-it) ·
-[Problems](#problems) · [For companies](#for-companies) · [For developers](#for-developers)
+[Problems](#problems) · [For companies](#for-companies) · [For developers](#for-developers) · [License](#license)
 
 ---
 
@@ -66,6 +67,19 @@ flowchart LR
 | **X**, **Bluesky**, **Instagram** | A post with the screenshot and a short text | |
 | **Custom API** | Any web service with an API | |
 | **Save locally** | A zip on your computer, no account needed | ✓ |
+
+<table>
+<tr>
+<td width="33%"><img alt="Settings, Connections: every service you can add, each with a line on what it sends" src="docs/images/connections.png"></td>
+<td width="33%"><img alt="Settings, Preferences: language, appearance with the accent colour, notifications" src="docs/images/settings-light.png"></td>
+<td width="33%"><img alt="Settings, System in the dark theme: the apps CargoFrame uses on this computer, updates and the license" src="docs/images/settings-dark.png"></td>
+</tr>
+<tr>
+<td><b>Connections.</b> Add a service; a button beside each token field opens the page where you get it.</td>
+<td><b>Preferences.</b> Language, theme and accent colour, which notifications show.</td>
+<td><b>System.</b> What CargoFrame uses on this computer, installed with one button; updates; speed and memory.</td>
+</tr>
+</table>
 
 ---
 
@@ -181,7 +195,7 @@ everything it sends (the picture itself for a screenshot or a recording).
 
 <img alt="The CargoFrame window from the Jira recording template: tabs for the recording, the screenshot and the logs; the recording's tools above it and the trim handles under it" src="docs/images/capture-recording.png" width="640">
 
-Only the last seconds are kept (10 by default, *Settings, Recording*). Drag the two handles under it to trim; the
+Only the last seconds are kept (15 by default, *Settings, Recording*). Drag the two handles under it to trim; the
 icons above it, as on a screenshot, **crop** (drag a frame, then *Apply crop*) and draw **marks** with the screenshot's
 tools (pen, square, circle, arrow, text). Rest the mouse on an icon to see its name.
 If you switch programs while recording, the one you used longest names the capture and gives the project folder.
@@ -272,9 +286,11 @@ camera icon. Recordings go to Jira, GitHub, Google, Slack, Discord and Save loca
   rules, the settings and the end of the log to its Files block. **Set up the bug report**, under the switch, makes the
   *CargoFrame bug report* layout for your GitHub connection and a shortcut, Ctrl+Alt+Shift+F12: press it in any
   CargoFrame window and the issue is filled in (where it was, what was in focus, the system, the graphics driver, the
-  screens…), with the version among its labels. **Check this PC**, beside it, tries the screenshot, a 3-second
-  recording, the apps, starting at sign-in, the credential store and the shortcuts on your PC, and the next bug
-  report attaches what it found.
+  screens…), with the version among its labels. **Check this PC**, below it, tries the screenshot, a 3-second
+  recording, the apps, starting at sign-in, the credential store and the shortcuts on your PC, marks each ✓, ! or ✗,
+  and the next bug report attaches what it found.
+
+  <img alt="Settings, System with debug mode on: the bug report set up, and Check this PC with a mark for each step" src="docs/images/check-this-pc.png" width="560">
 - **Values made from other values:** in *Data parsing*, *Made from other values*: for example a build id
   `{stream}_{change}_{shelf}_{config}` when a shelf is found, else without it.
 - **One-line text:** tick *One line high* on a Text block to keep its box one line tall; any Text block keeps at least
@@ -302,7 +318,10 @@ button says for each block what it does to an issue that is there (replace, add 
 list, count up, leave it), and can also vote (Jira) or react 👍 (GitHub).
 
 **Must be filled:** under *Before sharing*, tick the blocks a button waits for; in the window the button stays grey
-and lists what is still empty.
+and lists what is still empty. For a new Jira ticket, CargoFrame also asks Jira which fields the issue type you picked
+requires: one that no block sends, or whose block is empty, is named under the button (*Jira needs "Component/s" for
+this issue type, and no block sends it*) and the button waits for it. In the layout builder, a block that no button
+sends gets a warning, since whatever is put in it would go nowhere.
 
 | Remove | How | Gentler |
 |--------|-----|---------|
@@ -360,7 +379,7 @@ and lists what is still empty.
 |------|-----|
 | Install for many people without an administrator | Per-user installer; `/S` and `/NOSTARTUP` for Intune or a login script |
 | Ship only the services you use | `set CF_SERVICES=jira,teams,custom` before `scripts\windows\build.cmd`; the others are not in the program at all |
-| Let your own tools fill a layout | Turn on *Other programs can fill this* in the layout, then `cargoframe open --trigger bug --set summary="It crashed"`. Nothing is sent until the person presses a button |
+| Let your own tools fill a layout | Turn on *Other programs can fill this* in the layout, then `cargoframe open --trigger bug --set summary="It crashed"`. Nothing is sent until the person presses a button. More ways to plug it into your tools, add a company sign-in or hide values: [customizing](docs/customizing.md) |
 | Your network | Trusts the certificates your computers trust; uses the system proxy |
 | Your sign-in | Teams with Microsoft Entra; each person's tokens stay in their own password store |
 | Central settings for everyone | Planned: a read-only managed folder. See [the design](docs/design.md#5-for-companies) |
@@ -383,13 +402,14 @@ data, run `npm run dev` in `ui/` and open `settings.html` or `capture.html`.
 | Document | What it holds |
 |----------|---------------|
 | [Design](docs/design.md) | What the app is, does, how it is used and built; branding |
-| [Development plan](docs/development-plan.md) | How to make the app: stack, architecture, modules, build order, quality gates |
+| [Development plan](docs/development-plan.md) | How to build a tool like this, in order of priority: requirements, architecture, milestones, quality, metrics, risks, effort |
+| [Customizing](docs/customizing.md) · [AGENTS.md](AGENTS.md) | Recipes to change it (remove a service, plug it into another tool, add a sign-in, hide values, restyle, rename a fork); the rules for AI agents |
 | [Connectors](docs/connectors.md) | How each service flows, and what to improve next |
 | [Changelog](CHANGELOG.md) | What each version changed |
 | [Decisions](docs/decisions.md) | What was decided, and why |
 | [Languages](docs/i18n.md) | How texts are translated, the glossary, and keeping the packs in step on each push |
 | [Status](docs/status.md) · [Security](docs/security.md) · [Performance](docs/performance.md) | What is verified; the security review; budgets and measures |
-| [Spikes](docs/spikes.md) · [Signing](docs/signing.md) · [Installers](installers/README.md) | Real-machine checks; certificates; what the packages do |
+| [Signing](docs/signing.md) · [Installers](installers/README.md) | Certificates; what the packages do |
 | [Contributing](CONTRIBUTING.md) | Checks to run, translations, and the license of contributions |
 
 ## License

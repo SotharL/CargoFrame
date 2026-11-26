@@ -1803,3 +1803,29 @@ right to reuse it.
   the attachments branch holds screenshots of CargoFrame's own windows. The Updates section said the repository
   was private; it now says a token is for a private copy only.
 
+## The docs, reworked (26 Nov 2026)
+
+- **The development plan is a plan, not a history.** It now tells a team or an AI how to build a tool like this from
+  nothing, in order of priority: principles, requirements with priorities, the decisions to make first, the
+  architecture, ten milestones (each with why now, what to build and when it is done), modules, contracts, quality,
+  metrics, risks, team and effort. How the versions actually went stays in the changelog and here.
+- **Changing the tool has its own guide.** `docs/customizing.md` gives recipes with the files to touch (remove or add
+  a service, plug CargoFrame into another tool, add authentication, hide values, rules, pages and blocks, restyle,
+  add a language, rename a fork); `AGENTS.md` holds the rules an AI agent must keep.
+- **One page per question.** The spikes page (every spike still "not run" while most were answered by real use) went:
+  its questions open the plan's first milestone, its recording measures moved to `docs/performance.md`. The status
+  page is by area (automatic, real machines, not yet verified, checks by hand), no longer by release. The design
+  describes the tool as it is, without "(0.7.2)" marks.
+- **Clean-up found little dead code:** `knip` on the windows (no unused file or package; three unused functions
+  removed, 19 exports kept inside their files), a usage scan on Rust (no unused public function; `tracing` unused in
+  `ocr`), every file and picture checked for a reference (an old colour chart removed; the brand kit kept and listed).
+
+## Recording defaults for a new install (26 Nov 2026)
+
+The owner asked for 30 frames a second, the last 15 seconds and *Largest height* 0 on a new install, and for the
+values a person set never to change on an update. `Video::default()` says so; `video.json` is read with
+`#[serde(default)]`, so only fields missing from the file take the defaults, and a saved file keeps every value it
+holds (a test reads one saved with 10 s and 1080 and keeps them). Height 0 records at the screen's own size, still
+within the 4K cap of `fit_filter`. A copy that already saved `video.json` keeps 10 s and 1080: the file cannot tell a
+value chosen from one left as it was.
+

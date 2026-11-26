@@ -5,9 +5,9 @@
 //! This module builds its command line from the settings, watches it, stops it politely (so the
 //! last second is saved) and joins what is left into a clip.
 //!
-//! Which capture and which encoder suit each machine is what spike S9 decides; the choices here
-//! are the ones that spike measures, and `Encoder::Auto`/`Capture::default_for_this_system` are
-//! only proposals until it is run.
+//! Which capture and which encoder suit each machine is measured on the machine itself
+//! (`docs/performance.md`, Measuring a recording); `Encoder::Auto` tries the hardware encoders on a
+//! test picture and `Capture::default_for_this_system` picks the cheapest capture that works.
 
 use crate::buffer::Window;
 use crate::export::{self, ExportError, Plan};
