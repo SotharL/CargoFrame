@@ -145,7 +145,7 @@ function lines(text: string, start: number, end: number, mark: Mark): Edit {
 }
 
 /** A table to start from: a head and one empty row. */
-export const NEW_TABLE = msg('| Column 1 | Column 2 |\n| --- | --- |\n|  |  |');
+const NEW_TABLE = msg('| Column 1 | Column 2 |\n| --- | --- |\n|  |  |');
 
 /** Put `block` on lines of its own where the cursor is: after the line it is in. */
 export function insertBlock(text: string, at: number, block: string): Edit {

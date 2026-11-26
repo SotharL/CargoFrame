@@ -165,6 +165,7 @@ jobs:
           mkdir -p "dist/$pkg"
           cp target/release/bundle/appimage/*.AppImage "dist/$pkg/"
           cp installers/linux/install.sh installers/linux/uninstall.sh app/icons/128x128.png "dist/$pkg/"
+          cp LICENSE-MIT LICENSE-APACHE NOTICE THIRD-PARTY-LICENSES.md "dist/$pkg/"
           chmod +x "dist/$pkg/"*.sh "dist/$pkg/"*.AppImage
           tar -C dist -czf "dist/$pkg.tar.gz" "$pkg"
           rm -rf "dist/$pkg"

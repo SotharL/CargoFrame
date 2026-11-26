@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # The windows are drawn with the operating system's own calls: no web page, almost no memory.
 # Unsafe code is denied everywhere except the Windows module that needs it.

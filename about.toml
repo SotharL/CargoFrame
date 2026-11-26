@@ -1,0 +1,24 @@
+# cargo-about: the licenses of the crates CargoFrame ships with are all of these (checked 26 Nov
+# 2026). A new dependency under another license fails `scripts/licenses/third-party.sh`.
+accepted = [
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "MIT",
+    "MIT-0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "0BSD",
+    "BSL-1.0",
+    "CC0-1.0",
+    "Unicode-3.0",
+    "Unlicense",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+    "IJG",
+]
+ignore-build-dependencies = false
+ignore-dev-dependencies = true
+# CargoFrame's own crates (publish = false) are not third parties
+private = { ignore = true }

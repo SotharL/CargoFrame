@@ -20,7 +20,7 @@ export const columnsOf = (l: Pick<Layout, 'columns'>): number =>
 /** The columns the blocks reach: the grid cannot be narrower. */
 export const usedColumns = (blocks: readonly Block[]): number => blocks.reduce((m, b) => Math.max(m, b.rect.x + b.rect.w), 0);
 /** The canvas always shows at least this many rows, plus a spare row to drop into. */
-export const MIN_ROWS = 10;
+const MIN_ROWS = 10;
 
 /** A window has room for this many sharing buttons (the same limit as core/layout/validate.rs). */
 export const MAX_SHARING_BUTTONS = 5;

@@ -75,7 +75,7 @@ export interface Changes {
 }
 
 /** The rule that reads `file`, if one does (not one of values made from other values). */
-export function ruleFor(rules: Rules, file: string): ItemEntry<Rule> | undefined {
+function ruleFor(rules: Rules, file: string): ItemEntry<Rule> | undefined {
   const name = file.trim();
   return rules.find(({ item }) => item.file.trim() === name);
 }

@@ -59,7 +59,7 @@ export function keyName(code: string): string | null {
 const MODIFIER_CODES = /^(Control|Alt|Shift|Meta|OS)(Left|Right)?$/;
 const MODIFIER_ORDER = ['Ctrl', 'Alt', 'Shift', 'Super'];
 /** At most this many keys besides the modifiers (the backend says the same). */
-export const MAX_KEYS = 3;
+const MAX_KEYS = 3;
 
 export interface Pressed {
   /** Modifiers held, plus the key if one is down: `Ctrl+Shift+F9`, or `Ctrl+` while waiting. */

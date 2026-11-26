@@ -368,7 +368,7 @@ mod tests {
         );
         assert_eq!(
             (fresh.fps, fresh.window_secs, fresh.max_height),
-            (30, 10, 1080)
+            (30, 15, 0)
         );
 
         fs::create_dir_all(d.path().join("config")).unwrap();
@@ -380,7 +380,20 @@ mod tests {
         let v = s.load_or_default::<Video>().unwrap();
         assert_eq!(v.fps, 15);
         assert_eq!(v.encoder, VideoEncoder::MediaFoundation);
-        assert_eq!(v.window_secs, 10, "missing fields keep their default");
+        assert_eq!(v.window_secs, 15, "missing fields keep their default");
+        assert_eq!(v.max_height, 0);
+
+        // an update never changes what a person set: the file's values stay, whatever the defaults
+        fs::write(
+            d.path().join("config/video.json"),
+            r#"{ "schema_version": 1, "fps": 30, "window_secs": 10, "max_height": 1080 }"#,
+        )
+        .unwrap();
+        let kept = s.load_or_default::<Video>().unwrap();
+        assert_eq!(
+            (kept.fps, kept.window_secs, kept.max_height),
+            (30, 10, 1080)
+        );
     }
 
     #[test]

@@ -42,7 +42,7 @@ export interface EditorState {
 export const emptyState = (): EditorState => ({ crop: null, annotations: [], redo: [] });
 
 /** The smallest crop worth keeping; anything smaller is treated as an accidental click. */
-export const MIN_CROP = 8;
+const MIN_CROP = 8;
 
 /** Colours offered in the toolbar. The first is the default. */
 export const COLORS = ['#e04f4f', '#e0934f', '#f2d33b', '#62e04f', '#4f8ee0', '#b04fe0', '#ffffff', '#1f1e1d'];

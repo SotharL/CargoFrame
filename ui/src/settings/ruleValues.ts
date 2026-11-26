@@ -31,11 +31,6 @@ export function valuesOf(id: string, r: Rule): RuleValue[] {
   return [{ key: id, name: r.name, find: { type: 'advanced' }, which: 'first', fallback: r.fallback ?? null }];
 }
 
-/** Every variable name the other rules use. */
-export function keysOfOthers(rules: { id: string; item: Rule }[], except: string | null): string[] {
-  return rules.filter((r) => r.id !== except).flatMap((r) => valuesOf(r.id, r.item).map((v) => v.key));
-}
-
 /** A rule with nothing in it. */
 export function blankRule(): Rule {
   return {
@@ -80,9 +75,4 @@ export function describe(find: RuleFind, r: Rule): string {
         ? t('made of {text}', { text: find.choices[0]!.text })
         : t('made of {text}', { text: find.choices.map((c) => c.text).join(t(', or ')) });
   }
-}
-
-/** The variables of a rule, for "where is it used". */
-export function tokens(id: string, r: Rule): string[] {
-  return valuesOf(id, r).map((v) => `{${v.key}}`);
 }

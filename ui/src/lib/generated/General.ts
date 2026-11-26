@@ -9,7 +9,7 @@ import type { Theme } from "./Theme";
  */
 export type General = { schema_version: number, theme: Theme, memory_mode: MemoryMode, 
 /**
- * Off while the repository is private (no public release assets to check).
+ * Off unless the person turns it on: a daily request to GitHub's releases.
  */
 check_updates: boolean, 
 /**

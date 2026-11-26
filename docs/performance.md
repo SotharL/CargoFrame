@@ -75,7 +75,7 @@ The settings window's script grew from 52 to 94 KB with the video pages, the gui
   pages are shared with other programs and are not CargoFrame's own cost, which is why the
   Linux gate measures anonymous memory and reports the other two. On a real desktop with a GPU
   driver the picture will differ. **The 40 MB budget still has to be confirmed on a reference
-  machine** (spike S6 in `docs/spikes.md`), on Windows 11 and on one GNOME and one KDE desktop.
+  machine**, on Windows 11 and on one GNOME and one KDE desktop.
 - **Cold open times.** 736 ms and 684 ms are slightly over the 700 ms and 500 ms budgets on a
   virtual display with software rendering, which is why CI uses a scale of 2. A real GPU should
   be faster, but that is an expectation, not a measurement.
@@ -144,4 +144,29 @@ in a small buffer (a fifth of a second), and sends the samples to ffmpeg over a 
 over the text when a share is built (it scans a bounded stretch around each mark, so a long note stays fast). The
 data-page sizes are read when the page opens. The size budgets and the real capture run in the same gate as before
 (`scripts/dev/check.sh all`). The recording's cost with sound on a real Windows PC is not yet measured.
+
+## Measuring a recording on a real machine
+
+What a recording costs depends on the graphics card, the screens and ffmpeg's build, so it is measured on the machine
+itself. The quickest check is *Settings › Recording › Try a 5-second recording*: it uses the recorder the product
+uses, says whether it worked and keeps the clip. To compare captures and encoders with numbers:
+
+- **Windows:** `powershell -ExecutionPolicy Bypass -File scripts\windows\s9-video.ps1` records 10 s with `gdigrab`
+  and `ddagrab` and each encoder it finds, and writes `s9-video.log`. Watch Task Manager (GPU, "Video Encode") during
+  each run: the script does not read GPU load.
+- **Linux, X11:** `scripts/e2e/s9-video-linux.sh` does the same with `x11grab` and writes `s9-video-linux.log`.
+  Without a display it records a virtual one, which only proves the script.
+- **Linux, Wayland:** `x11grab` cannot see Wayland windows. Record with the desktop's own recorder or OBS at the same
+  size and read CPU and memory from `top`.
+
+| Measure | Target |
+|---------|--------|
+| CPU while recording 1080p30, best encoder | under 10% of the machine |
+| CPU while recording 1080p30, software x264 | under 25% of the machine |
+| Peak memory of ffmpeg | under 300 MB |
+| Clip size for 10 s of a busy screen | under 25 MB (Discord's limit) |
+| Dropped or duplicated frames | under 2% |
+| Start of recording to first frame | under 500 ms |
+| Stop to window open | under 1 s |
+| CargoFrame while not recording | unchanged (about 0%) |
 

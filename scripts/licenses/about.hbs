@@ -1,0 +1,31 @@
+# Third-party licenses
+
+CargoFrame is built with the crates below. Each one's license is reproduced as its authors wrote it.
+Written by `scripts/licenses/third-party.sh` (cargo-about); do not edit by hand.
+
+Crates under the Mozilla Public License 2.0 (`cssparser`, `cssparser-macros`, `dtoa-short`,
+`option-ext`, `selectors`) are used unchanged; their source code is on crates.io
+(https://crates.io/crates/NAME) and in each crate's repository named below.
+
+The window also ships the Svelte runtime (MIT) and `@tauri-apps/api` (MIT OR Apache-2.0); their
+licenses are at the end.
+
+## Overview
+
+{{#each overview}}
+- {{{name}}} ({{{id}}}): {{count}} crate{{#if (gt count 1)}}s{{/if}}
+{{/each}}
+
+{{#each licenses}}
+## {{{name}}}
+
+Used by:
+{{#each used_by}}
+- [{{crate.name}} {{crate.version}}]({{#if crate.repository}}{{{crate.repository}}}{{else}}https://crates.io/crates/{{crate.name}}{{/if}})
+{{/each}}
+
+```
+{{{text}}}
+```
+
+{{/each}}

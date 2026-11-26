@@ -354,6 +354,13 @@ fn the_recorder_gets_the_settings_and_the_whole_x11_screen() {
     let cfg = recorder_config(&f, &choice, &Video::default(), &session, Path::new("/r"));
     assert_eq!(cfg.capture, Capture::Ddagrab { output: 0 });
     assert!(matches!(cfg.encoder, Encoder::Vaapi { .. }));
+    // a new install records at the screen's own height
+    assert_eq!(cfg.max_height, None);
+    let video = Video {
+        max_height: 1080,
+        ..Video::default()
+    };
+    let cfg = recorder_config(&f, &choice, &video, &session, Path::new("/r"));
     assert_eq!(cfg.max_height, Some(1080));
 }
 

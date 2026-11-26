@@ -38,7 +38,7 @@ pub struct General {
     pub schema_version: u32,
     pub theme: Theme,
     pub memory_mode: MemoryMode,
-    /// Off while the repository is private (no public release assets to check).
+    /// Off unless the person turns it on: a daily request to GitHub's releases.
     pub check_updates: bool,
     /// The accent colour as `#rrggbb`: buttons, focus rings, links and the arrow of the logo.
     /// A value that is not a colour counts as the default wherever it is used.
@@ -274,8 +274,9 @@ impl Default for Video {
             capture: VideoCapture::Auto,
             encoder: VideoEncoder::Auto,
             fps: 30,
-            window_secs: 10,
-            max_height: 1080,
+            // a new install keeps 15 s at the screen's own height (0); a saved video.json keeps its values
+            window_secs: 15,
+            max_height: 0,
             sign: RecordingSign::default(),
             continuous: false,
             follow_window: false,

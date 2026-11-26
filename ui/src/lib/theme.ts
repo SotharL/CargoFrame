@@ -24,8 +24,8 @@ export const ACCENT_PRESETS = [
 ];
 
 /** The page backgrounds of the two themes, for telling when an accent is hard to see. */
-export const LIGHT_BACKGROUND = '#faf9f5';
-export const DARK_BACKGROUND = '#262624';
+const LIGHT_BACKGROUND = '#faf9f5';
+const DARK_BACKGROUND = '#262624';
 
 /** The text colour put on an accent fill when it is dark (the design system's text colour). */
 const DARK_TEXT = '#1f1e1d';

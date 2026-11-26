@@ -51,7 +51,7 @@ export function cleaned(it: InfoType, steps: FillStep[]): InfoType {
 const quote = (s: string) => `“${s.trim()}”`;
 
 /** "If {gpu} is found" / "If this field is empty" / "Always". */
-export function whenText(w: FillWhen | null | undefined): string {
+function whenText(w: FillWhen | null | undefined): string {
   if (!w) return t('Always');
   const subject = w.subject.trim() ? token(w.subject.trim().replace(/^\{+|\}+$/g, '')) : t('this field');
   if (!w.subject.trim() && w.test === 'missing') return t('If this field is empty');
@@ -72,7 +72,7 @@ export function whenText(w: FillWhen | null | undefined): string {
 }
 
 /** "add “crash” and add “gpu”". */
-export function thenText(s: FillStep): string {
+function thenText(s: FillStep): string {
   return s.then
     .map((a) => {
       const text = a.text.trim() ? quote(a.text) : t('(nothing)');

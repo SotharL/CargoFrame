@@ -148,7 +148,7 @@ export interface Table {
 }
 
 /** The cells of a table line `| a | b |` (a `\|` stays a bar inside a cell). */
-export function cellsOf(line: string): string[] {
+function cellsOf(line: string): string[] {
   let t = line.trim();
   if (t.startsWith('|')) t = t.slice(1);
   if (t.endsWith('|') && !t.endsWith('\\|')) t = t.slice(0, -1);

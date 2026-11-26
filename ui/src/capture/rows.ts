@@ -14,7 +14,7 @@ const TAB_NAMES = 30;
 const PAGE = 18;
 
 /** The height a block needs to show at least one line of what it holds; 0 when any will do. */
-export function needs(b: Block, toolbar: boolean): number {
+function needs(b: Block, toolbar: boolean): number {
   switch (b.type) {
     case 'text':
       return (b.placement === 'inside' ? 0 : TITLE) + (toolbar ? TOOLBAR : 0) + LINE;
@@ -46,7 +46,7 @@ export function rowMinimums(blocks: readonly Block[], rows: number, toolbar: (b:
 }
 
 /** The blocks of a Tabs block's tabs, placed from its own top-left corner. */
-export function insideTabs(t: TabsBlock, blocks: readonly Block[]): Block[] {
+function insideTabs(t: TabsBlock, blocks: readonly Block[]): Block[] {
   const ids = new Set(childIds(t));
   return blocks
     .filter((b) => ids.has(b.id))

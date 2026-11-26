@@ -5,6 +5,8 @@ version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 publish.workspace = true
+license.workspace = true
+repository.workspace = true
 
 # Pressing keys in another program calls into the operating system. The rest of the workspace
 # forbids unsafe code; here it is denied everywhere except the Windows module that needs it.

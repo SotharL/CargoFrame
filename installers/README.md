@@ -52,5 +52,5 @@ the commit that was built and publishing it creates the tag `v<version>`, so no 
 
 ## Not covered by automated tests
 
-A real Windows 11 install by a standard user (spike S1), notification clicks (S2), and the tray
-on real GNOME and KDE sessions (S4). See `docs/spikes.md`.
+A real Windows 11 install by a standard user, notification clicks, and the tray on real GNOME and
+KDE sessions. See `docs/status.md`.

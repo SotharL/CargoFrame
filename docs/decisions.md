@@ -434,7 +434,7 @@ everything after the recorded file exists, and a recorder that works on a virtua
 - **Capture and encoder choices are the ones S9 measures:** Linux X11 `x11grab`; Windows
   `gdigrab` and `ddagrab`; encoders x264 (ultrafast/veryfast), NVENC, QSV, AMF, Media Foundation
   and VAAPI. Frames larger than 1080 lines are scaled down before encoding by default. Which is
-  the default per machine is left to S9 (`docs/spikes.md`), with `scripts/windows/s9-video.ps1`
+  the default per machine is left to S9 (then `docs/spikes.md`, now `docs/performance.md`), with `scripts/windows/s9-video.ps1`
   and `scripts/e2e/s9-video-linux.sh` to measure it.
 - **Not built yet:** the video block and the "video layout", the recorder window (start, stop,
   the editor with its timeline, crop and marks), per-connection sending of a video (size limits
@@ -1771,3 +1771,61 @@ development plan, §10.
   Reporter required on every issue type and the answer read gave no default for it; Jira sets it to the person
   signed in when it is left out. Counted, it would have greyed every Jira button: it is left out with the project and
   the issue type.
+
+## Open source (26 Nov 2026)
+
+The owner wants CargoFrame free for anyone to use, copy and change, at no cost, asking only to be named as the
+source. The repository was already public, without a license: people could read the code, but the law gave them no
+right to reuse it.
+
+- **MIT OR Apache-2.0, at the user's option.** Both are permissive and both keep the copyright notice with every
+  copy, which is the credit asked for. It is what Rust itself and nearly every crate CargoFrame uses are under (610
+  crates, none GPL), so the code can move both ways. MIT is short and works with GPLv2 projects; Apache-2.0 adds a
+  patent grant and says in so many words (section 6) that the name and marks are not licensed. The copyright line
+  carries the project's address, so keeping it points back to the source; `NOTICE` asks for a line such as "Based
+  on CargoFrame" and Apache-2.0 makes keeping it a condition. The holder is written as the owner's GitHub name
+  (SotharL) and "the CargoFrame contributors", so nothing personal is published; the owner can put a legal name
+  there instead. Copyleft (GPL, MPL) was set aside: it would ask users to share their changes, more than the owner
+  asked.
+- **The name is not the license's.** A name is protected by trademark, not copyright. `TRADEMARKS.md` lets anyone
+  say "based on CargoFrame" and use the name for CargoFrame itself, and asks a changed copy shared with others to
+  take its own name and icon. "Cargo" is a trademark of the Rust Foundation, whose policy needs written permission
+  to use it within another trademark and forbids looking affiliated; CargoFrame is a Rust program, so `NOTICE`,
+  `TRADEMARKS.md` and the README say it is not affiliated and that "Cargo" here is the English word. Registering
+  CargoFrame as a trademark (INPI or EUIPO) is the owner's decision; the Rust Foundation is asked first.
+- **Third-party licenses go with the program.** MIT and BSD ask that their text travel with every copy, and MPL-2.0
+  (`cssparser`, `selectors`, `dtoa-short`, `option-ext`, unchanged) that people be told where its source is.
+  `cargo-about` writes `THIRD-PARTY-LICENSES.md` from the crates' own sources (`about.toml` lists the licenses
+  accepted, so a new one stops the script), with the Svelte runtime and `@tauri-apps/api` added; Tauri's
+  `bundle.resources` put it, the two licenses and `NOTICE` into both installers. ffmpeg (GPL) is not shipped: the
+  person downloads it from its own release.
+- **What was public before.** The history (186 commits, both branches) holds no token, key or personal e-mail;
+  the attachments branch holds screenshots of CargoFrame's own windows. The Updates section said the repository
+  was private; it now says a token is for a private copy only.
+
+## The docs, reworked (26 Nov 2026)
+
+- **The development plan is a plan, not a history.** It now tells a team or an AI how to build a tool like this from
+  nothing, in order of priority: principles, requirements with priorities, the decisions to make first, the
+  architecture, ten milestones (each with why now, what to build and when it is done), modules, contracts, quality,
+  metrics, risks, team and effort. How the versions actually went stays in the changelog and here.
+- **Changing the tool has its own guide.** `docs/customizing.md` gives recipes with the files to touch (remove or add
+  a service, plug CargoFrame into another tool, add authentication, hide values, rules, pages and blocks, restyle,
+  add a language, rename a fork); `AGENTS.md` holds the rules an AI agent must keep.
+- **One page per question.** The spikes page (every spike still "not run" while most were answered by real use) went:
+  its questions open the plan's first milestone, its recording measures moved to `docs/performance.md`. The status
+  page is by area (automatic, real machines, not yet verified, checks by hand), no longer by release. The design
+  describes the tool as it is, without "(0.7.2)" marks.
+- **Clean-up found little dead code:** `knip` on the windows (no unused file or package; three unused functions
+  removed, 19 exports kept inside their files), a usage scan on Rust (no unused public function; `tracing` unused in
+  `ocr`), every file and picture checked for a reference (an old colour chart removed; the brand kit kept and listed).
+
+## Recording defaults for a new install (26 Nov 2026)
+
+The owner asked for 30 frames a second, the last 15 seconds and *Largest height* 0 on a new install, and for the
+values a person set never to change on an update. `Video::default()` says so; `video.json` is read with
+`#[serde(default)]`, so only fields missing from the file take the defaults, and a saved file keeps every value it
+holds (a test reads one saved with 10 s and 1080 and keeps them). Height 0 records at the screen's own size, still
+within the 4K cap of `fit_filter`. A copy that already saved `video.json` keeps 10 s and 1080: the file cannot tell a
+value chosen from one left as it was.
+
