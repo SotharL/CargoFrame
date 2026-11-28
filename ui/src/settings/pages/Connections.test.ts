@@ -232,9 +232,8 @@ describe('Connections the organisation provides', () => {
   it('hides adding new ones when the policy says so, and locks theirs', async () => {
     const org = memoryApi({ managed: ['company'], policy: { services: [], check_updates: null, debug_mode: null, own_connections: false } });
     await org.saveItem('connection', 'company', {
-      name: 'Company Jira', kind: 'jira', enabled: true,
-      settings: { base_url: 'https://acme.atlassian.net', email: '', auth: 'api_token', default_project: '', client_id: '', redirect_port: 53683 },
-    } as never);
+      kind: 'jira', name: 'Company Jira', enabled: true, site_url: 'https://acme.atlassian.net', auth: 'api_token', email: 'me@example.com', client_id: '', redirect_port: 53683,
+    });
     setApiForTests(org);
     render(Connections);
     await screen.findByText('Company Jira');

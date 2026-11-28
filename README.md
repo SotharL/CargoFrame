@@ -6,7 +6,7 @@
 </p>
 
 <p align="center"><b>Share what is on your screen, with the context around it, in one shortcut.</b><br>
-Windows 11 and Linux · version 0.7.3 (beta) · English, Français, Español, Italiano, Deutsch · free and open source</p>
+Windows 11 and Linux · version 0.8.0 (beta) · English, Français, Español, Italiano, Deutsch · free and open source</p>
 
 <p align="center">
   <picture>

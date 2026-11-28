@@ -1,6 +1,6 @@
 # Design
 
-CargoFrame 0.7.3. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
+CargoFrame 0.8.0. What the app **is**, what it **does**, how it is **used** and how it is **built**, in that order.
 How to make it step by step is in the [development plan](development-plan.md); why each choice was made is in
 [decisions.md](decisions.md); what has been verified on real machines is in [status.md](status.md).
 

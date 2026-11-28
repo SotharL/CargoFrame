@@ -35,8 +35,8 @@ export interface MemoryOptions {
   connectors?: ServiceKind[];
   /** What the stand-in organisation decided (its policy.json). */
   policy?: Policy;
-  /** Items the organisation set (its managed folder), by id: read-only. */
-  managed?: string[];
+  /** Items the organisation set (its managed folder), by id, or all of them: read-only. */
+  managed?: string[] | true;
   /** The stand-in's test recording fails. */
   recordingFails?: boolean;
   /** The stand-in is a Windows PC (it can record one program's sound, and has no "Stereo Mix"). */
@@ -397,6 +397,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     ['system.screens', 'The screens and their sizes, the main one first'],
     ['system.computer', 'The computer\'s name'],
   ].map(([name, description]) => ({ name: name!, description: description!, ...(DEMO_SYSTEM[name!] ? { value: DEMO_SYSTEM[name!] } : {}) }));
+  const isManaged = (id: string) => opts.managed === true || !!opts.managed?.includes(id);
   return {
     appInfo: async () => ({
       version: '0.1.0-dev',
@@ -498,7 +499,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     listItems: async <T,>(kind: ItemKind) => ({
       items: [...store[kind].entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([id, item]) => ({ id, item: plain(item) as T, ...(opts.managed?.includes(id) ? { managed: true } : {}) }) as ItemEntry<T>),
+        .map(([id, item]) => ({ id, item: plain(item) as T, ...(isManaged(id) ? { managed: true } : {}) }) as ItemEntry<T>),
       problems: [],
     }),
     saveItem: async (kind, id, item) => {
@@ -627,7 +628,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),
           describe: describeFor(c),
           capabilities: demoCapabilities(c.kind),
-          ...(opts.managed?.includes(id) ? { managed: true } : {}),
+          ...(isManaged(id) ? { managed: true } : {}),
         } satisfies ConnectionView;
       }),
       problems: [],
@@ -892,7 +893,17 @@ export async function demoApi(): Promise<Api> {
           // `<block>:<channel>` is the threads inside one channel
           list.includes(':') ? DEMO_THREADS.filter((t) => list.endsWith(`/${t.category}`)) : DEMO_CHANNELS
       : undefined;
-  const api = memoryApi({ share: () => demoShare(kind), update, options });
+  // `?managed=1`: everything set by an organisation, whose policy locks updates and debug mode
+  const managed = query.get('managed') === '1'
+    ? { managed: true as const, policy: { services: [], check_updates: true, debug_mode: false, own_connections: false } }
+    : {};
+  const api = memoryApi({ share: () => demoShare(kind), update, options, ...managed });
+  if ('managed' in managed) {
+    await api.saveItem('connection', 'company-jira', {
+      kind: 'jira', name: 'Company Jira', enabled: true, site_url: 'https://jira.example.com', auth: 'oauth', email: '', client_id: 'cargoframe', redirect_port: 53683,
+    } as Connection);
+    await api.saveItem('trigger', 'company-report', { name: 'Report a problem to IT', enabled: true, shortcut: 'Ctrl+Alt+F9', capture: 'active_window', layout_id: null });
+  }
   // `?media=both` plays a real clip, so "Take screenshot" has a frame to take
   if (query.get('media') === 'both' && typeof MediaRecorder !== 'undefined') {
     api.getSessionClip = async () => (await import('../capture/demo')).demoClip();
