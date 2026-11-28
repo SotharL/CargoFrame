@@ -502,7 +502,7 @@ Meant for companies of thousands of people.
 | Other programs hand data in | `cargoframe open --trigger <id> --set <block>=<text> --file <path>` reaches the running copy through the single-instance channel (same user, no network port), runs the shortcut, fills text boxes, dropdowns and tags, and adds the files to the first Files block, ticked. A layout that records starts recording and is filled when it stops. Only layouts with *Other programs can fill this*; nothing is sent until the person presses a button. At most 50 values of 20,000 characters and 20 files; the log records counts only | Built |
 | Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`); the update check can be off | Built |
 | The company's network | The system certificate store and proxy setting | Built |
-| The company's sign-in | OAuth with the company's identity provider: Teams with Entra today; Jira OAuth and generic OAuth 2.0 for Custom API next | Partly built |
+| The company's sign-in | OAuth with the company's identity provider: Teams with Entra; Jira Data Center through an incoming application link (OAuth 2.0 with PKCE, `WRITE`); the Custom API with OAuth 2.0 in the browser (PKCE) or client credentials (a service account). Jira Cloud stays on API tokens: Atlassian asks tools not to make each customer register an OAuth app ([decisions](decisions.md)) | Built (Jira Cloud: see decisions) |
 | Set up for everyone | A read-only managed folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`) with the same JSON files plus `policy.json`; managed items show a lock | Planned |
 | Accessible without thinking | Labels on every control, full keyboard use, visible focus, reduced motion, checked contrast, one obvious button per screen | Built; screen-reader pass open |
 
@@ -579,5 +579,4 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
   the CI's Windows build only, not yet on a real PC).
 - An update of an issue changes the fields the layout maps; Jira fields with their own update operations beyond lists
   (worklogs, links) are not offered.
-- Next for the connectors (required fields shown before sending for services beyond Jira, company sign-in):
-  [connectors.md](connectors.md).
+- Next for the connectors: [connectors.md](connectors.md).

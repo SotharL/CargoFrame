@@ -12,6 +12,7 @@
 use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model::{self, JiraAuth};
+use crate::oauth::{self, ClientAuth, OAuthClient, Redirect};
 use crate::payload::{first_line, Field, FieldKind, OptionItem, Payload, SendOutcome, Update};
 use crate::richtext::{render, Style};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
@@ -24,11 +25,51 @@ use serde_json::{json, Map, Value};
 
 pub struct JiraConnector {
     settings: model::Jira,
+    /// How long the browser sign-in may take (OAuth).
+    wait: std::time::Duration,
 }
 
 impl JiraConnector {
     pub fn new(settings: model::Jira) -> Self {
-        Self { settings }
+        Self {
+            settings,
+            wait: std::time::Duration::from_secs(180),
+        }
+    }
+
+    /// A shorter wait for the browser sign-in (tests).
+    #[cfg(test)]
+    pub fn with_wait(mut self, wait: std::time::Duration) -> Self {
+        self.wait = wait;
+        self
+    }
+
+    /// Jira Data Center's OAuth 2.0 provider, as the incoming application link made by the
+    /// company's administrator: authorization code with PKCE, the `WRITE` scope (create and
+    /// update issues), the redirect `http://127.0.0.1:<port>/callback` registered in the link.
+    fn oauth_client(&self, ctx: &Ctx) -> Result<OAuthClient, SendError> {
+        let client_id = self.settings.client_id.trim();
+        if client_id.is_empty() {
+            return Err(not_set_up(t("Jira needs the Client ID of the incoming application link: ask your Jira administrator for it, then paste it in Connections")));
+        }
+        let base = self.base()?;
+        Ok(OAuthClient {
+            auth_url: format!("{base}/rest/oauth2/latest/authorize"),
+            token_url: format!("{base}/rest/oauth2/latest/token"),
+            // Jira has no revocation address: the person can revoke it in their profile
+            revoke_url: None,
+            client_id: client_id.to_string(),
+            client_secret: ctx
+                .secret("client_secret")?
+                .filter(|s| !s.trim().is_empty()),
+            scopes: vec!["WRITE".into()],
+            extra_auth_params: Vec::new(),
+            pkce: true,
+            client_auth: ClientAuth::Body,
+            redirect_port: Some(self.settings.redirect_port),
+            redirect: Redirect::Ip,
+            wait: self.wait,
+        })
     }
 
     fn cloud(&self) -> bool {
@@ -47,6 +88,10 @@ impl JiraConnector {
     }
 
     fn authorization(&self, ctx: &Ctx) -> Result<String, SendError> {
+        if self.settings.auth == JiraAuth::Oauth {
+            let token = oauth::access_token(&self.oauth_client(ctx)?, ctx)?;
+            return Ok(format!("Bearer {token}"));
+        }
         let token = ctx
             .secret("token")?
             .filter(|t| !t.is_empty())
@@ -60,7 +105,7 @@ impl JiraConnector {
                 "Basic {}",
                 STANDARD.encode(format!("{}:{token}", self.settings.email.trim()))
             ),
-            JiraAuth::Pat => format!("Bearer {token}"),
+            JiraAuth::Pat | JiraAuth::Oauth => format!("Bearer {token}"),
         })
     }
 
@@ -673,16 +718,32 @@ impl Connector for JiraConnector {
     }
 
     fn status(&self, ctx: &Ctx) -> Status {
+        if self.settings.auth == JiraAuth::Oauth {
+            return if oauth::is_signed_in(ctx) {
+                Status::Connected
+            } else {
+                Status::Disconnected
+            };
+        }
         match ctx.secret("token") {
             Ok(Some(t)) if !t.is_empty() => Status::Connected,
             _ => Status::Disconnected,
         }
     }
 
+    /// A token is tested; OAuth signs in in the browser first.
+    fn connect(&self, ctx: &Ctx) -> Result<String, SendError> {
+        if self.settings.auth == JiraAuth::Oauth {
+            oauth::authorize(&self.oauth_client(ctx)?, ctx)?;
+        }
+        self.test(ctx)
+    }
+
     fn disconnect(&self, ctx: &Ctx) {
-        let _ = ctx
-            .secrets
-            .delete(&crate::secrets::key(ctx.connection_id, "token"));
+        if let Ok(client) = self.oauth_client(ctx) {
+            oauth::sign_out(&client, ctx);
+        }
+        crate::secrets::delete_all(ctx.secrets, ctx.connection_id, &["token", "oauth"]);
     }
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {

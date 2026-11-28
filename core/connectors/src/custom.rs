@@ -5,6 +5,7 @@
 use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
 use crate::model::{Custom, CustomAuth, CustomBody, Pair, SendMethod};
+use crate::oauth::{self, ClientAuth, OAuthClient, Redirect};
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, ListSpec, Status};
 use base64::engine::general_purpose::STANDARD;
@@ -17,11 +18,74 @@ use serde_json::Value;
 
 pub struct CustomConnector {
     settings: Custom,
+    /// How long the browser sign-in may take (OAuth 2.0).
+    wait: std::time::Duration,
 }
 
 impl CustomConnector {
     pub fn new(settings: Custom) -> Self {
-        Self { settings }
+        Self {
+            settings,
+            wait: std::time::Duration::from_secs(180),
+        }
+    }
+
+    /// A shorter wait for the browser sign-in (tests).
+    #[cfg(test)]
+    pub fn with_wait(mut self, wait: std::time::Duration) -> Self {
+        self.wait = wait;
+        self
+    }
+
+    /// The OAuth 2.0 client of a connection that uses one: the company's identity provider, as
+    /// the person described it. The client secret, when there is one, is the connection's secret.
+    fn oauth_client(&self, ctx: &Ctx) -> Result<Option<OAuthClient>, SendError> {
+        let (auth_url, token_url, client_id, scopes, port, pkce) = match &self.settings.auth {
+            CustomAuth::OAuth2 {
+                auth_url,
+                token_url,
+                client_id,
+                scopes,
+                redirect_port,
+            } => (
+                auth_url.as_str(),
+                token_url,
+                client_id,
+                scopes,
+                Some(*redirect_port),
+                true,
+            ),
+            CustomAuth::ClientCredentials {
+                token_url,
+                client_id,
+                scopes,
+            } => ("", token_url, client_id, scopes, None, false),
+            _ => return Ok(None),
+        };
+        if pkce {
+            check_url(auth_url)
+                .map_err(|e| invalid(tf("The sign-in address: {e}", &[("e", &e)])))?;
+        }
+        check_url(token_url).map_err(|e| invalid(tf("The token address: {e}", &[("e", &e)])))?;
+        if client_id.trim().is_empty() {
+            return Err(not_set_up(t(
+                "OAuth 2.0 needs the Client ID your identity provider gave this app",
+            )));
+        }
+        Ok(Some(OAuthClient {
+            auth_url: auth_url.trim().to_string(),
+            token_url: token_url.trim().to_string(),
+            revoke_url: None,
+            client_id: client_id.trim().to_string(),
+            client_secret: ctx.secret("secret")?.filter(|s| !s.trim().is_empty()),
+            scopes: scopes.split_whitespace().map(String::from).collect(),
+            extra_auth_params: Vec::new(),
+            pkce,
+            client_auth: ClientAuth::Body,
+            redirect_port: port,
+            redirect: Redirect::Ip,
+            wait: self.wait,
+        }))
     }
 
     fn base(&self) -> Result<String, SendError> {
@@ -36,8 +100,14 @@ impl CustomConnector {
     }
 
     fn secret(&self, ctx: &Ctx) -> Result<Option<String>, SendError> {
-        if self.settings.auth == CustomAuth::None {
-            return Ok(None);
+        match (&self.settings.auth, self.oauth_client(ctx)?) {
+            (CustomAuth::None, _) => return Ok(None),
+            // a token from the identity provider, renewed or asked for again when it expires
+            (CustomAuth::OAuth2 { .. }, Some(c)) => return Ok(Some(oauth::access_token(&c, ctx)?)),
+            (CustomAuth::ClientCredentials { .. }, Some(c)) => {
+                return Ok(Some(oauth::client_token(&c, ctx)?))
+            }
+            _ => {}
         }
         ctx.secret("secret")?
             .filter(|s| !s.is_empty())
@@ -54,7 +124,11 @@ impl CustomConnector {
         let Some(secret) = secret else { return req };
         match &self.settings.auth {
             CustomAuth::None => {}
-            CustomAuth::Bearer => req = req.header("Authorization", format!("Bearer {secret}")),
+            CustomAuth::Bearer
+            | CustomAuth::OAuth2 { .. }
+            | CustomAuth::ClientCredentials { .. } => {
+                req = req.header("Authorization", format!("Bearer {secret}"))
+            }
             CustomAuth::Header { name } => req = req.header(name, secret),
             CustomAuth::Basic { user } => {
                 req = req.header(
@@ -197,8 +271,11 @@ impl Connector for CustomConnector {
     }
 
     fn status(&self, ctx: &Ctx) -> Status {
-        if self.settings.auth == CustomAuth::None {
-            return Status::Connected;
+        match &self.settings.auth {
+            CustomAuth::None => return Status::Connected,
+            CustomAuth::OAuth2 { .. } if oauth::is_signed_in(ctx) => return Status::Connected,
+            CustomAuth::OAuth2 { .. } => return Status::Disconnected,
+            _ => {}
         }
         match ctx.secret("secret") {
             Ok(Some(s)) if !s.is_empty() => Status::Connected,
@@ -206,10 +283,24 @@ impl Connector for CustomConnector {
         }
     }
 
+    /// OAuth 2.0 signs in in the browser first; every way is then tested.
+    fn connect(&self, ctx: &Ctx) -> Result<String, SendError> {
+        if let (CustomAuth::OAuth2 { .. }, Some(client)) =
+            (&self.settings.auth, self.oauth_client(ctx)?)
+        {
+            oauth::authorize(&client, ctx)?;
+        }
+        self.test(ctx)
+    }
+
     fn disconnect(&self, ctx: &Ctx) {
-        let _ = ctx
-            .secrets
-            .delete(&crate::secrets::key(ctx.connection_id, "secret"));
+        // signing out of OAuth 2.0 forgets the tokens and keeps the client secret, which is setup
+        let names: &[&str] = if matches!(self.settings.auth, CustomAuth::OAuth2 { .. }) {
+            &["oauth"]
+        } else {
+            &["secret", "oauth"]
+        };
+        crate::secrets::delete_all(ctx.secrets, ctx.connection_id, names);
     }
 
     fn test(&self, ctx: &Ctx) -> Result<String, SendError> {
@@ -713,5 +804,100 @@ mod tests {
             .contains("Nothing to test"));
         let c = connector(&server, |c| c.test_path = "/health".into());
         assert!(w.with("c", |ctx| c.test(ctx)).is_err());
+    }
+
+    #[test]
+    fn oauth2_signs_in_in_the_browser_then_sends_with_the_token() {
+        let server = MockServer::start(|req| match req.path() {
+            "/oauth/token" => MockResponse::json(
+                200,
+                json!({"access_token":"IDP-AT","refresh_token":"IDP-RT","expires_in":3600}),
+            ),
+            "/me" | "/hook" => MockResponse::json(200, json!({"ok": true})),
+            _ => MockResponse::new(404),
+        });
+        let base = server.base();
+        let c = connector(&server, |c| {
+            c.auth = CustomAuth::OAuth2 {
+                auth_url: format!("{base}/oauth/authorize"),
+                token_url: format!("{base}/oauth/token"),
+                client_id: "cargoframe-desktop".into(),
+                scopes: "tickets.write  openid".into(),
+                redirect_port: 0,
+            };
+            c.test_path = "/me".into();
+            c.send.path = "/hook".into();
+        })
+        .with_wait(std::time::Duration::from_secs(5));
+        let w = World::new();
+        assert_eq!(w.with("api", |ctx| c.status(ctx)), Status::Disconnected);
+        let browser = crate::testkit::ApproveBrowser::new();
+        w.with_browser("api", &browser, |ctx| c.connect(ctx))
+            .unwrap();
+        assert_eq!(w.with("api", |ctx| c.status(ctx)), Status::Connected);
+        let url = browser.opened.lock().unwrap()[0].clone();
+        assert!(
+            url.starts_with(&format!("{base}/oauth/authorize?")),
+            "{url}"
+        );
+        assert!(url.contains("client_id=cargoframe-desktop"), "{url}");
+        assert!(url.contains("scope=tickets.write%20openid"), "{url}");
+        assert!(url.contains("code_challenge_method=S256"), "{url}");
+        // no client secret given: none is sent
+        let token = server.requests_to("/oauth/token")[0].text();
+        assert!(!token.contains("client_secret"), "{token}");
+
+        w.with("api", |ctx| c.send(ctx, &payload())).unwrap();
+        let hook = &server.requests_to("/hook")[0];
+        assert_eq!(hook.header("authorization"), Some("Bearer IDP-AT"));
+
+        // signing out forgets the tokens
+        w.with("api", |ctx| c.disconnect(ctx));
+        assert_eq!(w.with("api", |ctx| c.status(ctx)), Status::Disconnected);
+    }
+
+    #[test]
+    fn client_credentials_get_a_token_once_and_reuse_it_until_it_expires() {
+        let server = MockServer::start(|req| match req.path() {
+            "/token" => MockResponse::json(
+                200,
+                json!({"access_token":"SVC-AT","token_type":"Bearer","expires_in":3600}),
+            ),
+            "/hook" => MockResponse::json(200, json!({"ok": true})),
+            _ => MockResponse::new(404),
+        });
+        let base = server.base();
+        let c = connector(&server, |c| {
+            c.auth = CustomAuth::ClientCredentials {
+                token_url: format!("{base}/token"),
+                client_id: "svc-cargoframe".into(),
+                scopes: "api://tickets/.default".into(),
+            };
+            c.send.path = "/hook".into();
+        });
+        // without its secret, nothing is asked
+        let e = World::new()
+            .with("api", |ctx| c.send(ctx, &payload()))
+            .unwrap_err();
+        assert!(e.message.contains("secret"), "{}", e.message);
+        assert!(server.requests().is_empty());
+
+        let w = World::new().secret("api", "secret", "S3CRET");
+        assert_eq!(w.with("api", |ctx| c.status(ctx)), Status::Connected);
+        w.with("api", |ctx| c.send(ctx, &payload())).unwrap();
+        w.with("api", |ctx| c.send(ctx, &payload())).unwrap();
+        let tokens = server.requests_to("/token");
+        assert_eq!(tokens.len(), 1, "the token is kept until it expires");
+        let form = tokens[0].text();
+        assert!(form.contains("grant_type=client_credentials"), "{form}");
+        assert!(form.contains("client_id=svc-cargoframe"), "{form}");
+        assert!(form.contains("client_secret=S3CRET"), "{form}");
+        assert!(
+            form.contains("scope=api%3A%2F%2Ftickets%2F.default"),
+            "{form}"
+        );
+        for hook in server.requests_to("/hook") {
+            assert_eq!(hook.header("authorization"), Some("Bearer SVC-AT"));
+        }
     }
 }

@@ -5,6 +5,9 @@ people who use it; why each change was made is in [decisions.md](decisions.md).
 
 ## Next
 
+- Company sign-in: Jira Data Center through an incoming application link (OAuth 2.0 with PKCE; the administrator makes
+  the link, people sign in in the browser with the company's sign-in), and the Custom API through your identity
+  provider (OAuth 2.0 in the browser, or client credentials for a service account)
 - Recordings everywhere: X and Bluesky post the recording as the post's video (X's chunked upload, Bluesky's video
   service), Instagram as a reel (through your picture server), each waiting until the service has processed it. A post
   holds a video or pictures, so the recording goes and the window says the screenshot was left out

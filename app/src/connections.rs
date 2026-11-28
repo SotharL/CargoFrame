@@ -675,8 +675,15 @@ pub mod tests {
         assert!(view.store_problem.is_none());
         let jira = view.items.iter().find(|c| c.id == "jira").unwrap();
         assert_eq!(jira.state, "connected");
-        assert_eq!(jira.secrets.len(), 1);
-        assert!(jira.secrets[0].stored);
+        // the token, and the incoming link's secret for Data Center's OAuth (0.8.0); the window
+        // shows the one the sign-in chosen uses
+        assert_eq!(
+            jira.secrets
+                .iter()
+                .map(|s| (s.name, s.stored))
+                .collect::<Vec<_>>(),
+            vec![("token", true), ("client_secret", false)]
+        );
         assert!(!jira.describe.fields.is_empty());
         let off = view.items.iter().find(|c| c.id == "off").unwrap();
         assert_eq!(off.state, "disabled");
