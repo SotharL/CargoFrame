@@ -329,10 +329,10 @@
         bind:checked={() => draft?.accepts_input === true, (on) => { if (draft) draft.accepts_input = on; }}
       />
       <p class="quiet">
-        {t('A program on this computer can then open the window with values in its text boxes and dropdowns. Nothing is sent until you press a button.')}
+        {t('A program on this computer can then open the window with values in its text boxes, dropdowns and tags, and files in its first Files block; a layout that records starts recording. Nothing is sent until you press a button.')}
       </p>
       {#if draft.accepts_input}
-        <code class="example selectable">cargoframe open --trigger {usedBy[0]?.id ?? 'TRIGGER'} --set {draft.blocks.find((b) => b.type === 'text')?.id ?? 'BLOCK'}="text"</code>
+        <code class="example selectable">cargoframe open --trigger {usedBy[0]?.id ?? 'TRIGGER'} --set {draft.blocks.find((b) => b.type === 'text')?.id ?? 'BLOCK'}="text"{draft.blocks.some((b) => b.type === 'files') ? ' --file /full/path/to/a.log' : ''}</code>
       {/if}
     </details>
 

@@ -1104,3 +1104,79 @@ fn a_capture_of_cargoframe_in_debug_mode_fills_the_bug_report() {
         .value
         .contains("{cargoframe.where}"));
 }
+
+#[test]
+fn files_from_another_program_go_in_the_first_files_block_ticked() {
+    let dir = tempfile::tempdir().unwrap();
+    let (mut s, _) = log_capture(&dir, &[]);
+    let ws = Workspace::new(dir.path().join("captures"));
+    let dump = dir.path().join("crash.dmp");
+    std::fs::write(&dump, "MDMP").unwrap();
+    let incoming = Incoming {
+        values: Vec::new(),
+        files: vec![dump.clone(), dir.path().join("gone.dmp")],
+    };
+    // a layout that does not accept them: nothing is added, and the window says why
+    apply(&mut s, &ws, &incoming);
+    assert!(s.view.files["logs"]
+        .entries
+        .iter()
+        .all(|e| !e.path.starts_with("added/")));
+    assert!(s.view.notes.iter().any(|n| n.contains("does not accept")));
+
+    // one that does: copied into the capture, ticked; the one that is not there is named
+    let (mut s, _) = log_capture(&dir, &[]);
+    s.view.layout.as_mut().unwrap().accepts_input = true;
+    apply(&mut s, &ws, &incoming);
+    let added: Vec<_> = s.view.files["logs"]
+        .entries
+        .iter()
+        .filter(|e| e.path.starts_with("added/"))
+        .collect();
+    assert_eq!(added.len(), 1);
+    assert_eq!(added[0].path, "added/crash.dmp");
+    assert!(added[0].selected);
+    let copy = s
+        .dir_path()
+        .unwrap()
+        .join("files")
+        .join("added")
+        .join("crash.dmp");
+    assert_eq!(std::fs::read_to_string(copy).unwrap(), "MDMP");
+    assert!(s.view.notes.iter().any(|n| n.contains("gone.dmp")));
+
+    // a layout with no Files block says so
+    let (mut s, _) = log_capture(&dir, &[]);
+    let layout = s.view.layout.as_mut().unwrap();
+    layout.accepts_input = true;
+    layout.blocks.clear();
+    apply(&mut s, &ws, &incoming);
+    assert!(s.view.notes.iter().any(|n| n.contains("no Files block")));
+}
+
+#[test]
+fn what_a_later_open_sends_is_added_to_what_waits() {
+    let mut first = Incoming {
+        values: vec![
+            ("summary".into(), "One".into()),
+            ("build".into(), "1".into()),
+        ],
+        files: vec![PathBuf::from("/a.log")],
+    };
+    first.merge(Incoming {
+        values: vec![("summary".into(), "Two".into())],
+        files: vec![PathBuf::from("/a.log"), PathBuf::from("/b.log")],
+    });
+    assert_eq!(
+        first.values,
+        vec![
+            ("build".into(), "1".into()),
+            ("summary".into(), "Two".into())
+        ]
+    );
+    assert_eq!(
+        first.files,
+        vec![PathBuf::from("/a.log"), PathBuf::from("/b.log")]
+    );
+    assert!(!first.is_empty() && Incoming::default().is_empty());
+}

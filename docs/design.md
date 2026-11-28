@@ -499,7 +499,7 @@ Meant for companies of thousands of people.
 | Need | How | State |
 |------|-----|-------|
 | Only the services a company uses | One Cargo feature per connector; `set CF_SERVICES=jira,teams` before `scripts\windows\build.cmd`. The code is not in the program; forms, templates and guides are hidden; a saved connection of a missing kind shows "not in this copy" | Built |
-| Other programs hand data in | `cargoframe open --trigger <id> --set <block>=<text>` reaches the running copy through the single-instance channel (same user, no network port), runs the shortcut and fills text boxes and dropdowns. Only layouts with *Other programs can fill this*; nothing is sent until the person presses a button. At most 50 values of 20,000 characters; the log records counts only | Built (text, dropdowns) |
+| Other programs hand data in | `cargoframe open --trigger <id> --set <block>=<text> --file <path>` reaches the running copy through the single-instance channel (same user, no network port), runs the shortcut, fills text boxes, dropdowns and tags, and adds the files to the first Files block, ticked. A layout that records starts recording and is filled when it stops. Only layouts with *Other programs can fill this*; nothing is sent until the person presses a button. At most 50 values of 20,000 characters and 20 files; the log records counts only | Built |
 | Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`); the update check can be off | Built |
 | The company's network | The system certificate store and proxy setting | Built |
 | The company's sign-in | OAuth with the company's identity provider: Teams with Entra today; Jira OAuth and generic OAuth 2.0 for Custom API next | Partly built |

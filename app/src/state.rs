@@ -32,6 +32,9 @@ pub struct AppState {
     pub recording: crate::video::Recording,
     /// While a trigger records: the sign on screen and the program in focus.
     watch: Mutex<Option<crate::watch::Watch>>,
+    /// What another program sent to a trigger that records (`cargoframe open`), by trigger id:
+    /// it waits for the recording to stop, then fills the window.
+    incoming: Mutex<Option<(String, crate::session::Incoming)>>,
     /// The shortcuts held down right now (see `hold`).
     pub holds: crate::hold::Holds,
     /// Looking for, downloading and installing a newer version.
@@ -101,6 +104,7 @@ impl AppState {
             timings: Timings::new(),
             recording: crate::video::Recording::new(),
             watch: Mutex::new(None),
+            incoming: Mutex::new(None),
             holds: crate::hold::Holds::default(),
             updates: std::sync::Arc::new(Updates::new(
                 std::sync::Arc::new(cargoframe_net::UreqHttp::new()),
@@ -129,6 +133,25 @@ impl AppState {
     }
 
     /// Remember the program of the capture that was just taken.
+    /// Keep what another program sent to a trigger that records, added to what it sent before.
+    /// What was waiting for another trigger is dropped: one recording runs at a time.
+    pub fn keep_incoming(&self, trigger_id: &str, incoming: crate::session::Incoming) {
+        let mut kept = self.incoming.lock().unwrap_or_else(|e| e.into_inner());
+        match kept.as_mut() {
+            Some((id, before)) if id == trigger_id => before.merge(incoming),
+            _ => *kept = Some((trigger_id.to_string(), incoming)),
+        }
+    }
+
+    /// What another program sent to this trigger while it recorded, once.
+    pub fn take_incoming(&self, trigger_id: &str) -> Option<crate::session::Incoming> {
+        let mut kept = self.incoming.lock().unwrap_or_else(|e| e.into_inner());
+        match kept.take() {
+            Some((id, incoming)) if id == trigger_id => Some(incoming),
+            _ => None,
+        }
+    }
+
     pub fn set_last_program(&self, program: Option<String>) {
         if program.is_some() {
             *self.last_program.lock().unwrap_or_else(|e| e.into_inner()) = program;
@@ -248,6 +271,24 @@ mod tests {
             AppState::new(store, false, crate::session::tests::no_connections()),
             dir,
         )
+    }
+
+    #[test]
+    fn what_another_program_sent_to_a_recording_waits_for_that_trigger_only() {
+        use crate::session::Incoming;
+        let (s, _d) = state();
+        let sent = |v: &str| Incoming {
+            values: vec![("summary".into(), v.into())],
+            files: Vec::new(),
+        };
+        s.keep_incoming("rec", sent("start"));
+        s.keep_incoming("rec", sent("stop"));
+        // another trigger does not get it, and it is gone after
+        assert_eq!(s.take_incoming("other"), None);
+        s.keep_incoming("rec", sent("start"));
+        s.keep_incoming("rec", sent("stop"));
+        assert_eq!(s.take_incoming("rec"), Some(sent("stop")));
+        assert_eq!(s.take_incoming("rec"), None);
     }
 
     #[test]

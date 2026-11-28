@@ -5,6 +5,9 @@ people who use it; why each change was made is in [decisions.md](decisions.md).
 
 ## Next
 
+- `cargoframe open` takes files (`--file <full path>`, up to 20): added to the layout's first Files block, copied into
+  the capture and ticked. A layout that records can now be opened by another program: it starts recording, and the
+  values and files wait until the recording stops (the shortcut again, or a second `open`), then fill the window
 - What a service refuses to send without is said before sending, for every service: the Slack, Discord and Teams
   channel, Reddit's subreddit, Jira's project and issue type. A button that sends none of them is an error in the
   builder (its field list marks them *(required)*); a block that sends one while empty is named under the button,

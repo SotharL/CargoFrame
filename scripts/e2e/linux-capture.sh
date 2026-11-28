@@ -197,6 +197,31 @@ grep -q "started again at sign-in" "$work/cargoframe.log" || fail "a second sign
 kill -0 "$app_pid" 2>/dev/null || fail "CargoFrame exited when started again at sign-in"
 echo "ok: a second sign-in start is handed over and opens nothing"
 
+# Another program opens the layout with a value and a file (`cargoframe open`): the file is
+# copied into the capture, ticked in the first Files block.
+python3 - "$cfg/layouts/bug.json" <<'PY'
+import json, sys
+p = sys.argv[1]; l = json.load(open(p)); l["accepts_input"] = True; json.dump(l, open(p, "w"))
+PY
+printf 'MDMP-crash' > "$work/crash.dmp"
+xdotool windowraise "$fake_win" || true
+xdotool windowfocus "$fake_win" || true
+sleep 0.5
+"$bin" open --trigger bug --set prompt="Sent by the game" --file "$work/crash.dmp" >/dev/null 2>&1 || true
+for _ in $(seq 50); do grep -q "asked to open by another program.*files=1" "$work/cargoframe.log" && break; sleep 0.1; done
+grep -q "asked to open by another program.*files=1" "$work/cargoframe.log" || fail "'cargoframe open --file' did not reach the running copy"
+added=""
+for _ in $(seq 100); do
+  added="$(find "$CARGOFRAME_HOME/data/captures" -path '*/files/added/crash.dmp' 2>/dev/null | head -n1)"
+  [ -n "$added" ] && break
+  sleep 0.1
+done
+[ -n "$added" ] || fail "the file sent with 'cargoframe open' is not in the capture"
+[ "$(cat "$added")" = "MDMP-crash" ] || fail "the file in the capture is not the one sent"
+# the log never names the file
+grep -q "crash.dmp" "$work/cargoframe.log" && fail "the log names a file another program sent"
+echo "ok: 'cargoframe open --file' added the file to the capture"
+
 grep -q "panicked" "$work/cargoframe.log" && fail "the app panicked"
 # an error in the log is a bug or noise to remove (Windows' web view asking for /favicon.ico was one)
 if grep -E "^[0-9TZ:.-]+ +ERROR" "$work/cargoframe.log" >&2; then fail "the log has errors (above)"; fi

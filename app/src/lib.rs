@@ -50,8 +50,12 @@ use tauri::{Manager, RunEvent};
 fn open_from_another_program(app: &tauri::AppHandle, open: Result<cli::OpenRequest, String>) {
     match open {
         Ok(req) => {
-            tracing::info!(trigger = %req.trigger, values = req.values.len(), "asked to open by another program");
-            triggers::run_with(app, req.trigger, req.values);
+            tracing::info!(trigger = %req.trigger, values = req.values.len(), files = req.files.len(), "asked to open by another program");
+            let incoming = session::Incoming {
+                values: req.values,
+                files: req.files,
+            };
+            triggers::run_with(app, req.trigger, incoming);
         }
         Err(why) => notify::problem(
             app,
