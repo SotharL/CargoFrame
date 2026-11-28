@@ -1,12 +1,12 @@
 # Status
 
-_Last updated 26 Nov 2026 · version 0.7.3 · the repository is public; open-source license pending its merge._
+_Last updated 28 Nov 2026 · version 0.8.0 · public, MIT OR Apache-2.0._
 
 What is verified today, how, and what is not. What each version changed is in the [changelog](changelog.md); why,
 in [decisions](decisions.md).
 
 **In one line:** CargoFrame runs every day on the owner's Windows 11 PC, sends real Jira tickets, GitHub issues and
-Discord messages, and passes about 1,780 tests on every push; Linux is verified on virtual screens only, and the
+Discord messages, and passes about 1,850 tests on every push; Linux is verified on virtual screens only, and the
 services other than Jira, GitHub and Discord only against mocks of their documented APIs.
 
 ---
@@ -15,9 +15,9 @@ services other than Jira, GitHub and Discord only against mocks of their documen
 
 | Area | How | Where |
 |------|-----|-------|
-| Logic | 1,128 Rust tests: rules, layouts, templates, connectors, retries, migrations, updates, security regressions | `cargo test` |
+| Logic | 1,168 Rust tests: rules, layouts, templates, connectors, retries, migrations, updates, security regressions | `cargo test` |
 | Services | Each connector against a mock of its documented API: sign-in, lists, send, retry, never twice; Jira Cloud's real create-metadata answers kept as cases | `core/connectors/src/*/tests.rs` |
-| Windows (UI) | 651 tests on the in-memory backend; whole windows rendered with demo data; guides walked; search entries point at real code | `vitest` |
+| Windows (UI) | 684 tests on the in-memory backend; whole windows rendered with demo data; guides walked; search entries point at real code | `vitest` |
 | How the windows look | Every Settings page and the CargoFrame window in Chrome, smallest and large, light and dark: nothing outside its box, no file missing | `ui/scripts/overflow-check.mjs` |
 | Rust and the windows in step | Settings types and defaults generated from Rust; mirror tests for the lists copied by hand; value-finding cases run on both sides | `ui/src/lib/generated`, `mirrors.test.ts`, `pick_cases.json` |
 | Whole program, Linux | The real binary captures a fake program on a virtual X11 screen and on a headless sway desktop (Wayland and XWayland, GNOME-like shortcuts); a second sign-in start is handed over; no error in the log | `scripts/e2e/` |

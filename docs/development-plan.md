@@ -3,7 +3,7 @@
 How to build a tool like CargoFrame from an empty repository, in the order a careful team would choose: what to
 build first, why, how to know each step is done, and what it costs. It is written for an AI agent or an engineering
 team that wants to make a similar tool (a tray program that captures what is on screen, gathers the context around it
-and sends it to a service with one button). It describes the **end state of CargoFrame 0.7.3** as the target, but
+and sends it to a service with one button). It describes the **end state of CargoFrame 0.8.0** as the target, but
 not the path its versions took; that history is in the [changelog](changelog.md) and [decisions](decisions.md).
 
 What the finished tool is and how people use it: [design](design.md). How to change it (remove a service, plug it
@@ -36,13 +36,13 @@ flowchart LR
 
 ### Size of the finished tool
 
-| Measure | CargoFrame 0.7.3 |
+| Measure | CargoFrame 0.8.0 |
 |---------|------------------|
 | Platforms | Windows 11; Linux on X11 and Wayland (GNOME, KDE, sway, Hyprland) |
 | Destinations | 12 services and a local zip: Jira, GitHub, Google, Slack, Discord, Teams, Reddit, Claude, X, Bluesky, Instagram, any HTTPS API |
 | Languages | English, French, Spanish, Italian, German (about 1,800 window texts and 1,300 program texts) |
-| Rust | 20 crates, about 77,000 lines, 1,128 tests |
-| Windows (UI) | Svelte 5 and TypeScript, about 23,000 lines, 651 tests, 2 pages |
+| Rust | 20 crates, about 80,000 lines, 1,168 tests |
+| Windows (UI) | Svelte 5 and TypeScript, about 23,000 lines, 684 tests, 2 pages |
 | Interface between them | 86 commands, each granted only to the window that needs it |
 | Budgets enforced in CI | Idle under 40 MB; picture under 150 ms; window usable under 250 ms warm; 250 KB of script per window |
 | Releases | Signed-ready per-user installers (NSIS, AppImage), SHA-256 checked updates |
@@ -694,7 +694,7 @@ made with debug mode.
 | Tester with real PCs and accounts | A few days per milestone | Spikes, real services, *Check this PC* |
 
 The estimates in §6 add up to **42–52 person-weeks**: about six months for two engineers, or less for one engineer
-with an AI agent doing most of the writing and testing (CargoFrame reached 0.7.3 in five weeks that way). The real
+with an AI agent doing most of the writing and testing (CargoFrame reached 0.8.0 in five weeks that way). The real
 costs are the parts no test can cover: real accounts, real desktops, certificates.
 
 ---

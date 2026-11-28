@@ -3,7 +3,7 @@
 What each version of CargoFrame changed, newest first. The release notes on GitHub say the same for the
 people who use it; why each change was made is in [decisions.md](decisions.md).
 
-## Next
+## 0.8.0 (28 November 2026)
 
 - Set up every computer at once: an administrator puts layouts, shortcuts, connections and data rules in a read-only
   folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`, or `CARGOFRAME_MANAGED`). They win over a
