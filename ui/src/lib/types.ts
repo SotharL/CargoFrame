@@ -807,7 +807,11 @@ export type CustomAuth =
   | { type: 'bearer' }
   | { type: 'header'; name: string }
   | { type: 'basic'; user: string }
-  | { type: 'query'; param: string };
+  | { type: 'query'; param: string }
+  /** OAuth 2.0: the person signs in in the browser with the company's identity provider (PKCE). */
+  | { type: 'oauth2'; auth_url: string; token_url: string; client_id: string; scopes: string; redirect_port: number }
+  /** OAuth 2.0 client credentials: a service account, nobody signs in. */
+  | { type: 'client_credentials'; token_url: string; client_id: string; scopes: string };
 
 export type CustomBody =
   | { type: 'none' }
@@ -831,7 +835,17 @@ interface ConnectionCommon {
 
 export type Connection = ConnectionCommon &
   (
-    | { kind: 'jira'; site_url: string; auth: 'api_token' | 'pat'; email: string }
+    | {
+        kind: 'jira';
+        site_url: string;
+        /** `oauth`: Data Center's OAuth 2.0, through an incoming application link. */
+        auth: 'api_token' | 'pat' | 'oauth';
+        email: string;
+        /** OAuth: the Client ID of the incoming link. */
+        client_id: string;
+        /** OAuth: the port of the redirect URL registered in the link. */
+        redirect_port: number;
+      }
     | { kind: 'google'; client_id: string; sheets: boolean; full_drive: boolean }
     | { kind: 'reddit'; client_id: string; redirect_port: number }
     | { kind: 'claude'; open_with: 'auto' | 'app' | 'browser'; send_automatically: boolean; extra_wait_seconds: number }

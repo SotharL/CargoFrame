@@ -25,11 +25,24 @@
     <select bind:value={value.auth}>
       <option value="api_token">{t('Jira Cloud: e-mail and API token')}</option>
       <option value="pat">{t('Jira Server or Data Center: personal access token')}</option>
+      <option value="oauth">{t('Jira Data Center: company sign-in (OAuth 2.0)')}</option>
     </select>
   </Field>
   {#if value.auth === 'api_token'}
     <Field label={t('Account e-mail')} hint={t('The address you sign in to Jira with.')} tour="jira.email">
       <input type="text" bind:value={value.email} placeholder="you@example.com" />
+    </Field>
+  {:else if value.auth === 'oauth'}
+    {@const j = value}
+    <p class="quiet">
+      {t('Your Jira administrator makes an incoming application link for CargoFrame (Administration, Applications, Application links: External application, Incoming) with the WRITE permission and the redirect URL below, then gives you its Client ID and Client secret. You then sign in in the browser, with your company\'s sign-in.')}
+    </p>
+    <Field label={t('Client ID')} hint={t('From the incoming application link.')} tour="jira.client_id">
+      <input type="text" bind:value={j.client_id} />
+    </Field>
+    <Field label={t('Redirect port')} hint={t('The link\'s redirect URL must be {address}', { address: `http://127.0.0.1:${j.redirect_port}/callback` })}>
+      <input type="text" inputmode="numeric" value={String(j.redirect_port)}
+        oninput={(e) => (j.redirect_port = Number(e.currentTarget.value) || 0)} />
     </Field>
   {/if}
 {:else if value.kind === 'google'}

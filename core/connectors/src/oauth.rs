@@ -507,6 +507,40 @@ pub fn authorize(client: &OAuthClient, ctx: &Ctx) -> Result<Tokens, SendError> {
     Ok(tokens)
 }
 
+/// A token for the client itself (the client credentials grant: a service account, nobody signs
+/// in), kept until it is about to expire and then asked for again. `client.client_secret` is
+/// required; `client.scopes` are asked for when there are any.
+pub fn client_token(client: &OAuthClient, ctx: &Ctx) -> Result<String, SendError> {
+    if let Ok(Some(t)) = load_tokens(ctx) {
+        if t.expires_at > (ctx.now)() + 60 {
+            return Ok(t.access_token);
+        }
+    }
+    if client.client_secret.as_deref().unwrap_or("").is_empty() {
+        return Err(not_set_up(t(
+            "The client secret is missing: open Connections, paste it and press Save",
+        )));
+    }
+    let mut fields = vec![("grant_type", "client_credentials".to_string())];
+    if !client.scopes.is_empty() {
+        fields.push(("scope", client.scopes.join(" ")));
+    }
+    let req = request_with_client(client, &client.token_url, fields, ctx);
+    let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
+    let tokens = match parse_tokens(&resp, (ctx.now)(), None) {
+        Ok(t) if resp.is_success() => t,
+        Ok(_) => return Err(from_response(&resp, msg!("get a token"))),
+        Err(e) => return Err(e),
+    };
+    // nothing to renew with: the next share asks again once this one has expired
+    let tokens = Tokens {
+        refresh_token: None,
+        ..tokens
+    };
+    store_tokens(ctx, &tokens)?;
+    Ok(tokens.access_token)
+}
+
 /// A valid access token, renewed first if it is about to expire.
 pub fn access_token(client: &OAuthClient, ctx: &Ctx) -> Result<String, SendError> {
     let tokens = load_tokens(ctx)?

@@ -13,6 +13,7 @@ fn cloud(server: &MockServer) -> JiraConnector {
         site_url: server.base(),
         auth: JiraAuth::ApiToken,
         email: "me@acme.com".into(),
+        ..JiraSettings::default()
     })
 }
 
@@ -21,6 +22,7 @@ fn server_connector(server: &MockServer) -> JiraConnector {
         site_url: server.base(),
         auth: JiraAuth::Pat,
         email: String::new(),
+        ..JiraSettings::default()
     })
 }
 
@@ -908,4 +910,68 @@ fn the_answer_of_a_real_jira_cloud_needs_nothing_more_for_a_task() {
         .map(|o| o.value)
         .collect();
     assert_eq!(ids, vec!["parent".to_string()]);
+}
+
+#[test]
+fn data_center_oauth_signs_in_through_the_incoming_link_with_pkce_then_uses_the_token() {
+    let server = MockServer::start(|req| match req.path() {
+        "/rest/oauth2/latest/token" => MockResponse::json(
+            200,
+            json!({"access_token":"DCAT","refresh_token":"DCRT","token_type":"bearer","expires_in":7200}),
+        ),
+        "/rest/api/2/myself" => MockResponse::json(200, json!({"displayName":"Jane Doe"})),
+        _ => MockResponse::new(404),
+    });
+    let c = JiraConnector::new(JiraSettings {
+        site_url: server.base(),
+        auth: JiraAuth::Oauth,
+        client_id: "LINK-CLIENT".into(),
+        redirect_port: 0,
+        ..JiraSettings::default()
+    })
+    .with_wait(std::time::Duration::from_secs(5));
+    let w = World::new().secret("jira", "client_secret", "LINK-SECRET");
+    assert_eq!(w.with("jira", |ctx| c.status(ctx)), Status::Disconnected);
+    let browser = crate::testkit::ApproveBrowser::new();
+    let msg = w
+        .with_browser("jira", &browser, |ctx| c.connect(ctx))
+        .unwrap();
+    assert!(msg.contains("Jane Doe"), "{msg}");
+    assert_eq!(w.with("jira", |ctx| c.status(ctx)), Status::Connected);
+
+    // the company's Jira, its authorize page, PKCE and the WRITE scope
+    let url = browser.opened.lock().unwrap()[0].clone();
+    assert!(
+        url.starts_with(&format!("{}/rest/oauth2/latest/authorize?", server.base())),
+        "{url}"
+    );
+    assert!(url.contains("client_id=LINK-CLIENT"), "{url}");
+    assert!(url.contains("scope=WRITE"), "{url}");
+    assert!(url.contains("code_challenge_method=S256"), "{url}");
+    assert!(
+        url.contains("redirect_uri=http%3A%2F%2F127.0.0.1%3A"),
+        "{url}"
+    );
+    let token = server.requests_to("/rest/oauth2/latest/token")[0].text();
+    assert!(token.contains("grant_type=authorization_code"), "{token}");
+    assert!(token.contains("code_verifier="), "{token}");
+    assert!(token.contains("client_secret=LINK-SECRET"), "{token}");
+    let me = &server.requests_to("/rest/api/2/myself")[0];
+    assert_eq!(me.header("authorization"), Some("Bearer DCAT"));
+
+    w.with("jira", |ctx| c.disconnect(ctx));
+    assert_eq!(w.with("jira", |ctx| c.status(ctx)), Status::Disconnected);
+}
+
+#[test]
+fn data_center_oauth_without_the_client_id_says_who_has_it() {
+    let server = MockServer::start(|_| MockResponse::new(404));
+    let c = JiraConnector::new(JiraSettings {
+        site_url: server.base(),
+        auth: JiraAuth::Oauth,
+        ..JiraSettings::default()
+    });
+    let e = World::new().with("jira", |ctx| c.connect(ctx)).unwrap_err();
+    assert!(e.message.contains("administrator"), "{}", e.message);
+    assert!(server.requests().is_empty());
 }

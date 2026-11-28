@@ -128,8 +128,9 @@ then in *Settings › Data parsing* select the value once. Every capture reads i
 ### 3.3 Receive CargoFrame's reports in your tool
 
 Use the **Custom API** service: any HTTPS endpoint, a body template with `{{name}}` values, the picture and files as
-multipart. Authentication: none, `Authorization: Bearer`, a named header, Basic, or a query parameter
-(`CustomAuth` in `core/connectors/src/model.rs`).
+multipart. Authentication: none, `Authorization: Bearer`, a named header, Basic, a query parameter, or OAuth 2.0 with
+your identity provider, either in the browser (authorization code with PKCE) or as a service account (client
+credentials) (`CustomAuth` in `core/connectors/src/model.rs`).
 
 ### 3.4 Use the libraries in your own Rust program
 
@@ -152,7 +153,15 @@ notice ([NOTICE](../NOTICE)).
 Use `core/connectors/src/oauth.rs`: an `OAuthClient` (authorize and token addresses, client id, scopes, a local
 redirect port), `authorize` (PKCE, the browser opens, the code comes back to `127.0.0.1`), `load_tokens`, refresh,
 `sign_out`. Teams (`core/connectors/src/teams/mod.rs`, `fn client`) is the example: a public client with PKCE and no
-secret. Google and Reddit follow the same pattern.
+secret. Google and Reddit follow the same pattern; Jira Data Center (`fn oauth_client` in `core/connectors/src/jira/`)
+and the Custom API (`fn oauth_client` in `custom.rs`) take the client from the connection's settings, the client
+secret, when there is one, from the credential store. `client_token` does the client credentials grant (a service
+account), kept until it expires.
+
+**Already there, nothing to build:** a company with Jira Data Center has its administrator make an incoming
+application link (External application, Incoming, `WRITE`, the redirect URL the connection form shows) and gives
+people its Client ID and secret; a company API behind Entra, Okta or Keycloak is a Custom API connection with *OAuth
+2.0: sign in in the browser*, or *client credentials* for a shared service account.
 
 ### 4.3 Make people sign in to CargoFrame itself (a company requirement)
 

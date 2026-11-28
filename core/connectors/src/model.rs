@@ -19,6 +19,9 @@ fn yes() -> bool {
     true
 }
 
+// A connection is read when it is used, a few at a time: the size of the largest kind (a custom API
+// with its requests and its OAuth 2.0 client) costs nothing worth boxing it for.
+#[allow(clippy::large_enum_variant)]
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum Settings {
@@ -111,14 +114,14 @@ impl Kind {
     /// Names the credential store may hold for this kind (and the only ones the window can set).
     pub fn secret_names(self) -> &'static [&'static str] {
         match self {
-            Kind::Jira => &["token"],
+            Kind::Jira => &["token", "client_secret", "oauth"],
             Kind::Google => &["client_secret", "oauth"],
             Kind::Reddit => &["oauth"],
             Kind::Claude => &[],
             Kind::Slack => &["token"],
             Kind::Discord => &DISCORD_SECRETS,
             Kind::Teams => &["oauth"],
-            Kind::Custom => &["secret"],
+            Kind::Custom => &["secret", "oauth"],
             Kind::X => &["oauth"],
             Kind::Bluesky => &["app_password"],
             Kind::Instagram => &["token", "host_key"],
@@ -129,7 +132,7 @@ impl Kind {
     /// Of those, the ones a person types in (the rest are written by the sign-in).
     pub fn typed_secrets(self) -> &'static [&'static str] {
         match self {
-            Kind::Jira => &["token"],
+            Kind::Jira => &["token", "client_secret"],
             Kind::Google => &["client_secret"],
             Kind::Slack => &["token"],
             Kind::Discord => &DISCORD_SECRETS,
@@ -152,9 +155,13 @@ pub enum JiraAuth {
     ApiToken,
     /// Jira Server or Data Center: a personal access token.
     Pat,
+    /// Jira Data Center: OAuth 2.0 through an incoming application link the company's
+    /// administrator made (authorization code with PKCE). No token is pasted: the person signs in
+    /// in the browser, with the company's own sign-in.
+    Oauth,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Jira {
     /// `https://yourteam.atlassian.net`
@@ -162,6 +169,23 @@ pub struct Jira {
     pub auth: JiraAuth,
     /// Account e-mail, for API-token sign-in.
     pub email: String,
+    /// OAuth: the Client ID of the incoming application link.
+    pub client_id: String,
+    /// OAuth: the port of the redirect URL registered in the link,
+    /// `http://127.0.0.1:<port>/callback`.
+    pub redirect_port: u16,
+}
+
+impl Default for Jira {
+    fn default() -> Self {
+        Self {
+            site_url: String::new(),
+            auth: JiraAuth::default(),
+            email: String::new(),
+            client_id: String::new(),
+            redirect_port: 53683,
+        }
+    }
 }
 
 // ----- Reddit -----
@@ -447,6 +471,27 @@ pub enum CustomAuth {
     Basic { user: String },
     /// A query parameter carries the secret.
     Query { param: String },
+    /// OAuth 2.0, the person signing in in the browser (authorization code with PKCE) with the
+    /// company's identity provider. The client secret, when the provider gives one, is the
+    /// connection's secret.
+    #[serde(rename = "oauth2")]
+    OAuth2 {
+        auth_url: String,
+        token_url: String,
+        client_id: String,
+        /// Separated by spaces.
+        scopes: String,
+        /// The redirect URL registered with the provider is `http://127.0.0.1:<port>/callback`.
+        redirect_port: u16,
+    },
+    /// OAuth 2.0 client credentials: CargoFrame itself is the client (a service account), no
+    /// person signs in. The client secret is the connection's secret.
+    ClientCredentials {
+        token_url: String,
+        client_id: String,
+        /// Separated by spaces.
+        scopes: String,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
@@ -536,6 +581,9 @@ pub fn check(c: &Connection) -> Result<(), String> {
             }
             if j.auth == JiraAuth::ApiToken && !j.email.contains('@') {
                 return Err(t("Write the e-mail address of the Jira account").into());
+            }
+            if j.auth == JiraAuth::Oauth && j.client_id.trim().is_empty() {
+                return Err(t("Write the Client ID of the incoming application link your Jira administrator made").into());
             }
         }
         Settings::Reddit(r) => {
@@ -695,6 +743,31 @@ fn check_custom(cu: &Custom) -> Result<(), String> {
         CustomAuth::Basic { user } if user.trim().is_empty() => {
             return Err(t("Write the user name for basic sign-in").into())
         }
+        CustomAuth::OAuth2 {
+            auth_url,
+            token_url,
+            client_id,
+            ..
+        } => {
+            cargoframe_net::check_url(auth_url)
+                .map_err(|e| tf("The sign-in address: {e}", &[("e", &e)]))?;
+            cargoframe_net::check_url(token_url)
+                .map_err(|e| tf("The token address: {e}", &[("e", &e)]))?;
+            if client_id.trim().is_empty() {
+                return Err(t("Write the Client ID your identity provider gave this app").into());
+            }
+        }
+        CustomAuth::ClientCredentials {
+            token_url,
+            client_id,
+            ..
+        } => {
+            cargoframe_net::check_url(token_url)
+                .map_err(|e| tf("The token address: {e}", &[("e", &e)]))?;
+            if client_id.trim().is_empty() {
+                return Err(t("Write the Client ID your identity provider gave this app").into());
+            }
+        }
         _ => {}
     }
     for h in &cu.send.headers {
@@ -846,6 +919,7 @@ mod tests {
                 site_url: site.into(),
                 auth,
                 email: email.into(),
+                ..Jira::default()
             }),
         }
     }

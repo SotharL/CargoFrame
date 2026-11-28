@@ -1850,3 +1850,20 @@ value chosen from one left as it was.
   chat, the person's OneDrive with an organisation view link in the message (Graph cannot share a file with a chat's
   members). This needs `Files.ReadWrite.All` (delegated, no administrator consent by default); a sign-in made before
   keeps posting messages and says to sign in again for files, instead of failing.
+
+## Company sign-in (28 Nov 2026)
+
+- **Jira Data Center: OAuth 2.0 through an incoming application link.** It is how Atlassian lets an external program
+  act for a person on Data Center: the company's administrator makes the link (External application, Incoming, the
+  `WRITE` scope, the redirect `http://127.0.0.1:<port>/callback`), people sign in in the browser with the company's
+  own sign-in, and Jira supports PKCE. The link's client secret, when given, is kept in the credential store.
+- **Custom API: OAuth 2.0 with the company's identity provider**, in the browser (authorization code with PKCE, a
+  client secret optional) or as a service account (client credentials, the token kept until it expires). One
+  shape covers Entra, Okta, Keycloak and the like, so no provider is named in the code.
+- **Jira Cloud is not given per-company OAuth.** Atlassian's OAuth 2.0 (3LO) page (checked 28 Nov 2026) says that
+  apps that "collect API tokens or instruct customers to create individual 3LO apps" do not meet its security
+  requirements, and asks for one distributable app instead. Its 3LO also needs a client secret and documents no
+  PKCE, which a desktop program cannot keep. The compliant way is a single CargoFrame app registered by the project,
+  with a small service that holds its secret and exchanges the codes: that is a decision for the project's owner
+  (an Atlassian developer account, the service to run, the Marketplace listing), so Jira Cloud keeps API tokens
+  until then. The same notice concerns API tokens: it is in the backlog.

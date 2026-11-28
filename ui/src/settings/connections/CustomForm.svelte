@@ -13,6 +13,8 @@
     { value: 'header', label: t('A header with the key') },
     { value: 'basic', label: t('User name and password (basic)') },
     { value: 'query', label: t('A query parameter with the key') },
+    { value: 'oauth2', label: t('OAuth 2.0: sign in in the browser (company sign-in)') },
+    { value: 'client_credentials', label: t('OAuth 2.0: client credentials (a service account)') },
   ];
   const BODIES: { value: CustomBody['type']; label: string }[] = [
     { value: 'none', label: t('No body') },
@@ -26,6 +28,8 @@
       type === 'header' ? { type, name: 'X-Api-Key' }
       : type === 'basic' ? { type, user: '' }
       : type === 'query' ? { type, param: 'key' }
+      : type === 'oauth2' ? { type, auth_url: 'https://', token_url: 'https://', client_id: '', scopes: '', redirect_port: 53684 }
+      : type === 'client_credentials' ? { type, token_url: 'https://', client_id: '', scopes: '' }
       : { type };
   }
   function setBody(type: CustomBody['type']) {
@@ -52,6 +56,35 @@
   <Field label={t('User name')}><input type="text" bind:value={value.auth.user} /></Field>
 {:else if value.auth.type === 'query'}
   <Field label={t('Query parameter')}><input type="text" bind:value={value.auth.param} /></Field>
+{:else if value.auth.type === 'oauth2'}
+  {@const a = value.auth}
+  <Field label={t('Sign-in address')} hint={t('The authorization endpoint of your identity provider.')}>
+    <input type="text" bind:value={a.auth_url} placeholder="https://login.example.com/oauth2/authorize" />
+  </Field>
+  <Field label={t('Token address')} hint={t('Its token endpoint.')}>
+    <input type="text" bind:value={a.token_url} placeholder="https://login.example.com/oauth2/token" />
+  </Field>
+  <Field label={t('Client ID')} hint={t('Of the app registered for CargoFrame with your identity provider. A client secret, if it gave one, goes below once saved.')}>
+    <input type="text" bind:value={a.client_id} />
+  </Field>
+  <Field label={t('Scopes')} hint={t('Separated by spaces, as your identity provider names them.')}>
+    <input type="text" bind:value={a.scopes} placeholder="openid tickets.write" />
+  </Field>
+  <Field label={t('Redirect port')} hint={t('The app\'s redirect URL must be {address}', { address: `http://127.0.0.1:${a.redirect_port}/callback` })}>
+    <input type="text" inputmode="numeric" value={String(a.redirect_port)}
+      oninput={(e) => (a.redirect_port = Number(e.currentTarget.value) || 0)} />
+  </Field>
+{:else if value.auth.type === 'client_credentials'}
+  {@const a = value.auth}
+  <Field label={t('Token address')} hint={t('The token endpoint of your identity provider.')}>
+    <input type="text" bind:value={a.token_url} placeholder="https://login.example.com/oauth2/token" />
+  </Field>
+  <Field label={t('Client ID')} hint={t('Of the service account. Its secret goes below once saved.')}>
+    <input type="text" bind:value={a.client_id} />
+  </Field>
+  <Field label={t('Scopes')} hint={t('Separated by spaces. Empty: none asked for.')}>
+    <input type="text" bind:value={a.scopes} placeholder="api://tickets/.default" />
+  </Field>
 {/if}
 
 <fieldset>

@@ -42,7 +42,7 @@
   function blank(kind: ServiceKind): Connection {
     switch (kind) {
       case 'jira':
-        return { kind, name: 'Jira', enabled: true, site_url: 'https://', auth: 'api_token', email: '' };
+        return { kind, name: 'Jira', enabled: true, site_url: 'https://', auth: 'api_token', email: '', client_id: '', redirect_port: 53683 };
       case 'google':
         return { kind, name: t('Google Drive'), enabled: true, client_id: '', sheets: false, full_drive: false };
       case 'reddit':
@@ -86,7 +86,10 @@
   });
 
   const viewOf = (id: string): ConnectionView | undefined => view?.items.find((c) => c.id === id);
-  const oauth = (k: ServiceKind) => k === 'google' || k === 'reddit' || k === 'teams' || k === 'x';
+  /** Signed in in the browser rather than with a pasted token: some services, and Jira or a custom API set up for it. */
+  const oauth = (c: Connection) =>
+    c.kind === 'google' || c.kind === 'reddit' || c.kind === 'teams' || c.kind === 'x' ||
+    (c.kind === 'jira' && c.auth === 'oauth') || (c.kind === 'custom' && c.auth.type === 'oauth2');
 
   function stateChip(c: ConnectionView, saved: Connection): { kind: 'ok' | 'warn' | 'err' | 'dbg'; label: string } {
     switch (c.state) {
@@ -94,25 +97,28 @@
       case 'expired': return { kind: 'err', label: t('Sign-in expired') };
       case 'disabled': return { kind: 'dbg', label: t('Turned off') };
       case 'not_in_build': return { kind: 'dbg', label: t('Not in this copy of CargoFrame') };
-      default: return { kind: 'warn', label: oauth(c.kind) ? t('Not signed in') : saved.kind === 'discord' && saved.mode === 'webhook' ? t('Needs a webhook link') : t('Needs its token') };
+      default: return { kind: 'warn', label: oauth(saved) ? t('Not signed in') : saved.kind === 'discord' && saved.mode === 'webhook' ? t('Needs a webhook link') : t('Needs its token') };
     }
   }
 
   function secretLabel(c: Connection, name: string): string {
     if (name === 'client_secret') return t('Client secret');
     if (c.kind === 'jira') return c.auth === 'pat' ? t('Personal access token') : t('API token');
+    if (c.kind === 'custom' && (c.auth.type === 'oauth2' || c.auth.type === 'client_credentials')) return t('Client secret');
     if (c.kind === 'slack') return t('Bot token (starts with xoxb-)');
     if (c.kind === 'discord') return t('Bot token');
     if (c.kind === 'bluesky') return t('App password');
     if (c.kind === 'github') return t('Personal access token');
     if (c.kind === 'instagram') return name === 'host_key' ? t('Key of the picture server') : t('Access token');
     if (c.kind === 'custom') {
-      return { bearer: t('Token'), header: t('Key'), basic: t('Password'), query: t('Key'), none: t('Key') }[c.auth.type];
+      return { bearer: t('Token'), header: t('Key'), basic: t('Password'), query: t('Key'), none: t('Key'), oauth2: t('Client secret'), client_credentials: t('Client secret') }[c.auth.type];
     }
     return t('Secret');
   }
   const needsSecret = (c: Connection, name: string) => {
     if (c.kind === 'custom' && name === 'secret' && c.auth.type === 'none') return false;
+    // Jira: the token for a token sign-in, the incoming link's secret for OAuth
+    if (c.kind === 'jira') return name === 'client_secret' ? c.auth === 'oauth' : c.auth !== 'oauth';
     // Discord: the bot token only for a bot; each webhook link has its own box in the channel list
     if (c.kind === 'discord') return c.mode === 'bot' && name === 'token';
     // the picture server's key only when it says which header carries one
@@ -248,7 +254,7 @@
       </div>
       <div class="actions">
         {#if v && item.enabled && v.state !== 'not_in_build'}
-          {#if oauth(item.kind)}
+          {#if oauth(item)}
             {#if signingIn === id}
               <span class="quiet">{t('Waiting for your browser…')}</span>
               <button onclick={() => (void (async () => (await getApi()).cancelSignIn())())}>{t('Cancel')}</button>
