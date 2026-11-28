@@ -424,6 +424,59 @@ fn the_lists_are_read_from_reddit() {
 }
 
 #[test]
+fn what_a_subreddit_requires_is_asked_of_reddit() {
+    let server = MockServer::start(|req| match req.path() {
+        // Reddit's answer, shortened: the moderators require a flair and a text
+        "/api/v1/strict/post_requirements" => MockResponse::json(
+            200,
+            json!({"is_flair_required": true, "body_restriction_policy": "required",
+                   "title_text_min_length": 10, "domain_whitelist": []}),
+        ),
+        "/api/v1/open/post_requirements" => MockResponse::json(
+            200,
+            json!({"is_flair_required": false, "body_restriction_policy": "notAllowed"}),
+        ),
+        _ => MockResponse::new(404),
+    });
+    let w = signed_in();
+    let c = connector(&server);
+    let strict = w
+        .with("reddit", |ctx| c.options(ctx, "required:strict"))
+        .unwrap();
+    assert_eq!(
+        strict
+            .iter()
+            .map(|f| (f.value.as_str(), f.label.as_str()))
+            .collect::<Vec<_>>(),
+        vec![("flair_id", "Flair"), ("text", "Text")]
+    );
+    assert!(w
+        .with("reddit", |ctx| c.options(ctx, "required:open"))
+        .unwrap()
+        .is_empty());
+    // a name that cannot be a subreddit is never put in a path
+    assert!(w
+        .with("reddit", |ctx| c.options(ctx, "required:../x"))
+        .is_err());
+    assert!(server
+        .requests()
+        .iter()
+        .all(|r| r.path().starts_with("/api/v1/") && !r.path().contains("..")));
+}
+
+#[test]
+fn the_fields_reddit_needs_are_said() {
+    let d = connector(&MockServer::start(|_| MockResponse::new(404))).describe();
+    let sub = d.fields.iter().find(|f| f.key == "subreddit").unwrap();
+    assert!(sub.required && sub.unless.is_none());
+    assert!(d
+        .fields
+        .iter()
+        .filter(|f| f.key != "subreddit")
+        .all(|f| !f.required));
+}
+
+#[test]
 fn connecting_signs_in_through_the_browser_and_names_the_account() {
     let server = MockServer::start(|req| match req.path() {
         "/token" => MockResponse::json(

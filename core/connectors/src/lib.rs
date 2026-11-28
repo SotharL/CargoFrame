@@ -64,6 +64,38 @@ pub struct FieldSpec {
     pub hint: &'static str,
     /// The dropdown list that suits this field, if any.
     pub list: Option<&'static str>,
+    /// The service refuses a share without it: the window names it beside the button, and the
+    /// share is held back until it has a value.
+    pub required: bool,
+    /// Not needed when this other field has a value: a thread link says the channel, an issue
+    /// picked to update needs no project.
+    pub unless: Option<&'static str>,
+}
+
+impl FieldSpec {
+    /// A field with no need: what most fields are.
+    pub fn new(
+        key: &'static str,
+        label: &'static str,
+        hint: &'static str,
+        list: Option<&'static str>,
+    ) -> Self {
+        Self {
+            key,
+            label,
+            hint,
+            list,
+            required: false,
+            unless: None,
+        }
+    }
+
+    /// The service needs this field, unless `unless` has a value.
+    pub fn required(mut self, unless: Option<&'static str>) -> Self {
+        self.required = true;
+        self.unless = unless;
+        self
+    }
 }
 
 /// A list the service can supply (for a dropdown block or a choice info type).

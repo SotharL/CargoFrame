@@ -5,6 +5,10 @@ people who use it; why each change was made is in [decisions.md](decisions.md).
 
 ## Next
 
+- What a service refuses to send without is said before sending, for every service: the Slack, Discord and Teams
+  channel, Reddit's subreddit, Jira's project and issue type. A button that sends none of them is an error in the
+  builder (its field list marks them *(required)*); a block that sends one while empty is named under the button,
+  which stays grey. Reddit is asked what the subreddit requires (a flair, a text), as Jira is asked for an issue type
 - Open source: MIT OR Apache-2.0, at the user's choice, with a NOTICE asking for credit (`LICENSE-MIT`,
   `LICENSE-APACHE`, `NOTICE`); the name and logo kept for the official copy (`docs/trademarks.md`); `.github/CONTRIBUTING.md`
 - The licenses of every library CargoFrame ships with (`docs/third-party-licenses.md`, written by cargo-about), in the

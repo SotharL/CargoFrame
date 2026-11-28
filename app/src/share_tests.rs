@@ -2361,8 +2361,15 @@ fn a_sharing_button_asks_what_its_service_needs() {
         options_searched(&layout, "send", Some(" SP/10001 "), None),
         Some(("jira".into(), "required:SP/10001".into()))
     );
-    // only a project key and an issue type id
-    for bad in ["SP", "SP/x", "../SP/1", "SP/1/2", "S P/1", ""] {
+    // Reddit asks with a subreddit
+    assert_eq!(
+        options_searched(&layout, "send", Some("rust"), None),
+        Some(("jira".into(), "required:rust".into()))
+    );
+    // letters, digits, `_` and one `/`: never a path, a space or a dot
+    for bad in [
+        "../SP/1", "SP/1/2", "S P/1", "", "SP/", "/1", "a.b", "r/../x",
+    ] {
         assert_eq!(
             options_searched(&layout, "send", Some(bad), None),
             None,
@@ -2370,4 +2377,40 @@ fn a_sharing_button_asks_what_its_service_needs() {
         );
     }
     assert_eq!(options_searched(&layout, "send", None, None), None);
+}
+
+#[test]
+fn a_field_the_service_needs_is_asked_for_before_anything_is_sent() {
+    let mut w = world(|_| MockResponse::json(500, json!({})));
+    save(&w.f.store, "slk", json!({"name": "Slack", "kind": "slack"}));
+    w.f.connections
+        .set_secret(&w.f.store, "slk", "token", "xoxb-test")
+        .unwrap();
+    set_safe(&w, None, 0);
+    let layout = w.session.view.layout.as_mut().unwrap();
+    for b in &mut layout.blocks {
+        if let BlockKind::SharingButton(btn) = &mut b.kind {
+            btn.connection_id = Some("slk".into());
+            btn.prompt_block_id = None;
+            btn.mappings = vec![cargoframe_layout::InfoMapping {
+                field: "channel".into(),
+                source: cargoframe_layout::ValueSource::Block("note".into()),
+                update: None,
+            }];
+        }
+    }
+    // the block that says the channel is empty: held back, in Slack's own word for it
+    let req = Request {
+        texts: [("note".to_string(), "  ".to_string())].into(),
+        ..request()
+    };
+    let (r, _) = go(&w, &req, vec![]);
+    let ShareResult::Blocked { reasons } = r else {
+        panic!("{r:?}")
+    };
+    assert_eq!(
+        reasons,
+        vec!["\u{201c}Channel\u{201d} needs a value".to_string()]
+    );
+    assert!(w.server.requests().is_empty());
 }

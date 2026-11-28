@@ -16,7 +16,7 @@ pub use model::*;
 pub use reach::{effective_mappings, reach, select, BlockReach, Reach, Role, Selection, Verdict};
 pub use validate::{
     sharing_mode, sharing_state, validate, worst, Code, ConnectionInfo, ConnectionKind,
-    ConnectionState, Issue, Registry, Severity, SharingMode, SharingState,
+    ConnectionState, FieldNeed, Issue, Registry, Severity, SharingMode, SharingState,
 };
 
 /// Version written into every layout file so later releases can migrate old ones.

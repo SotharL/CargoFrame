@@ -20,6 +20,7 @@ use crate::model::{
 use crate::reach::{reach, Verdict};
 use cargoframe_context::template;
 use cargoframe_i18n::{msg, t, tf};
+use serde::Serialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Severity {
@@ -68,6 +69,9 @@ pub enum Code {
     /// A text, dropdown or tags block that no sharing button sends: what is typed or picked in
     /// it goes nowhere (0.7.3: an Assignee dropdown nobody mapped).
     NotSent,
+    /// A field the service refuses to share without, and that nothing on the button sends
+    /// (a Slack button with no channel).
+    ServiceNeedsField,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -147,6 +151,17 @@ impl ConnectionInfo {
     }
 }
 
+/// A field the service of a connection refuses to share without (Slack's channel, Reddit's
+/// subreddit, Jira's project to create an issue).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct FieldNeed {
+    pub field: String,
+    /// What the service calls it, in the language in use.
+    pub label: String,
+    /// Not needed when this other field has a value (a thread link says its channel).
+    pub unless: Option<String>,
+}
+
 /// What the builder knows about the rest of the configuration.
 pub trait Registry {
     fn connection(&self, id: &str) -> Option<ConnectionInfo>;
@@ -162,6 +177,14 @@ pub trait Registry {
     /// Does the service search list `list` (its id, before any `:`) for what is typed, rather
     /// than send it whole? The default: none does.
     fn list_searches(&self, _connection_id: &str, _list: &str) -> bool {
+        false
+    }
+    /// The fields the service of `connection_id` refuses to share without. The default: none.
+    fn needs(&self, _connection_id: &str) -> Vec<FieldNeed> {
+        Vec::new()
+    }
+    /// Does a field fill set `field` on every share to this connection? Then no block has to.
+    fn field_filled(&self, _connection_id: &str, _field: &str) -> bool {
         false
     }
 }
@@ -550,6 +573,25 @@ fn sharing_issues(
             _ => {}
         }
     }
+    // what the service refuses to share without: mapped to a block or a fixed value, set by a
+    // field fill, or made unnecessary by the field that stands in for it
+    let sends = |field: &str| {
+        button.mappings.iter().any(|m| m.field == field) || reg.field_filled(connection_id, field)
+    };
+    for need in reg.needs(connection_id) {
+        if sends(&need.field) || need.unless.as_deref().is_some_and(sends) {
+            continue;
+        }
+        out.push(issue(
+            block,
+            Severity::Error,
+            Code::ServiceNeedsField,
+            tf(
+                "\u{201c}{name}\u{201d} is required: map it to a block in the layout",
+                &[("name", &need.label)],
+            ),
+        ));
+    }
     out.extend(cannot_send_issues(layout, block, reg));
     out
 }
@@ -783,6 +825,8 @@ mod tests {
     struct Reg {
         connections: HashMap<String, ConnectionInfo>,
         rules: Vec<String>,
+        needs: Vec<FieldNeed>,
+        filled: Vec<String>,
     }
 
     impl Reg {
@@ -806,6 +850,12 @@ mod tests {
         }
         fn is_known_variable(&self, name: &str) -> bool {
             self.rules.iter().any(|r| name == format!("rule.{r}"))
+        }
+        fn needs(&self, _connection_id: &str) -> Vec<FieldNeed> {
+            self.needs.clone()
+        }
+        fn field_filled(&self, _connection_id: &str, field: &str) -> bool {
+            self.filled.iter().any(|f| f == field)
         }
     }
 
@@ -1558,5 +1608,57 @@ mod tests {
                 ..
             })
         ));
+    }
+
+    #[test]
+    fn a_field_the_service_needs_must_be_sent_by_the_button() {
+        let mut reg =
+            Reg::default().with("slack", ConnectionKind::Slack, ConnectionState::Connected);
+        reg.needs = vec![FieldNeed {
+            field: "channel".into(),
+            label: "Channel".into(),
+            unless: Some("thread".into()),
+        }];
+        let with = |mappings: Vec<(&str, ValueSource)>| {
+            let mut b = button(Some("slack"), None);
+            if let BlockKind::SharingButton(s) = &mut b {
+                s.mappings = mappings
+                    .into_iter()
+                    .map(|(field, source)| InfoMapping {
+                        field: field.into(),
+                        source,
+                        update: None,
+                    })
+                    .collect();
+            }
+            layout(vec![at("s", 0, b), at("t", 1, text(TextRole::Plain, ""))])
+        };
+        // nothing sends it: an error that keeps the button grey, naming the field
+        let l = with(vec![]);
+        let issues = validate(&l, &reg);
+        assert!(
+            codes(&issues).contains(&Code::ServiceNeedsField),
+            "{issues:?}"
+        );
+        assert!(issues
+            .iter()
+            .any(|i| i.message.contains("Channel") && i.severity == Severity::Error));
+        assert!(matches!(
+            sharing_state(&l, "s", &reg),
+            SharingState::Disabled(c) if c == vec![Code::ServiceNeedsField]
+        ));
+        // a block, a fixed value, the field that stands in for it, or a field fill: fine
+        for sent in [
+            with(vec![("channel", ValueSource::Block("t".into()))]),
+            with(vec![("channel", ValueSource::Fixed("#bugs".into()))]),
+            with(vec![("thread", ValueSource::Block("t".into()))]),
+        ] {
+            assert!(!codes(&validate(&sent, &reg)).contains(&Code::ServiceNeedsField));
+        }
+        reg.filled = vec!["channel".into()];
+        assert!(!codes(&validate(&with(vec![]), &reg)).contains(&Code::ServiceNeedsField));
+        // a button that saves a zip here needs nothing of a service
+        let local = layout(vec![at("s", 0, button(None, None))]);
+        assert!(!codes(&validate(&local, &reg)).contains(&Code::ServiceNeedsField));
     }
 }

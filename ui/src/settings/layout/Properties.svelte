@@ -127,8 +127,8 @@
   /** Fields to suggest for a connection: what the service offers, then the person's info types. */
   const fieldsFor = (connection: string | null) => {
     const known = connectionOf(connection)?.describe.fields ?? [];
-    const out: { key: string; label: string }[] = [];
-    for (const f of known) if (!out.some((o) => o.key === f.key)) out.push({ key: f.key, label: f.label });
+    const out: { key: string; label: string; required?: boolean }[] = [];
+    for (const f of known) if (!out.some((o) => o.key === f.key)) out.push({ key: f.key, label: f.label, required: f.required });
     for (const i of infoTypes) {
       if (connection && i.item.connection_id !== connection) continue;
       if (!out.some((o) => o.key === i.item.field)) out.push({ key: i.item.field, label: i.item.name });
@@ -542,7 +542,7 @@
           <option value="">{t('Not sent')}</option>
           <!-- tags go best in a field that takes several values: those come first -->
           {#each several ? [...fields.filter((f) => takesSeveral(m.button, f.key)), ...fields.filter((f) => !takesSeveral(m.button, f.key))] : fields as f (f.key)}
-            <option value={f.key}>{f.label}{!several && f.key === m.message ? ' (formatted)' : ''}{several && takesSeveral(m.button, f.key) ? ' (several)' : ''}</option>
+            <option value={f.key}>{f.label}{f.required ? ` ${t('(required)')}` : ''}{!several && f.key === m.message ? ' (formatted)' : ''}{several && takesSeveral(m.button, f.key) ? ' (several)' : ''}</option>
           {/each}
         </select>
       </label>

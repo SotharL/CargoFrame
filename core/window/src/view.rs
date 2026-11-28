@@ -5,8 +5,8 @@ use cargoframe_context::template;
 use cargoframe_handoff::ChatList;
 use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{
-    reach, sharing_mode, sharing_state, validate, Block, BlockKind, Code, DropdownSource, Layout,
-    Reach, Registry, Severity, SharingMode, SharingState,
+    reach, sharing_mode, sharing_state, validate, Block, BlockKind, Code, DropdownSource,
+    FieldNeed, Layout, Reach, Registry, Severity, SharingMode, SharingState,
 };
 use serde::Serialize;
 use std::collections::BTreeMap;
@@ -164,6 +164,9 @@ pub struct SharingView {
     /// What this button does with each other block of the layout, and what its destination can
     /// take at all.
     pub reach: Option<Reach>,
+    /// The fields its service refuses to share without: the window names a block that sends one
+    /// and is still empty, and keeps the button grey.
+    pub needs: Vec<FieldNeed>,
 }
 
 /// Why "Save locally" is disabled. The same words are used when the share is refused.
@@ -449,6 +452,10 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                     })
                     .map(|c| c.kind.key());
                 let reach = reach(layout, &block.id, inputs.registry);
+                let needs = match (kind, button.connection_id.as_deref()) {
+                    (Some(_), Some(id)) => inputs.registry.needs(id),
+                    _ => Vec::new(),
+                };
                 let sv = match sharing_mode(layout, &block.id, inputs.registry) {
                     SharingMode::SaveLocally => {
                         match inputs.local_folder.map(str::trim).filter(|f| !f.is_empty()) {
@@ -462,6 +469,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                                 )),
                                 kind,
                                 reach,
+                                needs,
                             },
                             None => SharingView {
                                 enabled: false,
@@ -470,6 +478,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                                 note: None,
                                 kind,
                                 reach,
+                                needs,
                             },
                         }
                     }
@@ -481,6 +490,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                             note: None,
                             kind,
                             reach,
+                            needs,
                         },
                         SharingState::Disabled(codes) => SharingView {
                             enabled: false,
@@ -496,6 +506,7 @@ pub fn build(inputs: &Inputs<'_>) -> SessionView {
                             note: None,
                             kind,
                             reach,
+                            needs,
                         },
                     },
                 };

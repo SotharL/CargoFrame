@@ -1,5 +1,5 @@
 import type { Layout, ServiceKind, SessionView, ShareResult } from '../lib/types';
-import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from '../lib/demoReach';
+import { demoCapabilities, demoNeeds, demoReach, LOCAL_CAPABILITIES } from '../lib/demoReach';
 
 /**
  * A sample capture for `npm run dev`, tests and screenshots. Loaded only outside the app, so it
@@ -156,13 +156,13 @@ export async function demoSession(): Promise<SessionView> {
       ...(!button || !reach
         ? {}
         : local
-          ? { [button.id]: { enabled: true, reasons: [], mode: 'save_locally' as const, note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach } }
-          : { [button.id]: { enabled: true, reasons: [], mode: 'send' as const, note: null, kind, reach } }),
+          ? { [button.id]: { enabled: true, reasons: [], mode: 'save_locally' as const, note: 'No connection: saves a zip in your “Folder for saved zips”', kind: null, reach, needs: [] } }
+          : { [button.id]: { enabled: true, reasons: [], mode: 'send' as const, note: null, kind, reach, needs: demoNeeds(kind) } }),
       ...Object.fromEntries(
         [...kinds].flatMap(([id, k]) => {
           const b = layout.blocks.find((x) => x.id === id);
           if (b?.type !== 'sharing_button' || b.id === button?.id) return [];
-          return [[id, { enabled: true, reasons: [], mode: 'send' as const, note: null, kind: k, reach: demoReach(layout, b, demoCapabilities(k!), k) }]];
+          return [[id, { enabled: true, reasons: [], mode: 'send' as const, note: null, kind: k, reach: demoReach(layout, b, demoCapabilities(k!), k), needs: demoNeeds(k) }]];
         }),
       ),
     },

@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { demoSession } from './demo';
 import { initialValues } from './values';
-import { needsAsk, unsent } from './needs';
+import { emptyNeeds, needsAsk, unsent } from './needs';
+import { demoNeeds } from '../lib/demoReach';
 import type { Block, SessionView } from '../lib/types';
 
 type Button = Extract<Block, { type: 'sharing_button' }>;
@@ -21,7 +22,7 @@ async function jira(): Promise<{ view: SessionView; button: Button }> {
     { field: 'issuetype', source: { kind: 'block', value: 'type' } },
     { field: 'environment', source: { kind: 'block', value: 'note' } },
   ];
-  view.sharing[button.id] = { enabled: true, reasons: [], mode: 'send', note: null, kind: 'jira', reach: null };
+  view.sharing[button.id] = { enabled: true, reasons: [], mode: 'send', note: null, kind: 'jira', reach: null, needs: [] };
   return { view, button };
 }
 
@@ -60,5 +61,72 @@ describe('what Jira needs', () => {
     values.texts.note = 'Windows 11, RTX 4070';
     button.mappings.push({ field: 'components', source: { kind: 'fixed', value: 'Editor' } });
     expect(unsent(view, button, values, required)).toEqual([]);
+  });
+});
+
+describe('what every share to a service needs', () => {
+  it('names a block that sends it while empty, and lets the field that stands in for it do', async () => {
+    const { view, button } = await jira();
+    view.sharing[button.id]!.kind = 'slack';
+    view.sharing[button.id]!.needs = demoNeeds('slack');
+    view.layout!.blocks.push({
+      id: 'where', type: 'dropdown', rect: { x: 0, y: 21, w: 4, h: 1 }, title: 'Where to post',
+      source: { type: 'web_api', connection_id: 'slack', options_id: 'channels' },
+    });
+    view.dropdowns.where = { status: 'ready', options: [], selected: null, message: null };
+    button.mappings = [{ field: 'channel', source: { kind: 'block', value: 'where' } }];
+    const values = initialValues(view);
+    values.dropdowns.where = '';
+    expect(emptyNeeds(view, button, values)).toEqual(['“Channel” is needed: fill “Where to post”']);
+    // a thread link says its channel
+    button.mappings.push({ field: 'thread', source: { kind: 'fixed', value: 'https://x.slack.com/archives/C1/p1' } });
+    expect(emptyNeeds(view, button, values)).toEqual([]);
+    button.mappings.pop();
+    // picked: fine
+    values.dropdowns.where = 'C123';
+    expect(emptyNeeds(view, button, values)).toEqual([]);
+  });
+
+  it('counts a thread picked inside a channel (a dropdown that goes deeper)', async () => {
+    const { view, button } = await jira();
+    view.sharing[button.id]!.needs = [{ field: 'channel', label: 'Channel', unless: 'thread' }];
+    view.layout!.blocks.push({
+      id: 'where', type: 'dropdown', rect: { x: 0, y: 21, w: 4, h: 1 }, title: 'Where',
+      source: { type: 'web_api', connection_id: 'discord', options_id: 'channels' },
+      deeper: { list: 'threads', field: 'thread' },
+    });
+    // mapped to another field, so only its second step can stand in for the channel
+    button.mappings = [
+      { field: 'channel', source: { kind: 'fixed', value: '' } },
+      { field: 'forum', source: { kind: 'block', value: 'where' } },
+    ];
+    const values = initialValues(view);
+    values.deeper.where = { value: '', label: '' };
+    expect(emptyNeeds(view, button, values)).toEqual([]); // a fixed empty value: the layout's problem
+    values.deeper.where = { value: '987', label: 'Crash on start' };
+    expect(emptyNeeds(view, button, values)).toEqual([]);
+  });
+
+  it('asks Reddit what a subreddit requires, and names what is missing', async () => {
+    const { view, button } = await jira();
+    view.sharing[button.id]!.kind = 'reddit';
+    button.mappings = [
+      { field: 'subreddit', source: { kind: 'fixed', value: 'r/rust' } },
+      { field: 'text', source: { kind: 'block', value: 'note' } },
+    ];
+    const values = initialValues(view);
+    expect(needsAsk(view, button, values)).toBe('rust');
+    values.texts.note = '';
+    const asked = [
+      { value: 'flair_id', label: 'Flair', group: null },
+      { value: 'text', label: 'Text', group: null },
+    ];
+    expect(unsent(view, button, values, asked)).toEqual([
+      'This subreddit requires “Flair”, and no block sends it',
+      'This subreddit requires “Text”: fill “Note”',
+    ]);
+    // not a subreddit name: nothing is asked
+    button.mappings[0] = { field: 'subreddit', source: { kind: 'fixed', value: 'not one/../x' } };
+    expect(needsAsk(view, button, values)).toBeNull();
   });
 });

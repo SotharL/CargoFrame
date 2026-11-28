@@ -113,6 +113,14 @@ sequenceDiagram
 One connector per service in `core/connectors/src/<service>`, all answering the same questions (describe, status,
 connect, test, list options, send), so the share flow never names a service.
 
+**What a service needs is known before sending.** Each connector marks the fields it refuses to send without
+(`FieldSpec::required`): the channel of Slack, Discord and Teams (unless a thread link says it; not for Discord with
+a single webhook), Reddit's subreddit, Jira's project and issue type (unless an issue is picked to update). A button
+that sends none of them is an error in the builder, which marks them *(required)* in its field list; a block that
+sends one and is still empty is named under the button in the window (*"Channel" is needed: fill "Where to post"*),
+the button stays grey, and the share checks again. What a choice needs is asked of the service as the person picks:
+Jira's create screen for the issue type (below), Reddit's `post_requirements` for the subreddit (a flair, a text).
+
 | Service | Sign-in | What it sends | Video |
 |---------|---------|---------------|:-----:|
 | Jira Cloud / Server | E-mail and API token / personal access token | A new issue, or an update of one (each field as its mapping says, a comment, a vote), with the picture, still, video and files; people and teams searched by name | ✓ |
@@ -150,7 +158,7 @@ operations for lists) or `PATCH` (GitHub, with the labels and assignees added by
 progress records it, so a retry does not add the text twice. A layout saved before 0.7.1 says none of this, and does
 what it did: the description becomes a comment on the issue picked.
 
-**What Jira requires.** For a new issue, the window asks Jira which fields its create screen requires for
+**What Jira requires for an issue type.** For a new issue, the window asks Jira which fields its create screen requires for
 the issue type picked in the project picked (`createmeta`, through the button: the list `required:PROJ/10001`),
 less those with a default value and those a field fill sets. A required field no block sends, or sent by a block
 still empty, is named beside the button, which stays grey until it is: *Jira needs "Component/s" for this issue

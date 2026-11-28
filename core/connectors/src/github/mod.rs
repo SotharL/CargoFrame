@@ -319,12 +319,7 @@ impl GithubConnector {
 
 impl Connector for GithubConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         let l = |id: &str, label: &str| ListSpec {
             id: id.into(),
             label: label.into(),

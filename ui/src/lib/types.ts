@@ -864,6 +864,10 @@ export interface FieldSpec {
   label: string;
   hint: string;
   list: string | null;
+  /** The service refuses a share without it. */
+  required: boolean;
+  /** Not needed when this other field has a value. */
+  unless: string | null;
 }
 
 export interface ListSpec {
@@ -973,6 +977,16 @@ export interface SharingView {
   kind: ServiceKind | null;
   /** What this button does with each other block, and what its destination can take. */
   reach: Reach | null;
+  /** The fields its service refuses to share without. */
+  needs: FieldNeed[];
+}
+
+/** A field a service refuses to share without (Slack's channel, Reddit's subreddit). */
+export interface FieldNeed {
+  field: string;
+  label: string;
+  /** Not needed when this other field has a value (a thread link says its channel). */
+  unless: string | null;
 }
 
 export interface SavedCopy {

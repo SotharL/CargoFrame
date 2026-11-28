@@ -162,17 +162,25 @@ fn body_errors(resp: &Response) -> Option<SendError> {
     Some(invalid(message))
 }
 
+/// The fields a subreddit's post requirements make necessary, as the fields a sharing button
+/// maps: the flair when it is required, the text when the post must have a body.
+fn post_requirements(v: &Value) -> Vec<OptionItem> {
+    let mut out = Vec::new();
+    if v.get("is_flair_required").and_then(Value::as_bool) == Some(true) {
+        out.push(OptionItem::new("flair_id", t("Flair")));
+    }
+    if v.get("body_restriction_policy").and_then(Value::as_str) == Some("required") {
+        out.push(OptionItem::new("text", t("Text")));
+    }
+    out
+}
+
 impl Connector for RedditConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         Describe {
             fields: vec![
-                f("subreddit", msg!("Subreddit"), msg!("Where to post, for example rust"), Some("subscribed")),
+                f("subreddit", msg!("Subreddit"), msg!("Where to post, for example rust"), Some("subscribed")).required(None),
                 f("title", msg!("Title"), msg!("Defaults to the window title"), None),
                 f("text", msg!("Text"), msg!("The post body. Defaults to the prompt text"), None),
                 f("url", msg!("Link"), msg!("Makes it a link post instead of an image"), None),
@@ -277,6 +285,16 @@ impl Connector for RedditConnector {
                         ))
                     })
                     .collect())
+            }
+            // what the subreddit's moderators require of a post (`required:rust`): a flair, a text
+            "required" => {
+                let sub = clean_subreddit(param.unwrap_or("")).map_err(invalid)?;
+                let v = self.get_json(
+                    ctx,
+                    &format!("/api/v1/{sub}/post_requirements"),
+                    msg!("read what the subreddit requires"),
+                )?;
+                Ok(post_requirements(&v))
             }
             other => Err(invalid(tf(
                 "Reddit has no list called \"{other}\"",

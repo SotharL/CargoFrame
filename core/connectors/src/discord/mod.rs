@@ -632,25 +632,29 @@ fn link_to(guild: Option<&str>, channel: &str, message: Option<&str>) -> String 
 
 impl Connector for DiscordConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         let hooks = self.webhooks();
+        let channel = f(
+            "channel",
+            msg!("Channel"),
+            if hooks {
+                msg!("One of the channels you added a webhook for")
+            } else {
+                msg!(
+                    "A text channel, or a forum to start a post in. The bot must be able to see it"
+                )
+            },
+            Some("channels"),
+        );
+        // one webhook is where every post goes; otherwise a channel, or a thread link that says it
+        let channel = if hooks && self.settings.hooks.len() == 1 {
+            channel
+        } else {
+            channel.required(Some("thread"))
+        };
         Describe {
             fields: vec![
-                f(
-                    "channel",
-                    msg!("Channel"),
-                    if hooks {
-                        msg!("One of the channels you added a webhook for")
-                    } else {
-                        msg!("A text channel, or a forum to start a post in. The bot must be able to see it")
-                    },
-                    Some("channels"),
-                ),
+                channel,
                 f(
                     "thread",
                     msg!("Thread or forum post"),

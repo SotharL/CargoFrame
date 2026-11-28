@@ -522,15 +522,11 @@ pub fn compose(payload: &Payload, with_image: bool, subject: bool) -> Composed {
 
 impl Connector for TeamsConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         Describe {
             fields: vec![
-                f("target", msg!("Chat or channel"), msg!("Where to post. You must be a member of it"), Some("targets")),
+                // a thread link says its channel
+                f("target", msg!("Chat or channel"), msg!("Where to post. You must be a member of it"), Some("targets")).required(Some("thread")),
                 f("thread", msg!("Reply in a channel thread"), msg!("A message link (Copy link in Teams) in a channel. Empty: a new message"), None),
                 f("message", msg!("Message"), msg!("Defaults to the prompt text, then the window title"), None),
                 f("title", msg!("Headline"), msg!("Empty: none. The headline of a new channel post, or a bold first line in a chat or a reply"), None),
