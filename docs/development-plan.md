@@ -427,7 +427,7 @@ paths are solid.
 | Build | Details |
 |-------|---------|
 | Builds per company | One Cargo feature per service; `CF_SERVICES=jira,teams` builds a program without the others' code, forms, templates or guides |
-| Other programs | `cargoframe open --trigger <id> --set <block>=<text>` fills a layout that accepts it, through the single-instance channel (no network port) |
+| Other programs | `cargoframe open --trigger <id> --set <block>=<text> --file <path>` fills a layout that accepts it, through the single-instance channel (no network port) |
 | Networks | The system's certificates and proxy |
 | Languages | French, Spanish, Italian, German packs for both codebases, with a glossary; the computer's language by default |
 
@@ -574,8 +574,9 @@ when read and migrated with a backup. Secrets only in the credential store, keye
   and `memoryApi.ts` for tests and demos (loaded only outside the app). `shipped_config_tests` fails if a command is
   not registered, not listed, or not granted.
 - The window's settings types and defaults come from Rust (`ui/src/lib/generated/`, written by `cargo test`).
-- `cargoframe open --trigger <id> --set <block>=<text>` (at most 50 values of 20,000 characters; counts logged, never
-  content; only layouts with *Other programs can fill this*).
+- `cargoframe open --trigger <id> --set <block>=<text> --file <full path>` (at most 50 values of 20,000 characters and
+  20 files; counts logged, never content; only layouts with *Other programs can fill this*; a layout that records is
+  filled when the recording stops).
 - Build features: one per service in `core/connectors` and `app` (`jira google reddit claude slack discord teams
   custom x bluesky instagram github`); `scripts\windows\build.cmd` reads `CF_SERVICES`.
 
@@ -717,9 +718,7 @@ The repository is set up so an agent can work safely; [AGENTS.md](../AGENTS.md) 
 |------|-----|
 | Managed settings folder and `policy.json` | Set up thousands of computers at once, with locked items |
 | Company sign-in: Jira OAuth, OAuth 2.0 for the custom API | No personal tokens in large companies |
-| Required fields for services beyond Jira | The same "named before sending" everywhere |
 | Video for X, Bluesky, Instagram; Teams files through OneDrive | Recordings everywhere |
-| `cargoframe open` for files and recording layouts | Other programs hand over more than text |
 | The remaining types generated from Rust | No copy of a Rust type by hand |
 | `commands.rs`, `video.rs`, `share.rs` split by topic | Files under 1,000 lines |
 | A sidebar folded to its icons | More room on a small screen |

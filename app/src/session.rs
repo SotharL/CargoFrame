@@ -700,6 +700,75 @@ pub fn apply_incoming(view: &mut SessionView, values: &[(String, String)]) {
     }
 }
 
+/// What another program sent with `cargoframe open`: values for blocks, and files to add.
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
+pub struct Incoming {
+    pub values: Vec<(String, String)>,
+    pub files: Vec<PathBuf>,
+}
+
+impl Incoming {
+    pub fn is_empty(&self) -> bool {
+        self.values.is_empty() && self.files.is_empty()
+    }
+
+    /// Add what a later `open` sent: its value for a block wins, its files are added.
+    pub fn merge(&mut self, later: Incoming) {
+        for (block, value) in later.values {
+            self.values.retain(|(b, _)| *b != block);
+            self.values.push((block, value));
+        }
+        for f in later.files {
+            if !self.files.contains(&f) {
+                self.files.push(f);
+            }
+        }
+    }
+}
+
+/// Put what another program sent into the capture: the values into its blocks, the files into
+/// the layout's first Files block (copied into the capture and ticked, as with ＋). Only a
+/// layout marked *Other programs can fill this* takes them; what cannot be used is said in a
+/// note in the window.
+pub fn apply(session: &mut Session, workspace: &Workspace, incoming: &Incoming) {
+    if incoming.is_empty() {
+        return;
+    }
+    let Some(layout) = session.view.layout.clone() else {
+        return;
+    };
+    if !layout.accepts_input {
+        session.view.notes.push(
+            t("Another program sent values, but this layout does not accept them: turn on \"Other programs can fill this\" in the layout").into(),
+        );
+        return;
+    }
+    apply_incoming(&mut session.view, &incoming.values);
+    if incoming.files.is_empty() {
+        return;
+    }
+    let Some(block) = layout
+        .blocks
+        .iter()
+        .find(|b| matches!(b.kind, cargoframe_layout::BlockKind::Files(_)))
+        .map(|b| b.id.clone())
+    else {
+        session.view.notes.push(
+            t("Another program sent files, but this layout has no Files block to add them to")
+                .into(),
+        );
+        return;
+    };
+    let problems: Vec<String> = incoming
+        .files
+        .iter()
+        .filter_map(|f| session.add_own_file(workspace, &block, f).err())
+        .collect();
+    if !problems.is_empty() {
+        session.view.notes.push(problems.join("; "));
+    }
+}
+
 /// Does a press of this trigger record a video? Its layout decides: a layout with a Video block
 /// records (a press starts, the next one stops), any other takes a screenshot. A trigger with no
 /// layout, or one that cannot be read, takes a screenshot.

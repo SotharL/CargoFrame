@@ -438,11 +438,11 @@ fn show(app: &AppHandle, state: &AppState, s: session::Session) {
 /// Take a capture for `trigger_id` and open the CargoFrame window. Safe to call from any
 /// thread; does nothing while paused or while another capture is running.
 pub fn run(app: &AppHandle, trigger_id: String) {
-    run_with(app, trigger_id, Vec::new());
+    run_with(app, trigger_id, session::Incoming::default());
 }
 
 /// The same, with values another program sent for the window's blocks (`cargoframe open`).
-pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String)>) {
+pub fn run_with(app: &AppHandle, trigger_id: String, incoming: session::Incoming) {
     let Some(state) = app.try_state::<AppState>() else {
         return;
     };
@@ -458,12 +458,9 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
         .flatten()
         .is_some_and(|t| session::records(&state.store, &t));
     if makes_video {
-        if !values.is_empty() {
-            notify::problem(
-                app,
-                "CargoFrame",
-                t("A layout that records cannot take values from another program yet; it records as usual."),
-            );
+        // what another program sent waits for the recording to stop (this press, or a later one)
+        if !incoming.is_empty() {
+            state.keep_incoming(&trigger_id, incoming);
         }
         press_video(app, trigger_id);
         return;
@@ -490,7 +487,7 @@ pub fn run_with(app: &AppHandle, trigger_id: String, values: Vec<(String, String
         match result {
             Ok(Ok(mut s)) => {
                 crate::debug::attach(&state.store, &state.workspace, &mut s);
-                session::apply_incoming(&mut s.view, &values);
+                session::apply(&mut s, &state.workspace, &incoming);
                 state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
                 show(&app, &state, s);
             }
@@ -529,8 +526,13 @@ fn video_step(app: &AppHandle, trigger_id: &str) {
         state.recording.started_by_trigger(),
         state.recording.is_continuous(),
     ) {
-        Step::Refuse(why) => notify::problem(app, "CargoFrame", why),
+        Step::Refuse(why) => {
+            // no recording to fill: what another program sent for it goes too
+            drop(state.take_incoming(trigger_id));
+            notify::problem(app, "CargoFrame", why);
+        }
         Step::Report(why) => {
+            drop(state.take_incoming(trigger_id));
             // hand the failure over (this also clears it), so the next press starts again
             let _ = state.recording.stop();
             drop(state.take_watch());
@@ -674,7 +676,10 @@ fn stop_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
         .map(|s| with_watched(app, s, watched.as_ref(), span, layout.as_ref(), followed));
     state.end_capture();
     match made {
-        Ok(s) => {
+        Ok(mut s) => {
+            if let Some(incoming) = state.take_incoming(trigger_id) {
+                session::apply(&mut s, &state.workspace, &incoming);
+            }
             state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
             show(app, state, s);
         }
@@ -711,7 +716,10 @@ fn snapshot_recording(app: &AppHandle, state: &AppState, trigger_id: &str) {
         });
     state.end_capture();
     match made {
-        Ok(s) => {
+        Ok(mut s) => {
+            if let Some(incoming) = state.take_incoming(trigger_id) {
+                session::apply(&mut s, &state.workspace, &incoming);
+            }
             state.set_last_program(s.view.app.as_ref().and_then(|a| a.exe_path.clone()));
             show(app, state, s);
         }

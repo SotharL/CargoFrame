@@ -2,18 +2,22 @@
 //! layout:
 //!
 //! ```text
-//! cargoframe open --trigger bug --set summary="It crashed" --set build=1.4.2
+//! cargoframe open --trigger bug --set summary="It crashed" --set build=1.4.2 --file /tmp/crash.dmp
 //! ```
 //!
 //! runs the trigger `bug` in the copy that is already running (the single-instance channel
-//! carries it there: same user, no network port) and puts the values in the blocks with those
-//! ids. Only a layout with *Other programs can fill this* accepts them, and nothing is sent
-//! until the person presses a button.
+//! carries it there: same user, no network port), puts the values in the blocks with those
+//! ids and adds the files to the layout's first Files block (copied into the capture, ticked).
+//! Only a layout with *Other programs can fill this* accepts them, and nothing is sent until
+//! the person presses a button. A layout that records starts recording; what was sent waits
+//! until the recording stops (the shortcut again, or another `open` of the same trigger).
 
 use cargoframe_i18n::{t, tf};
 /// Most values one `open` can carry, and the longest one.
 pub const MAX_VALUES: usize = 50;
 pub const MAX_VALUE_CHARS: usize = 20_000;
+/// Most files one `open` can add.
+pub const MAX_FILES: usize = 20;
 
 /// What this launch was asked to do.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -31,6 +35,8 @@ pub struct Cli {
 pub struct OpenRequest {
     pub trigger: String,
     pub values: Vec<(String, String)>,
+    /// Files to add to the first Files block, by their full path.
+    pub files: Vec<std::path::PathBuf>,
 }
 
 // The values come from another program and may be anything: the log says how many, never what.
@@ -39,6 +45,7 @@ impl std::fmt::Debug for OpenRequest {
         f.debug_struct("OpenRequest")
             .field("trigger", &self.trigger)
             .field("values", &self.values.len())
+            .field("files", &self.files.len())
             .finish()
     }
 }
@@ -55,6 +62,7 @@ fn is_id(s: &str) -> bool {
 pub fn parse_open<S: AsRef<str>>(args: &[S]) -> Result<OpenRequest, String> {
     let mut trigger = None;
     let mut values: Vec<(String, String)> = Vec::new();
+    let mut files: Vec<std::path::PathBuf> = Vec::new();
     let mut i = 0;
     while i < args.len() {
         let arg = args[i].as_ref();
@@ -96,6 +104,22 @@ pub fn parse_open<S: AsRef<str>>(args: &[S]) -> Result<OpenRequest, String> {
                     ));
                 }
             }
+            "--file" => {
+                let path = std::path::PathBuf::from(next()?);
+                // the running copy may have another working folder: only a full path is clear
+                if !path.is_absolute() {
+                    return Err(t("--file needs the full path of the file").into());
+                }
+                if !files.contains(&path) {
+                    files.push(path);
+                }
+                if files.len() > MAX_FILES {
+                    return Err(tf(
+                        "At most {MAX_FILES} files can be sent at once",
+                        &[("MAX_FILES", &MAX_FILES)],
+                    ));
+                }
+            }
             other => return Err(tf("Unknown option for open: {other}", &[("other", &other)])),
         }
         i += 1;
@@ -107,7 +131,11 @@ pub fn parse_open<S: AsRef<str>>(args: &[S]) -> Result<OpenRequest, String> {
             &[("trigger", &trigger)],
         ));
     }
-    Ok(OpenRequest { trigger, values })
+    Ok(OpenRequest {
+        trigger,
+        values,
+        files,
+    })
 }
 
 impl Cli {
@@ -257,6 +285,43 @@ mod tests {
         assert!(err(&["--trigger"]).contains("needs a value"));
         let long = format!("x={}", "y".repeat(MAX_VALUE_CHARS + 1));
         assert!(err(&["--trigger", "t", "--set", &long]).contains("longer than"));
+        assert!(err(&["--trigger", "t", "--file", "crash.dmp"]).contains("full path"));
+        let many: Vec<String> = (0..=MAX_FILES).map(|n| full(&format!("f{n}"))).collect();
+        let mut args = vec!["--trigger".to_string(), "t".to_string()];
+        for f in &many {
+            args.extend(["--file".to_string(), f.clone()]);
+        }
+        assert!(parse_open(&args).unwrap_err().contains("files"));
+    }
+
+    /// A full path on this system.
+    fn full(name: &str) -> String {
+        std::env::temp_dir().join(name).display().to_string()
+    }
+
+    #[test]
+    fn open_reads_files_by_their_full_path_once_each() {
+        let dump = full("crash.dmp");
+        let log = full("game.log");
+        let open = parse_open(&[
+            "--trigger",
+            "bug",
+            "--file",
+            &dump,
+            &format!("--file={log}"),
+            "--file",
+            &dump,
+        ])
+        .unwrap();
+        assert_eq!(
+            open.files,
+            vec![
+                std::path::PathBuf::from(&dump),
+                std::path::PathBuf::from(&log)
+            ]
+        );
+        // the log says how many, never which
+        assert!(!format!("{open:?}").contains("crash"));
     }
 
     #[test]

@@ -93,8 +93,10 @@ _Reviewed 2026-10-23, on the code merged to `main` in pull request #1. This is a
 - **`cargoframe open`** (other programs fill a layout): it travels through the single-instance channel of the
   running copy, so only programs of the same user on the same computer can reach it, and no port is opened. A layout
   must be switched to *Other programs can fill this*; otherwise the values are left out and the window says so. Values
-  go into text boxes and dropdowns only, at most 50 of 20,000 characters, and are never sent by themselves: the person
-  sees them in the window and presses the button. The log says how many values came, never what they were.
+  go into text boxes, dropdowns and tags only, at most 50 of 20,000 characters, and are never sent by themselves: the
+  person sees them in the window and presses the button. Files (0.8.0, `--file`, at most 20, full paths only) are
+  copied into the capture like a file added with ＋ and shown ticked, so the person sees each one before it goes. The
+  log says how many values and files came, never what they were or where.
 - **X**: OAuth with PKCE and no client secret (a public client), the person's own app; the refresh token (which X
   renews at each use) is kept in the credential store. **Bluesky**: an app password (never the account password) in
   the credential store, a new session for each share. **Instagram**: the access token and the picture server's key in

@@ -100,17 +100,23 @@ flowchart LR
 ### 3.1 Open CargoFrame from your tool, with values filled in
 
 ```sh
-cargoframe open --trigger bug --set summary="Crash in level 3" --set build=1.4.2 --set seed=88123
+cargoframe open --trigger bug --set summary="Crash in level 3" --set build=1.4.2 --set seed=88123 \
+                --file /home/me/game/crash.dmp --file /home/me/game/save.json
 ```
 
 - `--trigger` is a shortcut's id (`triggers/<id>.json`); its layout must have **Other programs can fill this** on
-  (`accepts_input: true`); `--set <block>=<text>` fills a text or dropdown block by its id.
+  (`accepts_input: true`); `--set <block>=<text>` fills a text, dropdown or tags block by its id.
+- `--file <full path>` adds a file to the layout's first Files block: copied into the capture at once and ticked,
+  as the window's **＋** does. A path that is not full is refused (the running copy has its own working folder).
+- A layout that **records** starts recording; what was sent waits until the recording stops (the shortcut again,
+  or a second `open` of the same trigger, whose values and files are added) and then fills the window.
 - It reaches the copy already running through the single-instance channel: same user only, no network port. At
-  most 50 values of 20,000 characters; the log records counts, never content.
+  most 50 values of 20,000 characters and 20 files; the log records counts, never content or paths.
 - Nothing is sent until the person presses a button: your tool proposes, the person decides.
 - Typical callers: a game's crash handler, an editor's "report a bug" menu, a test runner after a failure.
 
-Code: `app/src/cli.rs` (parsing, limits), `app/src/session.rs` (the values applied), `app/src/lib.rs`
+Code: `app/src/cli.rs` (parsing, limits), `app/src/session.rs` (`Incoming`, `apply`), `app/src/triggers.rs`
+(`run_with`; a recording keeps it in `AppState::keep_incoming` until it stops), `app/src/lib.rs`
 (`open_from_another_program`).
 
 ### 3.2 Let CargoFrame read your tool's context
