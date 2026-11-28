@@ -96,3 +96,15 @@ describe('System', () => {
     await waitFor(() => expect(screen.getByText(/^Refreshed at /)).toBeTruthy(), { timeout: 3000 });
   });
 });
+
+describe('System under an organisation policy', () => {
+  it('locks the update check and debug mode the policy decides', async () => {
+    setApiForTests(memoryApi({ policy: { services: [], check_updates: true, debug_mode: false, own_connections: null } }));
+    render(About);
+    const updates = (await screen.findByRole('switch', { name: 'Look for a newer version once a day' })) as HTMLInputElement;
+    expect(updates.disabled).toBe(true);
+    const debug = screen.getByRole('switch', { name: 'Describe CargoFrame in a capture of its own windows' }) as HTMLInputElement;
+    expect(debug.disabled).toBe(true);
+    expect(screen.getAllByText('Set by your organisation')).toHaveLength(2);
+  });
+});

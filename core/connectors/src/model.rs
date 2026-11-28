@@ -94,6 +94,24 @@ impl Settings {
 }
 
 impl Kind {
+    /// The kind as settings files write it (`jira`, `custom`), which a policy names too.
+    pub fn key(self) -> &'static str {
+        match self {
+            Kind::Jira => "jira",
+            Kind::Google => "google",
+            Kind::Reddit => "reddit",
+            Kind::Claude => "claude",
+            Kind::Slack => "slack",
+            Kind::Discord => "discord",
+            Kind::Teams => "teams",
+            Kind::Custom => "custom",
+            Kind::X => "x",
+            Kind::Bluesky => "bluesky",
+            Kind::Instagram => "instagram",
+            Kind::Github => "github",
+        }
+    }
+
     pub fn label(self) -> &'static str {
         match self {
             Kind::Jira => "Jira",

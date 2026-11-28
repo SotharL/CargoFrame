@@ -227,3 +227,22 @@ describe('Connections page', () => {
   });
 });
 
+
+describe('Connections the organisation provides', () => {
+  it('hides adding new ones when the policy says so, and locks theirs', async () => {
+    const org = memoryApi({ managed: ['company'], policy: { services: [], check_updates: null, debug_mode: null, own_connections: false } });
+    await org.saveItem('connection', 'company', {
+      name: 'Company Jira', kind: 'jira', enabled: true,
+      settings: { base_url: 'https://acme.atlassian.net', email: '', auth: 'api_token', default_project: '', client_id: '', redirect_port: 53683 },
+    } as never);
+    setApiForTests(org);
+    render(Connections);
+    await screen.findByText('Company Jira');
+    expect(screen.getByText(/Your organisation provides the connections/)).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /^Delete$/ })).toBeNull();
+    await fireEvent.click(screen.getByRole('button', { name: 'Your token' }));
+    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect(screen.getByLabelText('Jira address').matches(':disabled')).toBe(true);
+    expect(screen.getAllByLabelText(/API token/).some((e) => !e.matches(':disabled'))).toBe(true);
+  });
+});

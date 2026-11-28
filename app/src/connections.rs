@@ -122,9 +122,11 @@ pub struct ConnectionView {
     pub kind: Kind,
     pub kind_label: &'static str,
     pub enabled: bool,
-    /// `connected`, `disconnected`, `expired`, `disabled`, or `not_in_build` (a service this
-    /// build of CargoFrame leaves out).
+    /// `connected`, `disconnected`, `expired`, `disabled`, `not_in_build` (a service this
+    /// build of CargoFrame leaves out) or `not_allowed` (one the organisation's policy leaves out).
     pub state: &'static str,
+    /// Set by the organisation (its managed folder): it cannot be changed or removed here.
+    pub managed: bool,
     /// Which of the secrets the person types are stored (never their values).
     pub secrets: Vec<SecretFlag>,
     pub describe: Describe,
@@ -172,7 +174,22 @@ impl Connections {
         self.cache.lock().unwrap_or_else(|e| e.into_inner())
     }
 
+    /// A connection that may be used: one the organisation's policy leaves out is refused, so
+    /// nothing is ever sent to it (signing in, testing, lists, shares all start here).
     pub fn load(&self, store: &Store, id: &str) -> Result<Connection, String> {
+        let c = self.load_saved(store, id)?;
+        let kind = c.settings.kind();
+        if !store.policy().allows_service(kind.key()) {
+            return Err(tf(
+                "Your organisation does not allow {kind} in CargoFrame",
+                &[("kind", &kind.label())],
+            ));
+        }
+        Ok(c)
+    }
+
+    /// A connection as saved, allowed or not (to remove it and its secrets).
+    pub fn load_saved(&self, store: &Store, id: &str) -> Result<Connection, String> {
         if !cargoframe_config::valid_id(id) {
             return Err(t("That is not a connection").into());
         }
@@ -265,10 +282,17 @@ impl Connections {
 
     /// What the layout checks and the window need to know about a connection.
     pub fn info(&self, store: &Store, id: &str) -> Option<ConnectionInfo> {
-        let connection = self.load(store, id).ok()?;
+        let connection = self.load_saved(store, id).ok()?;
+        let kind = connection.settings.kind();
+        // a service the organisation leaves out is never signed in: its buttons save a zip here
+        let state = if store.policy().allows_service(kind.key()) {
+            self.status_of(id, &connection)
+        } else {
+            ConnectionState::Disconnected
+        };
         Some(ConnectionInfo {
-            kind: layout_kind(connection.settings.kind()),
-            state: self.status_of(id, &connection),
+            kind: layout_kind(kind),
+            state,
             capabilities: capabilities_of(&connection),
         })
     }
@@ -306,6 +330,7 @@ impl Connections {
                 }
             }
         };
+        let policy = store.policy();
         let items = loaded
             .items
             .iter()
@@ -334,11 +359,14 @@ impl Connections {
                     kind,
                     kind_label: kind.label(),
                     enabled: c.enabled,
-                    state: if conn::available(kind) {
-                        state_name(self.status_of(id, c), c.enabled)
-                    } else {
+                    state: if !conn::available(kind) {
                         "not_in_build"
+                    } else if !policy.allows_service(kind.key()) {
+                        "not_allowed"
+                    } else {
+                        state_name(self.status_of(id, c), c.enabled)
                     },
+                    managed: store.is_managed(ConfigKind::Connections, id),
                     secrets,
                     describe,
                     capabilities: capabilities_of(c),
@@ -652,6 +680,36 @@ pub mod tests {
             .set_secret(&f.store, "jira", "token", "")
             .unwrap();
         assert!(f.secrets.keys().is_empty());
+    }
+
+    #[test]
+    fn a_service_the_organisation_leaves_out_is_never_used() {
+        let dir = tempfile::tempdir().unwrap();
+        let managed = dir.path().join("managed");
+        std::fs::create_dir_all(&managed).unwrap();
+        std::fs::write(
+            managed.join("policy.json"),
+            r#"{"schema_version":1,"services":["jira"]}"#,
+        )
+        .unwrap();
+        let store = Store::new(Dirs::under(dir.path()).with_managed(&managed));
+        let connections =
+            Connections::new(Arc::new(UreqHttp::new()), Arc::new(MemorySecrets::new()));
+        save(&store, "slack", json!({"name": "Slack", "kind": "slack"}));
+        // no token can even be kept for it
+        assert!(connections
+            .set_secret(&store, "slack", "token", "xoxb-1")
+            .is_err());
+        // refused before anything could be sent, its buttons save a zip, the list says why
+        let e = connections.load(&store, "slack").unwrap_err();
+        assert!(e.contains("does not allow Slack"), "{e}");
+        assert_eq!(
+            connections.info(&store, "slack").unwrap().state,
+            ConnectionState::Disconnected
+        );
+        let view = connections.view(&store);
+        assert_eq!(view.items[0].state, "not_allowed");
+        assert!(!view.items[0].managed);
     }
 
     #[test]

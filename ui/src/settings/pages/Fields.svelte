@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Managed from '../../lib/components/Managed.svelte';
   import { t } from '../../lib/i18n/index.svelte';
   import Tr from '../../lib/i18n/Tr.svelte';
   // Layouts → Fill fields: a field of a service (Jira's Labels, Priority, a custom field) and
@@ -148,7 +149,7 @@
     </div>
   {/if}
 
-  {#each fills.items as { id, item } (id)}
+  {#each fills.items as { id, item, managed } (id)}
     <article class="card">
       <div class="main">
         <h2>{nameOf(item.connection_id)} → {fieldLabel(item)}</h2>
@@ -158,12 +159,16 @@
         <p class="quiet use">{where(item)}{item.required ? ' · required' : ''}</p>
       </div>
       <div class="actions">
-        <button onclick={() => edit(id, item)}>{t('Edit')}</button>
-        {#if confirming === id}
-          <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
-          <button onclick={() => (confirming = null)}>{t('Keep')}</button>
+        {#if managed}
+          <Managed />
         {:else}
-          <button onclick={() => (confirming = id)}>{t('Delete')}</button>
+          <button onclick={() => edit(id, item)}>{t('Edit')}</button>
+          {#if confirming === id}
+            <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
+            <button onclick={() => (confirming = null)}>{t('Keep')}</button>
+          {:else}
+            <button onclick={() => (confirming = id)}>{t('Delete')}</button>
+          {/if}
         {/if}
       </div>
     </article>

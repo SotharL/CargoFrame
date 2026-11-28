@@ -716,7 +716,6 @@ The repository is set up so an agent can work safely; [AGENTS.md](../AGENTS.md) 
 
 | Item | Why |
 |------|-----|
-| Managed settings folder and `policy.json` | Set up thousands of computers at once, with locked items |
 | Jira Cloud sign-in through one app published by the project (with a small service that keeps its secret) | Atlassian asks tools not to collect API tokens or make each customer register an app |
 | The remaining types generated from Rust | No copy of a Rust type by hand |
 | `commands.rs`, `video.rs`, `share.rs` split by topic | Files under 1,000 lines |

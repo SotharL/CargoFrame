@@ -23,6 +23,9 @@ pub enum ConfigError {
     },
     #[error("{0}")]
     Invalid(String),
+    /// The item comes from the organisation's managed folder, which CargoFrame never writes.
+    #[error("\"{0}\" is set by your organisation and cannot be changed or removed here")]
+    Managed(String),
 }
 
 impl ConfigError {

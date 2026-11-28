@@ -5,6 +5,11 @@ people who use it; why each change was made is in [decisions.md](decisions.md).
 
 ## Next
 
+- Set up every computer at once: an administrator puts layouts, shortcuts, connections and data rules in a read-only
+  folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`, or `CARGOFRAME_MANAGED`). They win over a
+  person's own, show *Set by your organisation* and cannot be edited or deleted (a layout can be saved as a copy).
+  A `policy.json` there decides the services allowed, the update check, debug mode and whether people may add their
+  own connections; tokens and sign-ins stay each person's own
 - Company sign-in: Jira Data Center through an incoming application link (OAuth 2.0 with PKCE; the administrator makes
   the link, people sign in in the browser with the company's sign-in), and the Custom API through your identity
   provider (OAuth 2.0 in the browser, or client credentials for a service account)

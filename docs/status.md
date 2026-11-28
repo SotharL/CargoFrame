@@ -41,7 +41,8 @@ services other than Jira, GitHub and Discord only against mocks of their documen
 |------|-----------------|
 | Linux desktops | A real GNOME, KDE and Hyprland session (trays, the portal's dialogs, KDE's shortcut dialog, `wtype`); the Secret Service credential store (an in-memory stand-in in tests) |
 | Services | Real accounts for Google, Reddit, Teams (each needs an app registered by the person), Slack (a bot token), X, Bluesky, Instagram, Claude's composer with a pasted picture; Discord threads and bot lists. New in 0.8.0 and tried against the services' documented APIs only: videos to X, Bluesky and Instagram, Teams files in a channel and a chat, Reddit's post requirements |
-| Jira | A ticket sent from CargoFrame with the required-fields check on; Jira Server and Data Center |
+| Jira | A ticket sent from CargoFrame with the required-fields check on; Jira Server and Data Center, and its OAuth sign-in through an application link |
+| Company setup | A managed folder put in place by Intune or Group Policy on a real PC (tested with temporary folders and `CARGOFRAME_MANAGED`); the Custom API's OAuth with a real identity provider |
 | Windows | *Check this PC* on a real PC; sound of one program; several screens and 150% scaling while recording; the winget install of ffmpeg; *Stop the older copy* (administrator) |
 | Performance | The budgets on a reference machine (cold windows were slightly over budget on a virtual screen) |
 | Releases | A signing certificate (`scripts/windows/sign.ps1`, `new-signing-material.ps1` never run with one) |

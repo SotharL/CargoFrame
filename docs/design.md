@@ -503,7 +503,7 @@ Meant for companies of thousands of people.
 | Install and update centrally | Silent per-user install (`/S`, `/NOSTARTUP`); the update check can be off | Built |
 | The company's network | The system certificate store and proxy setting | Built |
 | The company's sign-in | OAuth with the company's identity provider: Teams with Entra; Jira Data Center through an incoming application link (OAuth 2.0 with PKCE, `WRITE`); the Custom API with OAuth 2.0 in the browser (PKCE) or client credentials (a service account). Jira Cloud stays on API tokens: Atlassian asks tools not to make each customer register an OAuth app ([decisions](decisions.md)) | Built (Jira Cloud: see decisions) |
-| Set up for everyone | A read-only managed folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`) with the same JSON files plus `policy.json`; managed items show a lock | Planned |
+| Set up for everyone | A read-only managed folder (`%ProgramData%\CargoFrame\managed`, `/etc/cargoframe/managed`, or `CARGOFRAME_MANAGED`) with the same JSON files plus `policy.json` (the services allowed, the update check, debug mode, whether people add their own connections). Managed items win over the person's own, show *Set by your organisation* and cannot be edited or deleted; tokens stay each person's own. [Recipe](customizing.md#10-set-up-every-computer-at-once) | Built |
 | Accessible without thinking | Labels on every control, full keyboard use, visible focus, reduced motion, checked contrast, one obvious button per screen | Built; screen-reader pass open |
 
 ---

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Managed from '../../lib/components/Managed.svelte';
   import { t } from '../../lib/i18n/index.svelte';
   import Tr from '../../lib/i18n/Tr.svelte';
   // The files Data parsing looks for in a capture's project folder: whether each is added to the
@@ -59,7 +60,7 @@
 </script>
 
 <div class="files">
-  {#each files as { id, item } (id)}
+  {#each files as { id, item, managed } (id)}
     {@const values = valuesOf(id, item)}
     {#if draft && draft.id === id}
       {@render editor()}
@@ -76,12 +77,16 @@
           {/if}
         </div>
         <div class="actions">
-          <button type="button" onclick={() => edit(id, item)}>{t('Edit')}</button>
-          {#if confirming === id}
-            <button type="button" class="danger" onclick={async () => { await onremove(id); confirming = null; }}>{t('Delete for good')}</button>
-            <button type="button" onclick={() => (confirming = null)}>{t('Keep')}</button>
+          {#if managed}
+            <Managed />
           {:else}
-            <button type="button" onclick={() => (confirming = id)}>{t('Delete')}</button>
+            <button type="button" onclick={() => edit(id, item)}>{t('Edit')}</button>
+            {#if confirming === id}
+              <button type="button" class="danger" onclick={async () => { await onremove(id); confirming = null; }}>{t('Delete for good')}</button>
+              <button type="button" onclick={() => (confirming = null)}>{t('Keep')}</button>
+            {:else}
+              <button type="button" onclick={() => (confirming = id)}>{t('Delete')}</button>
+            {/if}
           {/if}
         </div>
       </article>

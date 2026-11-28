@@ -17,6 +17,8 @@ import type { Video } from './generated/Video';
 import type { VideoCapture } from './generated/VideoCapture';
 import type { VideoEncoder } from './generated/VideoEncoder';
 import type { MemoryMode } from './generated/MemoryMode';
+import type { Policy } from './generated/Policy';
+export type { Policy };
 /** Debug mode's setup: the GitHub connections, and what is made already (app/src/debug.rs). */
 export interface DebugSetup {
   /** [id, name] of each GitHub connection. */
@@ -126,8 +128,10 @@ export interface AppInfo {
   data_dir: string;
   /** False when a Linux desktop has no tray host (for example GNOME without the extension). */
   tray_available: boolean;
-  /** The services this build has; a company build can leave some out. */
+  /** The services this build has, less those the organisation's policy leaves out. */
   connectors: ServiceKind[];
+  /** What the organisation decided for everyone (`policy.json` in its managed folder). */
+  policy?: Policy;
 }
 
 // ----- layouts (mirror core/layout) -----
@@ -539,6 +543,8 @@ export interface ImportReport {
 export interface ItemEntry<T> {
   id: string;
   item: T;
+  /** Set by the organisation (its managed folder): shown with a lock, never changed here. */
+  managed?: boolean;
 }
 
 export interface ItemList<T> {
@@ -795,7 +801,7 @@ export interface VariableInfo {
 export type ServiceKind =
   | 'jira' | 'google' | 'reddit' | 'claude' | 'slack' | 'discord' | 'teams' | 'custom' | 'x' | 'bluesky' | 'instagram' | 'github';
 /** `not_in_build`: a service this copy of CargoFrame was built without. */
-export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled' | 'not_in_build';
+export type ConnectionState = 'connected' | 'disconnected' | 'expired' | 'disabled' | 'not_in_build' | 'not_allowed';
 
 export interface Pair {
   name: string;
@@ -953,6 +959,8 @@ export interface ConnectionView {
   kind_label: string;
   enabled: boolean;
   state: ConnectionState;
+  /** Set by the organisation: its settings cannot be changed here (its sign-in is still the person's). */
+  managed?: boolean;
   /** Which of the secrets the person types are stored (never their values). */
   secrets: { name: string; stored: boolean }[];
   describe: Describe;

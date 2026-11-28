@@ -91,3 +91,17 @@ describe('Triggers on a Wayland desktop', () => {
     expect(screen.getByText('cf open --trigger chat')).toBeTruthy();
   });
 });
+
+describe('Triggers the organisation set', () => {
+  it('shows them locked: no switch, no Edit or Delete', async () => {
+    const managed = memoryApi({ managed: ['org'] });
+    await managed.saveItem('trigger', 'org', trigger({ name: 'Company report', shortcut: 'F8' }));
+    await managed.saveItem('trigger', 'mine', trigger({ name: 'My own', shortcut: 'F7' }));
+    setApiForTests(managed);
+    render(Triggers);
+    await screen.findByText('Company report');
+    expect(screen.getByText('Set by your organisation')).toBeTruthy();
+    expect(screen.getAllByRole('button', { name: 'Edit' })).toHaveLength(1);
+    expect(screen.getAllByRole('switch', { name: 'On' })).toHaveLength(1);
+  });
+});

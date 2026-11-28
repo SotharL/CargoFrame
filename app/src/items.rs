@@ -36,6 +36,8 @@ impl ItemKind {
 pub struct ItemEntry {
     pub id: String,
     pub item: Value,
+    /// Set by the organisation (its managed folder): shown with a lock, never changed here.
+    pub managed: bool,
 }
 
 #[derive(Debug, Serialize, Default, PartialEq)]
@@ -47,6 +49,7 @@ pub struct ItemList {
 
 fn to_entries<T: serde::Serialize>(
     loaded: cargoframe_config::Loaded<T>,
+    managed: impl Fn(&str) -> bool,
     fix: impl Fn(&str, &mut Value),
 ) -> ItemList {
     let mut out = ItemList::default();
@@ -54,7 +57,12 @@ fn to_entries<T: serde::Serialize>(
         match serde_json::to_value(&item) {
             Ok(mut v) => {
                 fix(&id, &mut v);
-                out.items.push(ItemEntry { id, item: v });
+                let managed = managed(&id);
+                out.items.push(ItemEntry {
+                    id,
+                    item: v,
+                    managed,
+                });
             }
             Err(e) => out.problems.push(format!("{id}: {e}")),
         }
@@ -66,23 +74,32 @@ fn to_entries<T: serde::Serialize>(
 
 pub fn list(store: &Store, kind: ItemKind) -> Result<ItemList, String> {
     let e = |e: cargoframe_config::ConfigError| e.to_string();
+    let m = |id: &str| store.is_managed(kind.kind(), id);
     Ok(match kind {
         ItemKind::Trigger => to_entries(
             store.load_all::<Trigger>(Kind::Triggers).map_err(e)?,
+            m,
             |_, _| {},
         ),
-        ItemKind::Rule => to_entries(store.load_all::<Rule>(Kind::Rules).map_err(e)?, |_, _| {}),
+        ItemKind::Rule => to_entries(
+            store.load_all::<Rule>(Kind::Rules).map_err(e)?,
+            m,
+            |_, _| {},
+        ),
         ItemKind::InfoType => to_entries(
             store.load_all::<InfoType>(Kind::InfoTypes).map_err(e)?,
+            m,
             |_, _| {},
         ),
         ItemKind::Connection => to_entries(
             store.load_all::<Connection>(Kind::Connections).map_err(e)?,
+            m,
             |_, _| {},
         ),
         // A layout's id is its file name, whatever the file says.
         ItemKind::Layout => to_entries(
             store.load_all::<Layout>(Kind::Layouts).map_err(e)?,
+            m,
             |id, v| {
                 if let Some(o) = v.as_object_mut() {
                     o.insert("id".into(), Value::String(id.to_string()));
@@ -160,9 +177,45 @@ pub fn validate(kind: ItemKind, id: &str, item: &Value) -> Result<(), String> {
 }
 
 /// Validate `item` for `kind` and write it as `id`.
+/// What the organisation keeps people from changing: its own items, a connection to a service
+/// its policy leaves out, and a new connection when people may not add their own.
+fn refused_by_organisation(
+    store: &Store,
+    kind: ItemKind,
+    id: &str,
+    checked: &Checked,
+) -> Option<String> {
+    if store.is_managed(kind.kind(), id) {
+        return Some(
+            t("This is set by your organisation, so it cannot be changed or removed here").into(),
+        );
+    }
+    let Checked::Connection(c) = checked else {
+        return None;
+    };
+    let policy = store.policy();
+    let service = c.settings.kind();
+    if !policy.allows_service(service.key()) {
+        return Some(tf(
+            "Your organisation does not allow {kind} in CargoFrame",
+            &[("kind", &service.label())],
+        ));
+    }
+    let exists = store
+        .list_ids(Kind::Connections)
+        .is_ok_and(|ids| ids.iter().any(|i| i == id));
+    (!exists && !policy.allows_own_connections()).then(|| {
+        t("Your organisation provides the connections: new ones cannot be added").to_string()
+    })
+}
+
 pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), String> {
     let e = |e: cargoframe_config::ConfigError| e.to_string();
-    match check_item(kind, id, item)? {
+    let checked = check_item(kind, id, item)?;
+    if let Some(why) = refused_by_organisation(store, kind, id, &checked) {
+        return Err(why);
+    }
+    match checked {
         Checked::Trigger(t) => store.save_item(Kind::Triggers, id, &t).map_err(e),
         Checked::Layout(l) => store.save_item(Kind::Layouts, id, &l).map_err(e),
         Checked::Rule(r) => store.save_item(Kind::Rules, id, &r).map_err(e),
@@ -187,6 +240,11 @@ pub fn save(store: &Store, kind: ItemKind, id: &str, item: Value) -> Result<(), 
 }
 
 pub fn delete(store: &Store, kind: ItemKind, id: &str) -> Result<(), String> {
+    if store.is_managed(kind.kind(), id) {
+        return Err(
+            t("This is set by your organisation, so it cannot be changed or removed here").into(),
+        );
+    }
     store
         .delete_item(kind.kind(), id)
         .map(|_| ())
@@ -418,5 +476,73 @@ mod tests {
         assert_eq!(new_id(&s, ItemKind::Trigger, "ÄÖ").unwrap(), "trigger");
         let long = "x".repeat(200);
         assert!(new_id(&s, ItemKind::Rule, &long).unwrap().len() <= 48);
+    }
+
+    /// A person's settings beside an organisation's managed folder holding `files`.
+    fn managed(files: &[(&str, &str)]) -> (tempfile::TempDir, Store) {
+        let d = tempfile::tempdir().unwrap();
+        let m = d.path().join("managed");
+        for (path, text) in files {
+            let p = m.join(path);
+            std::fs::create_dir_all(p.parent().unwrap()).unwrap();
+            std::fs::write(p, text).unwrap();
+        }
+        let s = Store::new(Dirs::under(d.path()).with_managed(&m));
+        (d, s)
+    }
+
+    #[test]
+    fn the_organisations_items_are_listed_locked_and_cannot_be_changed() {
+        let (_d, s) = managed(&[(
+            "triggers/company-bug.json",
+            r#"{"schema_version":1,"name":"Company bug","shortcut":"Ctrl+Alt+B","capture":"active_window"}"#,
+        )]);
+        save(
+            &s,
+            ItemKind::Trigger,
+            "mine",
+            json!({"name": "Mine", "capture": "display"}),
+        )
+        .unwrap();
+        let list = list(&s, ItemKind::Trigger).unwrap();
+        let flags: Vec<(&str, bool)> = list
+            .items
+            .iter()
+            .map(|e| (e.id.as_str(), e.managed))
+            .collect();
+        assert_eq!(flags, vec![("company-bug", true), ("mine", false)]);
+        let e = save(
+            &s,
+            ItemKind::Trigger,
+            "company-bug",
+            json!({"name": "Mine now", "capture": "display"}),
+        )
+        .unwrap_err();
+        assert!(e.contains("organisation"), "{e}");
+        assert!(delete(&s, ItemKind::Trigger, "company-bug")
+            .unwrap_err()
+            .contains("organisation"));
+        assert!(delete(&s, ItemKind::Trigger, "mine").is_ok());
+    }
+
+    #[test]
+    fn the_policy_decides_which_services_and_whether_people_add_connections() {
+        let (_d, s) = managed(&[
+            (
+                "policy.json",
+                r#"{"schema_version":1,"services":["jira","custom"],"own_connections":false}"#,
+            ),
+            (
+                "connections/company-jira.json",
+                r#"{"schema_version":1,"name":"Company Jira","kind":"jira","site_url":"https://jira.acme.com","auth":"pat"}"#,
+            ),
+        ]);
+        let slack = json!({"name": "Slack", "kind": "slack"});
+        let e = save(&s, ItemKind::Connection, "slack", slack).unwrap_err();
+        assert!(e.contains("does not allow"), "{e}");
+        let jira = json!({"name": "My Jira", "kind": "jira", "site_url": "https://jira.acme.com", "auth": "pat"});
+        let e = save(&s, ItemKind::Connection, "my-jira", jira).unwrap_err();
+        assert!(e.contains("cannot be added"), "{e}");
+        assert!(list(&s, ItemKind::Connection).unwrap().items[0].managed);
     }
 }

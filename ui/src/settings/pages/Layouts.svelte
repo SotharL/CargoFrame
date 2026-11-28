@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Managed from '../../lib/components/Managed.svelte';
   import { t } from '../../lib/i18n/index.svelte';
   import { onMount, untrack } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
@@ -35,6 +36,8 @@
   let fromTemplate = $state<{ name: string } | null>(null);
 
   const dirty = $derived(draft !== null && JSON.stringify(tidy($state.snapshot(draft))) !== saved);
+  /** The layout open is the organisation's (its managed folder): saved only as a copy. */
+  const managedLayout = $derived(!!currentId && layouts.items.some((l) => l.id === currentId && l.managed));
   const usedBy = $derived(currentId ? triggers.items.filter((t) => t.item.layout_id === currentId) : []);
   const block = $derived(draft?.blocks.find((b) => b.id === selected) ?? null);
   const groups = $derived(offersFor(templates, connections));
@@ -308,15 +311,22 @@
           <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy}>{t('Save as my layout')}</button>
           <button onclick={discardTemplate}>{t('Discard')}</button>
         {:else}
-          {#if dirty}<Chip kind="warn" label={t('Unsaved changes')} />{/if}
-          <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy || !dirty}>{t('Save')}</button>
-          <button onclick={saveAsCopy} disabled={busy}>{t('Save as copy')}</button>
-          <button onclick={revert} disabled={!dirty}>{t('Revert')}</button>
-          {#if confirmingDelete}
-            <button class="danger" onclick={remove}>{t('Delete for good')}</button>
-            <button onclick={() => (confirmingDelete = false)}>{t('Keep')}</button>
+          {#if managedLayout}
+            <!-- the organisation's layout: a copy of it is the person's own to change -->
+            <Managed />
+            <button onclick={saveAsCopy} disabled={busy}>{t('Save as copy')}</button>
+            <button onclick={revert} disabled={!dirty}>{t('Revert')}</button>
           {:else}
-            <button onclick={() => (confirmingDelete = true)}>{t('Delete')}</button>
+            {#if dirty}<Chip kind="warn" label={t('Unsaved changes')} />{/if}
+            <button class="primary" data-tour="layouts.save" onclick={save} disabled={busy || !dirty}>{t('Save')}</button>
+            <button onclick={saveAsCopy} disabled={busy}>{t('Save as copy')}</button>
+            <button onclick={revert} disabled={!dirty}>{t('Revert')}</button>
+            {#if confirmingDelete}
+              <button class="danger" onclick={remove}>{t('Delete for good')}</button>
+              <button onclick={() => (confirmingDelete = false)}>{t('Keep')}</button>
+            {:else}
+              <button onclick={() => (confirmingDelete = true)}>{t('Delete')}</button>
+            {/if}
           {/if}
         {/if}
       </div>
