@@ -384,7 +384,7 @@ whatever is put in it would go nowhere.
 | Let your own tools fill a layout | Turn on *Other programs can fill this* in the layout, then `cargoframe open --trigger bug --set summary="It crashed" --file /path/to/crash.dmp`. A layout that records starts recording and is filled when it stops. Nothing is sent until the person presses a button. More ways to plug it into your tools, add a company sign-in or hide values: [customizing](docs/customizing.md) |
 | Your network | Trusts the certificates your computers trust; uses the system proxy |
 | Your sign-in | Teams with Microsoft Entra; Jira Data Center through an incoming application link (OAuth 2.0); your own API through your identity provider (OAuth 2.0 in the browser, or client credentials for a service account). Each person's tokens stay in their own password store |
-| Central settings for everyone | Planned: a read-only managed folder. See [the design](docs/design.md#5-for-companies) |
+| Central settings for everyone | A read-only managed folder with the organisation's layouts, shortcuts and connections, and a `policy.json` (allowed services, update check, debug mode). See [the recipe](docs/customizing.md#10-set-up-every-computer-at-once) |
 
 ---
 

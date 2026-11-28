@@ -1867,3 +1867,20 @@ value chosen from one left as it was.
   with a small service that holds its secret and exchanges the codes: that is a decision for the project's owner
   (an Atlassian developer account, the service to run, the Marketplace listing), so Jira Cloud keeps API tokens
   until then. The same notice concerns API tokens: it is in the backlog.
+
+## Settings set by the organisation (28 Nov 2026)
+
+- **A read-only folder, not the registry or Group Policy templates.** The same JSON files as a person's settings, in
+  `%ProgramData%\CargoFrame\managed` or `/etc/cargoframe/managed`, work on both systems and with every deployment
+  tool (Intune, Group Policy file copy, a package, a login script). An ADMX template can come later on top of it.
+- **The organisation's item wins, by id.** Merging field by field would make it hard to say what a person sees; a
+  whole item either is the organisation's (read-only, with a chip) or the person's. A layout can be saved as a copy,
+  so nobody is stuck.
+- **Tokens are never in the folder.** A managed connection holds the address and the choices; each person signs in
+  or enters their own token, kept in their own password store. A shared token in a world-readable folder would be
+  everyone's.
+- **A small policy.** Only what an organisation has asked for: the services allowed (on top of the build's own
+  choice), the update check, debug mode (it attaches settings and logs), and whether people may add connections. A
+  policy that cannot be read decides nothing: a typo must not stop the program on thousands of computers.
+- **`CARGOFRAME_HOME` reads no system folder.** Tests and portable copies stay inside their own folder; with it, only
+  `CARGOFRAME_MANAGED` names a managed folder.

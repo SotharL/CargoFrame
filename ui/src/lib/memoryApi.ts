@@ -6,7 +6,7 @@ import type {
   ChatView, Cleaned, Connection, ConnectionView, DebugSetup, DebugView, Describe, DropdownOption, FieldSpec, General,
   ImportPreview, ItemEntry, ItemKind, Layout, LayoutTemplate, LookFolder, Rule, Safe, FfmpegPhase, Reach,
   ShareRequest, ShareResult, UpdateLast, UpdateView, VariableInfo, Video, SetupReport, SetupItem, SetupInstall,
-  ServiceKind, TextReading, FileEntry, LogText, PcCheckStep,
+  ServiceKind, TextReading, FileEntry, LogText, PcCheckStep, Policy,
 } from './types';
 import type { Api } from './ipc';
 import { LANGUAGES, resolve as resolveLanguage } from './i18n/index.svelte';
@@ -33,6 +33,10 @@ export interface MemoryOptions {
   noFfmpeg?: boolean;
   /** The services the stand-in build has (all of them by default). */
   connectors?: ServiceKind[];
+  /** What the stand-in organisation decided (its policy.json). */
+  policy?: Policy;
+  /** Items the organisation set (its managed folder), by id: read-only. */
+  managed?: string[];
   /** The stand-in's test recording fails. */
   recordingFails?: boolean;
   /** The stand-in is a Windows PC (it can record one program's sound, and has no "Stereo Mix"). */
@@ -401,6 +405,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
       data_dir: '~/.local/share/CargoFrame',
       connectors: opts.connectors ?? ['jira', 'google', 'reddit', 'claude', 'slack', 'discord', 'teams', 'x', 'bluesky', 'instagram', 'github', 'custom'],
       tray_available: true,
+      ...(opts.policy ? { policy: opts.policy } : {}),
     }),
     getGeneral: async () => ({ ...general }),
     getLanguage: async () => {
@@ -493,7 +498,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     listItems: async <T,>(kind: ItemKind) => ({
       items: [...store[kind].entries()]
         .sort(([a], [b]) => a.localeCompare(b))
-        .map(([id, item]) => ({ id, item: plain(item) as T }) as ItemEntry<T>),
+        .map(([id, item]) => ({ id, item: plain(item) as T, ...(opts.managed?.includes(id) ? { managed: true } : {}) }) as ItemEntry<T>),
       problems: [],
     }),
     saveItem: async (kind, id, item) => {
@@ -622,6 +627,7 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
           secrets: TYPED[c.kind]!.map((name) => ({ name, stored: secretsSet.has(`${id}/${name}`) })),
           describe: describeFor(c),
           capabilities: demoCapabilities(c.kind),
+          ...(opts.managed?.includes(id) ? { managed: true } : {}),
         } satisfies ConnectionView;
       }),
       problems: [],

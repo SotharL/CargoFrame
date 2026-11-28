@@ -26,6 +26,7 @@ const STATE_DETAIL: Record<ConnectionView['state'], string> = translated({
   expired: 'sign-in expired',
   disabled: msg('turned off'),
   not_in_build: msg('not in this copy of CargoFrame'),
+  not_allowed: msg('not allowed by your organisation'),
 }, 'all');
 
 /**

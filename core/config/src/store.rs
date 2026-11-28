@@ -21,6 +21,13 @@ pub trait Document: Serialize + DeserializeOwned {
         let _ = from;
         Ok(value)
     }
+
+    /// The document as the organisation's policy leaves it (`general.json`: updates forced on
+    /// or off, debug mode off). The default changes nothing.
+    fn under(self, policy: &crate::Policy) -> Self {
+        let _ = policy;
+        self
+    }
 }
 
 /// The folders that hold one file per item.
@@ -98,9 +105,24 @@ impl Store {
 
     // ----- singleton documents (general.json, safe.json) -----
 
-    /// The document, or its default when the file does not exist yet.
+    /// The document, or its default when the file does not exist yet, as the organisation's
+    /// policy leaves it.
     pub fn load_or_default<T: Document + Default>(&self) -> Result<T, ConfigError> {
-        Ok(read_doc::<T>(&self.singleton_path::<T>())?.unwrap_or_default())
+        let doc = read_doc::<T>(&self.singleton_path::<T>())?.unwrap_or_default();
+        Ok(doc.under(&self.policy()))
+    }
+
+    /// The organisation's `policy.json`, or no policy: a file that is missing or cannot be read
+    /// decides nothing (and never stops CargoFrame from starting).
+    pub fn policy(&self) -> crate::Policy {
+        self.dirs
+            .managed()
+            .and_then(|m| {
+                read_doc_readonly::<crate::Policy>(&m.join("policy.json"))
+                    .ok()
+                    .flatten()
+            })
+            .unwrap_or_default()
     }
 
     pub fn save<T: Document>(&self, doc: &T) -> Result<(), ConfigError> {
@@ -113,16 +135,31 @@ impl Store {
 
     // ----- one file per item -----
 
+    /// An item: the organisation's when it has one with this id, else the person's own.
     pub fn load_item<T: Document>(&self, kind: Kind, id: &str) -> Result<Option<T>, ConfigError> {
-        read_doc(&self.item_path(kind, id)?)
+        match self.managed_path(kind, id)? {
+            Some(path) => read_doc_readonly(&path),
+            None => read_doc(&self.item_path(kind, id)?),
+        }
+    }
+
+    /// Is this item the organisation's (read from its managed folder, never written)?
+    pub fn is_managed(&self, kind: Kind, id: &str) -> bool {
+        matches!(self.managed_path(kind, id), Ok(Some(_)))
     }
 
     pub fn save_item<T: Document>(&self, kind: Kind, id: &str, doc: &T) -> Result<(), ConfigError> {
+        if self.is_managed(kind, id) {
+            return Err(ConfigError::Managed(id.to_string()));
+        }
         write_doc(&self.item_path(kind, id)?, doc)
     }
 
     /// True when a file was removed.
     pub fn delete_item(&self, kind: Kind, id: &str) -> Result<bool, ConfigError> {
+        if self.is_managed(kind, id) {
+            return Err(ConfigError::Managed(id.to_string()));
+        }
         let path = self.item_path(kind, id)?;
         match fs::remove_file(&path) {
             Ok(()) => Ok(true),
@@ -144,25 +181,29 @@ impl Store {
         Ok(out)
     }
 
-    /// Ids of the items of a kind, sorted. Files that are not `<valid id>.json` are ignored.
+    /// Ids of the items of a kind, the organisation's and the person's, sorted and each once.
+    /// Files that are not `<valid id>.json` are ignored.
     pub fn list_ids(&self, kind: Kind) -> Result<Vec<String>, ConfigError> {
-        let dir = self.dirs.config().join(kind.dir_name());
-        let entries = match fs::read_dir(&dir) {
-            Ok(e) => e,
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
-            Err(e) => return Err(ConfigError::io(dir, e)),
-        };
-        let mut ids: Vec<String> = entries
-            .filter_map(Result::ok)
-            .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
-            .filter_map(|e| {
-                let name = e.file_name().into_string().ok()?;
-                let id = name.strip_suffix(".json")?;
-                valid_id(id).then(|| id.to_string())
-            })
-            .collect();
+        let mut ids = ids_in(&self.dirs.config().join(kind.dir_name()))?;
+        if let Some(m) = self.dirs.managed() {
+            // an organisation's folder that cannot be read hides nothing of the person's own
+            ids.extend(ids_in(&m.join(kind.dir_name())).unwrap_or_default());
+        }
         ids.sort();
+        ids.dedup();
         Ok(ids)
+    }
+
+    /// The organisation's file for an item, when it has one.
+    fn managed_path(&self, kind: Kind, id: &str) -> Result<Option<PathBuf>, ConfigError> {
+        if !valid_id(id) {
+            return Err(ConfigError::InvalidId(id.to_string()));
+        }
+        Ok(self
+            .dirs
+            .managed()
+            .map(|m| m.join(kind.dir_name()).join(format!("{id}.json")))
+            .filter(|p| p.is_file()))
     }
 
     fn item_path(&self, kind: Kind, id: &str) -> Result<PathBuf, ConfigError> {
@@ -175,6 +216,59 @@ impl Store {
             .join(kind.dir_name())
             .join(format!("{id}.json")))
     }
+}
+
+/// The `<valid id>.json` files of a folder, as ids. A folder that is not there holds none.
+fn ids_in(dir: &Path) -> Result<Vec<String>, ConfigError> {
+    let entries = match fs::read_dir(dir) {
+        Ok(e) => e,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+        Err(e) => return Err(ConfigError::io(dir, e)),
+    };
+    Ok(entries
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().map(|t| t.is_file()).unwrap_or(false))
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            let id = name.strip_suffix(".json")?;
+            valid_id(id).then(|| id.to_string())
+        })
+        .collect())
+}
+
+/// Read and parse a file CargoFrame must not write (the organisation's): an older schema is
+/// migrated in memory only, with no backup and no write back.
+fn read_doc_readonly<T: Document>(path: &Path) -> Result<Option<T>, ConfigError> {
+    let text = match fs::read_to_string(path) {
+        Ok(t) => t,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(e) => return Err(ConfigError::io(path, e)),
+    };
+    let mut value: Value = serde_json::from_str(&text).map_err(|e| ConfigError::Parse {
+        path: path.to_path_buf(),
+        message: e.to_string(),
+    })?;
+    let found = value
+        .get("schema_version")
+        .and_then(Value::as_u64)
+        .and_then(|v| u32::try_from(v).ok())
+        .unwrap_or(1);
+    if found > T::SCHEMA {
+        return Err(ConfigError::Newer {
+            path: path.to_path_buf(),
+            found,
+            supported: T::SCHEMA,
+        });
+    }
+    for from in found..T::SCHEMA {
+        value = T::migrate(from, value)?;
+    }
+    serde_json::from_value(value)
+        .map(Some)
+        .map_err(|e| ConfigError::Parse {
+            path: path.to_path_buf(),
+            message: e.to_string(),
+        })
 }
 
 /// Read, migrate if needed, and parse. `None` when the file does not exist.
@@ -571,6 +665,107 @@ mod tests {
         assert_eq!(d.data(), Path::new("/r/data"));
         assert_eq!(d.kept_zips(), Path::new("/r/data/kept"));
         assert_eq!(d.logs(), Path::new("/r/data/logs"));
+    }
+
+    /// A person's settings and an organisation's managed folder beside them.
+    fn managed_store() -> (tempfile::TempDir, Store, PathBuf) {
+        let dir = tempfile::tempdir().unwrap();
+        let managed = dir.path().join("managed");
+        let s = Store::new(Dirs::under(dir.path()).with_managed(&managed));
+        (dir, s, managed)
+    }
+
+    fn put(path: &Path, text: &str) {
+        fs::create_dir_all(path.parent().unwrap()).unwrap();
+        fs::write(path, text).unwrap();
+    }
+
+    #[test]
+    fn the_organisations_items_are_listed_with_the_persons_and_win_on_the_same_id() {
+        let (_d, s, managed) = managed_store();
+        let w = |name: &str| Widget {
+            schema_version: 2,
+            name: name.into(),
+        };
+        s.save_item(Kind::Layouts, "mine", &w("Mine")).unwrap();
+        s.save_item(Kind::Layouts, "bug", &w("My bug")).unwrap();
+        put(
+            &managed.join("layouts/bug.json"),
+            r#"{"schema_version":2,"name":"Company bug"}"#,
+        );
+        put(
+            &managed.join("layouts/report.json"),
+            r#"{"schema_version":2,"name":"Company report"}"#,
+        );
+        put(&managed.join("layouts/Not An Id.json"), "{}");
+        assert_eq!(
+            s.list_ids(Kind::Layouts).unwrap(),
+            ["bug", "mine", "report"]
+        );
+        assert_eq!(
+            s.load_item::<Widget>(Kind::Layouts, "bug")
+                .unwrap()
+                .unwrap()
+                .name,
+            "Company bug"
+        );
+        assert!(s.is_managed(Kind::Layouts, "bug") && s.is_managed(Kind::Layouts, "report"));
+        assert!(!s.is_managed(Kind::Layouts, "mine"));
+        // never changed or removed from here, and the person's own file is left as it was
+        assert!(matches!(
+            s.save_item(Kind::Layouts, "report", &w("x")),
+            Err(ConfigError::Managed(_))
+        ));
+        assert!(matches!(
+            s.delete_item(Kind::Layouts, "bug"),
+            Err(ConfigError::Managed(_))
+        ));
+        assert!(managed.join("layouts/report.json").exists());
+        assert!(s.save_item(Kind::Layouts, "mine", &w("Mine 2")).is_ok());
+    }
+
+    #[test]
+    fn an_older_managed_file_is_read_without_writing_anything() {
+        let (_d, s, managed) = managed_store();
+        let path = managed.join("layouts/old.json");
+        put(&path, r#"{"schema_version":1,"name":"Old"}"#);
+        let before = fs::read_to_string(&path).unwrap();
+        let w = s
+            .load_item::<Widget>(Kind::Layouts, "old")
+            .unwrap()
+            .unwrap();
+        assert_eq!(w.name, "Old");
+        assert_eq!(fs::read_to_string(&path).unwrap(), before);
+        assert!(!managed.join("layouts/old.json.bak-v1").exists());
+    }
+
+    #[test]
+    fn the_policy_decides_updates_and_debug_mode_whatever_was_saved() {
+        let (_d, s, managed) = managed_store();
+        s.save(&General {
+            check_updates: true,
+            debug: true,
+            ..General::default()
+        })
+        .unwrap();
+        assert!(s.policy().is_empty());
+        put(
+            &managed.join("policy.json"),
+            r#"{"schema_version":1,"check_updates":false,"debug_mode":false}"#,
+        );
+        let g = s.load_or_default::<General>().unwrap();
+        assert!(!g.check_updates && !g.debug);
+        // a policy that cannot be read decides nothing
+        put(&managed.join("policy.json"), "{ not json");
+        assert!(s.policy().is_empty());
+        assert!(s.load_or_default::<General>().unwrap().check_updates);
+    }
+
+    #[test]
+    fn without_a_managed_folder_nothing_changes() {
+        let (_d, s) = store();
+        assert!(s.policy().is_empty());
+        assert!(!s.is_managed(Kind::Layouts, "bug"));
     }
 }
 

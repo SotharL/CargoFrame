@@ -18,6 +18,7 @@ Before any change, read [AGENTS.md](../AGENTS.md) (the rules) and §5 of the [de
 | Change what is sent to a service | [7. Change what a service receives](#7-change-what-a-service-receives) |
 | Add a language | [8. Add a language](#8-add-a-language) |
 | Publish my own copy under another name | [9. Rename a fork](#9-rename-a-fork) |
+| Set up every computer of an organisation, with locked items | [10. Set up every computer at once](#10-set-up-every-computer-at-once) |
 
 ---
 
@@ -240,7 +241,7 @@ to take its own name and icon. Change:
 | What | Where |
 |------|-------|
 | Product name, identifier | `app/tauri.conf.json` (`productName`, `identifier`, `copyright`) |
-| Settings and data folders | `APP_DIR` in `core/config/src/paths.rs` |
+| Settings and data folders | `APP_DIR` in `core/config/src/paths.rs` (and `system_managed` for the managed folder) |
 | Credential store entries | `SERVICE` in `app/src/secrets.rs` |
 | Sign-in entry | `NAME` in `app/src/autostart.rs` |
 | Where updates come from | `REPOSITORY` in `app/src/updates.rs` |
@@ -249,3 +250,48 @@ to take its own name and icon. Change:
 | Texts that say "CargoFrame" | Search and replace in the code, then the packs (`check.mjs`) |
 
 Keep the credit (the copyright notice and [NOTICE](../NOTICE)).
+
+---
+
+## 10. Set up every computer at once
+
+An administrator puts the organisation's settings in one read-only folder, with Intune, Group Policy, a login
+script or a package. CargoFrame reads it at start and never writes to it.
+
+| System | Folder |
+|--------|--------|
+| Windows | `%ProgramData%\CargoFrame\managed` |
+| Linux | `/etc/cargoframe/managed` |
+| Anywhere | the folder named by `CARGOFRAME_MANAGED` (with `CARGOFRAME_HOME` set, only this one is read) |
+
+It holds the same files as a person's settings folder (`layouts/`, `triggers/`, `connections/`, `rules/`,
+`infotypes/`; export them from Settings → Your data, or copy them from a set-up computer), plus `policy.json`:
+
+```json
+{ "schema_version": 1,
+  "services": ["jira", "teams", "custom"],
+  "check_updates": false,
+  "debug_mode": false,
+  "own_connections": false }
+```
+
+- **Items.** A file in the managed folder wins over the person's file with the same id, shows *Set by your
+  organisation* and cannot be edited or deleted; *Save as copy* still makes a layout of their own. A managed
+  connection keeps its settings, but each person signs in or enters their own token (kept in their own password
+  store: never put a token in these files).
+- **`services`**: the only services people may use (keys as in `connections/*.json`: `jira`, `teams`, `slack`,
+  `custom`…). Others are hidden from *Add a connection*, and a saved connection to one says *Not allowed by your
+  organisation* and cannot send. Empty or absent: every service in this copy. To take the code out as well, build
+  without it ([1. Remove a service](#1-remove-a-service)).
+- **`check_updates`**: `true` or `false` decides the update check for everyone; absent, each person chooses.
+- **`debug_mode`**: `false` keeps debug mode off (it attaches settings and logs to bug reports).
+- **`own_connections`**: `false` means people use the organisation's connections only.
+- Every rule is optional. A `policy.json` that cannot be read decides nothing and never stops CargoFrame from
+  starting; a managed item that cannot be read is listed as a problem, like any other.
+
+Check: put the folder in place, set `CARGOFRAME_MANAGED` to it and start CargoFrame; the managed items show the
+chip, and the policy's switches are greyed out under System.
+
+Code: `core/config/src/paths.rs` (`Dirs::managed`), `core/config/src/policy.rs`, `core/config/src/store.rs`
+(`load_item`, `is_managed`, `list_ids`, `Document::under`), `app/src/items.rs` (`refused_by_organisation`),
+`app/src/connections.rs` (`load`, the `not_allowed` state), `ui/src/lib/components/Managed.svelte`.

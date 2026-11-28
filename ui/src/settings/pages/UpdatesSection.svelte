@@ -3,6 +3,7 @@
   import Tr from '../../lib/i18n/Tr.svelte';
   import { onDestroy, onMount } from 'svelte';
   import Section from '../../lib/components/Section.svelte';
+  import Managed from '../../lib/components/Managed.svelte';
   import Toggle from '../../lib/components/Toggle.svelte';
   import Chip from '../../lib/components/Chip.svelte';
   import SecretInput from '../connections/SecretInput.svelte';
@@ -13,10 +14,13 @@
   let {
     auto = $bindable(false),
     onauto,
+    locked = false,
   }: {
     /** The "check once a day" setting; saved by the page that owns General. */
     auto?: boolean;
     onauto?: (value: boolean) => void;
+    /** The organisation decides it (its policy.json): shown, not changeable. */
+    locked?: boolean;
   } = $props();
 
   let view = $state<UpdateView | null>(null);
@@ -181,7 +185,8 @@
 
     {#if error}<p class="error" role="alert">{error}</p>{/if}
 
-    <Toggle bind:checked={auto} label={t('Look for a newer version once a day')} onchange={onauto} />
+    <Toggle bind:checked={auto} label={t('Look for a newer version once a day')} onchange={onauto} disabled={locked} />
+    {#if locked}<Managed />{/if}
     <p class="quiet">
       {t('You get a notification when one is found. Nothing is downloaded or installed until you press the button above.')}
     </p>

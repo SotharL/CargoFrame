@@ -35,8 +35,11 @@ pub struct AppInfo {
     config_dir: String,
     data_dir: String,
     tray_available: bool,
-    /// The services this build has (a company build can leave some out).
+    /// The services this build has (a company build can leave some out), less those the
+    /// organisation's policy leaves out.
     connectors: Vec<cargoframe_connectors::Kind>,
+    /// What the organisation decided for everyone (empty when it decided nothing).
+    policy: cargoframe_config::Policy,
 }
 
 fn os_name() -> &'static str {
@@ -53,13 +56,18 @@ fn os_name() -> &'static str {
 
 #[tauri::command]
 pub fn app_info(state: State<'_, AppState>) -> AppInfo {
+    let policy = state.store.policy();
     AppInfo {
         version: env!("CARGO_PKG_VERSION"),
         os: os_name(),
         config_dir: state.store.dirs().config().display().to_string(),
         data_dir: state.store.dirs().data().display().to_string(),
         tray_available: state.tray_available,
-        connectors: cargoframe_connectors::available_kinds(),
+        connectors: cargoframe_connectors::available_kinds()
+            .into_iter()
+            .filter(|k| policy.allows_service(k.key()))
+            .collect(),
+        policy,
     }
 }
 
@@ -162,7 +170,8 @@ pub fn reset_everything(
         .list_ids(cargoframe_config::Kind::Connections)
         .unwrap_or_default()
     {
-        if let Ok(c) = state.connections.load(&state.store, &id) {
+        // one the organisation's policy leaves out too: its secrets go with it
+        if let Ok(c) = state.connections.load_saved(&state.store, &id) {
             state.connections.forget_secrets(&id, c.settings.kind());
         }
     }

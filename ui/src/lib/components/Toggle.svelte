@@ -3,13 +3,15 @@
     checked = $bindable(false),
     label,
     onchange,
-  }: { checked?: boolean; label: string; onchange?: (value: boolean) => void } = $props();
+    disabled = false,
+  }: { checked?: boolean; label: string; onchange?: (value: boolean) => void; disabled?: boolean } = $props();
 </script>
 
-<label class="toggle">
+<label class="toggle" class:off={disabled}>
   <input
     type="checkbox"
     role="switch"
+    {disabled}
     bind:checked
     onchange={() => onchange?.(checked)}
   />
@@ -21,6 +23,7 @@
   /* relative: the hidden input below is absolute, and without a positioned parent it escapes the
      scrolling page and gives the whole window a second scroll bar */
   .toggle { position: relative; display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+  .off { cursor: default; opacity: 0.6; }
   input { position: absolute; opacity: 0; width: 1px; height: 1px; }
   .track {
     position: relative; width: 36px; height: 20px; flex: none;

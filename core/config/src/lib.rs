@@ -19,6 +19,7 @@ pub mod error;
 pub mod infotype;
 pub mod models;
 pub mod paths;
+pub mod policy;
 pub mod shortcut;
 pub mod store;
 pub mod triggers;
@@ -32,4 +33,5 @@ pub use models::{
     SignCorner, Theme, Trigger, Video, VideoCapture, VideoEncoder, DEFAULT_ACCENT,
 };
 pub use paths::Dirs;
+pub use policy::Policy;
 pub use store::{valid_id, Document, Kind, Loaded, Store};

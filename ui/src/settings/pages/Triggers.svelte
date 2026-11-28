@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Managed from '../../lib/components/Managed.svelte';
   import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
@@ -112,7 +113,7 @@
     </div>
   {/if}
 
-  {#each triggers.items as { id, item } (id)}
+  {#each triggers.items as { id, item, managed } (id)}
     <article class="card" class:off={!item.enabled}>
       <div class="main">
         <div class="head">
@@ -145,13 +146,17 @@
         {/if}
       </div>
       <div class="actions">
-        <Toggle label={t('On')} checked={item.enabled} onchange={(v) => toggle(id, item, v)} />
-        <button onclick={() => edit(id, item)}>{t('Edit')}</button>
-        {#if confirming === id}
-          <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
-          <button onclick={() => (confirming = null)}>{t('Keep')}</button>
+        {#if managed}
+          <Managed />
         {:else}
-          <button onclick={() => (confirming = id)}>{t('Delete')}</button>
+          <Toggle label={t('On')} checked={item.enabled} onchange={(v) => toggle(id, item, v)} />
+          <button onclick={() => edit(id, item)}>{t('Edit')}</button>
+          {#if confirming === id}
+            <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
+            <button onclick={() => (confirming = null)}>{t('Keep')}</button>
+          {:else}
+            <button onclick={() => (confirming = id)}>{t('Delete')}</button>
+          {/if}
         {/if}
       </div>
     </article>

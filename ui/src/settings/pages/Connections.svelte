@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Managed from '../../lib/components/Managed.svelte';
   import { t } from '../../lib/i18n/index.svelte';
   import { onMount } from 'svelte';
   import Chip from '../../lib/components/Chip.svelte';
@@ -13,7 +14,11 @@
 
   const items = createItems<Connection>('connection');
   let view = $state<ConnectionsView | null>(null);
+  /** False when the organisation provides the connections and people cannot add their own. */
+  let ownAllowed = $state(true);
   let draft = $state<{ id: string | null; value: Connection } | null>(null);
+  /** The connection being edited is the organisation's: only the person's own token can be set. */
+  const draftManaged = $derived(!!draft?.id && items.items.some((e) => e.id === draft!.id && e.managed));
   let formError = $state('');
   let note = $state('');
   let busy = $state(false);
@@ -81,7 +86,9 @@
     }
   }
   onMount(async () => {
-    built = (await (await getApi()).appInfo().catch(() => null))?.connectors ?? null;
+    const info = await (await getApi()).appInfo().catch(() => null);
+    built = info?.connectors ?? null;
+    ownAllowed = info?.policy?.own_connections !== false;
     await refresh();
   });
 
@@ -97,6 +104,7 @@
       case 'expired': return { kind: 'err', label: t('Sign-in expired') };
       case 'disabled': return { kind: 'dbg', label: t('Turned off') };
       case 'not_in_build': return { kind: 'dbg', label: t('Not in this copy of CargoFrame') };
+      case 'not_allowed': return { kind: 'dbg', label: t('Not allowed by your organisation') };
       default: return { kind: 'warn', label: oauth(saved) ? t('Not signed in') : saved.kind === 'discord' && saved.mode === 'webhook' ? t('Needs a webhook link') : t('Needs its token') };
     }
   }
@@ -238,7 +246,7 @@
     </div>
   {/if}
 
-  {#each items.items as { id, item } (id)}
+  {#each items.items as { id, item, managed } (id)}
     {@const v = viewOf(id)}
     <article class="card" class:off={!item.enabled}>
       <div class="main">
@@ -270,12 +278,20 @@
             {/if}
           {/if}
         {/if}
-        <button onclick={() => edit(id, item)}>{t('Edit')}</button>
-        {#if confirming === id}
-          <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
-          <button onclick={() => (confirming = null)}>{t('Keep')}</button>
+        {#if managed}
+          <Managed />
+          {#if !oauth(item) && item.kind !== 'claude'}
+            <!-- its settings are the organisation's, the token is the person's own -->
+            <button onclick={() => edit(id, item)}>{t('Your token')}</button>
+          {/if}
         {:else}
-          <button onclick={() => (confirming = id)}>{t('Delete')}</button>
+          <button onclick={() => edit(id, item)}>{t('Edit')}</button>
+          {#if confirming === id}
+            <button class="danger" onclick={() => remove(id)}>{t('Delete for good')}</button>
+            <button onclick={() => (confirming = null)}>{t('Keep')}</button>
+          {:else}
+            <button onclick={() => (confirming = id)}>{t('Delete')}</button>
+          {/if}
         {/if}
       </div>
     </article>
@@ -285,7 +301,9 @@
     <section class="card"><ClaudeChats /></section>
   {/if}
 
-  {#if !draft}
+  {#if !draft && !ownAllowed}
+    <p class="quiet">{t('Your organisation provides the connections: new ones cannot be added here.')}</p>
+  {:else if !draft}
     <section class="adders" data-tour="conn.add" aria-label={t('Add a connection')}>
       <h2>{t('Add a connection')}</h2>
       <div class="kinds">
@@ -300,7 +318,12 @@
   {:else}
     <form class="editor" onsubmit={(e) => { e.preventDefault(); void save(); }}>
       <h2>{draft.id ? t('Edit connection') : t('New {service} connection', { service: KINDS.find((k) => k.kind === draft!.value.kind)?.label ?? '' })}</h2>
-      <ConnectionForm bind:value={draft.value} hooks={hookStore()} />
+      {#if draftManaged}
+        <Managed />
+        <fieldset class="locked" disabled><ConnectionForm bind:value={draft.value} hooks={hookStore()} /></fieldset>
+      {:else}
+        <ConnectionForm bind:value={draft.value} hooks={hookStore()} />
+      {/if}
       {#if draft.id}
         {@const v = viewOf(draft.id)}
         {#each v?.secrets ?? [] as s (s.name)}
@@ -327,7 +350,9 @@
       {#if note}<div role="status"><Chip kind="ok" label={note} /></div>{/if}
       {#if formError}<p class="error" role="alert">{formError}</p>{/if}
       <div class="buttons">
-        <button class="primary" type="submit" data-tour="conn.save" disabled={busy}>{t('Save')}</button>
+        {#if !draftManaged}
+          <button class="primary" type="submit" data-tour="conn.save" disabled={busy}>{t('Save')}</button>
+        {/if}
         <button type="button" data-tour="conn.done" onclick={() => (draft = null)}>{draft.id ? t('Done') : t('Cancel')}</button>
       </div>
     </form>
@@ -336,6 +361,7 @@
 
 <style>
   .page { display: grid; gap: 12px; }
+  .locked { border: 0; padding: 0; margin: 0; display: grid; gap: 12px; }
   .empty, .card, .editor, .adders {
     background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 16px;
   }

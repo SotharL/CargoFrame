@@ -125,6 +125,17 @@ impl Default for General {
 impl Document for General {
     const SCHEMA: u32 = 1;
     const NAME: &'static str = "general";
+
+    /// Updates as the organisation decided, and debug mode off when it forbids it.
+    fn under(mut self, policy: &crate::Policy) -> Self {
+        if let Some(on) = policy.check_updates {
+            self.check_updates = on;
+        }
+        if !policy.allows_debug_mode() {
+            self.debug = false;
+        }
+        self
+    }
 }
 
 /// `safe.json`: what happens when sharing fails.
