@@ -252,6 +252,7 @@ pub fn hashtag(tag: &str) -> Option<String> {
 }
 
 /// The tags as hashtags, one space apart (each once).
+#[cfg(any(feature = "x", feature = "bluesky", feature = "instagram"))]
 pub fn hashtags(tags: &[String]) -> String {
     let mut out: Vec<String> = Vec::new();
     for t in tags.iter().filter_map(|t| hashtag(t)) {
@@ -288,6 +289,7 @@ pub fn with_tags_line(body: Option<String>, payload: &Payload) -> Option<String>
 
 /// A post's text with its hashtags (the `hashtags` field) at the end, within `max` characters:
 /// the text is cut first, so the hashtags stay. Whether the text was cut is the second value.
+#[cfg(any(feature = "x", feature = "bluesky", feature = "instagram"))]
 pub fn with_hashtags(source: &str, payload: &Payload, max: usize) -> (String, bool) {
     let tags = hashtags(&payload.list("hashtags"));
     if tags.is_empty() {
@@ -427,6 +429,12 @@ mod tests {
             Some("It broke\n\n**Tags:** `crash` `gpu`")
         );
         assert_eq!(with_tags_line(None, &with(&[])), None);
+    }
+
+    #[cfg(any(feature = "x", feature = "bluesky", feature = "instagram"))]
+    #[test]
+    fn hashtags_go_at_the_end_of_a_post_cut_to_fit() {
+        let p = with(&[("hashtags", "bug report, ui")]);
         let (text, cut) = with_hashtags("x".repeat(300).as_str(), &p, 280);
         assert!(cut);
         assert!(text.ends_with("\n\n#bugReport #ui"), "{text}");

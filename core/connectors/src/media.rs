@@ -240,6 +240,54 @@ fn size_text(bytes: usize) -> String {
     }
 }
 
+/// The width and height of an MP4 recording, read from its track header (`tkhd`): the first
+/// track with a size is the video. `None` when the file says nothing a service could use.
+pub fn mp4_size(data: &[u8]) -> Option<(u32, u32)> {
+    let mut from = 0;
+    while let Some(at) = data[from..].windows(4).position(|w| w == b"tkhd") {
+        let at = from + at;
+        from = at + 4;
+        // the box's size is the four bytes before its type; width and height end it, in 16.16
+        let Some(start) = at.checked_sub(4) else {
+            continue;
+        };
+        let size = u32::from_be_bytes(data[start..at].try_into().ok()?) as usize;
+        let end = start.checked_add(size)?;
+        if size < 92 || end > data.len() {
+            continue;
+        }
+        let word = |o: usize| u32::from_be_bytes(data[o..o + 4].try_into().unwrap_or([0; 4])) >> 16;
+        let (w, h) = (word(end - 8), word(end - 4));
+        if w > 0 && h > 0 {
+            return Some((w, h));
+        }
+    }
+    None
+}
+
+#[cfg(test)]
+#[test]
+fn an_mp4_says_its_size_in_the_video_track_header() {
+    // a sound track's header (no size), then the video's: 92 bytes each, width and height last
+    let tkhd = |w: u32, h: u32| {
+        let mut b = 92u32.to_be_bytes().to_vec();
+        b.extend_from_slice(b"tkhd");
+        b.extend(std::iter::repeat_n(0u8, 92 - 16));
+        b.extend((w << 16).to_be_bytes());
+        b.extend((h << 16).to_be_bytes());
+        b
+    };
+    let mut file = b"....ftypisom....moov".to_vec();
+    file.extend(tkhd(0, 0));
+    file.extend(tkhd(1920, 1080));
+    assert_eq!(mp4_size(&file), Some((1920, 1080)));
+    assert_eq!(mp4_size(b"no boxes here"), None);
+    // a size that runs past the end is not trusted
+    let mut cut = tkhd(1280, 720);
+    cut.truncate(60);
+    assert_eq!(mp4_size(&cut), None);
+}
+
 /// The text with the formatting marks taken out (for services that show plain text only), and
 /// at most `max` characters long, cut at a word with "…" when it had to be cut.
 pub fn plain_text(text: &str, max: usize) -> (String, bool) {

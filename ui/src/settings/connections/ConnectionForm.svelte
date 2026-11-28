@@ -118,7 +118,7 @@
       <li>{t('On Overview, copy the Application (client) ID and paste it above.')}</li>
       <li>
         <Tr text={t('Under API permissions, Add a permission, Microsoft Graph, Delegated permissions: {permissions}.')}>
-          {#snippet permissions()}<span class="mono">Chat.ReadBasic, ChatMessage.Send, ChannelMessage.Send, Team.ReadBasic.All, Channel.ReadBasic.All, User.Read</span>{/snippet}
+          {#snippet permissions()}<span class="mono">Chat.ReadBasic, ChatMessage.Send, ChannelMessage.Send, Team.ReadBasic.All, Channel.ReadBasic.All, Files.ReadWrite.All, User.Read</span>{/snippet}
         </Tr>
       </li>
       <li>{t('Under Authentication, make sure “Allow public client flows” is Yes.')}</li>

@@ -213,3 +213,45 @@ fn test_says_who_is_signed_in() {
         .unwrap();
     assert_eq!(out, "Signed in to Instagram as @acme");
 }
+
+#[test]
+fn a_recording_is_hosted_as_an_mp4_and_published_as_a_reel() {
+    // a video takes longer: more looks than a picture is given
+    let server = instagram(8);
+    let clip = Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0, 0, 24, b'f', b't', b'y', b'p'],
+    };
+    let p = Payload {
+        image: Some(clip.clone()),
+        still: Some(picture()),
+        ..payload()
+    };
+    let out = signed_in()
+        .with("ig", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    assert_eq!(out.url.as_deref(), Some("https://www.instagram.com/p/ABC/"));
+    assert!(
+        out.notes.iter().any(|n| n.contains("reel")),
+        "{:?}",
+        out.notes
+    );
+    let put = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path().starts_with("/bucket/"))
+        .unwrap();
+    assert!(put.path().ends_with(".mp4"), "{}", put.path());
+    assert_eq!(put.header("content-type"), Some("video/mp4"));
+    assert_eq!(put.body, clip.data);
+    let draft = server.requests_to("/v23.0/1789/media")[0].json();
+    assert_eq!(draft["media_type"], "REELS");
+    assert!(draft["video_url"]
+        .as_str()
+        .unwrap()
+        .starts_with("https://cdn.example.com/shots/cargoframe-"));
+    assert!(draft["video_url"].as_str().unwrap().ends_with(".mp4"));
+    assert!(draft.get("image_url").is_none());
+    assert_eq!(server.requests_to("/v23.0/1789/media_publish").len(), 1);
+}

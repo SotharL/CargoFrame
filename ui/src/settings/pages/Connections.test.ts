@@ -66,7 +66,7 @@ describe('Connections page', () => {
     await fireEvent.click(await screen.findByRole('button', { name: /^Teams/ }));
     // The steps for registering the app are on the form, with what to give it.
     const steps = screen.getByText('How to register the app').closest('details')!;
-    for (const word of ['http://localhost', 'ChatMessage.Send', 'ChannelMessage.Send', 'Chat.ReadBasic', 'public client flows']) {
+    for (const word of ['http://localhost', 'ChatMessage.Send', 'ChannelMessage.Send', 'Chat.ReadBasic', 'Files.ReadWrite.All', 'public client flows']) {
       expect(steps.textContent).toContain(word);
     }
     // There is no token to paste: the person signs in with the browser.

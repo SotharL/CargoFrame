@@ -128,12 +128,12 @@ Jira's create screen for the issue type (below), Reddit's `post_requirements` fo
 | Google | OAuth with the person's own Desktop client | A Drive upload, optional Sheets row | ✓ |
 | Slack | Bot token (`xoxb-`) | A message with files, in a channel or thread | ✓ |
 | Discord | A webhook link per channel (a bot token as a last resort) | A message, a new forum post, a reply in a thread | ✓ |
-| Teams | OAuth through the person's own Entra app | A message | |
+| Teams | OAuth through the person's own Entra app | A message with the picture inside; the recording and the zip go in the channel's Files and are attached (in a chat: the person's OneDrive, linked) | ✓ |
 | Reddit | OAuth with the person's own app | A post with the picture | |
 | Claude | None: opens a chat and pastes | The picture, files and prompt, into the desktop app or the browser | |
-| X | OAuth (PKCE), the person's own Native App | Text (280 characters) and the screenshot, made smaller to fit | |
-| Bluesky | Handle and an app password | Text (300 characters), the screenshot, links marked | |
-| Instagram | Meta token; a picture server the person owns | A post with a caption; the picture is hosted first, because Instagram fetches from a web address | |
+| X | OAuth (PKCE), the person's own Native App | Text (280 characters) and the screenshot, made smaller to fit, or the recording as the post's video (chunked upload, then X's processing waited for) | ✓ |
+| Bluesky | Handle and an app password | Text (300 characters), the screenshot or the recording (through Bluesky's video service), links marked | ✓ |
+| Instagram | Meta token; a picture server the person owns | A post with a caption, or a reel of the recording; the picture or video is hosted first, because Instagram fetches from a web address | ✓ |
 | Custom API | Header or token | Any HTTPS endpoint, with the fields you define | |
 
 <details>
@@ -546,7 +546,8 @@ Sources: `assets/brand/` (SVG), `app/icons/` (drawn by `scripts/dev/render-icons
 - Wayland: GNOME tells no program which Wayland window is in focus (XWayland programs are found), and GNOME and KDE
   let no program press keys, so a Claude message is left on the clipboard. Verified on a headless sway desktop (also
   run as a GNOME-like desktop); real GNOME, KDE and Hyprland sessions are still to be tried.
-- X, Bluesky and Instagram take pictures and plain text, not video. Instagram needs a picture server the person owns.
+- X, Bluesky and Instagram take plain text and a screenshot or a recording, never both in one post: a recording goes as the video. Instagram needs a picture server the person owns, for reels too.
+- Teams files need the `Files.ReadWrite.All` permission: a connection signed in before 0.8.0 posts without them until it signs in again. In a chat, files go in the person's OneDrive with a link the organisation can open (or only the person, where the organisation forbids such links).
 - GitHub's API cannot attach a file to an issue: pictures and files go in a branch of the repository (or are left out),
   so the token needs Contents write as well as Issues.
 - Text colour is not offered: only Jira and Teams could show it.

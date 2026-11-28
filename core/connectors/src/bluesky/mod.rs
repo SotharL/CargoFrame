@@ -1,18 +1,21 @@
 //! Bluesky: a post with the screenshot. The person types their handle and an *app password*
 //! (Settings, Privacy and security, App passwords in Bluesky): no developer app to register.
 //!
-//! Each share signs in (`createSession`), uploads the picture (`uploadBlob`, shrunk to fit), and
-//! writes the post (`createRecord`). Links in the text are marked so Bluesky shows them as links.
-//! The post is never written twice: if an earlier attempt may have posted it, it is not retried.
+//! Each share signs in (`createSession`), uploads the picture (`uploadBlob`, shrunk to fit) or the
+//! recording, and writes the post (`createRecord`). A recording goes to Bluesky's video service,
+//! as Bluesky recommends: a token from the account's own server (`getServiceAuth`), the upload
+//! (`app.bsky.video.uploadVideo`), then the job's status until the video is ready; the post holds
+//! it as a video. Links in the text are marked so Bluesky shows them as links. The post is never
+//! written twice: if an earlier attempt may have posted it, it is not retried.
 
 use crate::ctx::Ctx;
 use crate::error::{from_net, from_response, invalid, not_set_up};
-use crate::media::{fit, plain_text};
+use crate::media::{fit, mp4_size, plain_text};
 use crate::model;
 use crate::payload::{OptionItem, Payload, SendOutcome};
 use crate::{Connector, Describe, FieldSpec, Status};
 use cargoframe_i18n::{msg, t, tf};
-use cargoframe_net::{check_url, Body, Method, Request};
+use cargoframe_net::{check_url, encode_component, Body, Method, Request};
 use cargoframe_safe::{FailureKind, SendError};
 use serde_json::{json, Value};
 
@@ -20,9 +23,18 @@ use serde_json::{json, Value};
 pub const MAX_TEXT: usize = 300;
 /// Largest picture Bluesky keeps.
 pub const MAX_PICTURE: usize = 1_000_000;
+/// Largest video Bluesky's video service takes.
+pub const MAX_VIDEO: usize = 100 * 1024 * 1024;
+/// Bluesky's video service.
+const VIDEO_SERVICE: &str = "https://video.bsky.app";
+/// How long the video service may take before the share gives up (it can be retried).
+const MAX_PROCESSING_SECS: u32 = 300;
 
 pub struct BlueskyConnector {
     settings: model::Bluesky,
+    video: String,
+    /// A second between two looks at the video job (shorter in tests).
+    second: std::time::Duration,
 }
 
 /// A signed-in session: who, and the key for the next calls.
@@ -30,11 +42,25 @@ struct Session {
     did: String,
     handle: String,
     jwt: String,
+    /// The host of the account's own server (its PDS), which the video service uploads to.
+    pds: String,
 }
 
 impl BlueskyConnector {
     pub fn new(settings: model::Bluesky) -> Self {
-        Self { settings }
+        Self {
+            settings,
+            video: VIDEO_SERVICE.into(),
+            second: std::time::Duration::from_secs(1),
+        }
+    }
+
+    /// Another video service, and no wait between looks (tests).
+    #[cfg(test)]
+    pub fn with_video_service(mut self, url: String) -> Self {
+        self.video = url;
+        self.second = std::time::Duration::ZERO;
+        self
     }
 
     fn service(&self) -> Result<String, SendError> {
@@ -80,14 +106,157 @@ impl BlueskyConnector {
             .json()
             .ok_or_else(|| invalid(t("Bluesky answered the sign-in with something unreadable")))?;
         let get = |k: &str| v.get(k).and_then(Value::as_str).map(String::from);
+        // the account's own server, from its DID document; else the one signed in to
+        let pds = v
+            .pointer("/didDoc/service")
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .find(|s| {
+                s.get("id")
+                    .and_then(Value::as_str)
+                    .is_some_and(|id| id.ends_with("#atproto_pds"))
+            })
+            .and_then(|s| s.get("serviceEndpoint").and_then(Value::as_str))
+            .map(str::to_string)
+            .unwrap_or(self.service()?);
+        let pds = host_of(&pds);
         match (get("did"), get("accessJwt")) {
             (Some(did), Some(jwt)) => Ok(Session {
                 did,
                 handle: get("handle").unwrap_or(handle),
                 jwt,
+                pds,
             }),
             _ => Err(invalid(t("Bluesky's sign-in answer had no account"))),
         }
+    }
+
+    /// The recording through Bluesky's video service, and the blob to put in the post once the
+    /// service has processed it. A job already started is looked up again rather than redone.
+    fn upload_video(
+        &self,
+        ctx: &Ctx,
+        session: &Session,
+        clip: &crate::payload::Attachment,
+    ) -> Result<Value, SendError> {
+        if clip.data.len() > MAX_VIDEO {
+            return Err(invalid(t(
+                "The recording is larger than Bluesky takes (100 MB): trim it in the window",
+            )));
+        }
+        let job = match ctx.progress.get("bluesky.job") {
+            Some(job) => job,
+            None => {
+                // a token for the video service to put the video in the account's own server
+                let exp = (ctx.now)() + 30 * 60;
+                let req = Request::new(
+                    Method::Get,
+                    format!(
+                        "{}/xrpc/com.atproto.server.getServiceAuth?aud={}&lxm=com.atproto.repo.uploadBlob&exp={exp}",
+                        self.service()?,
+                        encode_component(&format!("did:web:{}", session.pds)),
+                    ),
+                )
+                .header("Authorization", format!("Bearer {}", session.jwt))
+                .timeout(ctx.timeout);
+                let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
+                if !resp.is_success() {
+                    return Err(from_response(
+                        &resp,
+                        msg!("get a key for Bluesky's video service"),
+                    ));
+                }
+                let token = resp
+                    .json()
+                    .and_then(|v| v.get("token").and_then(Value::as_str).map(String::from))
+                    .ok_or_else(|| invalid(t("Bluesky gave no key for its video service")))?;
+                let req = Request::new(
+                    Method::Post,
+                    format!(
+                        "{}/xrpc/app.bsky.video.uploadVideo?did={}&name={}",
+                        self.video,
+                        encode_component(&session.did),
+                        encode_component(&clip.name),
+                    ),
+                )
+                .header("Authorization", format!("Bearer {token}"))
+                .timeout(ctx.timeout.max(std::time::Duration::from_secs(300)))
+                .body(Body::Bytes {
+                    content_type: clip.mime.clone(),
+                    data: clip.data.clone(),
+                });
+                let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
+                let v = resp.json().unwrap_or(Value::Null);
+                // the same video sent before answers with its job too
+                let status = v.get("jobStatus").unwrap_or(&v);
+                let job = status
+                    .get("jobId")
+                    .and_then(Value::as_str)
+                    .map(String::from);
+                match job {
+                    Some(job) if resp.is_success() || resp.status == 409 => {
+                        if let Some(blob) = status.get("blob").filter(|b| b.is_object()) {
+                            return Ok(blob.clone());
+                        }
+                        ctx.progress.set("bluesky.job", &job);
+                        job
+                    }
+                    _ => return Err(from_response(&resp, msg!("upload the video to Bluesky"))),
+                }
+            }
+        };
+        for _ in 0..MAX_PROCESSING_SECS {
+            let req = Request::new(
+                Method::Get,
+                format!(
+                    "{}/xrpc/app.bsky.video.getJobStatus?jobId={}",
+                    self.video,
+                    encode_component(&job)
+                ),
+            )
+            .timeout(ctx.timeout);
+            let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
+            if !resp.is_success() {
+                return Err(from_response(
+                    &resp,
+                    msg!("ask Bluesky whether the video is ready"),
+                ));
+            }
+            let v = resp.json().unwrap_or(Value::Null);
+            let status = v.get("jobStatus").unwrap_or(&v);
+            if let Some(blob) = status.get("blob").filter(|b| b.is_object()) {
+                return Ok(blob.clone());
+            }
+            if status.get("state").and_then(Value::as_str) == Some("JOB_STATE_FAILED") {
+                ctx.progress.clear("bluesky.job");
+                let why = status
+                    .get("message")
+                    .or_else(|| status.get("error"))
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string();
+                return Err(invalid(if why.is_empty() {
+                    t("Bluesky could not process the video").to_string()
+                } else {
+                    tf(
+                        "Bluesky could not process the video: {why}",
+                        &[("why", &why)],
+                    )
+                }));
+            }
+            if (ctx.cancelled)() {
+                return Err(SendError::new(
+                    FailureKind::Rejected(0),
+                    t("The window was closed, so the upload stopped"),
+                ));
+            }
+            std::thread::sleep(self.second);
+        }
+        Err(SendError::new(
+            FailureKind::Timeout,
+            t("Bluesky is still processing the video; try again in a minute"),
+        ))
     }
 
     fn call(&self, session: &Session, ctx: &Ctx, method: &str) -> Result<Request, SendError> {
@@ -97,6 +266,15 @@ impl BlueskyConnector {
                 .timeout(ctx.timeout),
         )
     }
+}
+
+/// `https://morel.us-east.host.bsky.network/` is `morel.us-east.host.bsky.network`.
+fn host_of(url: &str) -> String {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    rest.split(['/', '?', '#'])
+        .next()
+        .unwrap_or(rest)
+        .to_string()
 }
 
 /// `@jane.bsky.social`, `jane.bsky.social` and `https://bsky.app/profile/jane.bsky.social` all
@@ -213,7 +391,7 @@ impl Connector for BlueskyConnector {
                 f("hashtags", msg!("Hashtags"), msg!("Added at the end as #tags. Separate several with commas")),
             ],
             lists: Vec::new(),
-            summary: msg!("Posts the text and the screenshot (made smaller when it is over 1 MB) to your Bluesky account. Links become links; formatting is shown as plain text. Files and videos are not sent.").into(),
+            summary: msg!("Posts the text and the screenshot (made smaller when it is over 1 MB), or the recording, to your Bluesky account. Links become links; formatting is shown as plain text. Files are not sent.").into(),
         }
     }
 
@@ -269,25 +447,30 @@ impl Connector for BlueskyConnector {
             ));
         }
 
-        // The picture: the screenshot, or the still that goes with a recording.
+        // A post holds a video or pictures: the recording when there is one, else the screenshot
+        // (or the still that goes with a recording).
+        let video = payload
+            .image
+            .as_ref()
+            .filter(|a| a.mime.starts_with("video/"));
         let picture = payload
             .image
             .as_ref()
             .filter(|a| a.mime.starts_with("image/"))
-            .or(payload.still.as_ref());
-        if payload
-            .image
-            .as_ref()
-            .is_some_and(|a| a.mime.starts_with("video/"))
-        {
-            notes.push(t("Bluesky gets the screenshot, not the recording").to_string());
+            .or(payload.still.as_ref())
+            .filter(|_| video.is_none());
+        if video.is_some() && payload.still.is_some() {
+            notes.push(
+                t("Bluesky takes a video or pictures in a post, not both: the recording was sent")
+                    .to_string(),
+            );
         }
         if payload.files_zip.is_some() {
             notes.push(
                 t("Bluesky cannot take files, so the ticked files were not sent").to_string(),
             );
         }
-        if picture.is_none() && text.trim().is_empty() {
+        if picture.is_none() && video.is_none() && text.trim().is_empty() {
             return Err(invalid(t(
                 "There is nothing to post: no text and no picture",
             )));
@@ -295,6 +478,28 @@ impl Connector for BlueskyConnector {
 
         let session = self.sign_in(ctx)?;
         let mut embed = Value::Null;
+        if let Some(clip) = video {
+            let blob = match ctx
+                .progress
+                .get("bluesky.blob")
+                .and_then(|s| serde_json::from_str::<Value>(&s).ok())
+            {
+                Some(blob) => blob,
+                None => {
+                    let blob = self.upload_video(ctx, &session, clip)?;
+                    ctx.progress.set("bluesky.blob", &blob.to_string());
+                    blob
+                }
+            };
+            let alt = payload
+                .value("alt")
+                .map(str::to_string)
+                .unwrap_or_else(|| payload.title.trim().to_string());
+            embed = json!({"$type": "app.bsky.embed.video", "video": blob, "alt": plain_text(&alt, 1000).0});
+            if let Some((w, h)) = mp4_size(&clip.data) {
+                embed["aspectRatio"] = json!({"width": w, "height": h});
+            }
+        }
         if let Some(pic) = picture {
             let fitted = fit(pic, MAX_PICTURE, "Bluesky").map_err(invalid)?;
             if fitted.shrunk {

@@ -337,22 +337,226 @@ fn contradicting_choices_are_refused_before_anything_is_sent() {
     assert!(server.requests().is_empty());
 }
 
-#[test]
-fn ticked_files_are_left_out_and_the_person_is_told() {
-    let server = MockServer::start(|_| created());
-    let w = signed_in();
-    let mut p = payload(&[("target", "chat:19:abc@thread.v2")]);
-    p.files_zip = Some(Attachment {
+fn zip() -> Attachment {
+    Attachment {
         name: "files.zip".into(),
         mime: "application/zip".into(),
         data: vec![1, 2, 3],
-    });
+    }
+}
+
+fn clip() -> Attachment {
+    Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: vec![0, 0, 0, 24, b'f', b't', b'y', b'p'],
+    }
+}
+
+/// Graph with a channel's Files folder and a person's OneDrive.
+fn files_server(upload_status: u16) -> MockServer {
+    MockServer::start(move |req| {
+        let path = req.path();
+        if path.ends_with("/filesFolder") {
+            return MockResponse::json(
+                200,
+                json!({"id": "F1", "name": "General", "parentReference": {"driveId": "D1"},
+                       "webUrl": "https://contoso.sharepoint.com/sites/QA/Shared%20Documents/General"}),
+            );
+        }
+        if path.ends_with(":/content") {
+            if upload_status != 200 {
+                return MockResponse::json(
+                    upload_status,
+                    json!({"error": {"code": "accessDenied"}}),
+                );
+            }
+            let name = path
+                .rsplit(":/")
+                .nth(1)
+                .unwrap_or("x")
+                .rsplit('/')
+                .next()
+                .unwrap_or("x")
+                .to_string();
+            let guid = if name.ends_with(".mp4") {
+                "2A5A0A5B-1111-4C2D-9E8F-0123456789AB"
+            } else {
+                "153FA47D-18C9-4179-BE08-9879815A9F90"
+            };
+            return MockResponse::json(
+                201,
+                json!({"id": format!("ITEM-{name}"), "name": name, "eTag": format!("\"{{{guid}}},1\""),
+                       "webUrl": format!("https://contoso-my.sharepoint.com/personal/jane/Documents/CargoFrame/{name}")}),
+            );
+        }
+        if path.ends_with("/createLink") {
+            return MockResponse::json(
+                201,
+                json!({"link": {"type": "view", "scope": "organization", "webUrl": "https://contoso-my.sharepoint.com/:u:/g/personal/jane/LINK"}}),
+            );
+        }
+        created()
+    })
+}
+
+#[test]
+fn in_a_channel_the_recording_and_the_files_go_in_its_files_and_are_attached() {
+    let server = files_server(200);
+    let w = signed_in();
+    let mut p = payload(&[("target", &format!("channel:{TEAM}/{CHANNEL}"))]);
+    p.image = Some(clip());
+    p.still = Some(image());
+    p.files_zip = Some(zip());
     let out = w
         .with("teams", |ctx| connector(&server).send(ctx, &p))
         .unwrap();
-    assert!(out.notes[0].contains("OneDrive"), "{:?}", out.notes);
-    // the zip is nowhere in the message
-    assert!(!server.requests()[0].text().contains("files.zip"));
+    assert!(out.notes.is_empty(), "{:?}", out.notes);
+    let uploads: Vec<_> = server
+        .requests()
+        .into_iter()
+        .filter(|r| r.path().ends_with(":/content"))
+        .collect();
+    assert_eq!(uploads.len(), 2);
+    assert_eq!(uploads[0].method, "PUT");
+    assert_eq!(
+        uploads[0].path(),
+        "/graph/drives/D1/items/F1:/recording.mp4:/content"
+    );
+    assert_eq!(uploads[0].header("content-type"), Some("video/mp4"));
+    assert_eq!(uploads[0].body, clip().data);
+    assert_eq!(
+        uploads[1].path(),
+        "/graph/drives/D1/items/F1:/files.zip:/content"
+    );
+
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path().ends_with("/messages"))
+        .unwrap()
+        .json();
+    let html = post["body"]["content"].as_str().unwrap();
+    assert!(
+        html.contains("<attachment id=\"2a5a0a5b-1111-4c2d-9e8f-0123456789ab\"></attachment>"),
+        "{html}"
+    );
+    assert!(
+        html.contains("<attachment id=\"153fa47d-18c9-4179-be08-9879815a9f90\"></attachment>"),
+        "{html}"
+    );
+    assert_eq!(post["attachments"][0]["contentType"], "reference");
+    assert_eq!(post["attachments"][0]["name"], "recording.mp4");
+    assert_eq!(
+        post["attachments"][0]["contentUrl"],
+        "https://contoso.sharepoint.com/sites/QA/Shared%20Documents/General/recording.mp4"
+    );
+    // the still is the picture shown in the message, never the video
+    assert_eq!(post["hostedContents"][0]["contentType"], "image/png");
+}
+
+#[test]
+fn in_a_chat_the_files_go_in_onedrive_with_a_link_in_the_message() {
+    let server = files_server(200);
+    let w = signed_in();
+    let mut p = payload(&[("target", "chat:19:abc@thread.v2")]);
+    p.files_zip = Some(zip());
+    w.with("teams", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    let upload = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path().ends_with(":/content"))
+        .unwrap();
+    assert_eq!(
+        upload.path(),
+        "/graph/me/drive/root:/CargoFrame/files.zip:/content"
+    );
+    let link = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path().ends_with("/createLink"))
+        .unwrap();
+    assert_eq!(
+        link.path(),
+        "/graph/me/drive/items/ITEM-files.zip/createLink"
+    );
+    assert_eq!(
+        link.json(),
+        json!({"type": "view", "scope": "organization"})
+    );
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path().ends_with("/messages"))
+        .unwrap()
+        .json();
+    let html = post["body"]["content"].as_str().unwrap();
+    assert!(
+        html.contains(
+            "<a href=\"https://contoso-my.sharepoint.com/:u:/g/personal/jane/LINK\">files.zip</a>"
+        ),
+        "{html}"
+    );
+    assert!(post.get("attachments").is_none());
+}
+
+#[test]
+fn a_sign_in_from_before_files_still_posts_and_says_to_sign_in_again() {
+    let server = files_server(403);
+    let w = signed_in();
+    let mut p = payload(&[("target", "chat:19:abc@thread.v2")]);
+    p.files_zip = Some(zip());
+    let out = w
+        .with("teams", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    assert!(
+        out.notes.iter().any(|n| n.contains("Sign in again")),
+        "{:?}",
+        out.notes
+    );
+    assert!(server
+        .requests()
+        .iter()
+        .any(|r| r.path().ends_with("/messages")));
+}
+
+#[test]
+fn a_retry_does_not_put_a_file_in_teams_twice() {
+    let server = files_server(200);
+    let w = signed_in();
+    let mut p = payload(&[("target", &format!("channel:{TEAM}/{CHANNEL}"))]);
+    p.files_zip = Some(zip());
+    w.progress.set(
+        "teams.file.0",
+        &json!({"id": "153fa47d-18c9-4179-be08-9879815a9f90", "name": "files.zip", "url": "https://x.example/files.zip"}).to_string(),
+    );
+    w.with("teams", |ctx| connector(&server).send(ctx, &p))
+        .unwrap();
+    assert!(server
+        .requests()
+        .iter()
+        .all(|r| !r.path().ends_with(":/content")));
+    let post = server
+        .requests()
+        .into_iter()
+        .find(|r| r.path().ends_with("/messages"))
+        .unwrap()
+        .json();
+    assert_eq!(
+        post["attachments"][0]["contentUrl"],
+        "https://x.example/files.zip"
+    );
+}
+
+#[test]
+fn an_etag_gives_the_attachment_id() {
+    assert_eq!(
+        etag_guid("\"{2A5A0A5B-1111-4C2D-9E8F-0123456789AB},3\"").as_deref(),
+        Some("2a5a0a5b-1111-4c2d-9e8f-0123456789ab")
+    );
+    assert_eq!(etag_guid("\"aWQ\""), None);
+    assert_eq!(etag_guid("{not-a-guid}"), None);
 }
 
 #[test]
