@@ -41,6 +41,10 @@ const VIEWS = [
     path: 'settings.html?page=system',
     steps: [['text', 'Describe CargoFrame in a capture of its own windows'], ['role', 'button', 'Set up the bug report'], ['role', 'button', 'Check this PC']],
   },
+  // set by an organisation: the chip in place of Edit and Delete, the locked switches
+  { name: 'Connections, managed', path: 'settings.html?page=connections&managed=1' },
+  { name: 'Shortcuts, managed', path: 'settings.html?page=triggers&managed=1' },
+  { name: 'System, managed', path: 'settings.html?page=system&managed=1' },
   { name: 'CargoFrame window', path: 'capture.html', capture: true },
   // Tags with a list of the service, opened, over a Description block (#55)
   {
