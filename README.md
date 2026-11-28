@@ -61,10 +61,10 @@ flowchart LR
 | **Google** | A file in Drive, and optionally a row in a spreadsheet | ✓ |
 | **Slack** | A message in a channel or a thread | ✓ |
 | **Discord** | A message, a forum post, or a reply in a thread | ✓ |
-| **Teams** | A message in a chat or a channel | |
+| **Teams** | A message in a chat or a channel; the recording and files in the channel's Files (or your OneDrive for a chat) | ✓ |
 | **Reddit** | A post with the picture | |
 | **Claude** | Opens a chat and pastes the picture and your prompt | |
-| **X**, **Bluesky**, **Instagram** | A post with the screenshot and a short text | |
+| **X**, **Bluesky**, **Instagram** | A post with the screenshot, or the recording as its video (a reel on Instagram), and a short text | ✓ |
 | **Custom API** | Any web service with an API | |
 | **Save locally** | A zip on your computer, no account needed | ✓ |
 

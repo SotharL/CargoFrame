@@ -5,6 +5,14 @@ people who use it; why each change was made is in [decisions.md](decisions.md).
 
 ## Next
 
+- Recordings everywhere: X and Bluesky post the recording as the post's video (X's chunked upload, Bluesky's video
+  service), Instagram as a reel (through your picture server), each waiting until the service has processed it. A post
+  holds a video or pictures, so the recording goes and the window says the screenshot was left out
+- Teams sends the recording and the ticked files: in a channel they go in its Files and are attached to the message, in
+  a chat they go in your OneDrive with a link the organisation can open. It needs the new `Files.ReadWrite.All`
+  permission: a connection signed in before posts without them and says to sign in again
+- New templates: *Teams message with a recording*, *X post with a recording*, *Bluesky post with a recording*,
+  *Instagram reel of a recording*
 - `cargoframe open` takes files (`--file <full path>`, up to 20): added to the layout's first Files block, copied into
   the capture and ticked. A layout that records can now be opened by another program: it starts recording, and the
   values and files wait until the recording stops (the shortcut again, or a second `open`), then fill the window

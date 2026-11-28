@@ -15,13 +15,13 @@ const program = [...rs.matchAll(/key: "([^"]+)",\s*name: msg!\("([^"]+)"\),\s*de
 describe('the ready-made layouts of the stand-in', () => {
   it('are the program’s', async () => {
     const listed = await memoryApi({ general: { debug: true } }).listLayoutTemplates();
-    expect(program.length).toBe(21);
+    expect(program.length).toBe(25);
     expect(listed.map(({ key, name, description }) => ({ key, name, description }))).toEqual(program);
   });
 
   it('offer the CargoFrame bug report in debug mode only', async () => {
     const keys = (await memoryApi().listLayoutTemplates()).map((t) => t.key);
     expect(keys).not.toContain('cargoframe-report');
-    expect(keys.length).toBe(20);
+    expect(keys.length).toBe(24);
   });
 });

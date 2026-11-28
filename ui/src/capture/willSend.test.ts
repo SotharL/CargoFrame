@@ -53,7 +53,7 @@ describe('willSend', () => {
     expect(willSend(view, button, initialValues(view), false, { start_ms: 0, end_ms: null, crop, mark: true })[0]).toBe('Video (9.5 s, cropped and marked)');
     expect(willSend(view, button, initialValues(view), false, { start_ms: 1_000, end_ms: 4_000, crop, mark: true })[0]).toBe('Video (3.0 s of 9.5 s, cut, cropped and marked)');
     // where video cannot go, it is not listed
-    view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('teams'), 'teams');
+    view.sharing[button.id]!.reach = demoReach(view.layout!, button, demoCapabilities('reddit'), 'reddit');
     expect(willSend(view, button, initialValues(view), false).join()).not.toContain('Video');
   });
 

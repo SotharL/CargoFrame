@@ -26,7 +26,7 @@ pub struct TemplateInfo {
     pub service: Option<ConnectionKind>,
 }
 
-pub const TEMPLATES: [TemplateInfo; 21] = [
+pub const TEMPLATES: [TemplateInfo; 25] = [
     TemplateInfo {
         key: "local-capture",
         name: msg!("Save a capture locally"),
@@ -130,9 +130,21 @@ pub const TEMPLATES: [TemplateInfo; 21] = [
         service: Some(ConnectionKind::Teams),
     },
     TemplateInfo {
+        key: "teams-video",
+        name: msg!("Teams message with a recording"),
+        description: msg!("Post a message with the recording of the window in focus and a zip of the ticked files: in a channel they go in its Files and are attached, in a chat they go in your OneDrive and are linked. Tabs hold the recording, the screenshot taken from it (shown in the message) and the logs. A shortcut that opens it records the window in focus."),
+        service: Some(ConnectionKind::Teams),
+    },
+    TemplateInfo {
         key: "x-post",
         name: msg!("X post"),
         description: msg!("Post the screenshot to your X account with a short text (280 characters), hashtags and a description of the picture."),
+        service: Some(ConnectionKind::X),
+    },
+    TemplateInfo {
+        key: "x-video",
+        name: msg!("X post with a recording"),
+        description: msg!("Post the recording of the window in focus to your X account as the post's video, with a short text (280 characters) and hashtags. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::X),
     },
     TemplateInfo {
@@ -142,9 +154,21 @@ pub const TEMPLATES: [TemplateInfo; 21] = [
         service: Some(ConnectionKind::Bluesky),
     },
     TemplateInfo {
+        key: "bluesky-video",
+        name: msg!("Bluesky post with a recording"),
+        description: msg!("Post the recording of the window in focus to your Bluesky account as the post's video, with a short text (300 characters), hashtags and a description. A shortcut that opens it records the window in focus."),
+        service: Some(ConnectionKind::Bluesky),
+    },
+    TemplateInfo {
         key: "instagram-post",
         name: msg!("Instagram post"),
         description: msg!("Post the screenshot to your Instagram professional account with a caption and hashtags."),
+        service: Some(ConnectionKind::Instagram),
+    },
+    TemplateInfo {
+        key: "instagram-video",
+        name: msg!("Instagram reel of a recording"),
+        description: msg!("Post the recording of the window in focus to your Instagram professional account as a reel, with a caption and hashtags; it is put on your picture server first. A shortcut that opens it records the window in focus."),
         service: Some(ConnectionKind::Instagram),
     },
     TemplateInfo {
@@ -416,6 +440,10 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         "google-drive-video" => ("google-drive", true),
         "slack-video" => ("slack-message", true),
         "discord-video" => ("discord-message", true),
+        "teams-video" => ("teams-message", true),
+        "x-video" => ("x-post", true),
+        "bluesky-video" => ("bluesky-post", true),
+        "instagram-video" => ("instagram-post", true),
         other => (other, false),
     };
     let c = match (
@@ -427,6 +455,41 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
         (None, _) => None,
     };
     let shot = |h| block("shot", rect(0, 0, 7, h), BlockKind::Screenshot);
+    // a post's picture, or its recording beside the screenshot taken from it
+    let post_media = |h: u32| -> Vec<Block> {
+        if !is_video {
+            return vec![shot(h)];
+        }
+        let whole = rect(0, 0, 7, h);
+        let tab = |name: &str, id: &str| Tab {
+            name: t(name).into(),
+            blocks: vec![id.to_string()],
+            locked: false,
+        };
+        vec![
+            block(
+                "capture",
+                whole,
+                BlockKind::Tabs(TabsBlock {
+                    tabs: vec![
+                        tab(msg!("Recording"), "clip"),
+                        tab(msg!("Screenshot"), "shot"),
+                    ],
+                    side: TabSide::Top,
+                }),
+            ),
+            block(
+                "clip",
+                whole,
+                BlockKind::Video(VideoBlock {
+                    subject: VideoSubject::FocusedWindow,
+                    screenshot_at_end: true,
+                    ..Default::default()
+                }),
+            ),
+            block("shot", whole, BlockKind::Screenshot),
+        ]
+    };
     let blocks = match (key, c) {
         ("local-capture", _) => [
             capture_tabs(8, is_video, msg!("Files to keep")),
@@ -638,83 +701,92 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
                 ],
             ),
         ],
-        ("x-post", Some(c)) => vec![
-            shot(8),
-            block(
-                "text",
-                rect(7, 0, 5, 4),
-                text(msg!("Post (280 characters)"), TextRole::Plain, WHERE),
-            ),
-            block("hashtags", rect(7, 4, 5, 1), hashtags()),
-            block(
-                "alt",
-                rect(7, 5, 5, 2),
-                text(
-                    msg!("Picture description"),
-                    TextRole::Plain,
-                    msg!("A screenshot of {app.title}"),
+        ("x-post", Some(c)) => [
+            post_media(8),
+            vec![
+                block(
+                    "text",
+                    rect(7, 0, 5, 4),
+                    text(msg!("Post (280 characters)"), TextRole::Plain, WHERE),
                 ),
-            ),
-            button(
-                rect(7, 7, 5, 1),
-                msg!("Post to X"),
-                Some(c),
-                None,
-                vec![
-                    from_block("text", "text"),
-                    from_block("hashtags", "hashtags"),
-                    from_block("alt", "alt"),
-                ],
-            ),
-        ],
-        ("bluesky-post", Some(c)) => vec![
-            shot(8),
-            block(
-                "text",
-                rect(7, 0, 5, 4),
-                text(msg!("Post (300 characters)"), TextRole::Plain, WHERE),
-            ),
-            block("hashtags", rect(7, 4, 5, 1), hashtags()),
-            block(
-                "alt",
-                rect(7, 5, 5, 2),
-                text(
-                    msg!("Picture description"),
-                    TextRole::Plain,
-                    msg!("A screenshot of {app.title}"),
+                block("hashtags", rect(7, 4, 5, 1), hashtags()),
+                block(
+                    "alt",
+                    rect(7, 5, 5, 2),
+                    text(
+                        msg!("Picture description"),
+                        TextRole::Plain,
+                        msg!("A screenshot of {app.title}"),
+                    ),
                 ),
-            ),
-            button(
-                rect(7, 7, 5, 1),
-                msg!("Post to Bluesky"),
-                Some(c),
-                None,
-                vec![
-                    from_block("text", "text"),
-                    from_block("hashtags", "hashtags"),
-                    from_block("alt", "alt"),
-                ],
-            ),
-        ],
-        ("instagram-post", Some(c)) => vec![
-            shot(8),
-            block(
-                "caption",
-                rect(7, 0, 5, 6),
-                text(msg!("Caption"), TextRole::Plain, WHERE),
-            ),
-            block("hashtags", rect(7, 6, 5, 1), hashtags()),
-            button(
-                rect(7, 7, 5, 1),
-                msg!("Post to Instagram"),
-                Some(c),
-                None,
-                vec![
-                    from_block("caption", "caption"),
-                    from_block("hashtags", "hashtags"),
-                ],
-            ),
-        ],
+                button(
+                    rect(7, 7, 5, 1),
+                    msg!("Post to X"),
+                    Some(c),
+                    None,
+                    vec![
+                        from_block("text", "text"),
+                        from_block("hashtags", "hashtags"),
+                        from_block("alt", "alt"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
+        ("bluesky-post", Some(c)) => [
+            post_media(8),
+            vec![
+                block(
+                    "text",
+                    rect(7, 0, 5, 4),
+                    text(msg!("Post (300 characters)"), TextRole::Plain, WHERE),
+                ),
+                block("hashtags", rect(7, 4, 5, 1), hashtags()),
+                block(
+                    "alt",
+                    rect(7, 5, 5, 2),
+                    text(
+                        msg!("Picture description"),
+                        TextRole::Plain,
+                        msg!("A screenshot of {app.title}"),
+                    ),
+                ),
+                button(
+                    rect(7, 7, 5, 1),
+                    msg!("Post to Bluesky"),
+                    Some(c),
+                    None,
+                    vec![
+                        from_block("text", "text"),
+                        from_block("hashtags", "hashtags"),
+                        from_block("alt", "alt"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
+        ("instagram-post", Some(c)) => [
+            post_media(8),
+            vec![
+                block(
+                    "caption",
+                    rect(7, 0, 5, 6),
+                    text(msg!("Caption"), TextRole::Plain, WHERE),
+                ),
+                block("hashtags", rect(7, 6, 5, 1), hashtags()),
+                button(
+                    rect(7, 7, 5, 1),
+                    msg!("Post to Instagram"),
+                    Some(c),
+                    None,
+                    vec![
+                        from_block("caption", "caption"),
+                        from_block("hashtags", "hashtags"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
         ("claude-ask", Some(c)) => [
             capture_tabs(9, is_video, msg!("Files to mention")),
             vec![
@@ -813,43 +885,50 @@ pub fn build(key: &str, connection_id: Option<&str>) -> Option<Layout> {
             ],
         ]
         .concat(),
-        ("teams-message", Some(c)) => vec![
-            shot(8),
-            block(
-                "target",
-                rect(7, 0, 5, 1),
-                web_list(msg!("Chat or channel"), c, "targets"),
-            ),
-            block(
-                "title",
-                rect(7, 1, 5, 1),
-                line(msg!("Headline (optional)"), ""),
-            ),
-            block(
-                "message",
-                rect(7, 2, 5, 4),
-                text(msg!("Message"), TextRole::Plain, SEEN_IN),
-            ),
-            block(
-                "thread",
-                rect(7, 6, 5, 1),
-                line(
-                    msg!("Reply in a channel thread (message link, optional)"),
-                    "",
+        ("teams-message", Some(c)) => [
+            if is_video {
+                capture_tabs(8, true, msg!("Attach files"))
+            } else {
+                vec![shot(8)]
+            },
+            vec![
+                block(
+                    "target",
+                    rect(7, 0, 5, 1),
+                    web_list(msg!("Chat or channel"), c, "targets"),
                 ),
-            ),
-            button(
-                rect(7, 7, 5, 1),
-                msg!("Post to Teams"),
-                Some(c),
-                Some("message"),
-                vec![
-                    from_block("target", "target"),
-                    from_block("title", "title"),
-                    from_block("thread", "thread"),
-                ],
-            ),
-        ],
+                block(
+                    "title",
+                    rect(7, 1, 5, 1),
+                    line(msg!("Headline (optional)"), ""),
+                ),
+                block(
+                    "message",
+                    rect(7, 2, 5, 4),
+                    text(msg!("Message"), TextRole::Plain, SEEN_IN),
+                ),
+                block(
+                    "thread",
+                    rect(7, 6, 5, 1),
+                    line(
+                        msg!("Reply in a channel thread (message link, optional)"),
+                        "",
+                    ),
+                ),
+                button(
+                    rect(7, 7, 5, 1),
+                    msg!("Post to Teams"),
+                    Some(c),
+                    Some("message"),
+                    vec![
+                        from_block("target", "target"),
+                        from_block("title", "title"),
+                        from_block("thread", "thread"),
+                    ],
+                ),
+            ],
+        ]
+        .concat(),
         ("custom-post", Some(c)) => vec![
             shot(8),
             block("title", rect(7, 0, 5, 1), line(msg!("Title"), WHERE)),

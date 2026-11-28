@@ -31,7 +31,9 @@ use serde_json::{json, Value};
 use std::time::Duration;
 
 /// What the app registration needs (all delegated, none of them an "application" permission).
-pub const SCOPES: [&str; 7] = [
+/// `Files.ReadWrite.All` (0.8.0) puts the recording and the files in the channel's Files or in
+/// the person's OneDrive; a sign-in from before it still posts messages, without them.
+pub const SCOPES: [&str; 8] = [
     "offline_access",
     "User.Read",
     "Chat.ReadBasic",
@@ -39,7 +41,12 @@ pub const SCOPES: [&str; 7] = [
     "ChannelMessage.Send",
     "Team.ReadBasic.All",
     "Channel.ReadBasic.All",
+    "Files.ReadWrite.All",
 ];
+/// Largest file put in Teams in one request (Microsoft's limit for a simple upload).
+pub const MAX_FILE: usize = 250 * 1024 * 1024;
+/// The OneDrive folder files for a chat go in.
+const CHAT_FOLDER: &str = "CargoFrame";
 /// Pages of chats read at most (50 each), so a huge account cannot hang the window.
 const MAX_CHAT_PAGES: usize = 3;
 /// Teams read at most for the channel list.
@@ -538,7 +545,7 @@ impl Connector for TeamsConnector {
                 param: None,
                 inside: None, search: false,
             }],
-            summary: msg!("Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The ticked files cannot be sent yet: Teams needs them in OneDrive.").into(),
+            summary: msg!("Posts a message as you into a chat, a channel or a channel thread, with the screenshot inside it. The recording and the ticked files go in the channel's Files and are attached; in a chat, they go in your OneDrive and the message links to them.").into(),
         }
     }
 
@@ -640,7 +647,51 @@ impl Connector for TeamsConnector {
             }
         };
 
-        let composed = compose(payload, payload.image.is_some(), new_channel_post);
+        // the picture is shown in the message; a recording and the files are put in Teams
+        let picture = payload
+            .image
+            .as_ref()
+            .filter(|a| a.mime.starts_with("image/"))
+            .or(payload.still.as_ref());
+        let video = payload
+            .image
+            .as_ref()
+            .filter(|a| a.mime.starts_with("video/"));
+        let mut notes = Vec::new();
+        let files: Vec<&crate::payload::Attachment> = video
+            .into_iter()
+            .chain(payload.files_zip.as_ref())
+            .collect();
+        let channel = match (&thread, &target) {
+            (Some(t), _) => Some((t.team.as_str(), t.channel.as_str())),
+            (None, Some(Target::Channel { team, channel })) => {
+                Some((team.as_str(), channel.as_str()))
+            }
+            _ => None,
+        };
+        let placed = if files.is_empty() {
+            Vec::new()
+        } else {
+            self.place_files(ctx, channel, &files, &mut notes)?
+        };
+        let mut composed = compose(payload, picture.is_some(), new_channel_post);
+        let mut attachments = Vec::new();
+        for p in &placed {
+            if channel.is_some() && !p.id.is_empty() {
+                composed
+                    .html
+                    .push_str(&format!("<attachment id=\"{}\"></attachment>", p.id));
+                attachments.push(json!({
+                    "id": p.id, "contentType": "reference", "contentUrl": p.url, "name": p.name,
+                }));
+            } else {
+                composed.html.push_str(&format!(
+                    "<p><a href=\"{}\">{}</a></p>",
+                    escape(&p.url),
+                    escape(&p.name)
+                ));
+            }
+        }
         if composed.html.is_empty() {
             return Err(invalid(t(
                 "There is nothing to send to Teams: no text and no screenshot",
@@ -652,12 +703,15 @@ impl Connector for TeamsConnector {
         if let Some(subject) = &composed.subject {
             body["subject"] = json!(subject);
         }
-        if let Some(image) = &payload.image {
+        if let Some(image) = picture {
             body["hostedContents"] = json!([{
                 "@microsoft.graph.temporaryId": "1",
                 "contentBytes": STANDARD.encode(&image.data),
                 "contentType": image.mime,
             }]);
+        }
+        if !attachments.is_empty() {
+            body["attachments"] = Value::Array(attachments);
         }
 
         let posted = self.post(ctx, &path, &body)?;
@@ -667,13 +721,6 @@ impl Connector for TeamsConnector {
             .filter(|u| check_url(u).is_ok())
             .map(String::from);
 
-        let mut notes = Vec::new();
-        if payload.files_zip.is_some() {
-            notes.push(
-                t("The ticked files were not sent: Teams needs them in OneDrive, which CargoFrame does not use yet")
-                    .to_string(),
-            );
-        }
         if composed.shortened {
             notes.push(t("The message was shortened to fit Teams' size limit").to_string());
         }
@@ -687,6 +734,177 @@ impl Connector for TeamsConnector {
             notes,
             place: None,
         })
+    }
+}
+
+/// A file put in Teams: what the message attaches (a channel) or links to (a chat).
+struct Placed {
+    /// The GUID in the file's eTag: the attachment's id in a channel message.
+    id: String,
+    name: String,
+    /// Where it opens.
+    url: String,
+}
+
+/// The GUID of a drive item's eTag (`"{2A5A...},3"`), which Teams uses as the attachment's id.
+fn etag_guid(etag: &str) -> Option<String> {
+    let start = etag.find('{')? + 1;
+    let end = start + etag[start..].find('}')?;
+    let guid = &etag[start..end];
+    (guid.len() == 36 && guid.chars().all(|c| c.is_ascii_hexdigit() || c == '-'))
+        .then(|| guid.to_lowercase())
+}
+
+impl TeamsConnector {
+    /// Put `files` where the message can show them: a channel's Files folder (its SharePoint
+    /// library, which every member can open), or the person's OneDrive for a chat (with a link
+    /// people in the organisation can open). Each file is put once, even when the share is tried
+    /// again. `None` when this sign-in may not add files (it was made before 0.8.0).
+    fn place_files(
+        &self,
+        ctx: &Ctx,
+        channel: Option<(&str, &str)>,
+        files: &[&crate::payload::Attachment],
+        notes: &mut Vec<String>,
+    ) -> Result<Vec<Placed>, SendError> {
+        let mut placed = Vec::new();
+        // where they go: the channel's folder, or the person's OneDrive
+        let mut folder: Option<(String, String, String)> = None;
+        for (n, file) in files.iter().enumerate() {
+            let key = format!("teams.file.{n}");
+            if let Some(saved) = ctx.progress.get(&key) {
+                let v: Value = serde_json::from_str(&saved).unwrap_or(Value::Null);
+                let get = |k: &str| {
+                    v.get(k)
+                        .and_then(Value::as_str)
+                        .unwrap_or_default()
+                        .to_string()
+                };
+                placed.push(Placed {
+                    id: get("id"),
+                    name: get("name"),
+                    url: get("url"),
+                });
+                continue;
+            }
+            if file.data.len() > MAX_FILE {
+                notes.push(tf(
+                    "\u{201c}{name}\u{201d} is larger than Teams takes in one go (250 MB), so it was not sent",
+                    &[("name", &file.name)],
+                ));
+                continue;
+            }
+            let (drive, parent, base) = match &folder {
+                Some(f) => f.clone(),
+                None => {
+                    let f = match channel {
+                        Some((team, ch)) => {
+                            let req = self.request(
+                                ctx,
+                                Method::Get,
+                                self.graph(&format!(
+                                    "/teams/{}/channels/{}/filesFolder",
+                                    encode_component(team),
+                                    encode_component(ch)
+                                )),
+                            )?;
+                            let v = self.call(ctx, req, msg!("find the channel's files"))?;
+                            let get = |p: &str| {
+                                v.pointer(p)
+                                    .and_then(Value::as_str)
+                                    .unwrap_or_default()
+                                    .to_string()
+                            };
+                            (get("/parentReference/driveId"), get("/id"), get("/webUrl"))
+                        }
+                        None => (String::new(), String::new(), String::new()),
+                    };
+                    folder = Some(f.clone());
+                    f
+                }
+            };
+            let url = if channel.is_some() {
+                self.graph(&format!(
+                    "/drives/{}/items/{}:/{}:/content?@microsoft.graph.conflictBehavior=rename",
+                    encode_component(&drive),
+                    encode_component(&parent),
+                    encode_component(&file.name)
+                ))
+            } else {
+                self.graph(&format!(
+                    "/me/drive/root:/{CHAT_FOLDER}/{}:/content?@microsoft.graph.conflictBehavior=rename",
+                    encode_component(&file.name)
+                ))
+            };
+            let req = self
+                .request(ctx, Method::Put, url)?
+                .timeout(ctx.timeout.max(Duration::from_secs(300)))
+                .body(Body::Bytes {
+                    content_type: file.mime.clone(),
+                    data: file.data.clone(),
+                });
+            let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
+            if resp.status == 403 && placed.is_empty() {
+                // a sign-in from before files were sent: the message still goes, without them
+                notes.push(t("The recording and the files were not sent: press Sign in again on this connection to let CargoFrame put files in Teams").to_string());
+                return Ok(Vec::new());
+            }
+            if !resp.is_success() {
+                return Err(graph_error(&resp, msg!("put the file in Teams")));
+            }
+            let item = resp.json().unwrap_or(Value::Null);
+            let get = |k: &str| {
+                item.get(k)
+                    .and_then(Value::as_str)
+                    .unwrap_or_default()
+                    .to_string()
+            };
+            let name = get("name");
+            let name = if name.is_empty() {
+                file.name.clone()
+            } else {
+                name
+            };
+            let id = etag_guid(&get("eTag")).unwrap_or_default();
+            let url = if channel.is_some() {
+                // Teams wants the folder's address and the file's name
+                format!("{}/{}", base.trim_end_matches('/'), encode_component(&name))
+            } else {
+                // a link people in the organisation can open; else the owner's own address
+                let link = self
+                    .request(
+                        ctx,
+                        Method::Post,
+                        self.graph(&format!(
+                            "/me/drive/items/{}/createLink",
+                            encode_component(&get("id"))
+                        )),
+                    )?
+                    .body(Body::json(
+                        &json!({"type": "view", "scope": "organization"}),
+                    ));
+                match ctx.http.send(&link) {
+                    Ok(r) if r.is_success() => r
+                        .json()
+                        .and_then(|v| {
+                            v.pointer("/link/webUrl")
+                                .and_then(Value::as_str)
+                                .map(String::from)
+                        })
+                        .unwrap_or_else(|| get("webUrl")),
+                    _ => {
+                        notes.push(t("Your organisation does not allow links to files, so only you can open the files in the chat until you share them").to_string());
+                        get("webUrl")
+                    }
+                }
+            };
+            ctx.progress.set(
+                &key,
+                &json!({"id": id, "name": name, "url": url}).to_string(),
+            );
+            placed.push(Placed { id, name, url });
+        }
+        Ok(placed)
     }
 }
 

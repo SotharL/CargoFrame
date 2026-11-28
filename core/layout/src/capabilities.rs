@@ -148,15 +148,15 @@ impl Capabilities {
                 text: Capability::yes(msg!("Posted as the message (a new channel post uses the title as its headline)")),
                 dropdown: Capability::limited(msg!("Your chats and channels can be picked; a thread is chosen by its link")),
                 screenshot: Capability::yes(msg!("Shown inside the message")),
-                video: Capability::no(msg!("Teams needs files in OneDrive, which CargoFrame does not use yet")),
-                files: Capability::no(msg!("Teams needs files in OneDrive, which CargoFrame does not use yet")),
+                video: Capability::limited(msg!("Put in the channel's Files and attached (250 MB at most); in a chat, put in your OneDrive and linked")),
+                files: Capability::limited(msg!("Put in the channel's Files and attached as one zip; in a chat, put in your OneDrive and linked")),
                 link: Capability::yes(msg!("Addresses are shown as typed and Teams links them by itself; markup is shown as text")),
             },
             ConnectionKind::X => Self {
                 text: Capability::limited(msg!("Posted as the post, at most 280 characters; formatting is shown as plain text")),
                 dropdown: Capability::no(msg!("X has no lists to pick from")),
                 screenshot: Capability::yes(msg!("Attached to the post, made smaller when over 5 MB")),
-                video: Capability::no(msg!("Videos are not sent to X yet; the screenshot is")),
+                video: Capability::limited(msg!("Posted as the post's video instead of the screenshot (a post holds one or the other); 512 MB at most")),
                 files: Capability::no(msg!("X cannot take files")),
                 link: Capability::yes(msg!("Addresses become links by themselves")),
             },
@@ -164,7 +164,7 @@ impl Capabilities {
                 text: Capability::limited(msg!("Posted as the post, at most 300 characters; formatting is shown as plain text")),
                 dropdown: Capability::no(msg!("Bluesky has no lists to pick from")),
                 screenshot: Capability::yes(msg!("Attached to the post, made smaller when over 1 MB")),
-                video: Capability::no(msg!("Videos are not sent to Bluesky yet; the screenshot is")),
+                video: Capability::limited(msg!("Posted as the post's video instead of the screenshot (a post holds one or the other); 100 MB at most")),
                 files: Capability::no(msg!("Bluesky cannot take files")),
                 link: Capability::yes(msg!("Addresses in the text are marked as links")),
             },
@@ -172,7 +172,7 @@ impl Capabilities {
                 text: Capability::limited(msg!("The caption, at most 2,200 characters; formatting is shown as plain text")),
                 dropdown: Capability::no(msg!("Instagram has no lists to pick from")),
                 screenshot: Capability::yes(msg!("The post's picture, put on your picture server first, as a JPEG")),
-                video: Capability::no(msg!("Videos are not sent to Instagram yet; the screenshot is")),
+                video: Capability::limited(msg!("Posted as a reel instead of the screenshot, put on your picture server first; 3 seconds to 15 minutes")),
                 files: Capability::no(msg!("Instagram cannot take files")),
                 link: Capability::limited(msg!("Addresses are shown as text: Instagram captions have no links")),
             },
@@ -355,14 +355,19 @@ mod tests {
         assert_eq!(video(ConnectionKind::Google), Support::Yes);
         assert_eq!(video(ConnectionKind::Jira), Support::Limited);
         assert_eq!(video(ConnectionKind::Discord), Support::Limited);
-        for no in [
-            ConnectionKind::Reddit,
-            ConnectionKind::Claude,
+        // 0.8.0: a post's video, a reel, a file in the channel
+        for limited in [
             ConnectionKind::Teams,
-            ConnectionKind::CustomApi,
             ConnectionKind::X,
             ConnectionKind::Bluesky,
             ConnectionKind::Instagram,
+        ] {
+            assert_eq!(video(limited), Support::Limited, "{limited:?}");
+        }
+        for no in [
+            ConnectionKind::Reddit,
+            ConnectionKind::Claude,
+            ConnectionKind::CustomApi,
         ] {
             assert_eq!(video(no), Support::No, "{no:?}");
         }

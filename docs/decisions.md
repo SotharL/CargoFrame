@@ -1829,3 +1829,24 @@ holds (a test reads one saved with 10 s and 1080 and keeps them). Height 0 recor
 within the 4K cap of `fit_filter`. A copy that already saved `video.json` keeps 10 s and 1080: the file cannot tell a
 value chosen from one left as it was.
 
+
+## Recordings to every service that can take one (28 Nov 2026)
+
+- **X** uses the v2 chunked upload (`/2/media/upload/initialize`, `/{id}/append` in 4 MB pieces, `/{id}/finalize`, then
+  the status at the times X says) with `media_category=tweet_video`, the way X documents it for every video; the
+  older `command=INIT` form is gone from v2. The media id is kept in the share's progress, so a retry waits for the
+  same video instead of uploading it again.
+- **Bluesky** uses its video service, as Bluesky recommends: a token from the account's own server
+  (`getServiceAuth`, audience `did:web:<its host>` read from the DID document), the upload to `video.bsky.app`, then
+  the job until it holds the blob. Uploading the video as a plain blob also works but leaves the video missing for a
+  while after the post.
+- **Instagram** takes a reel from a public address, like a picture: the same picture server, `media_type=REELS`,
+  five times as many looks while it processes. Meta's resumable upload would need no picture server; it is in the
+  connector notes for later.
+- **A post holds a video or pictures**: on all three, a recording goes as the video and the screenshot is left out,
+  with a note in the window. Sending both would need two posts.
+- **Teams** puts files where Teams itself puts them: a channel's Files folder (its SharePoint library, open to every
+  member; the message carries them as `reference` attachments, the id being the GUID of the file's eTag) and, for a
+  chat, the person's OneDrive with an organisation view link in the message (Graph cannot share a file with a chat's
+  members). This needs `Files.ReadWrite.All` (delegated, no administrator consent by default); a sign-in made before
+  keeps posting messages and says to sign in again for files, instead of failing.

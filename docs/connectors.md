@@ -30,12 +30,12 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 | **Slack** | Bot token from an app you make; channel list; thread by pasted link | A *Create the app* link with the permissions filled in (Slack app manifest), so setup is one click and a paste; path: channel, then recent threads |
 | **Discord** | Webhook per channel, or a bot; one path down to threads | Name a channel from its webhook by itself; forum tags as a list |
 | **Reddit** | Your own app; subreddit and flair lists; what the subreddit requires (a flair, a text) said before sending (0.8.0) | Title length checked as you type |
-| **Teams** | Your own Entra app; chats and channels; thread by link | Path: team, channel, then recent posts; pictures and files through OneDrive so videos and files can go; an admin-consent link to hand to IT |
+| **Teams** | Your own Entra app; chats and channels; thread by link; the recording and the files in the channel's Files, attached (in a chat: your OneDrive, linked) (0.8.0) | Path: team, channel, then recent posts; an upload session for files over 250 MB; an admin-consent link to hand to IT |
 | **Claude** | Opens a chat and pastes | Pick a Claude project for new chats |
 | **Custom API** | Address, sign-in, request template | OAuth 2.0 with your own provider; a *Show the request* preview before sending; import from a `curl` line |
-| **X** (new) | Your own X app (Native App, no secret), sign in in the browser; text (280 characters) and the screenshot, picture description | Video through the chunked upload; reply to one of your recent posts (path step) |
-| **Bluesky** (new) | Handle and an app password, nothing to register; text (300 characters), the screenshot, picture description, links marked | Video; reply in one of your threads; sign in with Bluesky's OAuth when it is common |
-| **Instagram** (new) | Professional account; token from the Meta app dashboard; the picture is put on your own picture server first, then published | A list of common picture servers (S3-compatible, Azure, Bunny) with their address shapes filled in; Reels through the resumable upload; several pictures (carousel) |
+| **X** | Your own X app (Native App, no secret), sign in in the browser; text (280 characters) and the screenshot, picture description; the recording as the post's video through the chunked upload (0.8.0) | Reply to one of your recent posts (path step) |
+| **Bluesky** | Handle and an app password, nothing to register; text (300 characters), the screenshot, picture description, links marked; the recording through Bluesky's video service (0.8.0) | Reply in one of your threads; sign in with Bluesky's OAuth when it is common |
+| **Instagram** | Professional account; token from the Meta app dashboard; the picture, or the recording as a reel (0.8.0), is put on your own picture server first, then published | A list of common picture servers (S3-compatible, Azure, Bunny) with their address shapes filled in; reels through Meta's resumable upload, with no picture server; several pictures (carousel) |
 
 ## What the new connectors cannot do, and why
 
@@ -50,4 +50,4 @@ goes as deep as the service does, and send without surprises (sizes, required fi
 - **Pictures in the text** need a service that shows an attached file inside its text: Jira (`!name!`), GitHub (a link
   from the attachments branch) and Teams (an inline picture). Slack, Discord, Reddit and Google attach the files after
   the text, so the two values are left out of their text.
-- **Videos** are not sent to X, Bluesky or Instagram yet: the screenshot (or the still of a recording) is.
+- **A post holds a video or pictures, not both** on X, Bluesky and Instagram: a recording goes as the video (a reel on Instagram), and the window says the screenshot was left out.

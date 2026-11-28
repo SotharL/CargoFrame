@@ -225,3 +225,123 @@ fn a_post_that_may_have_gone_through_is_never_sent_twice() {
         e.message
     );
 }
+
+fn clip(bytes: usize) -> Attachment {
+    Attachment {
+        name: "recording.mp4".into(),
+        mime: "video/mp4".into(),
+        data: (0..bytes).map(|i| (i % 251) as u8).collect(),
+    }
+}
+
+/// X with the chunked upload: the video is processing once, then ready.
+fn x_video(fail: bool) -> MockServer {
+    let looks = std::sync::Arc::new(std::sync::atomic::AtomicU32::new(0));
+    MockServer::start(move |req| match req.path() {
+        "/2/media/upload/initialize" => MockResponse::json(
+            200,
+            json!({"data":{"id":"901","media_key":"7_901","expires_after_secs":86400}}),
+        ),
+        "/2/media/upload/901/append" => MockResponse::new(204),
+        "/2/media/upload/901/finalize" => MockResponse::json(
+            200,
+            json!({"data":{"id":"901","processing_info":{"state":"pending","check_after_secs":1}}}),
+        ),
+        "/2/media/upload" if req.query_param("command").as_deref() == Some("STATUS") => {
+            let n = looks.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            let state = match (fail, n) {
+                (_, 0) => json!({"state":"in_progress","check_after_secs":1,"progress_percent":40}),
+                (true, _) => json!({"state":"failed","error":{"message":"Unsupported codec"}}),
+                (false, _) => json!({"state":"succeeded","progress_percent":100}),
+            };
+            MockResponse::json(200, json!({"data":{"id":"901","processing_info": state}}))
+        }
+        "/2/tweets" => MockResponse::json(201, json!({"data":{"id":"1851","text":"x"}})),
+        _ => MockResponse::new(404),
+    })
+}
+
+#[test]
+fn a_recording_goes_through_the_chunked_upload_and_is_posted_once_processed() {
+    let server = x_video(false);
+    let p = Payload {
+        title: "Game".into(),
+        image: Some(clip(CHUNK * 2 + 10)),
+        still: Some(picture()),
+        prompt: Some("It stutters".into()),
+        ..Payload::default()
+    };
+    let out = signed_in()
+        .with("x", |ctx| {
+            connector(&server).with_second(Duration::ZERO).send(ctx, &p)
+        })
+        .unwrap();
+    assert_eq!(out.url.as_deref(), Some("https://x.com/i/web/status/1851"));
+    // a post holds a video or pictures: the screenshot was left out, and the person is told
+    assert!(
+        out.notes.iter().any(|n| n.contains("not both")),
+        "{:?}",
+        out.notes
+    );
+    assert!(server
+        .requests_to("/2/media/upload")
+        .iter()
+        .all(|r| r.query().contains("STATUS")));
+
+    let init = server.requests_to("/2/media/upload/initialize")[0].json();
+    assert_eq!(init["media_type"], "video/mp4");
+    assert_eq!(init["total_bytes"], CHUNK * 2 + 10);
+    assert_eq!(init["media_category"], "tweet_video");
+    // three pieces, numbered from 0, together the whole recording
+    let pieces = server.requests_to("/2/media/upload/901/append");
+    assert_eq!(pieces.len(), 3);
+    for (n, piece) in pieces.iter().enumerate() {
+        let raw = piece.text();
+        assert!(
+            raw.contains(&format!("name=\"segment_index\"\r\n\r\n{n}\r\n")),
+            "{n}"
+        );
+        assert!(raw.contains("name=\"media\"; filename=\"recording.mp4\""));
+    }
+    assert_eq!(server.requests_to("/2/media/upload/901/finalize").len(), 1);
+    // X was asked until it said the video was ready
+    assert_eq!(server.requests_to("/2/media/upload").len(), 2);
+    let post = server.requests_to("/2/tweets")[0].json();
+    assert_eq!(post["media"]["media_ids"][0], "901");
+    assert_eq!(post["text"], "It stutters");
+}
+
+#[test]
+fn a_video_x_cannot_process_is_said_and_not_posted() {
+    let server = x_video(true);
+    let p = Payload {
+        title: "Game".into(),
+        image: Some(clip(100)),
+        ..Payload::default()
+    };
+    let e = signed_in()
+        .with("x", |ctx| {
+            connector(&server).with_second(Duration::ZERO).send(ctx, &p)
+        })
+        .unwrap_err();
+    assert!(e.message.contains("Unsupported codec"), "{}", e.message);
+    assert!(server.requests_to("/2/tweets").is_empty());
+}
+
+#[test]
+fn a_retry_waits_for_the_video_already_uploaded_instead_of_uploading_it_again() {
+    let server = x_video(false);
+    let p = Payload {
+        title: "Game".into(),
+        image: Some(clip(100)),
+        ..Payload::default()
+    };
+    let w = signed_in();
+    w.progress.set("x.video", "901");
+    w.with("x", |ctx| {
+        connector(&server).with_second(Duration::ZERO).send(ctx, &p)
+    })
+    .unwrap();
+    assert!(server.requests_to("/2/media/upload/initialize").is_empty());
+    assert_eq!(server.requests_to("/2/tweets").len(), 1);
+}

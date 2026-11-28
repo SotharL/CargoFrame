@@ -718,7 +718,6 @@ The repository is set up so an agent can work safely; [AGENTS.md](../AGENTS.md) 
 |------|-----|
 | Managed settings folder and `policy.json` | Set up thousands of computers at once, with locked items |
 | Company sign-in: Jira OAuth, OAuth 2.0 for the custom API | No personal tokens in large companies |
-| Video for X, Bluesky, Instagram; Teams files through OneDrive | Recordings everywhere |
 | The remaining types generated from Rust | No copy of a Rust type by hand |
 | `commands.rs`, `video.rs`, `share.rs` split by topic | Files under 1,000 lines |
 | A sidebar folded to its icons | More room on a small screen |

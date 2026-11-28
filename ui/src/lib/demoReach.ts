@@ -69,8 +69,8 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         text: yes('Posted as the message (a new channel post uses the title as its headline)'),
         dropdown: limited('Your chats and channels can be picked; a thread is chosen by its link'),
         screenshot: yes('Shown inside the message'),
-        video: no('Teams needs files in OneDrive, which CargoFrame does not use yet'),
-        files: no('Teams needs files in OneDrive, which CargoFrame does not use yet'),
+        video: limited("Put in the channel's Files and attached (250 MB at most); in a chat, put in your OneDrive and linked"),
+        files: limited("Put in the channel's Files and attached as one zip; in a chat, put in your OneDrive and linked"),
         link: yes('Addresses are shown as typed and Teams links them by itself; markup is shown as text'),
       };
     case 'github':
@@ -90,7 +90,11 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         text: limited('Posted as plain text, within the length the service allows'),
         dropdown: no(`${name} has no lists to pick from`),
         screenshot: yes('Attached to the post, made smaller when it is too big'),
-        video: no(`Videos are not sent to ${name} yet; the screenshot is`),
+        video: limited(
+          kind === 'instagram'
+            ? 'Posted as a reel instead of the screenshot, put on your picture server first; 3 seconds to 15 minutes'
+            : `Posted as the post's video instead of the screenshot (a post holds one or the other); ${kind === 'x' ? '512' : '100'} MB at most`,
+        ),
         files: no(`${name} cannot take files`),
         link: kind === 'instagram' ? limited('Addresses are shown as text: Instagram captions have no links') : yes('Addresses become links'),
       };

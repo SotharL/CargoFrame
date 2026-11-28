@@ -1,10 +1,12 @@
-//! Instagram: a post with the screenshot, on a professional (business or creator) account.
+//! Instagram: a post with the screenshot, or a reel with the recording, on a professional
+//! (business or creator) account.
 //!
-//! Instagram takes a picture only from a public web address: it fetches the file itself and
-//! has no way to receive one. So a share first puts the picture, as a JPEG, on a web server the
-//! person or their company owns (an HTTP PUT to the *upload address*), then asks Instagram to
-//! make a post from the *public address* of that file, waits until Instagram has fetched it, and
-//! publishes it.
+//! Instagram takes a picture or a video only from a public web address: it fetches the file
+//! itself and has no way to receive one. So a share first puts the picture (as a JPEG) or the
+//! recording (as an MP4) on a web server the person or their company owns (an HTTP PUT to the
+//! *upload address*), then asks Instagram to make a post (a reel, `media_type=REELS`, for a video)
+//! from the *public address* of that file, waits until Instagram has fetched and processed it,
+//! and publishes it.
 //!
 //! Sign-in is an access token made in the Meta app dashboard (Instagram API, *Generate token*).
 //! It lasts 60 days and is renewed for another 60 each time the connection is tested or used.
@@ -25,6 +27,10 @@ use std::time::Duration;
 pub const MAX_CAPTION: usize = 2200;
 /// Largest picture Instagram takes.
 pub const MAX_PICTURE: usize = 8_000_000;
+/// Largest reel Instagram takes from a public address.
+pub const MAX_VIDEO: usize = 300 * 1024 * 1024;
+/// A video takes Instagram longer to process than a picture: this many more looks.
+const VIDEO_LOOKS: u32 = 5;
 
 #[derive(Debug, Clone)]
 pub struct Endpoints {
@@ -153,7 +159,13 @@ impl InstagramConnector {
     }
 
     /// Put the picture on the person's own server; returns its public address.
-    fn host(&self, ctx: &Ctx, jpeg: &[u8]) -> Result<String, SendError> {
+    fn host(
+        &self,
+        ctx: &Ctx,
+        data: &[u8],
+        ext: &str,
+        content_type: &str,
+    ) -> Result<String, SendError> {
         let (upload, public) = (
             self.settings.upload_url.trim(),
             self.settings.public_url.trim(),
@@ -161,7 +173,7 @@ impl InstagramConnector {
         if !upload.contains("{name}") || !public.contains("{name}") {
             return Err(not_set_up(t("Instagram needs the upload address and the public address of your picture server, each with {name} in it")));
         }
-        let name = format!("cargoframe-{}.jpg", random_hex(8));
+        let name = format!("cargoframe-{}.{ext}", random_hex(8));
         let upload = upload.replace("{name}", &name);
         let public = public.replace("{name}", &name);
         check_url(&upload).map_err(|e| invalid(tf("The upload address: {e}", &[("e", &e)])))?;
@@ -169,8 +181,8 @@ impl InstagramConnector {
         let mut req = Request::new(Method::Put, upload)
             .timeout(ctx.timeout)
             .body(Body::Bytes {
-                content_type: "image/jpeg".into(),
-                data: jpeg.to_vec(),
+                content_type: content_type.into(),
+                data: data.to_vec(),
             });
         let header = self.settings.host_header.trim();
         if !header.is_empty() {
@@ -234,7 +246,7 @@ impl Connector for InstagramConnector {
                 },
             ],
             lists: Vec::new(),
-            summary: msg!("Posts the screenshot with a caption to your Instagram professional account. The picture is first put on your own picture server, because Instagram only takes pictures from a public address. Files and videos are not sent.").into(),
+            summary: msg!("Posts the screenshot with a caption, or the recording as a reel, to your Instagram professional account. The picture or the video is first put on your own picture server, because Instagram only takes them from a public address. Files are not sent.").into(),
         }
     }
 
@@ -268,22 +280,26 @@ impl Connector for InstagramConnector {
             return Err(invalid(t("An earlier attempt may already have posted this. Check your Instagram profile before trying again")));
         }
         let mut notes = Vec::new();
+        // a recording goes as a reel; otherwise the screenshot (or the still of a recording)
+        let video = payload
+            .image
+            .as_ref()
+            .filter(|a| a.mime.starts_with("video/"));
         let picture = payload
             .image
             .as_ref()
             .filter(|a| a.mime.starts_with("image/"))
-            .or(payload.still.as_ref())
-            .ok_or_else(|| {
-                invalid(t(
-                    "An Instagram post needs a picture: add a screenshot to the layout",
-                ))
-            })?;
-        if payload
-            .image
-            .as_ref()
-            .is_some_and(|a| a.mime.starts_with("video/"))
-        {
-            notes.push(t("Instagram gets the screenshot, not the recording").to_string());
+            .or(payload.still.as_ref());
+        if video.is_none() && picture.is_none() {
+            return Err(invalid(t(
+                "An Instagram post needs a picture: add a screenshot to the layout",
+            )));
+        }
+        if video.is_some() && payload.still.is_some() {
+            notes.push(
+                t("Instagram takes a reel or a picture in a post, not both: the recording was sent as a reel")
+                    .to_string(),
+            );
         }
         if payload.files_zip.is_some() {
             notes.push(
@@ -305,31 +321,43 @@ impl Connector for InstagramConnector {
 
         let (account, name) = self.me(ctx)?;
 
-        // Step 1: the picture on the person's server, once.
-        let public = match ctx.progress.get("instagram.picture") {
-            Some(url) => url,
-            None => {
+        // Step 1: the recording or the picture on the person's server, once.
+        let public = match (ctx.progress.get("instagram.picture"), video, picture) {
+            (Some(url), _, _) => url,
+            (None, Some(clip), _) => {
+                if clip.data.len() > MAX_VIDEO {
+                    return Err(invalid(t("The recording is larger than Instagram takes (300 MB): trim it in the window")));
+                }
+                let url = self.host(ctx, &clip.data, "mp4", &clip.mime)?;
+                ctx.progress.set("instagram.picture", &url);
+                url
+            }
+            (None, None, Some(picture)) => {
                 let jpeg = to_jpeg(picture, MAX_PICTURE).map_err(invalid)?;
                 if jpeg.shrunk {
                     notes.push(
                         t("The picture was made smaller to fit Instagram's 8 MB").to_string(),
                     );
                 }
-                let url = self.host(ctx, &jpeg.picture.data)?;
+                let url = self.host(ctx, &jpeg.picture.data, "jpg", "image/jpeg")?;
                 ctx.progress.set("instagram.picture", &url);
                 url
             }
+            (None, None, None) => unreachable!("checked above"),
         };
 
         // Step 2: Instagram fetches it into a draft ("container"), once.
         let container = match ctx.progress.get("instagram.container") {
             Some(id) => id,
             None => {
+                let draft = if video.is_some() {
+                    json!({"media_type": "REELS", "video_url": public, "caption": caption, "share_to_feed": true})
+                } else {
+                    json!({"image_url": public, "caption": caption})
+                };
                 let req = self
                     .graph(ctx, Method::Post, &format!("/{account}/media"))?
-                    .body(Body::json(
-                        &json!({"image_url": public, "caption": caption}),
-                    ));
+                    .body(Body::json(&draft));
                 let resp = ctx.http.send(&req).map_err(|e| from_net(&e))?;
                 if !resp.is_success() {
                     return Err(refusal(&resp, msg!("give the picture to Instagram")));
@@ -343,9 +371,14 @@ impl Connector for InstagramConnector {
             }
         };
 
-        // Step 3: wait until Instagram has the picture.
+        // Step 3: wait until Instagram has the picture (or has processed the video).
         let mut ready = false;
-        for look in 0..self.ep.polls {
+        let looks = if video.is_some() {
+            self.ep.polls * VIDEO_LOOKS
+        } else {
+            self.ep.polls
+        };
+        for look in 0..looks {
             if look > 0 {
                 std::thread::sleep(self.ep.poll);
             }
@@ -359,6 +392,10 @@ impl Connector for InstagramConnector {
                     ready = true;
                     break;
                 }
+                Some("ERROR") | Some("EXPIRED") if video.is_some() => {
+                    ctx.progress.clear("instagram.container");
+                    return Err(invalid(t("Instagram could not make a reel of the recording: check that its public address opens in a browser without signing in, and that the clip is between 3 seconds and 15 minutes")));
+                }
                 Some("ERROR") | Some("EXPIRED") => {
                     ctx.progress.clear("instagram.container");
                     return Err(invalid(t("Instagram could not fetch the picture from your picture server: check that its public address opens in a browser without signing in")));
@@ -369,7 +406,11 @@ impl Connector for InstagramConnector {
         if !ready {
             return Err(SendError::new(
                 FailureKind::Timeout,
-                t("Instagram is still fetching the picture; try again in a minute"),
+                if video.is_some() {
+                    t("Instagram is still processing the reel; try again in a minute")
+                } else {
+                    t("Instagram is still fetching the picture; try again in a minute")
+                },
             ));
         }
 
