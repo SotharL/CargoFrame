@@ -226,12 +226,7 @@ fn id_from_link(raw: &str, segment: &str) -> Option<String> {
 
 impl Connector for GoogleConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         Describe {
             fields: vec![
                 f("folder", msg!("Drive folder"), msg!("A folder id or link. Empty: the CargoFrame folder"), Some("folders")),

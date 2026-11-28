@@ -27,7 +27,7 @@ use cargoframe_context::template;
 use cargoframe_i18n::{t, tf};
 use cargoframe_layout::{
     select, sharing_mode, sharing_state, validate, BlockKind, ConnectionKind, DropdownBlock,
-    DropdownSource, FilesHow, Layout, OnSuccess, SendRules, SharingButton, SharingMode,
+    DropdownSource, FilesHow, Layout, OnSuccess, Registry, SendRules, SharingButton, SharingMode,
     SharingState, TextRole, ValueSource,
 };
 use cargoframe_safe::ladder::{file_name_for, run_ladder, FallbackIo, LadderConfig, Saved};
@@ -228,17 +228,17 @@ fn options_list(layout: &Layout, block_id: &str, parent: Option<&str>) -> Option
             return Some((list.connection_id.clone(), list.options_id.clone()));
         }
         // a sharing button asks what its service needs for what is picked (Jira: the fields
-        // required for an issue type in a project, `PROJ/10001`)
+        // required for an issue type in a project, `PROJ/10001`; Reddit: what a subreddit's
+        // moderators require, `rust`). Letters, digits, `_` and one `/`; the connector checks the rest.
         BlockKind::SharingButton(b) => {
             let asked = parent.map(str::trim).filter(|p| {
-                p.split_once('/').is_some_and(|(project, kind)| {
-                    !project.is_empty()
-                        && project
-                            .chars()
-                            .all(|c| c.is_ascii_alphanumeric() || c == '_')
-                        && !kind.is_empty()
-                        && kind.chars().all(|c| c.is_ascii_digit())
-                })
+                !p.is_empty()
+                    && p.len() <= 100
+                    && p.matches('/').count() <= 1
+                    && p.split('/').all(|part| {
+                        !part.is_empty()
+                            && part.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
+                    })
             })?;
             return Some((b.connection_id.clone()?, format!("required:{asked}")));
         }
@@ -622,6 +622,23 @@ fn prepare(svc: &Services, session: &Session, req: &Request) -> Result<Prepared,
                 "\u{201c}{name}\u{201d} is required: map it to a block in the layout",
                 &[("name", &t.name)],
             ));
+        }
+    }
+    // What the service refuses to share without (a Slack channel, a subreddit): a block that
+    // sends it is still empty. The window greys the button for it; this is the same check.
+    if let Some(id) = connection_id {
+        let has = |field: &str| {
+            fields
+                .iter()
+                .any(|f| f.key == field && !f.value.trim().is_empty())
+        };
+        for need in registry.needs(id) {
+            if !has(&need.field) && !need.unless.as_deref().is_some_and(has) {
+                reasons.push(tf(
+                    "\u{201c}{name}\u{201d} needs a value",
+                    &[("name", &need.label)],
+                ));
+            }
         }
     }
 

@@ -318,10 +318,12 @@ button says for each block what it does to an issue that is there (replace, add 
 list, count up, leave it), and can also vote (Jira) or react 👍 (GitHub).
 
 **Must be filled:** under *Before sharing*, tick the blocks a button waits for; in the window the button stays grey
-and lists what is still empty. For a new Jira ticket, CargoFrame also asks Jira which fields the issue type you picked
-requires: one that no block sends, or whose block is empty, is named under the button (*Jira needs "Component/s" for
-this issue type, and no block sends it*) and the button waits for it. In the layout builder, a block that no button
-sends gets a warning, since whatever is put in it would go nowhere.
+and lists what is still empty. What a service refuses to send without is held back the same way: the Slack, Discord
+or Teams channel, the subreddit, the Jira project and issue type (marked *(required)* in the builder's field list).
+CargoFrame also asks the service what your choice requires: for a new Jira ticket, the fields of the issue type you
+picked (*Jira needs "Component/s" for this issue type, and no block sends it*); for Reddit, what the subreddit's
+moderators require (a flair, a text). In the layout builder, a block that no button sends gets a warning, since
+whatever is put in it would go nowhere.
 
 | Remove | How | Gentler |
 |--------|-----|---------|

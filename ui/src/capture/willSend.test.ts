@@ -20,6 +20,7 @@ async function viewFor(kind: ServiceKind | null, change: (b: Button) => void = (
   view.sharing[button.id] = {
     enabled: true, reasons: [], mode: kind ? 'send' : 'save_locally', note: null, kind,
     reach: demoReach(view.layout!, button, kind ? caps : demoCapabilities('jira'), kind),
+    needs: [],
   };
   return { view, button };
 }

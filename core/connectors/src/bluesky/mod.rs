@@ -205,12 +205,7 @@ pub fn post_url(uri: &str, handle: &str) -> Option<String> {
 
 impl Connector for BlueskyConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint| FieldSpec {
-            key,
-            label,
-            hint,
-            list: None,
-        };
+        let f = |key, label, hint| FieldSpec::new(key, label, hint, None);
         Describe {
             fields: vec![
                 f("text", msg!("Text"), msg!("The post, at most 300 characters. Defaults to the prompt, then the window title")),

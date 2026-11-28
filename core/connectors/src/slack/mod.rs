@@ -432,15 +432,11 @@ pub fn api_error(v: &Value, what: &str) -> SendError {
 
 impl Connector for SlackConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         Describe {
             fields: vec![
-                f("channel", msg!("Channel"), msg!("Where to post. The app must have been invited to it"), Some("channels")),
+                // a thread link says its channel
+                f("channel", msg!("Channel"), msg!("Where to post. The app must have been invited to it"), Some("channels")).required(Some("thread")),
                 f("thread", msg!("Reply in a thread"), msg!("A message link (Copy link in Slack) or its timestamp. Empty: a new message"), None),
                 f("message", msg!("Message"), msg!("Defaults to the prompt text, then the window title"), None),
                 f("title", msg!("Bold first line"), msg!("Empty: none"), None),

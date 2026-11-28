@@ -12,6 +12,7 @@ import { MIN_TABS, MAX_TABS, MIN_TABS_SIZE } from './tabs';
 import { MAX_SHARING_BUTTONS, BLOCK_TYPES } from '../settings/layout/model';
 import { groupOf } from '../settings/layout/automation';
 import { memoryApi } from './memoryApi';
+import { demoNeeds } from './demoReach';
 
 const rust = (path: string) => readFileSync(new URL(`../../../${path}`, import.meta.url), 'utf8');
 
@@ -69,5 +70,20 @@ describe('the window’s copies of the program’s lists', () => {
     // the demo lists the program's values, so screenshots and tests show what a capture has
     const demo = new Set((await memoryApi().listVariables()).map((v) => v.name));
     for (const n of strings(vars, 'NAMES')) expect(demo.has(n), n).toBe(true);
+  });
+
+  it('need the fields each connector marks as required (core/connectors)', () => {
+    for (const kind of ['jira', 'github', 'slack', 'discord', 'teams', 'reddit', 'google', 'x', 'bluesky', 'instagram'] as const) {
+      const src = rust(`core/connectors/src/${kind}/mod.rs`);
+      const found: [string, string | null][] = [];
+      // `f("channel", …).required(Some("thread"))` on one line
+      for (const m of src.matchAll(/f\("(\w+)"[^\n]*?\)\.required\((?:None|Some\("(\w+)"\))\)/g)) found.push([m[1]!, m[2] ?? null]);
+      // `channel.required(Some("thread"))`: a field built over several lines first (Discord)
+      for (const m of src.matchAll(/\b(\w+)\.required\((?:None|Some\("(\w+)"\))\)/g)) {
+        if (src.includes(`"${m[1]}",`)) found.push([m[1]!, m[2] ?? null]);
+      }
+      const mine = demoNeeds(kind).map((n): [string, string | null] => [n.field, n.unless]);
+      expect(mine.sort(), kind).toEqual(found.sort());
+    }
   });
 });

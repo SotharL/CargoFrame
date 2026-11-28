@@ -72,7 +72,10 @@ Take `bluesky` as the example; do the same for any service. Search for the servi
    and `tests.rs` against `MockServer`, following the service's documented API: sign-in, lists, send, a retry that
    never posts twice. Keep one real answer of the service as a test case when you can get one.
 2. Its settings in `model.rs`, a `Kind`, a Cargo feature in `core/connectors` and `app`.
-3. What it can take (`core/layout/src/capabilities.rs`): picture, video, files, text, dropdowns.
+3. What it can take (`core/layout/src/capabilities.rs`): picture, video, files, text, dropdowns. The fields it refuses
+   to send without: `.required(None)` on their `FieldSpec` (or `.required(Some("thread"))` when another field can
+   stand in), copied in `demoNeeds` (`ui/src/lib/demoReach.ts`, compared by `mirrors.test.ts`). What it needs for a
+   choice (Jira's issue type, a subreddit) is a `required:<choice>` list the window asks (`ui/src/capture/needs.ts`).
 4. Its kind in `ui/src/lib/types.ts` and `connector.ts`, its form section in `ConnectionForm.svelte` (with `tour`
    names), its links in `connectorHelp.ts`, its colour in `tokens.css`.
 5. A template in `core/layout/src/templates.rs`, a guide in `tours.ts`, its words in `search.ts`.

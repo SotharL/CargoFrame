@@ -1,7 +1,7 @@
 // Stand-in for the backend's capability table and reach, used only by the in-memory interface
 // (tests and the browser demo). The real answers come from the Rust code through `button_reach`,
 // so this does not need to be complete, only plausible and consistent with the types.
-import type { Block, Capabilities, Capability, Layout, Reach, ServiceKind, BlockReach, SendRules } from './types';
+import type { Block, Capabilities, Capability, FieldNeed, Layout, Reach, ServiceKind, BlockReach, SendRules } from './types';
 import { DEFAULT_SEND_RULES } from './types';
 
 const yes = (note: string): Capability => ({ support: 'yes', note });
@@ -104,6 +104,29 @@ export function demoCapabilities(kind: ServiceKind): Capabilities {
         files: no('The request has no multipart field for files'),
         link: limited('Sent as written; the service decides what it shows'),
       };
+  }
+}
+
+/**
+ * The fields each service refuses to share without, as its connector says (`.required(…)` in
+ * `core/connectors`; compared in mirrors.test.ts). Discord with one webhook needs no channel; the
+ * demo has several.
+ */
+export function demoNeeds(kind: ServiceKind | null): FieldNeed[] {
+  const need = (field: string, label: string, unless: string | null = null): FieldNeed => ({ field, label, unless });
+  switch (kind) {
+    case 'jira':
+      return [need('project', 'Project', 'issue'), need('issuetype', 'Issue type', 'issue')];
+    case 'slack':
+      return [need('channel', 'Channel', 'thread')];
+    case 'discord':
+      return [need('channel', 'Channel', 'thread')];
+    case 'teams':
+      return [need('target', 'Chat or channel', 'thread')];
+    case 'reddit':
+      return [need('subreddit', 'Subreddit')];
+    default:
+      return [];
   }
 }
 

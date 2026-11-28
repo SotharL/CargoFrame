@@ -3,7 +3,7 @@
  * the overflow check), with the demo's data. Loaded only there: in the app, `getApi` never imports this file.
  */
 import type {
-  ChatView, Cleaned, Connection, ConnectionView, DebugSetup, DebugView, Describe, DropdownOption, General,
+  ChatView, Cleaned, Connection, ConnectionView, DebugSetup, DebugView, Describe, DropdownOption, FieldSpec, General,
   ImportPreview, ItemEntry, ItemKind, Layout, LayoutTemplate, LookFolder, Rule, Safe, FfmpegPhase, Reach,
   ShareRequest, ShareResult, UpdateLast, UpdateView, VariableInfo, Video, SetupReport, SetupItem, SetupInstall,
   ServiceKind, TextReading, FileEntry, LogText, PcCheckStep,
@@ -11,7 +11,7 @@ import type {
 import type { Api } from './ipc';
 import { LANGUAGES, resolve as resolveLanguage } from './i18n/index.svelte';
 import { DEMO_SAMPLES, demoValues } from './demoSamples';
-import { demoCapabilities, demoReach, LOCAL_CAPABILITIES } from './demoReach';
+import { demoCapabilities, demoNeeds, demoReach, LOCAL_CAPABILITIES } from './demoReach';
 import { KIND_NAME } from './connector';
 import { valuesOf } from '../settings/ruleValues';
 import { defaultGeneral, defaultSafe, defaultVideo } from './defaults';
@@ -230,7 +230,19 @@ export function memoryApi(opts: MemoryOptions = {}): Api {
     discord: ['token', ...Array.from({ length: 10 }, (_, i) => `hook${i}`)],
   };
   const OAUTH = new Set(['google', 'reddit', 'teams', 'x']);
+  /** The demo's description of a connection, each field saying whether the service needs it. */
   const describeFor = (c: Connection): Describe => {
+    const d = describeRaw(c);
+    const needs = demoNeeds(c.kind);
+    return {
+      ...d,
+      fields: d.fields.map((f) => {
+        const n = needs.find((x) => x.field === f.key);
+        return { ...f, required: n !== undefined, unless: n?.unless ?? null };
+      }),
+    };
+  };
+  const describeRaw = (c: Connection): Omit<Describe, 'fields'> & { fields: Omit<FieldSpec, 'required' | 'unless'>[] } => {
     if (c.kind === 'jira') {
       return {
         summary: 'Creates an issue, or comments on one.',

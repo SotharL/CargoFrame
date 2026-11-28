@@ -116,12 +116,7 @@ fn refusal(resp: &cargoframe_net::Response, what: &str) -> SendError {
 
 impl Connector for XConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint| FieldSpec {
-            key,
-            label,
-            hint,
-            list: None,
-        };
+        let f = |key, label, hint| FieldSpec::new(key, label, hint, None);
         Describe {
             fields: vec![
                 f("text", msg!("Text"), msg!("The post, at most 280 characters. Defaults to the prompt, then the window title")),

@@ -26,7 +26,7 @@
   import TickBoxes from './TickBoxes.svelte';
   import { boxesFor, cornerWidth, initialTicks, isTicked, setTick, type Ticks as TickState } from './ticks';
   import { chatToOpen, missing, pairedWithRecording, willSend } from './willSend';
-  import { needsAsk, unsent } from './needs';
+  import { emptyNeeds, needsAsk, unsent } from './needs';
   import { kindStyle } from '../lib/connector';
   import { afterPaint } from '../lib/paint';
   import { applyAccent, applyTheme } from '../lib/theme';
@@ -35,7 +35,8 @@
   let view = $state<SessionView | null>(null);
   let image = $state<Blob | null>(null);
   let values = $state<FormValues>({ texts: {}, dropdowns: {}, deeper: {}, files: {}, tags: {} });
-  // What Jira needs for the project and issue type picked, per button: asked once per pair.
+  // What the service needs for what is picked, per button (Jira: the project and issue type;
+  // Reddit: the subreddit): asked once per choice.
   let needs = $state<Record<string, { ask: string; fields: DropdownOption[] }>>({});
   const asked = new Map<string, string>();
   $effect(() => {
@@ -51,7 +52,7 @@
         (fields) => {
           if (view?.session_id === session && asked.get(b.id) === ask) needs[b.id] = { ask, fields };
         },
-        // Jira could not say (no right to its create screen, an old Server): nothing is held back
+        // the service could not say (no right to Jira's create screen, an old Server): nothing is held back
         () => {},
       );
     }
@@ -205,8 +206,9 @@
   /** The rows of a grid: each at least as high as its blocks need, sharing what is left. */
   const gridRows = (heights: number[]) => heights.map((h) => `minmax(${h}px, 1fr)`).join(' ');
   const empty = $derived(view !== null && blocks.length === 0);
-  // "This button does not send X" is shown on the block itself, so the header does not repeat it.
-  const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug' && i.code !== 'cannot_send' && i.code !== 'not_sent') ?? []);
+  // "This button does not send X" is shown on the block itself, and what a service needs beside
+  // its button, so the header does not repeat them.
+  const problems = $derived(view?.issues.filter((i) => i.severity !== 'debug' && i.code !== 'cannot_send' && i.code !== 'not_sent' && i.code !== 'service_needs_field') ?? []);
   const debugs = $derived(view?.issues.filter((i) => i.severity === 'debug') ?? []);
 
   /** Where a block goes in its grid: the window's, or its Tabs block's page (from `origin`). */
@@ -428,7 +430,7 @@
           {:else if b.type === 'sharing_button'}
             {@const stillTaken = !pairedWithRecording(view) || still !== null}
             {@const ask = needsAsk(view, b, values)}
-            {@const unfilled = [...missing(view, b, values, stillTaken), ...(ask && needs[b.id]?.ask === ask ? unsent(view, b, values, needs[b.id]!.fields, stillTaken) : [])]}
+            {@const unfilled = [...missing(view, b, values, stillTaken), ...emptyNeeds(view, b, values, stillTaken), ...(ask && needs[b.id]?.ask === ask ? unsent(view, b, values, needs[b.id]!.fields, stillTaken) : [])]}
             <SharingBlock
               block={b}
               enabled={(view.sharing[b.id]?.enabled ?? false) && unfilled.length === 0 && sending === null}

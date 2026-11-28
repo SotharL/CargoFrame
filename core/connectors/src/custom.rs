@@ -189,7 +189,7 @@ impl Connector for CustomConnector {
             .collect();
         Describe {
             fields: vec![
-                FieldSpec { key: "title", label: msg!("Title"), hint: msg!("Placeholder {{title}}: the window title"), list: None },
+                FieldSpec::new("title", msg!("Title"), msg!("Placeholder {{title}}: the window title"), None),
             ],
             lists,
             summary: msg!("Sends one request that you describe. Use {{field}} placeholders for what the sharing button maps, plus {{prompt}} and {{title}}.").into(),

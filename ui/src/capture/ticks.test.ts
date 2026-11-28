@@ -15,6 +15,7 @@ async function twoButtons(second: ServiceKind | null = 'reddit'): Promise<{ view
   view.sharing.other = {
     enabled: true, reasons: [], mode: second ? 'send' : 'save_locally', note: null, kind: second,
     reach: demoReach(view.layout!, other, demoCapabilities(second ?? 'jira'), second),
+    needs: [],
   };
   return { view, jira, other };
 }

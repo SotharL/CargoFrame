@@ -610,12 +610,7 @@ fn issue_key_ok(k: &str) -> bool {
 
 impl Connector for JiraConnector {
     fn describe(&self) -> Describe {
-        let f = |key, label, hint, list| FieldSpec {
-            key,
-            label,
-            hint,
-            list,
-        };
+        let f = FieldSpec::new;
         let l = |id: &str, label: &str, param| ListSpec {
             id: id.into(),
             label: label.into(),
@@ -630,8 +625,9 @@ impl Connector for JiraConnector {
         };
         Describe {
             fields: vec![
-                f("project", msg!("Project"), msg!("A project key such as PROJ"), Some("projects")),
-                f("issuetype", msg!("Issue type"), msg!("Bug, Task, Story..."), Some("issue_types")),
+                // an issue picked to update needs neither
+                f("project", msg!("Project"), msg!("A project key such as PROJ"), Some("projects")).required(Some("issue")),
+                f("issuetype", msg!("Issue type"), msg!("Bug, Task, Story..."), Some("issue_types")).required(Some("issue")),
                 f("summary", msg!("Summary"), msg!("One line. Defaults to the window title"), None),
                 f("description", msg!("Description"), msg!("Defaults to the prompt text"), None),
                 f("priority", msg!("Priority"), "", Some("priorities")),
